@@ -1,18 +1,15 @@
-# Perplexica's Architecture
+# YAAWC's Architecture
 
-Perplexica's architecture consists of the following key components:
+YAAWC's architecture consists of the following key components:
 
-1. **User Interface**: A web-based interface that allows users to interact with Perplexica for searching images, videos, and much more.
-2. **Agent/Chains**: These components predict Perplexica's next actions, understand user queries, and decide whether a web search is necessary.
-3. **SearXNG**: A metadata search engine used by Perplexica to search the web for sources.
-4. **LLMs (Large Language Models)**: Utilized by agents and chains for tasks like understanding content, writing responses, and citing sources. Examples include Claude, GPTs, etc.
-5. **Embedding Models**: To improve the accuracy of search results, embedding models re-rank the results using similarity search algorithms such as cosine similarity and dot product distance.
-6. **Web Content**
-   - In Agent mode, the application uses an agentic workflow to answer complex multi-part questions
-     - The agent can use reasoning steps to provide comprehensive answers to complex questions
-     - Agent mode is experimental and may consume lots of tokens and take a long time to produce responses
-   - In Speed mode, the application only uses the preview content returned by SearXNG
-     - This content is provided by the search engines and contains minimal context from the actual web page
-     - This mode prioritizes quick responses over accuracy
+1. **User Interface**: A web-based interface built with React and Next.js that allows users to interact with YAAWC for searching the web, researching local files, and conversational chat.
+2. **LangGraph React Agent (`SimplifiedAgent`)**: The core reasoning engine. A LangGraph-based agentic workflow that autonomously decides which tools to invoke (web search, URL summarization, deep research, file search, image search, etc.) to answer user queries.
+3. **SearXNG**: A metadata search engine used by YAAWC to search the web for sources.
+4. **LLMs (Large Language Models)**: Utilized by the agent for reasoning, tool invocation decisions, content understanding, writing responses, and citing sources. Examples include Claude, GPTs, Gemini, etc.
+5. **Embedding Models**: Used for similarity-based re-ranking of search results using cosine similarity or dot product distance.
+6. **Focus Modes**: YAAWC supports three focus modes that control the agent's behavior:
+   - **Web Search**: The agent has access to all tools (web search, URL summarization, deep research, image search, etc.) for comprehensive web-based research.
+   - **Local Research**: The agent uses file search tools to research uploaded/local files with citations.
+   - **Chat**: A conversational mode with no tools — the agent responds from its training data only.
 
-For a more detailed explanation of how these components work together, see [WORKING.md](https://github.com/ItzCrazyKns/Perplexica/tree/master/docs/architecture/WORKING.md).
+For a more detailed explanation of how these components work together, see [WORKING.md](https://github.com/boarder2/Yet-Another-Agentic-Web-Chat/tree/master/docs/architecture/WORKING.md).

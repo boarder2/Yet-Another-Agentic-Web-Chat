@@ -7,9 +7,9 @@ import { getBaseUrl } from '@/lib/config';
 function generateOpenSearchResponse(origin: string): NextResponse {
   const opensearchXml = `<?xml version="1.0" encoding="utf-8"?>
 <OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/" xmlns:moz="http://www.mozilla.org/2006/browser/search/">
-  <ShortName>Perplexica</ShortName>
-  <LongName>Search with Perplexica AI</LongName>
-  <Description>Perplexica is a powerful AI-driven search engine that understands your queries and delivers relevant results.</Description>
+  <ShortName>YAAWC</ShortName>
+  <LongName>Search with YAAWC</LongName>
+  <Description>YAAWC is a powerful AI-driven search engine that understands your queries and delivers relevant results.</Description>
   <InputEncoding>UTF-8</InputEncoding>
   <Image width="16" height="16" type="image/x-icon">${origin}/favicon.ico</Image>
   <Url type="text/html" template="${origin}/?q={searchTerms}"/>
@@ -31,7 +31,7 @@ export async function GET(request: Request) {
   // If BASE_URL is configured, use it, otherwise detect from request
   if (configBaseUrl) {
     // Remove any trailing slashes for consistency
-    let origin = configBaseUrl.replace(/\/+$/, '');
+    const origin = configBaseUrl.replace(/\/+$/, '');
     return generateOpenSearchResponse(origin);
   }
 

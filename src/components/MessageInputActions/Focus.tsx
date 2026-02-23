@@ -48,6 +48,7 @@ const Focus = ({
           <div className="flex items-center border border-surface-2 rounded-lg overflow-hidden">
             {/* Web Search Mode Icon */}
             <button
+              type="button"
               className={cn(
                 'p-2 transition-all duration-200',
                 focusMode === 'webSearch'
@@ -69,6 +70,7 @@ const Focus = ({
 
             {/* Chat Mode Icon */}
             <button
+              type="button"
               className={cn(
                 'p-2 transition-all duration-200',
                 focusMode === 'chat'
@@ -90,6 +92,7 @@ const Focus = ({
 
             {/* Local Research Mode Icon */}
             <button
+              type="button"
               className={cn(
                 'p-2 transition-all duration-200',
                 focusMode === 'localResearch'

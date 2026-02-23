@@ -5,7 +5,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 
 // Cache config
-const CACHE_DIR = path.join(os.tmpdir(), 'perplexica-embedding-cache');
+const CACHE_DIR = path.join(os.tmpdir(), 'yaawc-embedding-cache');
 const CACHE_MAX_ENTRIES = 2000;
 const CACHE_TTL_MS = 5 * 24 * 60 * 60 * 1000; // 5 days
 

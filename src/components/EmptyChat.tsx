@@ -1,10 +1,7 @@
 import { Settings } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { File } from './ChatWindow';
+import { File, ImageAttachment } from './ChatWindow';
 import Link from 'next/link';
 import MessageInput from './MessageInput';
-import WeatherWidget from './WeatherWidget';
-import NewsArticleWidget from './NewsArticleWidget';
 
 const EmptyChat = ({
   sendMessage,
@@ -23,6 +20,9 @@ const EmptyChat = ({
   personalizationLocation,
   personalizationAbout,
   refreshPersonalization,
+  pendingImages,
+  setPendingImages,
+  imageCapable = false,
 }: {
   sendMessage: (message: string) => void;
   focusMode: string;
@@ -40,14 +40,10 @@ const EmptyChat = ({
   personalizationLocation?: string;
   personalizationAbout?: string;
   refreshPersonalization?: () => void;
+  pendingImages: ImageAttachment[];
+  setPendingImages: (images: ImageAttachment[]) => void;
+  imageCapable?: boolean;
 }) => {
-  const [showWeatherWidget, setShowWeatherWidget] = useState(true);
-  const [showNewsWidget, setShowNewsWidget] = useState(true);
-
-  useEffect(() => {
-    setShowWeatherWidget(localStorage.getItem('showWeatherWidget') !== 'false');
-    setShowNewsWidget(localStorage.getItem('showNewsWidget') !== 'false');
-  }, []);
   return (
     <div className="relative">
       <div className="absolute w-full flex flex-row items-center justify-end mr-5 mt-5">
@@ -77,19 +73,10 @@ const EmptyChat = ({
             personalizationLocation={personalizationLocation}
             personalizationAbout={personalizationAbout}
             refreshPersonalization={refreshPersonalization}
+            pendingImages={pendingImages}
+            setPendingImages={setPendingImages}
+            imageCapable={imageCapable}
           />
-        </div>
-        <div className="flex flex-col w-full gap-4 mt-2 sm:flex-row sm:justify-center">
-          {showWeatherWidget && (
-            <div className="flex-1 w-full">
-              <WeatherWidget />
-            </div>
-          )}
-          {showNewsWidget && (
-            <div className="flex-1 w-full">
-              <NewsArticleWidget />
-            </div>
-          )}
         </div>
       </div>
     </div>

@@ -1,4 +1,5 @@
 import { updateToolCallMarkup } from '@/lib/utils/toolCallMarkup';
+import { encodeHtmlAttribute } from '@/lib/utils/html';
 import { cleanupCancelToken, registerCancelToken } from '@/lib/cancel-tokens';
 import {
   getCustomOpenaiApiKey,
@@ -27,6 +28,7 @@ import {
   clearSoftStop,
 } from '@/lib/utils/runControl';
 import { CachedEmbeddings } from '@/lib/utils/cachedEmbeddings';
+import { buildMultimodalHumanMessage } from '@/lib/utils/images';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -56,7 +58,7 @@ type EmbeddingModel = {
 type Body = {
   message: Message;
   focusMode: string;
-  history: Array<[string, string]>;
+  history: Array<[string, string, string[]?]>;
   files: Array<string>;
   chatModel: ChatModel;
   systemModel?: SystemModel; // optional; defaults to chatModel
@@ -64,6 +66,12 @@ type Body = {
   selectedSystemPromptIds: string[]; // legacy name; treated as persona prompt IDs
   userLocation?: string;
   userProfile?: string;
+  messageImageIds?: string[];
+  messageImages?: Array<{
+    imageId: string;
+    fileName: string;
+    mimeType: string;
+  }>;
 };
 
 type TokenUsage = {
@@ -96,28 +104,41 @@ const handleEmitterEvents = async (
   usedPersonalization: boolean,
 ) => {
   let recievedMessage = '';
-  let sources: any[] = [];
+  let sources: Record<string, unknown>[] = [];
   let searchQuery: string | undefined;
   let searchUrl: string | undefined;
   let isStreamActive = true;
+  let writerClosed = false;
+
+  // Helper to safely write to the stream; aborts processing if the client has disconnected
+  const safeWrite = (data: string) => {
+    if (!isStreamActive || writerClosed || abortController.signal.aborted)
+      return;
+    writer.write(encoder.encode(data)).catch(() => {
+      if (!isStreamActive) return;
+      isStreamActive = false;
+      if (!abortController.signal.aborted) {
+        console.log('Write failed (client disconnected), aborting processing');
+        abortController.abort();
+      }
+    });
+  };
+
+  const safeClose = () => {
+    if (writerClosed) return;
+    writerClosed = true;
+    writer.close().catch(() => {});
+  };
 
   // Keep-alive ping mechanism to prevent reverse proxy timeouts
   const pingInterval = setInterval(() => {
-    if (isStreamActive) {
-      try {
-        writer.write(
-          encoder.encode(
-            JSON.stringify({
-              type: 'ping',
-              timestamp: Date.now(),
-            }) + '\n',
-          ),
-        );
-      } catch (error) {
-        // If writing fails, the connection is likely closed
-        clearInterval(pingInterval);
-        isStreamActive = false;
-      }
+    if (isStreamActive && !abortController.signal.aborted) {
+      safeWrite(
+        JSON.stringify({
+          type: 'ping',
+          timestamp: Date.now(),
+        }) + '\n',
+      );
     } else {
       clearInterval(pingInterval);
     }
@@ -130,17 +151,16 @@ const handleEmitterEvents = async (
   });
 
   stream.on('data', (data) => {
+    if (!isStreamActive || abortController.signal.aborted) return;
     const parsedData = JSON.parse(data);
 
     if (parsedData.type === 'response') {
-      writer.write(
-        encoder.encode(
-          JSON.stringify({
-            type: 'response',
-            data: parsedData.data,
-            messageId: aiMessageId,
-          }) + '\n',
-        ),
+      safeWrite(
+        JSON.stringify({
+          type: 'response',
+          data: parsedData.data,
+          messageId: aiMessageId,
+        }) + '\n',
       );
 
       recievedMessage += parsedData.data;
@@ -156,16 +176,14 @@ const handleEmitterEvents = async (
         searchUrl = parsedData.searchUrl;
       }
 
-      writer.write(
-        encoder.encode(
-          JSON.stringify({
-            type: parsedData.type,
-            data: parsedData.data,
-            searchQuery: parsedData.searchQuery,
-            messageId: aiMessageId,
-            searchUrl: searchUrl,
-          }) + '\n',
-        ),
+      safeWrite(
+        JSON.stringify({
+          type: parsedData.type,
+          data: parsedData.data,
+          searchQuery: parsedData.searchQuery,
+          messageId: aiMessageId,
+          searchUrl: searchUrl,
+        }) + '\n',
       );
 
       sources = parsedData.data;
@@ -175,14 +193,12 @@ const handleEmitterEvents = async (
       parsedData.type === 'tool_call_error'
     ) {
       // Forward new granular tool lifecycle events
-      writer.write(
-        encoder.encode(
-          JSON.stringify({
-            type: parsedData.type,
-            data: parsedData.data,
-            messageId: aiMessageId,
-          }) + '\n',
-        ),
+      safeWrite(
+        JSON.stringify({
+          type: parsedData.type,
+          data: parsedData.data,
+          messageId: aiMessageId,
+        }) + '\n',
       );
       if (parsedData.type === 'tool_call_started' && parsedData.data?.content) {
         // Append initial placeholder markup to message content for persistence
@@ -202,6 +218,118 @@ const handleEmitterEvents = async (
           },
         );
       }
+    } else if (
+      parsedData.type === 'subagent_started' ||
+      parsedData.type === 'subagent_completed' ||
+      parsedData.type === 'subagent_error' ||
+      parsedData.type === 'subagent_data'
+    ) {
+      // Forward subagent events to client
+      // console.log('API: Forwarding subagent event:', parsedData.type);
+      safeWrite(
+        JSON.stringify({
+          ...parsedData,
+          messageId: aiMessageId,
+        }) + '\n',
+      );
+
+      // Update received message for persistence if needed
+      if (parsedData.type === 'subagent_started') {
+        const markup = `<SubagentExecution id="${parsedData.executionId}" name="${encodeHtmlAttribute(parsedData.name ?? '')}" task="${encodeHtmlAttribute(parsedData.task ?? '')}" status="running"></SubagentExecution>\n`;
+        recievedMessage += markup;
+      } else if (parsedData.type === 'subagent_data') {
+        // Persist nested tool call markup inside SubagentExecution tags
+        const nestedEvent = parsedData.data;
+        const executionId = parsedData.subagentId;
+
+        if (
+          nestedEvent?.type === 'tool_call_started' &&
+          nestedEvent.data?.content
+        ) {
+          // Insert ToolCall markup inside the SubagentExecution tag
+          const subagentRegex = new RegExp(
+            `(<SubagentExecution\\s+id="${executionId}"[^>]*>)(.*?)(</SubagentExecution>)`,
+            'gs',
+          );
+          recievedMessage = recievedMessage.replace(
+            subagentRegex,
+            (match, openTag, content, closeTag) => {
+              return `${openTag}${content}${nestedEvent.data.content}\n${closeTag}`;
+            },
+          );
+        } else if (
+          nestedEvent?.type === 'tool_call_success' &&
+          nestedEvent.data?.toolCallId
+        ) {
+          recievedMessage = updateToolCallMarkup(
+            recievedMessage,
+            nestedEvent.data.toolCallId,
+            { status: 'success' },
+          );
+        } else if (
+          nestedEvent?.type === 'tool_call_error' &&
+          nestedEvent.data?.toolCallId
+        ) {
+          recievedMessage = updateToolCallMarkup(
+            recievedMessage,
+            nestedEvent.data.toolCallId,
+            {
+              status: 'error',
+              error: nestedEvent.data.error,
+            },
+          );
+        }
+      } else if (
+        parsedData.type === 'subagent_completed' ||
+        parsedData.type === 'subagent_error'
+      ) {
+        // Update the SubagentExecution markup in received message
+        const status =
+          parsedData.type === 'subagent_completed' ? 'success' : 'error';
+        const executionId = parsedData.id;
+        const subagentRegex = new RegExp(
+          `<SubagentExecution\\s+id="${executionId}"([^>]*)>(.*?)<\\/SubagentExecution>`,
+          'gs',
+        );
+        recievedMessage = recievedMessage.replace(
+          subagentRegex,
+          (match, attrs, innerContent) => {
+            let updatedAttrs = attrs
+              .replace(/status="[^"]*"/, `status="${status}"`)
+              .trim();
+            if (!updatedAttrs.includes('status=')) {
+              updatedAttrs += ` status="${status}"`;
+            }
+            if (parsedData.summary && status === 'success') {
+              const escapedSummary = parsedData.summary
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+              updatedAttrs += ` summary="${escapedSummary}"`;
+            }
+            if (parsedData.error && status === 'error') {
+              const escapedError = parsedData.error
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+              updatedAttrs += ` error="${escapedError}"`;
+            }
+            // Preserve inner content (ToolCall markup)
+            return `<SubagentExecution ${updatedAttrs}>${innerContent}</SubagentExecution>`;
+          },
+        );
+      }
+    } else if (parsedData.type === 'todo_update') {
+      // Forward todo_update event to client (transient UI, not persisted in message)
+      safeWrite(
+        JSON.stringify({
+          type: 'todo_update',
+          data: parsedData.data,
+          messageId: aiMessageId,
+        }) + '\n',
+      );
     }
   });
 
@@ -210,21 +338,21 @@ const handleEmitterEvents = async (
   };
 
   stream.on('progress', (data) => {
+    if (!isStreamActive || abortController.signal.aborted) return;
     const parsedData = JSON.parse(data);
     if (parsedData.type === 'progress') {
-      writer.write(
-        encoder.encode(
-          JSON.stringify({
-            type: 'progress',
-            data: parsedData.data,
-            messageId: aiMessageId,
-          }) + '\n',
-        ),
+      safeWrite(
+        JSON.stringify({
+          type: 'progress',
+          data: parsedData.data,
+          messageId: aiMessageId,
+        }) + '\n',
       );
     }
   });
 
   stream.on('stats', (data) => {
+    if (!isStreamActive || abortController.signal.aborted) return;
     const parsedData = JSON.parse(data);
     if (parsedData.type === 'modelStats') {
       modelStats = {
@@ -233,24 +361,17 @@ const handleEmitterEvents = async (
         usedPersonalization,
       };
       // Forward stats to client for live updates
-      try {
-        writer.write(
-          encoder.encode(
-            JSON.stringify({
-              type: 'stats',
-              data: modelStats,
-              messageId: aiMessageId,
-            }) + '\n',
-          ),
-        );
-      } catch (e) {
-        // Ignore write errors if stream closed
-      }
+      safeWrite(
+        JSON.stringify({
+          type: 'stats',
+          data: modelStats,
+          messageId: aiMessageId,
+        }) + '\n',
+      );
     }
   });
 
   stream.on('end', () => {
-    isStreamActive = false;
     clearInterval(pingInterval);
 
     const endTime = Date.now();
@@ -263,20 +384,19 @@ const handleEmitterEvents = async (
       usedPersonalization,
     };
 
-    writer.write(
-      encoder.encode(
-        JSON.stringify({
-          type: 'messageEnd',
-          messageId: aiMessageId,
-          modelStats: modelStats,
-          searchQuery: searchQuery,
-          searchUrl: searchUrl,
-          usedLocation,
-          usedPersonalization,
-        }) + '\n',
-      ),
+    safeWrite(
+      JSON.stringify({
+        type: 'messageEnd',
+        messageId: aiMessageId,
+        modelStats: modelStats,
+        searchQuery: searchQuery,
+        searchUrl: searchUrl,
+        usedLocation,
+        usedPersonalization,
+      }) + '\n',
     );
-    writer.close();
+    isStreamActive = false;
+    safeClose();
 
     // Clean up the abort controller reference
     cleanupCancelToken(userMessageId);
@@ -300,19 +420,17 @@ const handleEmitterEvents = async (
       .execute();
   });
   stream.on('error', (data) => {
-    isStreamActive = false;
     clearInterval(pingInterval);
 
     const parsedData = JSON.parse(data);
-    writer.write(
-      encoder.encode(
-        JSON.stringify({
-          type: 'error',
-          data: parsedData.data,
-        }),
-      ),
+    safeWrite(
+      JSON.stringify({
+        type: 'error',
+        data: parsedData.data,
+      }),
     );
-    writer.close();
+    isStreamActive = false;
+    safeClose();
   });
 };
 
@@ -321,6 +439,11 @@ const handleHistorySave = async (
   humanMessageId: string,
   focusMode: string,
   files: string[],
+  messageImages?: Array<{
+    imageId: string;
+    fileName: string;
+    mimeType: string;
+  }>,
 ) => {
   const chat = await db.query.chats.findFirst({
     where: eq(chats.id, message.chatId),
@@ -353,6 +476,8 @@ const handleHistorySave = async (
         role: 'user',
         metadata: JSON.stringify({
           createdAt: new Date(),
+          ...(messageImages &&
+            messageImages.length > 0 && { images: messageImages }),
         }),
       })
       .execute();
@@ -363,6 +488,8 @@ const handleHistorySave = async (
         content: message.content,
         metadata: JSON.stringify({
           createdAt: new Date(),
+          ...(messageImages &&
+            messageImages.length > 0 && { images: messageImages }),
         }),
       })
       .where(eq(messagesSchema.messageId, humanMessageId))
@@ -385,7 +512,10 @@ export const POST = async (req: Request) => {
     const body = (await req.json()) as Body;
     const { message, selectedSystemPromptIds } = body;
 
-    if (message.content === '') {
+    if (
+      message.content === '' &&
+      !(body.messageImageIds && body.messageImageIds.length > 0)
+    ) {
       return Response.json(
         {
           message: 'Please provide a message to process',
@@ -419,7 +549,7 @@ export const POST = async (req: Request) => {
 
     let chatLlm: BaseChatModel | undefined;
     let systemLlm: BaseChatModel | undefined;
-    let embedding = new CachedEmbeddings(
+    const embedding = new CachedEmbeddings(
       embeddingModel.model,
       body.embeddingModel?.provider || Object.keys(embeddingModelProviders)[0],
       body.embeddingModel?.name || Object.keys(embeddingProvider)[0],
@@ -491,6 +621,10 @@ export const POST = async (req: Request) => {
 
     const history: BaseMessage[] = body.history.map((msg) => {
       if (msg[0] === 'human') {
+        // If this history entry has image IDs, build a multimodal message
+        if (msg[2] && msg[2].length > 0) {
+          return buildMultimodalHumanMessage(msg[1], msg[2]);
+        }
         return new HumanMessage({
           content: msg[1],
         });
@@ -529,17 +663,32 @@ export const POST = async (req: Request) => {
     registerRetrieval(message.messageId, retrievalController);
     clearSoftStop(message.messageId);
 
+    // Detect client disconnection via the request's built-in abort signal
+    req.signal.addEventListener('abort', () => {
+      if (!abortController.signal.aborted) {
+        console.log('Client disconnected, aborting all processing');
+        retrievalController.abort();
+        abortController.abort();
+      }
+    });
+
     abortController.signal.addEventListener('abort', () => {
       console.log('Stream aborted, sending cancel event');
-      writer.write(
-        encoder.encode(
-          JSON.stringify({
-            type: 'error',
-            data: 'Request cancelled by user',
-          }),
-        ),
-      );
-      writer.close();
+      // Also abort retrieval to stop LangGraph agent processing
+      if (!retrievalController.signal.aborted) {
+        retrievalController.abort();
+      }
+      writer
+        .write(
+          encoder.encode(
+            JSON.stringify({
+              type: 'error',
+              data: 'Request cancelled by user',
+            }),
+          ),
+        )
+        .catch(() => {});
+      writer.close().catch(() => {});
       cleanupCancelToken(message.messageId);
       cleanupRun(message.messageId);
     });
@@ -562,6 +711,7 @@ export const POST = async (req: Request) => {
         location: body.userLocation,
         profile: body.userProfile,
       },
+      body.messageImageIds,
     );
 
     handleEmitterEvents(
@@ -577,7 +727,13 @@ export const POST = async (req: Request) => {
       body.userProfile ? body.userProfile.length > 0 : false,
     );
 
-    handleHistorySave(message, humanMessageId, body.focusMode, body.files);
+    handleHistorySave(
+      message,
+      humanMessageId,
+      body.focusMode,
+      body.files,
+      body.messageImages,
+    );
 
     return new Response(responseStream.readable, {
       headers: {

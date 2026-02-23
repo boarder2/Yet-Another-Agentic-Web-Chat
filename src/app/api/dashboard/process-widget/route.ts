@@ -3,7 +3,7 @@ import { getWebContent } from '@/lib/utils/documents';
 import { Document } from '@langchain/core/documents';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { ChatOpenAI } from '@langchain/openai';
-import { HumanMessage, SystemMessage } from '@langchain/core/messages';
+import { HumanMessage } from '@langchain/core/messages';
 import { getAvailableChatModelProviders } from '@/lib/providers';
 import {
   getCustomOpenaiApiKey,
@@ -11,12 +11,12 @@ import {
   getCustomOpenaiModelName,
 } from '@/lib/config';
 import { ChatOllama } from '@langchain/ollama';
-import { createReactAgent } from '@langchain/langgraph/prebuilt';
+import { createAgent } from 'langchain';
 import { allTools } from '@/lib/tools';
 import { Source } from '@/lib/types/widget';
 import { WidgetProcessRequest } from '@/lib/types/api';
 import axios from 'axios';
-import { getLangfuseCallbacks } from '@/lib/tracing/langfuse';
+// import { getLangfuseCallbacks } from '@/lib/tracing/langfuse';
 
 // Helper function to fetch content from a single source
 async function fetchSourceContent(
@@ -134,23 +134,20 @@ async function processWithLLM(
       ? allTools.filter((tool) => tool_names.includes(tool.name))
       : [];
 
-  // Create the React agent with tools
-  const agent = createReactAgent({
-    llm,
+  // Create the agent with tools
+  const agent = createAgent({
+    model: llm,
     tools,
   });
 
   // Invoke the agent with the prompt
   const response = await agent.invoke(
     {
-      messages: [
-        //new SystemMessage({ content: `You have the following tools available: ${tools.map(tool => tool.name).join(', ')} use them as necessary to complete the task.` }),
-        new HumanMessage({ content: prompt }),
-      ],
+      messages: [new HumanMessage({ content: prompt })],
     },
     {
       recursionLimit: 15, // Limit recursion depth to prevent infinite loops
-      ...getLangfuseCallbacks(),
+      // ...getLangfuseCallbacks(),
     },
   );
 
@@ -176,7 +173,7 @@ export async function POST(request: NextRequest) {
     let fetchErrors: string[] = [];
     let processedPrompt = body.prompt;
     let sourcesFetched = 0;
-    let totalSources = sources ? sources.length : 0;
+    const totalSources = sources ? sources.length : 0;
 
     if (sources && sources.length > 0) {
       // Fetch content from all sources

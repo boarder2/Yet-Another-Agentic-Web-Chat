@@ -10,7 +10,7 @@ import LineOutputParser from '../outputParsers/lineOutputParser';
 import { searchSearxng } from '../searxng';
 import { formatDateForLLM } from '../utils';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import { getLangfuseCallbacks } from '@/lib/tracing/langfuse';
+// import { getLangfuseCallbacks } from '@/lib/tracing/langfuse';
 
 const imageSearchChainPrompt = `
 # Instructions
@@ -18,7 +18,7 @@ const imageSearchChainPrompt = `
 - Rephrase the question based on the conversation so it is a standalone question that can be used to search for images that are relevant to the question
 - Ensure the rephrased question agrees with the conversation and is relevant to the conversation
 - If you are thinking or reasoning, use <think> tags to indicate your thought process
-- If you are thinking or reasoning, do not use <answer> and </answer> tags in your thinking. Those tags should only be used in the final output
+- If you are thinking or reasoning, reserve <answer> and </answer> tags for the final output section only
 - Use the provided date to ensure the rephrased question is relevant to the current date and time if applicable
 
 # Data locations
@@ -26,7 +26,7 @@ const imageSearchChainPrompt = `
 - The user question is contained in the <question> tag after the <examples> below
 - Output your answer in an <answer> tag
 - Current date is: {date}
-- Do not include any other text in your answer
+- Your answer must contain exactly the rephrased search query, placed inside <answer> tags
   
 <examples>
 ## Example 1 input
@@ -135,7 +135,9 @@ const handleImageSearch = (
   llm: BaseChatModel,
 ) => {
   const imageSearchChain = createImageSearchChain(llm);
-  return imageSearchChain.invoke(input, { ...getLangfuseCallbacks() });
+  return imageSearchChain.invoke(input, {
+    /* ...getLangfuseCallbacks() */
+  });
 };
 
 export default handleImageSearch;

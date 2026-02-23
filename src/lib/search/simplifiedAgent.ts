@@ -10,19 +10,20 @@ import {
   fileSearchTools,
   webSearchTools,
 } from '@/lib/tools/agents';
-import {
-  getLangfuseCallbacks,
-  getLangfuseHandler,
-} from '@/lib/tracing/langfuse';
+// import {
+//   getLangfuseCallbacks,
+//   getLangfuseHandler,
+// } from '@/lib/tracing/langfuse';
 import { encodeHtmlAttribute } from '@/lib/utils/html';
 import { isSoftStop } from '@/lib/utils/runControl';
-import { Embeddings } from '@langchain/core/embeddings';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import { AIMessage, BaseMessage, HumanMessage } from '@langchain/core/messages';
+import { BaseMessage, HumanMessage } from '@langchain/core/messages';
+import { buildMultimodalHumanMessage } from '@/lib/utils/images';
 import { ChatPromptTemplate } from '@langchain/core/prompts';
 import { RunnableConfig, RunnableSequence } from '@langchain/core/runnables';
-import { createReactAgent } from '@langchain/langgraph/prebuilt';
+import { createAgent } from 'langchain';
 import { EventEmitter } from 'events';
+import { Document } from '@langchain/core/documents';
 import { webSearchResponsePrompt } from '../prompts/webSearch';
 import { formatDateForLLM } from '../utils';
 import { removeThinkingBlocksFromMessages } from '../utils/contentUtils';
@@ -33,7 +34,7 @@ import { buildPersonalizationSection } from '../utils/personalization';
 /**
  * Normalize usage metadata from different LLM providers
  */
-function normalizeUsageMetadata(usageData: any): {
+function normalizeUsageMetadata(usageData: Record<string, number>): {
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
@@ -65,6 +66,57 @@ function normalizeUsageMetadata(usageData: any): {
     output_tokens: outputTokens,
     total_tokens: totalTokens,
   };
+}
+
+/**
+ * Extract text content from LLM message content (handles both string and array formats)
+ * OpenAI returns string, Anthropic returns array of content blocks.
+ * Thinking/reasoning blocks are wrapped in <think> tags so the frontend ThinkBox renders them.
+ */
+function extractTextContent(
+  content:
+    | string
+    | Array<{
+        type?: string;
+        text?: string;
+        thinking?: string;
+        reasoning?: string;
+      }>
+    | null
+    | undefined,
+): string {
+  if (!content) return '';
+
+  if (typeof content === 'string') {
+    return content;
+  }
+
+  if (Array.isArray(content)) {
+    let text = '';
+    for (const block of content) {
+      if (typeof block !== 'object' || block === null) continue;
+
+      if (
+        (block.type === 'text' || block.type === 'text_delta') &&
+        block.text
+      ) {
+        // Regular text output
+        text += block.text;
+      } else if (
+        (block.type === 'thinking' || block.type === 'thinking_delta') &&
+        block.thinking
+      ) {
+        // Anthropic extended thinking blocks — wrap so ThinkBox renders them
+        text += `<think>${block.thinking}</think>`;
+      } else if (block.type === 'reasoning' && block.reasoning) {
+        // LangChain normalized reasoning block — wrap so ThinkBox renders them
+        text += `<think>${block.reasoning}</think>`;
+      }
+    }
+    return text;
+  }
+
+  return '';
 }
 
 /**
@@ -113,7 +165,42 @@ export class SimplifiedAgent {
   }
 
   /**
-   * Initialize the createReactAgent with tools and configuration
+   * Emit model usage statistics to the client
+   */
+  private emitModelStats(
+    usageChat: {
+      input_tokens: number;
+      output_tokens: number;
+      total_tokens: number;
+    },
+    usageSystem: {
+      input_tokens: number;
+      output_tokens: number;
+      total_tokens: number;
+    },
+  ) {
+    this.emitter.emit(
+      'stats',
+      JSON.stringify({
+        type: 'modelStats',
+        data: {
+          modelName: getModelName(this.chatLlm),
+          modelNameChat: getModelName(this.chatLlm),
+          modelNameSystem: getModelName(this.systemLlm),
+          usage: {
+            input_tokens: usageChat.input_tokens + usageSystem.input_tokens,
+            output_tokens: usageChat.output_tokens + usageSystem.output_tokens,
+            total_tokens: usageChat.total_tokens + usageSystem.total_tokens,
+          },
+          usageChat,
+          usageSystem,
+        },
+      }),
+    );
+  }
+
+  /**
+   * Initialize the createAgent with tools and configuration
    */
   private initializeAgent(
     focusMode: string,
@@ -121,31 +208,38 @@ export class SimplifiedAgent {
     messagesCount?: number,
     query?: string,
     firefoxAIDetected?: boolean,
+    customTools?: typeof allAgentTools,
+    customSystemPrompt?: string,
   ) {
     // Select appropriate tools based on focus mode and available files
     // Special case: Firefox AI detection disables tools for this turn
-    const tools = firefoxAIDetected
-      ? []
-      : this.getToolsForFocusMode(focusMode, fileIds);
+    // Special case: custom tools override (for subagents)
+    const tools = customTools
+      ? customTools
+      : firefoxAIDetected
+        ? []
+        : this.getToolsForFocusMode(focusMode, fileIds);
 
     // Cache tool names for usage attribution heuristics
     this.currentToolNames = tools.map((t) => t.name.toLowerCase());
 
-    const enhancedSystemPrompt = this.createEnhancedSystemPrompt(
-      focusMode,
-      fileIds,
-      messagesCount,
-      query,
-      firefoxAIDetected,
-    );
+    const enhancedSystemPrompt = customSystemPrompt
+      ? customSystemPrompt
+      : this.createEnhancedSystemPrompt(
+          focusMode,
+          fileIds,
+          messagesCount,
+          query,
+          firefoxAIDetected,
+        );
 
     try {
       // Create the React agent with custom state
-      const agent = createReactAgent({
-        llm: this.chatLlm,
+      const agent = createAgent({
+        model: this.chatLlm,
         tools,
         stateSchema: SimplifiedAgentState,
-        prompt: enhancedSystemPrompt,
+        systemPrompt: enhancedSystemPrompt,
       });
 
       console.log(
@@ -269,7 +363,13 @@ export class SimplifiedAgent {
     history: BaseMessage[] = [],
     fileIds: string[] = [],
     focusMode: string = 'webSearch',
+    customTools?: typeof allAgentTools,
+    customSystemPrompt?: string,
+    messageImageIds?: string[],
   ): Promise<void> {
+    // Declared outside try so the catch block can clean it up
+    let toolLlmUsageHandler: ((data: string) => void) | null = null;
+
     try {
       console.log(`SimplifiedAgent: Starting search for query: "${query}"`);
       console.log(`SimplifiedAgent: Focus mode: ${focusMode}`);
@@ -280,9 +380,14 @@ export class SimplifiedAgent {
         this.emitResponse(''); // Empty response, to give the UI a message to display.
       }, 100);
 
+      const humanMsg =
+        messageImageIds && messageImageIds.length > 0
+          ? buildMultimodalHumanMessage(query, messageImageIds)
+          : new HumanMessage(query);
+
       const messagesHistory = [
         ...removeThinkingBlocksFromMessages(history),
-        new HumanMessage(query),
+        humanMsg,
       ];
       // Detect Firefox AI prompt pattern
       const trimmed = query.trim();
@@ -291,7 +396,19 @@ export class SimplifiedAgent {
       const containsSelection = trimmed.includes('<selection>');
       const firefoxAIDetected =
         (startsWithAscii || startsWithCurly) && containsSelection;
-      let toolCalls: Record<string, string> = {};
+      const toolCalls: Record<string, string> = {};
+
+      // Run-ID attribution sets (see AGENTS.md — Run-ID Attribution section)
+      // LangChain's AsyncLocalStorage propagates the parent's callback context into child
+      // tool executions, so child SimplifiedAgent LLM events also appear in this stream.
+      // These sets let us distinguish the parent agent's own events from nested child events.
+
+      // run_id of each active deep_research tool invocation in the parent graph's tools node
+      const deepResearchRunIds = new Set<string>();
+      // run_id of each 'tools' node chain start that belongs to the parent graph (not a child)
+      const parentToolsNodeRunIds = new Set<string>();
+      // run_id of each LLM call that belongs to THIS parent agent's 'model_request' node
+      const activeAgentLlmRunIds = new Set<string>();
 
       // Initialize agent with the provided focus mode and file context
       // Pass the number of messages that will be sent to the LLM so prompts can adapt.
@@ -302,6 +419,8 @@ export class SimplifiedAgent {
         llmMessagesCount,
         query,
         firefoxAIDetected,
+        customTools,
+        customSystemPrompt,
       );
 
       // Prepare initial state
@@ -311,6 +430,7 @@ export class SimplifiedAgent {
         focusMode,
         fileIds,
         relevantDocuments: [],
+        subagentExecutions: [],
       };
 
       // Configure the agent run
@@ -331,9 +451,9 @@ export class SimplifiedAgent {
           userLocation: this.userLocation,
           userProfile: this.userProfile,
         },
-        recursionLimit: 75, // Allow sufficient iterations for tool use
+        recursionLimit: 150, // Increased to handle complex multi-task research with todo_list
         signal: this.retrievalSignal,
-        ...getLangfuseCallbacks(),
+        // ...getLangfuseCallbacks(),
       };
 
       // Use streamEvents to capture both tool calls and token-level streaming
@@ -360,11 +480,25 @@ export class SimplifiedAgent {
                 metadata,
                 runName,
               });
-              toolCalls[runId] = runName || tool.name || 'unknown';
+              const toolName = runName || tool.name || 'unknown';
+              toolCalls[runId] = toolName;
+
+              // Skip generic tool events for deep_research and todo_list (have specialized rendering)
+              if (toolName === 'deep_research' || toolName === 'todo_list') {
+                return;
+              }
+
+              // Skip tool calls from child SimplifiedAgent graphs.
+              // parentRunId is the run_id of the invoking 'tools' node; if it isn't in
+              // parentToolsNodeRunIds it belongs to a nested child graph, not this agent.
+              if (parentRunId && !parentToolsNodeRunIds.has(parentRunId)) {
+                delete toolCalls[runId];
+                return;
+              }
 
               // Emit a tool_call_started event so UI can display a running state spinner.
               try {
-                const type = (runName || tool.name || 'unknown').trim();
+                const type = toolName.trim();
                 // We only include lightweight identifying args for now; avoid large payloads.
                 let extraAttr = '';
                 try {
@@ -381,25 +515,30 @@ export class SimplifiedAgent {
                     }
                   }
                   if (input && typeof input === 'object') {
-                    if (typeof (input as any).query === 'string') {
+                    const inputObj = input as Record<string, unknown>;
+                    if (typeof inputObj.query === 'string') {
                       // Encode query as attribute (basic escaping)
                       const q = encodeHtmlAttribute(
-                        (input as any).query.slice(0, 200),
+                        inputObj.query.slice(0, 200),
                       );
                       extraAttr += ` query="${q}"`;
                     }
-                    if (Array.isArray((input as any).urls)) {
-                      const count = (input as any).urls.length;
+                    if (Array.isArray(inputObj.urls)) {
+                      const count = inputObj.urls.length;
                       extraAttr += ` count="${count}"`;
                     }
-                    if (typeof (input as any).pdfUrl === 'string') {
+                    if (typeof inputObj.url === 'string') {
+                      const u = encodeHtmlAttribute(inputObj.url.slice(0, 300));
+                      extraAttr += ` url="${u}"`;
+                    }
+                    if (typeof inputObj.pdfUrl === 'string') {
                       const u = encodeHtmlAttribute(
-                        (input as any).pdfUrl.slice(0, 300),
+                        inputObj.pdfUrl.slice(0, 300),
                       );
                       extraAttr += ` url="${u}"`;
                     }
                   }
-                } catch (attrErr) {
+                } catch (_attrErr) {
                   // Ignore attribute extraction errors
                 }
 
@@ -427,16 +566,27 @@ export class SimplifiedAgent {
                 tags,
               });
 
+              const toolName = toolCalls[runId];
+
+              // Skip if the tool was never registered (e.g. filtered out as a child-graph call)
+              if (!toolName) return;
+
+              // Skip generic tool events for deep_research and todo_list (have specialized rendering)
+              if (toolName === 'deep_research' || toolName === 'todo_list') {
+                delete toolCalls[runId];
+                return;
+              }
+
               // If youtube transcript tool, capture videoId for potential future UI enhancements
               let extra: Record<string, string> | undefined;
-              if (toolCalls[runId] === 'youtube_transcript') {
+              if (toolName === 'youtube_transcript') {
                 const videoId =
                   output?.update?.relevantDocuments?.[0]?.metadata?.source;
                 if (videoId) {
                   extra = { videoId: String(videoId) };
                 }
               }
-              toolCalls[runId] && delete toolCalls[runId];
+              if (toolCalls[runId]) delete toolCalls[runId];
 
               // Emit success update so UI can swap spinner for checkmark
               try {
@@ -463,6 +613,17 @@ export class SimplifiedAgent {
                 tags,
               });
 
+              const toolName = toolCalls[runId];
+
+              // Skip if the tool was never registered (e.g. filtered out as a child-graph call)
+              if (!toolName) return;
+
+              // Skip generic tool events for deep_research and todo_list (have specialized rendering)
+              if (toolName === 'deep_research' || toolName === 'todo_list') {
+                delete toolCalls[runId];
+                return;
+              }
+
               const message =
                 (err && (err.message || err.toString())) ||
                 'Unknown tool error';
@@ -484,23 +645,58 @@ export class SimplifiedAgent {
               }
             },
           },
-          getLangfuseHandler() || {},
+          // getLangfuseHandler() || {},
         ],
       });
 
-      let finalResult: any = null;
-      let collectedDocuments: any[] = [];
+      let finalResult: {
+        messages?: BaseMessage[];
+        relevantDocuments?: Document[];
+      } | null = null;
+      const collectedDocuments: Document[] = [];
       let currentResponseBuffer = '';
       // Separate usage trackers for chat (final answer) and system (tools/internal chains)
-      let usageChat = { input_tokens: 0, output_tokens: 0, total_tokens: 0 };
-      let usageSystem = { input_tokens: 0, output_tokens: 0, total_tokens: 0 };
+      const usageChat = { input_tokens: 0, output_tokens: 0, total_tokens: 0 };
+      const usageSystem = {
+        input_tokens: 0,
+        output_tokens: 0,
+        total_tokens: 0,
+      };
 
       let initialMessageSent = false;
-      let respondNowTriggered = false;
+
+      // Listen for token usage emitted by tools (url_summarization, deep_research)
+      // that make their own LLM calls outside the agent's streamEvents chain.
+      toolLlmUsageHandler = (data: string) => {
+        try {
+          const usage = JSON.parse(data);
+          // Route to the correct accumulator based on which model was used
+          const accumulator = usage.target === 'chat' ? usageChat : usageSystem;
+          accumulator.input_tokens += usage.input_tokens || 0;
+          accumulator.output_tokens += usage.output_tokens || 0;
+          accumulator.total_tokens += usage.total_tokens || 0;
+          // Emit updated stats to client
+          this.emitModelStats(usageChat, usageSystem);
+        } catch (error) {
+          console.error(
+            'SimplifiedAgent: Error processing tool_llm_usage:',
+            error,
+          );
+        }
+      };
+      this.emitter.on('tool_llm_usage', toolLlmUsageHandler);
 
       try {
         // Process the event stream
         for await (const event of eventStream) {
+          // Check if the operation has been aborted (e.g., client disconnected)
+          if (this.signal.aborted) {
+            console.log(
+              'SimplifiedAgent: Abort signal received, stopping event processing',
+            );
+            break;
+          }
+
           if (!initialMessageSent) {
             initialMessageSent = true;
             // If Firefox AI was detected, emit synthetic lifecycle events so UI can show a completed pseudo-tool
@@ -528,7 +724,7 @@ export class SimplifiedAgent {
             }
           }
 
-          const emitNewDocs = (newDocs: any[]) => {
+          const emitNewDocs = (newDocs: Document[]) => {
             //Group by metadata.searchQuery and emit separate source blocks for each
             const groupedBySearchQuery = newDocs.reduce(
               (acc, doc) => {
@@ -556,6 +752,59 @@ export class SimplifiedAgent {
               );
             }
           };
+
+          // --- Run-ID attribution tracking (Steps 2-4) ---
+          // Step 2: Track deep_research tool execution run IDs.
+          // Any on_chat_model_start / on_chain_start with a parent_id in this set
+          // belongs to a child SimplifiedAgent, not the parent graph.
+          if (
+            event.event === 'on_tool_start' &&
+            event.name === 'deep_research'
+          ) {
+            deepResearchRunIds.add(event.run_id);
+          }
+          if (
+            (event.event === 'on_tool_end' ||
+              event.event === 'on_tool_error') &&
+            event.name === 'deep_research'
+          ) {
+            deepResearchRunIds.delete(event.run_id);
+          }
+
+          // Step 3: Track parent-graph 'tools' node run IDs.
+          // handleToolStart callbacks receive parentRunId; we compare it against this set
+          // to skip tool call lifecycle events that come from child agent tool executions.
+          if (
+            event.event === 'on_chain_start' &&
+            event.metadata?.langgraph_node === 'tools' &&
+            !(event as unknown as { parent_ids?: string[] }).parent_ids?.some(
+              (id: string) => deepResearchRunIds.has(id),
+            )
+          ) {
+            parentToolsNodeRunIds.add(event.run_id);
+          }
+          if (
+            (event.event === 'on_chain_end' ||
+              event.event === 'on_chain_error') &&
+            event.metadata?.langgraph_node === 'tools'
+          ) {
+            parentToolsNodeRunIds.delete(event.run_id);
+          }
+
+          // Step 4: Register parent-agent LLM run IDs.
+          // Drain happens later in the on_chat_model_end handler (after token counting)
+          // to avoid a use-after-delete race on the same event.
+          if (
+            event.event === 'on_chat_model_start' &&
+            event.metadata?.langgraph_node === 'model_request' &&
+            !(event as unknown as { parent_ids?: string[] }).parent_ids?.some(
+              (id: string) => deepResearchRunIds.has(id),
+            )
+          ) {
+            activeAgentLlmRunIds.add(event.run_id);
+          }
+
+          // --- End attribution tracking ---
 
           // Handle different event types
           if (
@@ -588,153 +837,113 @@ export class SimplifiedAgent {
                 ) {
                   collectedDocuments.push(...item.update.relevantDocuments);
                   emitNewDocs(item.update.relevantDocuments);
+
+                  // Log for deep_research to verify sources are being emitted
+                  if (event.name === 'deep_research') {
+                    console.log(
+                      `SimplifiedAgent: deep_research returned ${item.update.relevantDocuments.length} documents`,
+                    );
+                  }
                 }
               }
             }
           }
 
           // Handle streaming tool calls (for thought messages)
-          if (event.event === 'on_chat_model_end' && event.data.output) {
+          // Only count events from the 'model_request' node (createAgent's LLM node).
+          // In LangChain/LangGraph v1.x, AsyncLocalStorage propagates parent callbacks into
+          // tool executions, so system model llm.invoke() calls inside tools also fire
+          // on_chat_model_end in this stream. Those events have langgraph_node === 'tools'
+          // and must be excluded — their tokens are reported via tool_llm_usage instead.
+          // Additionally guard by activeAgentLlmRunIds to exclude child SimplifiedAgent
+          // LLM calls (which also have langgraph_node === 'model_request' from the child's graph).
+          if (
+            event.event === 'on_chat_model_end' &&
+            event.data.output &&
+            event.metadata?.langgraph_node === 'model_request' &&
+            activeAgentLlmRunIds.has(event.run_id)
+          ) {
             const output = event.data.output;
-            const nameLower = (event.name || '').toLowerCase();
-            console.log(`SimplifiedAgent: on_chat_model_end`, event);
-            const isToolContext =
-              output.tool_calls && output.tool_calls.length > 0;
 
-            // Collect token usage from chat model end events
             if (output.usage_metadata) {
               const normalized = normalizeUsageMetadata(output.usage_metadata);
-              if (isToolContext) {
-                usageSystem.input_tokens += normalized.input_tokens;
-                usageSystem.output_tokens += normalized.output_tokens;
-                usageSystem.total_tokens += normalized.total_tokens;
-              } else {
-                usageChat.input_tokens += normalized.input_tokens;
-                usageChat.output_tokens += normalized.output_tokens;
-                usageChat.total_tokens += normalized.total_tokens;
-              }
+              usageChat.input_tokens += normalized.input_tokens;
+              usageChat.output_tokens += normalized.output_tokens;
+              usageChat.total_tokens += normalized.total_tokens;
               console.log(
                 'SimplifiedAgent: Collected usage from usage_metadata:',
                 normalized,
               );
               // Emit live snapshot
-              this.emitter.emit(
-                'stats',
-                JSON.stringify({
-                  type: 'modelStats',
-                  data: {
-                    modelName: getModelName(this.chatLlm),
-                    modelNameChat: getModelName(this.chatLlm),
-                    modelNameSystem: getModelName(this.systemLlm),
-                    usage: {
-                      input_tokens:
-                        usageChat.input_tokens + usageSystem.input_tokens,
-                      output_tokens:
-                        usageChat.output_tokens + usageSystem.output_tokens,
-                      total_tokens:
-                        usageChat.total_tokens + usageSystem.total_tokens,
-                    },
-                    usageChat,
-                    usageSystem,
-                  },
-                }),
-              );
+              this.emitModelStats(usageChat, usageSystem);
             } else if (output.response_metadata?.usage) {
               // Fallback to response_metadata for different model providers
               const normalized = normalizeUsageMetadata(
                 output.response_metadata.usage,
               );
-              if (isToolContext) {
-                usageSystem.input_tokens += normalized.input_tokens;
-                usageSystem.output_tokens += normalized.output_tokens;
-                usageSystem.total_tokens += normalized.total_tokens;
-              } else {
-                usageChat.input_tokens += normalized.input_tokens;
-                usageChat.output_tokens += normalized.output_tokens;
-                usageChat.total_tokens += normalized.total_tokens;
-              }
+              usageChat.input_tokens += normalized.input_tokens;
+              usageChat.output_tokens += normalized.output_tokens;
+              usageChat.total_tokens += normalized.total_tokens;
               console.log(
                 'SimplifiedAgent: Collected usage from response_metadata:',
                 normalized,
               );
-              this.emitter.emit(
-                'stats',
-                JSON.stringify({
-                  type: 'modelStats',
-                  data: {
-                    modelName: getModelName(this.chatLlm),
-                    modelNameChat: getModelName(this.chatLlm),
-                    modelNameSystem: getModelName(this.systemLlm),
-                    usage: {
-                      input_tokens:
-                        usageChat.input_tokens + usageSystem.input_tokens,
-                      output_tokens:
-                        usageChat.output_tokens + usageSystem.output_tokens,
-                      total_tokens:
-                        usageChat.total_tokens + usageSystem.total_tokens,
-                    },
-                    usageChat,
-                    usageSystem,
-                  },
-                }),
-              );
+              this.emitModelStats(usageChat, usageSystem);
             }
           }
+          // Drain activeAgentLlmRunIds AFTER the token-counting check above so the
+          // has() test doesn't evaluate against an already-deleted entry.
+          if (event.event === 'on_chat_model_end') {
+            activeAgentLlmRunIds.delete(event.run_id);
+          }
 
-          // Handle LLM end events for token usage tracking
-          if (event.event === 'on_llm_end' && event.data.output) {
+          // Handle LLM end events for token usage tracking (completion models only; same
+          // node filter as on_chat_model_end to exclude tool-level system LLM calls).
+          // Also guarded by activeAgentLlmRunIds for the same child-agent reason above.
+          if (
+            event.event === 'on_llm_end' &&
+            event.data.output &&
+            event.metadata?.langgraph_node === 'model_request' &&
+            activeAgentLlmRunIds.has(event.run_id)
+          ) {
             const output = event.data.output;
 
-            // Collect token usage from LLM end events
+            // Only count tokens from the agent node. System model calls inside tools
+            // report via tool_llm_usage and have langgraph_node === 'tools'.
             if (output.llmOutput?.tokenUsage) {
               const normalized = normalizeUsageMetadata(
                 output.llmOutput.tokenUsage,
               );
-              // on_llm_end often corresponds to tool/internal chains; attribute to system usage
-              usageSystem.input_tokens += normalized.input_tokens;
-              usageSystem.output_tokens += normalized.output_tokens;
-              usageSystem.total_tokens += normalized.total_tokens;
+              usageChat.input_tokens += normalized.input_tokens;
+              usageChat.output_tokens += normalized.output_tokens;
+              usageChat.total_tokens += normalized.total_tokens;
               console.log(
                 'SimplifiedAgent: Collected usage from llmOutput:',
                 normalized,
               );
-              this.emitter.emit(
-                'stats',
-                JSON.stringify({
-                  type: 'modelStats',
-                  data: {
-                    modelName: getModelName(this.chatLlm),
-                    modelNameChat: getModelName(this.chatLlm),
-                    modelNameSystem: getModelName(this.systemLlm),
-                    usage: {
-                      input_tokens:
-                        usageChat.input_tokens + usageSystem.input_tokens,
-                      output_tokens:
-                        usageChat.output_tokens + usageSystem.output_tokens,
-                      total_tokens:
-                        usageChat.total_tokens + usageSystem.total_tokens,
-                    },
-                    usageChat,
-                    usageSystem,
-                  },
-                }),
-              );
+              this.emitModelStats(usageChat, usageSystem);
             }
           }
 
-          // Handle token-level streaming for the final response
-          if (event.event === 'on_chat_model_stream' && event.data.chunk) {
+          // Handle token-level streaming for the final response.
+          // Guard by activeAgentLlmRunIds so that tokens from child SimplifiedAgent
+          // instances (spawned by deep_research) — which bubble up via AsyncLocalStorage
+          // callback propagation — are not emitted as parent response tokens.
+          if (
+            event.event === 'on_chat_model_stream' &&
+            event.data.chunk &&
+            activeAgentLlmRunIds.has(event.run_id)
+          ) {
             const chunk = event.data.chunk;
-            if (chunk.content && typeof chunk.content === 'string') {
-              // Add the token to our buffer
-              currentResponseBuffer += chunk.content;
+            const textContent = extractTextContent(chunk.content);
 
-              // Emit the individual token
-              this.emitResponse(chunk.content);
+            if (textContent) {
+              currentResponseBuffer += textContent;
+              this.emitResponse(textContent);
             }
           }
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (
           this.retrievalSignal &&
           this.retrievalSignal.aborted &&
@@ -743,7 +952,7 @@ export class SimplifiedAgent {
           // If respond-now was triggered, run a quick synthesis from collected context before finalization
 
           const docsString = collectedDocuments
-            .map((doc: any, idx: number) => {
+            .map((doc, idx: number) => {
               const meta = doc?.metadata || {};
               const title = meta.title || meta.url || `Source ${idx + 1}`;
               const url = meta.url || '';
@@ -756,35 +965,46 @@ ${url ? `<url>${url}</url>` : ''}
             })
             .join('\n\n');
 
-          const prompt = await ChatPromptTemplate.fromMessages([
-            ['system', webSearchResponsePrompt],
-            ['user', query],
-          ]).partial({
-            //recursionLimitReached: '',
-            formattingAndCitations: this.personaInstructions
-              ? this.personaInstructions
-              : formattingAndCitationsWeb.content,
-            personalizationDirectives: buildPersonalizationSection({
-              location: this.userLocation,
-              profile: this.userProfile,
-            }),
-            //conversationHistory: '', //TODO: Pass recent history
-            context: docsString || 'No context documents available.',
-            date: formatDateForLLM(new Date()),
-          });
+          // Build the respond-now prompt based on whether a custom system prompt is active.
+          // When customSystemPrompt is provided (e.g. deep research subagent), use it
+          // instead of the default webSearchResponsePrompt to stay consistent with
+          // the agent's original role.
+          let respondNowPrompt: ChatPromptTemplate;
+          if (customSystemPrompt) {
+            const synthesisSystemPrompt = `${customSystemPrompt}\n\n## Early Synthesis\nYou were interrupted before completing your full research. Synthesize a response from the documents gathered so far.\n\n<context>\n${docsString || 'No context documents available.'}\n</context>\n\nCurrent date: ${formatDateForLLM(new Date())}`;
+            respondNowPrompt = ChatPromptTemplate.fromMessages([
+              ['system', synthesisSystemPrompt],
+              ['user', query],
+            ]);
+          } else {
+            respondNowPrompt = await ChatPromptTemplate.fromMessages([
+              ['system', webSearchResponsePrompt],
+              ['user', query],
+            ]).partial({
+              formattingAndCitations: this.personaInstructions
+                ? this.personaInstructions
+                : formattingAndCitationsWeb.content,
+              personalizationDirectives: buildPersonalizationSection({
+                location: this.userLocation,
+                profile: this.userProfile,
+              }),
+              context: docsString || 'No context documents available.',
+              date: formatDateForLLM(new Date()),
+            });
+          }
 
           const chain = RunnableSequence.from([
-            prompt,
+            respondNowPrompt,
             this.chatLlm,
           ]).withConfig({
             runName: 'SimplifiedRespondNowSynthesis',
-            ...getLangfuseCallbacks(),
+            // ...getLangfuseCallbacks(),
             signal: this.signal,
           });
 
           const eventStream2 = chain.streamEvents(
             { query },
-            { version: 'v2', ...getLangfuseCallbacks() },
+            { version: 'v2' /* ...getLangfuseCallbacks() */ },
           );
 
           this.emitResponse(
@@ -795,9 +1015,11 @@ ${url ? `<url>${url}</url>` : ''}
             if (this.signal.aborted) break;
             if (event.event === 'on_chat_model_stream' && event.data?.chunk) {
               const chunk = event.data.chunk;
-              if (chunk.content && typeof chunk.content === 'string') {
-                currentResponseBuffer += chunk.content;
-                this.emitResponse(chunk.content);
+              const textContent = extractTextContent(chunk.content);
+
+              if (textContent) {
+                currentResponseBuffer += textContent;
+                this.emitResponse(textContent);
               }
             }
             if (event.event === 'on_chat_model_end' && event.data?.output) {
@@ -856,7 +1078,10 @@ ${url ? `<url>${url}</url>` : ''}
         if (finalMessage && finalMessage.content) {
           console.log('SimplifiedAgent: Emitting complete response (fallback)');
 
-          this.emitResponse(finalMessage.content);
+          const text = extractTextContent(finalMessage.content);
+          if (text) {
+            this.emitResponse(text);
+          }
         }
       }
 
@@ -873,37 +1098,25 @@ ${url ? `<url>${url}</url>` : ''}
         );
       }
 
+      // Clean up tool_llm_usage listener before final emission
+      this.emitter.removeListener('tool_llm_usage', toolLlmUsageHandler);
+
       // Emit model stats and end signal after streaming is complete
-      const modelNameChat = getModelName(this.chatLlm);
-      const modelNameSystem = getModelName(this.systemLlm);
       console.log(
         'SimplifiedAgent: Usage collected — chat:',
         usageChat,
         'system:',
         usageSystem,
       );
-      this.emitter.emit(
-        'stats',
-        JSON.stringify({
-          type: 'modelStats',
-          data: {
-            modelName: modelNameChat, // legacy
-            modelNameChat,
-            modelNameSystem,
-            usage: {
-              input_tokens: usageChat.input_tokens + usageSystem.input_tokens,
-              output_tokens:
-                usageChat.output_tokens + usageSystem.output_tokens,
-              total_tokens: usageChat.total_tokens + usageSystem.total_tokens,
-            },
-            usageChat,
-            usageSystem,
-          },
-        }),
-      );
+      this.emitModelStats(usageChat, usageSystem);
 
       this.emitter.emit('end');
-    } catch (error: any) {
+    } catch (error: unknown) {
+      // Clean up tool_llm_usage listener on error
+      if (toolLlmUsageHandler) {
+        this.emitter.removeListener('tool_llm_usage', toolLlmUsageHandler);
+      }
+
       console.error('SimplifiedAgent: Error during search and answer:', error);
 
       // Handle specific error types

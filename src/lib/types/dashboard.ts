@@ -37,8 +37,34 @@ export interface DashboardLayouts {
 
 // Local storage keys
 export const DASHBOARD_STORAGE_KEYS = {
-  WIDGETS: 'perplexica_dashboard_widgets',
-  SETTINGS: 'perplexica_dashboard_settings',
-  CACHE: 'perplexica_dashboard_cache',
-  LAYOUTS: 'perplexica_dashboard_layouts',
+  WIDGETS: 'yaawc_dashboard_widgets',
+  SETTINGS: 'yaawc_dashboard_settings',
+  CACHE: 'yaawc_dashboard_cache',
+  LAYOUTS: 'yaawc_dashboard_layouts',
 } as const;
+
+// Legacy keys from before the Perplexica → YAAWC rebrand
+const LEGACY_STORAGE_KEYS: Record<string, string> = {
+  perplexica_dashboard_widgets: DASHBOARD_STORAGE_KEYS.WIDGETS,
+  perplexica_dashboard_settings: DASHBOARD_STORAGE_KEYS.SETTINGS,
+  perplexica_dashboard_cache: DASHBOARD_STORAGE_KEYS.CACHE,
+  perplexica_dashboard_layouts: DASHBOARD_STORAGE_KEYS.LAYOUTS,
+};
+
+/**
+ * Migrates legacy `perplexica_dashboard_*` localStorage keys to `yaawc_dashboard_*`.
+ * Copies values only when the new key doesn't already exist, then removes the old key.
+ * Safe to call multiple times — no-ops once migration is complete.
+ */
+export function migrateDashboardStorage(): void {
+  if (typeof window === 'undefined') return;
+  for (const [oldKey, newKey] of Object.entries(LEGACY_STORAGE_KEYS)) {
+    const oldValue = localStorage.getItem(oldKey);
+    if (oldValue !== null && localStorage.getItem(newKey) === null) {
+      localStorage.setItem(newKey, oldValue);
+    }
+    if (oldValue !== null) {
+      localStorage.removeItem(oldKey);
+    }
+  }
+}

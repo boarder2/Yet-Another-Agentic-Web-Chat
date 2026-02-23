@@ -1,16 +1,16 @@
 FROM node:22-slim AS builder
 
-WORKDIR /home/perplexica
+WORKDIR /home/yaawc
 
 COPY package.json yarn.lock ./
 RUN yarn install --frozen-lockfile --network-timeout 600000
 ENV NEXT_TELEMETRY_DISABLED=1
 
-COPY tsconfig.json next.config.mjs next-env.d.ts postcss.config.js drizzle.config.ts tailwind.config.ts ./
+COPY tsconfig.json next.config.mjs postcss.config.js drizzle.config.ts tailwind.config.ts ./
 COPY src ./src
 COPY public ./public
 
-RUN mkdir -p /home/perplexica/data
+RUN mkdir -p /home/yaawc/data
 RUN yarn build
 
 RUN yarn add --dev @vercel/ncc
@@ -20,22 +20,22 @@ FROM node:22-slim
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
-WORKDIR /home/perplexica
+WORKDIR /home/yaawc
 
-COPY --from=builder /home/perplexica/public ./public
-COPY --from=builder /home/perplexica/.next/static ./public/_next/static
+COPY --from=builder /home/yaawc/public ./public
+COPY --from=builder /home/yaawc/.next/static ./public/_next/static
 
-COPY --from=builder /home/perplexica/.next/standalone ./
-COPY --from=builder /home/perplexica/data ./data
+COPY --from=builder /home/yaawc/.next/standalone ./
+COPY --from=builder /home/yaawc/data ./data
 COPY drizzle ./drizzle
-COPY --from=builder /home/perplexica/migrator/build ./build
-COPY --from=builder /home/perplexica/migrator/index.js ./migrate.js
+COPY --from=builder /home/yaawc/migrator/build ./build
+COPY --from=builder /home/yaawc/migrator/index.js ./migrate.js
 
 COPY entrypoint.sh ./entrypoint.sh
 
-RUN mkdir /home/perplexica/uploads && \
-    chown -R node:node /home/perplexica && \
-    chmod +x /home/perplexica/entrypoint.sh && \
+RUN mkdir /home/yaawc/uploads && \
+    chown -R node:node /home/yaawc && \
+    chmod +x /home/yaawc/entrypoint.sh && \
     npm install playwright -g --no-fund --no-audit && \
     npx playwright install-deps chromium && \
     apt-get update && \

@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { updateToolCallMarkup } from '@/lib/utils/toolCallMarkup';
+import { encodeHtmlAttribute } from '@/lib/utils/html';
 import { Document } from '@langchain/core/documents';
 import Navbar from './Navbar';
 import Chat from './Chat';
 import EmptyChat from './EmptyChat';
 import crypto from 'crypto';
 import { toast } from 'sonner';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useSearchParams, usePathname } from 'next/navigation';
 import { getSuggestions } from '@/lib/actions';
 import { Settings } from 'lucide-react';
 import Link from 'next/link';
@@ -34,13 +35,6 @@ export type ModelStats = {
   usedPersonalization?: boolean;
 };
 
-export type AgentActionEvent = {
-  action: string;
-  message: string;
-  details: Record<string, any>;
-  timestamp: Date;
-};
-
 export type Message = {
   messageId: string;
   chatId: string;
@@ -61,6 +55,7 @@ export type Message = {
   expandedThinkBoxes?: Set<string>;
   usedLocation?: boolean;
   usedPersonalization?: boolean;
+  images?: ImageAttachment[];
 };
 
 export interface File {
@@ -69,16 +64,18 @@ export interface File {
   fileId: string;
 }
 
+export interface ImageAttachment {
+  imageId: string;
+  fileName: string;
+  mimeType: string;
+}
+
 interface ChatModelProvider {
   name: string;
   provider: string;
 }
 
 interface EmbeddingModelProvider {
-  name: string;
-  provider: string;
-}
-interface SystemModelProvider {
   name: string;
   provider: string;
 }
@@ -246,7 +243,7 @@ const loadMessages = async (
   chatId: string,
   setMessages: (messages: Message[]) => void,
   setIsMessagesLoaded: (loaded: boolean) => void,
-  setChatHistory: (history: [string, string][]) => void,
+  setChatHistory: (history: [string, string, string[]?][]) => void,
   setFocusMode: (mode: string) => void,
   setNotFound: (notFound: boolean) => void,
   setFiles: (files: File[]) => void,
@@ -267,24 +264,28 @@ const loadMessages = async (
 
   const data = await res.json();
 
-  const messages = data.messages.map((msg: any) => {
+  const messages = data.messages.map((msg: unknown) => {
     return {
-      ...msg,
-      ...JSON.parse(msg.metadata),
+      ...(msg as Record<string, unknown>),
+      ...JSON.parse((msg as Record<string, string>).metadata),
     };
   }) as Message[];
 
   setMessages(messages);
 
   const history = messages.map((msg) => {
-    return [msg.role, msg.content];
-  }) as [string, string][];
+    const entry: [string, string, string[]?] = [msg.role, msg.content];
+    if (msg.role === 'user' && msg.images && msg.images.length > 0) {
+      entry[2] = msg.images.map((img: ImageAttachment) => img.imageId);
+    }
+    return entry;
+  }) as [string, string, string[]?][];
 
   console.debug(new Date(), 'app:messages_loaded');
 
   document.title = messages[0].content;
 
-  const files = data.chat.files.map((file: any) => {
+  const files = data.chat.files.map((file: Record<string, string>) => {
     return {
       fileName: file.name,
       fileExtension: file.name.split('.').pop(),
@@ -302,7 +303,7 @@ const loadMessages = async (
 
 const ChatWindow = ({ id }: { id?: string }) => {
   const searchParams = useSearchParams();
-  const router = useRouter();
+  const pathname = usePathname();
   const initialMessage = searchParams.get('q');
 
   const [chatId, setChatId] = useState<string | undefined>(id);
@@ -333,7 +334,6 @@ const ChatWindow = ({ id }: { id?: string }) => {
       setIsConfigReady,
       setHasError,
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const [loading, setLoading] = useState(false);
@@ -346,11 +346,24 @@ const ChatWindow = ({ id }: { id?: string }) => {
   } | null>(null);
   const [liveModelStats, setLiveModelStats] = useState<ModelStats | null>(null);
 
-  const [chatHistory, setChatHistory] = useState<[string, string][]>([]);
+  const [chatHistory, setChatHistory] = useState<[string, string, string[]?][]>(
+    [],
+  );
   const [messages, setMessages] = useState<Message[]>([]);
+
+  const [todoItems, setTodoItems] = useState<
+    Array<{ content: string; status: string }>
+  >([]);
 
   const [files, setFiles] = useState<File[]>([]);
   const [fileIds, setFileIds] = useState<string[]>([]);
+
+  const [pendingImages, setPendingImages] = useState<ImageAttachment[]>([]);
+
+  const [imageCapable, setImageCapable] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('imageCapable') === 'true';
+  });
 
   const [focusMode, setFocusMode] = useState('webSearch');
   const [systemPromptIds, setSystemPromptIds] = useState<string[]>([]);
@@ -422,6 +435,17 @@ const ChatWindow = ({ id }: { id?: string }) => {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    const handleImageCapableStorage = () => {
+      setImageCapable(localStorage.getItem('imageCapable') === 'true');
+    };
+    window.addEventListener('storage', handleImageCapableStorage);
+    return () => {
+      window.removeEventListener('storage', handleImageCapableStorage);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
     const storedSendLocation = localStorage.getItem(SEND_LOCATION_KEY);
     const storedSendProfile = localStorage.getItem(SEND_PROFILE_KEY);
 
@@ -476,6 +500,33 @@ const ChatWindow = ({ id }: { id?: string }) => {
     messagesRef.current = messages;
   }, [messages]);
 
+  // Reset to a fresh chat when the user navigates back to "/" (e.g. via the
+  // sidebar "new chat" Link).  window.history.replaceState is used earlier to
+  // update the URL to /c/chatId without unmounting the component; usePathname()
+  // reflects that change, so when Next.js Link navigates to "/" the pathname
+  // switches from /c/… back to / and this effect fires.
+  const prevPathnameRef = useRef(pathname);
+  useEffect(() => {
+    if (prevPathnameRef.current !== pathname && pathname === '/' && !id) {
+      setMessages([]);
+      setChatHistory([]);
+      setFiles([]);
+      setFileIds([]);
+      setPendingImages([]);
+      setNewChatCreated(true);
+      setIsMessagesLoaded(true);
+      setLoading(false);
+      setGatheringSources([]);
+      setTodoItems([]);
+      setAnalysisProgress(null);
+      setLiveModelStats(null);
+      setNotFound(false);
+      setChatId(crypto.randomBytes(20).toString('hex'));
+      document.title = 'Chat - YAAWC';
+    }
+    prevPathnameRef.current = pathname;
+  }, [pathname, id]);
+
   useEffect(() => {
     if (isMessagesLoaded && isConfigReady) {
       setIsReady(true);
@@ -491,6 +542,7 @@ const ChatWindow = ({ id }: { id?: string }) => {
       messageId?: string;
       suggestions?: string[];
       editMode?: boolean;
+      images?: ImageAttachment[];
     },
   ) => {
     const userLocation = sendLocation ? personalizationLocation : '';
@@ -547,6 +599,17 @@ const ChatWindow = ({ id }: { id?: string }) => {
     const messageId =
       options?.messageId ?? crypto.randomBytes(7).toString('hex');
 
+    // In edit mode, use explicitly-provided images; otherwise use pendingImages
+    const messageImages =
+      options?.images !== undefined
+        ? options.images.length > 0
+          ? options.images
+          : undefined
+        : pendingImages.length > 0
+          ? [...pendingImages]
+          : undefined;
+    const messageImageIds = messageImages?.map((img) => img.imageId);
+
     setMessages((prevMessages) => [
       ...prevMessages,
       {
@@ -555,15 +618,19 @@ const ChatWindow = ({ id }: { id?: string }) => {
         chatId: chatId!,
         role: 'user',
         createdAt: new Date(),
+        ...(messageImages && { images: messageImages }),
       },
     ]);
+
+    setPendingImages([]);
 
     // If this is a new chat (no chatId in URL), replace the URL to include the new chatId
     if (messages.length <= 1) {
       window.history.replaceState({}, '', `/c/${chatId}`);
     }
 
-    const messageHandler = async (data: any) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const messageHandler = async (data: Record<string, any>) => {
       if (data.type === 'error') {
         toast.error(data.data);
         setLoading(false);
@@ -715,6 +782,334 @@ const ChatWindow = ({ id }: { id?: string }) => {
         return;
       }
 
+      // Handle subagent execution started
+      if (data.type === 'subagent_started') {
+        console.log('ChatWindow: Subagent started:', data);
+        const subagentMarkup = `<SubagentExecution id="${data.executionId}" name="${encodeHtmlAttribute(data.name ?? '')}" task="${encodeHtmlAttribute(data.task ?? '')}" status="running"></SubagentExecution>\n`;
+
+        if (!added) {
+          setMessages((prevMessages) => [
+            ...prevMessages,
+            {
+              content: subagentMarkup,
+              messageId: data.messageId || 'temp',
+              chatId: chatId!,
+              role: 'assistant',
+              sources: sources,
+              createdAt: new Date(),
+            },
+          ]);
+          added = true;
+        } else {
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.messageId === data.messageId
+                ? { ...message, content: message.content + subagentMarkup }
+                : message,
+            ),
+          );
+        }
+        recievedMessage += subagentMarkup;
+        setScrollTrigger((prev) => prev + 1);
+        return;
+      }
+
+      // Handle subagent data (nested events like tool calls and responses)
+      if (data.type === 'subagent_data') {
+        const nestedEvent = data.data;
+        const executionId = data.subagentId;
+
+        // Handle response tokens - accumulate into responseText attribute
+        if (nestedEvent.type === 'response') {
+          const token = nestedEvent.data || '';
+          console.log('ChatWindow: Subagent response token:', {
+            executionId,
+            tokenLength: token.length,
+            token: token.substring(0, 50),
+          });
+          setMessages((prev) =>
+            prev.map((message) => {
+              if (message.messageId === data.messageId) {
+                const subagentRegex = new RegExp(
+                  `<SubagentExecution\\s+id="${executionId}"([^>]*)>`,
+                  'g',
+                );
+
+                const updatedContent = message.content.replace(
+                  subagentRegex,
+                  (match, attrs) => {
+                    // Extract existing responseText
+                    const responseMatch = attrs.match(/responseText="([^"]*)"/);
+                    let existingText = '';
+                    if (responseMatch) {
+                      existingText = responseMatch[1]
+                        .replace(/&quot;/g, '"')
+                        .replace(/&lt;/g, '<')
+                        .replace(/&gt;/g, '>')
+                        .replace(/&amp;/g, '&');
+                    }
+
+                    // Append new token
+                    const newText = existingText + token;
+                    const escapedText = newText
+                      .replace(/&/g, '&amp;')
+                      .replace(/</g, '&lt;')
+                      .replace(/>/g, '&gt;')
+                      .replace(/"/g, '&quot;');
+
+                    // Update or add responseText attribute
+                    let updatedAttrs = attrs.replace(
+                      /responseText="[^"]*"/,
+                      `responseText="${escapedText}"`,
+                    );
+                    if (!updatedAttrs.includes('responseText=')) {
+                      updatedAttrs += ` responseText="${escapedText}"`;
+                    }
+
+                    console.log('ChatWindow: Updated responseText attr:', {
+                      executionId,
+                      textLength: newText.length,
+                      escapedLength: escapedText.length,
+                    });
+
+                    return `<SubagentExecution id="${executionId}"${updatedAttrs}>`;
+                  },
+                );
+
+                return { ...message, content: updatedContent };
+              }
+              return message;
+            }),
+          );
+          return;
+        }
+
+        // Only process tool call events beyond this point
+        if (!nestedEvent.type || !nestedEvent.type.startsWith('tool_call')) {
+          return;
+        }
+
+        console.log('ChatWindow: Subagent tool call:', nestedEvent);
+
+        // Convert tool call event to ToolCall markup
+        let toolCallMarkup = '';
+        if (
+          nestedEvent.type === 'tool_call_started' &&
+          nestedEvent.data?.content
+        ) {
+          toolCallMarkup = nestedEvent.data.content;
+        } else if (
+          nestedEvent.type === 'tool_call_success' &&
+          nestedEvent.data?.toolCallId
+        ) {
+          // Success event will update existing ToolCall, handle in next block
+          setMessages((prev) =>
+            prev.map((message) => {
+              if (message.messageId === data.messageId) {
+                // Update existing ToolCall status
+                const toolCallRegex = new RegExp(
+                  `<ToolCall([^>]*toolCallId="${nestedEvent.data.toolCallId}"[^>]*)>`,
+                  'g',
+                );
+                const updatedContent = message.content.replace(
+                  toolCallRegex,
+                  (match, attrs) => {
+                    let updated = attrs.replace(
+                      /status="[^"]*"/,
+                      'status="success"',
+                    );
+                    if (!updated.includes('status=')) {
+                      updated += ' status="success"';
+                    }
+                    return `<ToolCall${updated}>`;
+                  },
+                );
+                return { ...message, content: updatedContent };
+              }
+              return message;
+            }),
+          );
+          return;
+        } else if (
+          nestedEvent.type === 'tool_call_error' &&
+          nestedEvent.data?.toolCallId
+        ) {
+          // Error event will update existing ToolCall
+          setMessages((prev) =>
+            prev.map((message) => {
+              if (message.messageId === data.messageId) {
+                const toolCallRegex = new RegExp(
+                  `<ToolCall([^>]*toolCallId="${nestedEvent.data.toolCallId}"[^>]*)>`,
+                  'g',
+                );
+                const updatedContent = message.content.replace(
+                  toolCallRegex,
+                  (match, attrs) => {
+                    let updated = attrs.replace(
+                      /status="[^"]*"/,
+                      'status="error"',
+                    );
+                    if (!updated.includes('status=')) {
+                      updated += ' status="error"';
+                    }
+                    if (nestedEvent.data.error) {
+                      const escapedError = nestedEvent.data.error
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;');
+                      updated += ` error="${escapedError}"`;
+                    }
+                    return `<ToolCall${updated}>`;
+                  },
+                );
+                return { ...message, content: updatedContent };
+              }
+              return message;
+            }),
+          );
+          return;
+        }
+
+        if (!toolCallMarkup) {
+          return;
+        }
+
+        // Insert ToolCall markup inside SubagentExecution
+        setMessages((prev) =>
+          prev.map((message) => {
+            if (message.messageId === data.messageId) {
+              // Use a more permissive regex that can match existing nested content
+              const subagentRegex = new RegExp(
+                `(<SubagentExecution\\s+id="${executionId}"[^>]*>)(.*?)(</SubagentExecution>)`,
+                'gs',
+              );
+
+              const updatedContent = message.content.replace(
+                subagentRegex,
+                (match, openTag, content, closeTag) => {
+                  console.log(
+                    'ChatWindow: Inserting ToolCall, existing content length:',
+                    content.length,
+                  );
+                  return `${openTag}${content}${toolCallMarkup}\n${closeTag}`;
+                },
+              );
+
+              return { ...message, content: updatedContent };
+            }
+            return message;
+          }),
+        );
+
+        setScrollTrigger((prev) => prev + 1);
+        return;
+      }
+
+      // Handle subagent completion or error
+      if (
+        data.type === 'subagent_completed' ||
+        data.type === 'subagent_error'
+      ) {
+        console.log('ChatWindow: Subagent ended:', data.type, data);
+        const status = data.type === 'subagent_completed' ? 'success' : 'error';
+        const executionId = data.id;
+
+        setMessages((prev) =>
+          prev.map((message) => {
+            if (message.messageId === data.messageId) {
+              // Find and update the specific SubagentExecution tag
+              const subagentRegex = new RegExp(
+                `<SubagentExecution\\s+id="${executionId}"([^>]*)>(.*?)<\\/SubagentExecution>`,
+                'gs',
+              );
+
+              const updatedContent = message.content.replace(
+                subagentRegex,
+                (match, attrs, innerContent) => {
+                  // Update attributes
+                  let updatedAttrs = attrs
+                    .replace(/status="[^"]*"/, `status="${status}"`)
+                    .trim();
+
+                  if (!updatedAttrs.includes('status=')) {
+                    updatedAttrs += ` status="${status}"`;
+                  }
+
+                  if (data.summary && status === 'success') {
+                    // Escape HTML entities in summary
+                    const escapedSummary = data.summary
+                      .replace(/&/g, '&amp;')
+                      .replace(/</g, '&lt;')
+                      .replace(/>/g, '&gt;')
+                      .replace(/"/g, '&quot;');
+                    updatedAttrs += ` summary="${escapedSummary}"`;
+                  }
+
+                  if (data.error && status === 'error') {
+                    const escapedError = data.error
+                      .replace(/&/g, '&amp;')
+                      .replace(/</g, '&lt;')
+                      .replace(/>/g, '&gt;')
+                      .replace(/"/g, '&quot;');
+                    updatedAttrs += ` error="${escapedError}"`;
+                  }
+
+                  // Preserve inner content (ToolCall markup)
+                  return `<SubagentExecution ${updatedAttrs}>${innerContent}</SubagentExecution>`;
+                },
+              );
+
+              return { ...message, content: updatedContent };
+            }
+            return message;
+          }),
+        );
+
+        // Update recievedMessage as well
+        const subagentRegexForPersistence = new RegExp(
+          `<SubagentExecution\\s+id="${executionId}"([^>]*)>(.*?)<\\/SubagentExecution>`,
+          'gs',
+        );
+        recievedMessage = recievedMessage.replace(
+          subagentRegexForPersistence,
+          (match, attrs, innerContent) => {
+            let updatedAttrs = attrs
+              .replace(/status="[^"]*"/, `status="${status}"`)
+              .trim();
+            if (!updatedAttrs.includes('status=')) {
+              updatedAttrs += ` status="${status}"`;
+            }
+            if (data.summary && status === 'success') {
+              const escapedSummary = data.summary
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+              updatedAttrs += ` summary="${escapedSummary}"`;
+            }
+            if (data.error && status === 'error') {
+              const escapedError = data.error
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+              updatedAttrs += ` error="${escapedError}"`;
+            }
+            return `<SubagentExecution ${updatedAttrs}>${innerContent}</SubagentExecution>`;
+          },
+        );
+
+        setScrollTrigger((prev) => prev + 1);
+        return;
+      }
+
+      // Handle todo list updates
+      if (data.type === 'todo_update') {
+        setTodoItems(data.data.todos || []);
+        return;
+      }
+
       if (data.type === 'response') {
         // Add to buffer instead of immediately updating UI
         messageBuffer += data.data;
@@ -755,9 +1150,10 @@ const ChatWindow = ({ id }: { id?: string }) => {
       }
 
       if (data.type === 'messageEnd') {
-        // Clear analysis progress
+        // Clear analysis progress and todo list
         setAnalysisProgress(null);
         setLiveModelStats(null);
+        setTodoItems([]);
 
         // Ensure final message content is displayed (flush any remaining buffer)
         setMessages((prev) =>
@@ -804,7 +1200,13 @@ const ChatWindow = ({ id }: { id?: string }) => {
 
         setChatHistory((prevHistory) => [
           ...prevHistory,
-          ['human', message],
+          messageImageIds?.length
+            ? (['human', message, messageImageIds] as [
+                string,
+                string,
+                string[],
+              ])
+            : (['human', message] as [string, string]),
           ['assistant', recievedMessage],
         ]);
 
@@ -854,7 +1256,7 @@ const ChatWindow = ({ id }: { id?: string }) => {
       localStorage.getItem('systemModelProvider') || modelProvider;
     const systemModelName = localStorage.getItem('systemModel') || modelName;
 
-    const payload: Record<string, any> = {
+    const payload: Record<string, unknown> = {
       content: message,
       message: {
         messageId: messageId,
@@ -885,6 +1287,11 @@ const ChatWindow = ({ id }: { id?: string }) => {
       },
       selectedSystemPromptIds: systemPromptIds || [],
     };
+
+    if (messageImageIds?.length) {
+      payload.messageImageIds = messageImageIds;
+      payload.messageImages = messageImages;
+    }
 
     if (userLocation) {
       payload.userLocation = userLocation;
@@ -922,7 +1329,7 @@ const ChatWindow = ({ id }: { id?: string }) => {
           messageHandler(json);
         }
         partialChunk = '';
-      } catch (error) {
+      } catch (_error) {
         console.warn('Incomplete JSON, waiting for next chunk...');
       }
     }
@@ -938,7 +1345,11 @@ const ChatWindow = ({ id }: { id?: string }) => {
     });
   };
 
-  const handleEditMessage = async (messageId: string, newContent: string) => {
+  const handleEditMessage = async (
+    messageId: string,
+    newContent: string,
+    images?: ImageAttachment[],
+  ) => {
     // Get the index of the message being edited
     const messageIndex = messages.findIndex(
       (msg) => msg.messageId === messageId,
@@ -949,6 +1360,7 @@ const ChatWindow = ({ id }: { id?: string }) => {
       sendMessage(newContent, {
         messageId,
         editMode: true,
+        images,
       });
     } catch (error) {
       console.error('Error updating message:', error);
@@ -1052,6 +1464,10 @@ const ChatWindow = ({ id }: { id?: string }) => {
               personalizationLocation={personalizationLocation}
               personalizationAbout={personalizationAbout}
               refreshPersonalization={refreshPersonalization}
+              todoItems={todoItems}
+              pendingImages={pendingImages}
+              setPendingImages={setPendingImages}
+              imageCapable={imageCapable}
             />
           </>
         ) : (
@@ -1072,6 +1488,9 @@ const ChatWindow = ({ id }: { id?: string }) => {
             personalizationLocation={personalizationLocation}
             personalizationAbout={personalizationAbout}
             refreshPersonalization={refreshPersonalization}
+            pendingImages={pendingImages}
+            setPendingImages={setPendingImages}
+            imageCapable={imageCapable}
           />
         )}
       </div>

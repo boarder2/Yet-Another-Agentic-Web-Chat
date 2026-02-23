@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 440">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#16213e;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#e94560;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#ff6b6b;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="bubbleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f3460;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#533483;stop-opacity:1" />
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Background circle -->
+  <circle cx="220" cy="220" r="210" fill="url(#bgGrad)" stroke="#e94560" stroke-width="4"/>
+  
+  <!-- Chat bubble body -->
+  <rect x="90" y="100" rx="32" ry="32" width="260" height="180" fill="url(#bubbleGrad)" opacity="0.9"/>
+  <!-- Chat bubble tail -->
+  <polygon points="140,280 170,280 130,330" fill="url(#bubbleGrad)" opacity="0.9"/>
+  
+  <!-- Smirking face - the sarcastic agent -->
+  <!-- Left eye - raised eyebrow (skeptical) -->
+  <ellipse cx="170" cy="170" rx="18" ry="20" fill="#e94560"/>
+  <ellipse cx="170" cy="173" rx="10" ry="10" fill="#1a1a2e"/>
+  <!-- Raised eyebrow -->
+  <path d="M148 148 Q170 132 192 145" stroke="#ff6b6b" stroke-width="5" fill="none" stroke-linecap="round"/>
+  
+  <!-- Right eye - normal but glinting -->
+  <ellipse cx="270" cy="175" rx="18" ry="20" fill="#e94560"/>
+  <ellipse cx="270" cy="178" rx="10" ry="10" fill="#1a1a2e"/>
+  <!-- Glint -->
+  <circle cx="276" cy="172" r="4" fill="white" opacity="0.8"/>
+  <!-- Normal eyebrow -->
+  <path d="M248 153 Q270 145 292 153" stroke="#ff6b6b" stroke-width="5" fill="none" stroke-linecap="round"/>
+  
+  <!-- Smirk mouth -->
+  <path d="M165 225 Q200 240 240 235 Q270 228 295 215" stroke="#e94560" stroke-width="6" fill="none" stroke-linecap="round" filter="url(#glow)"/>
+  
+  <!-- Web/network nodes orbiting - representing "web" capability -->
+  <!-- Node connections -->
+  <line x1="320" y1="85" x2="355" y2="120" stroke="#533483" stroke-width="2" opacity="0.6"/>
+  <line x1="355" y1="120" x2="370" y2="80" stroke="#533483" stroke-width="2" opacity="0.6"/>
+  <line x1="320" y1="85" x2="370" y2="80" stroke="#533483" stroke-width="2" opacity="0.6"/>
+  <line x1="355" y1="120" x2="380" y2="155" stroke="#533483" stroke-width="2" opacity="0.6"/>
+  
+  <!-- Nodes -->
+  <circle cx="320" cy="85" r="6" fill="#e94560" filter="url(#glow)"/>
+  <circle cx="355" cy="120" r="5" fill="#ff6b6b"/>
+  <circle cx="370" cy="80" r="4" fill="#e94560"/>
+  <circle cx="380" cy="155" r="5" fill="#ff6b6b" filter="url(#glow)"/>
+  
+  <!-- Small search magnifying glass hint -->
+  <circle cx="85" cy="330" r="20" stroke="#533483" stroke-width="4" fill="none" opacity="0.5"/>
+  <line x1="99" y1="344" x2="115" y2="360" stroke="#533483" stroke-width="4" opacity="0.5" stroke-linecap="round"/>
+  
+  <!-- YAAWC text -->
+  <text x="220" y="390" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-weight="700" font-size="48" fill="url(#accentGrad)" letter-spacing="6" filter="url(#glow)">YAAWC</text>
+</svg>

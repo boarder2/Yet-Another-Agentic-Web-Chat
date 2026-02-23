@@ -1,4 +1,3 @@
-import type { Embeddings } from '@langchain/core/embeddings';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { BaseMessage } from '@langchain/core/messages';
 import eventEmitter from 'events';
@@ -20,6 +19,7 @@ export interface MetaSearchAgentType {
     messageId?: string,
     retrievalSignal?: AbortSignal,
     personalization?: PersonalizationContext,
+    messageImageIds?: string[],
   ) => Promise<eventEmitter>;
 }
 
@@ -64,6 +64,7 @@ class MetaSearchAgent implements MetaSearchAgentType {
     messageId?: string,
     retrievalSignal?: AbortSignal,
     personalization?: PersonalizationContext,
+    messageImageIds?: string[],
   ) {
     try {
       const agentSearch = new AgentSearch(
@@ -81,7 +82,12 @@ class MetaSearchAgent implements MetaSearchAgentType {
       );
 
       // Execute the agent workflow
-      await agentSearch.searchAndAnswer(message, history, fileIds);
+      await agentSearch.searchAndAnswer(
+        message,
+        history,
+        fileIds,
+        messageImageIds,
+      );
 
       // No need to emit end signals here since synthesizerAgent
       // is now streaming in real-time and emits them
@@ -111,6 +117,7 @@ class MetaSearchAgent implements MetaSearchAgentType {
     messageId?: string,
     retrievalSignal?: AbortSignal,
     personalization?: PersonalizationContext,
+    messageImageIds?: string[],
   ) {
     const emitter = new eventEmitter();
 
@@ -130,6 +137,7 @@ class MetaSearchAgent implements MetaSearchAgentType {
       messageId || '',
       retrievalSignal || signal,
       personalization,
+      messageImageIds,
     );
 
     return emitter;

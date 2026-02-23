@@ -1,8 +1,10 @@
-# Tracing LLM Calls in Perplexica
+# Tracing LLM Calls in YAAWC
 
-Perplexica supports tracing all LangChain and LangGraph LLM calls for debugging, analytics, and prompt transparency. You can use either Langfuse (self-hosted, private, or cloud) or LangSmith (cloud, by LangChain) for tracing.
+YAAWC has infrastructure for tracing LangChain and LangGraph LLM calls for debugging, analytics, and prompt transparency. You can use either Langfuse (self-hosted, private, or cloud) or LangSmith (cloud, by LangChain) for tracing.
 
-## Langfuse Tracing (Recommended for Private/Self-Hosted)
+## Langfuse Tracing
+
+> **Note**: The Langfuse integration code is currently disabled (commented out in `src/lib/tracing/langfuse.ts`). The infrastructure is in place but not active. To enable it, uncomment the code in that file and install the `langfuse-langchain` dependency.
 
 Langfuse is an open-source, self-hostable observability platform for LLM applications. It allows you to trace prompts, completions, and tool calls **privately**—no data leaves your infrastructure if you self-host.
 
@@ -12,7 +14,11 @@ Langfuse is an open-source, self-hostable observability platform for LLM applica
    - See: [Langfuse Self-Hosting Guide](https://langfuse.com/docs/self-hosting)
    - You can also use the Langfuse Cloud if you prefer.
 
-2. **Configure Environment Variables**
+2. **Uncomment the tracing code**
+   - Edit `src/lib/tracing/langfuse.ts` and uncomment the implementation.
+   - Ensure the `langfuse-langchain` package is installed.
+
+3. **Configure Environment Variables**
    - Add the following to your environment variables in docker-compose or your deployment environment:
 
      ```env
@@ -21,14 +27,14 @@ Langfuse is an open-source, self-hostable observability platform for LLM applica
      LANGFUSE_BASE_URL=https://your-langfuse-instance.com
      ```
 
-   - These are required for the tracing integration to work. If not set, tracing is disabled gracefully.
+   - These are required for the tracing integration to work.
 
-3. **Run Perplexica**
-   - All LLM and agent calls will be traced automatically. You can view traces in your Langfuse dashboard.
+4. **Run YAAWC**
+   - Once enabled, all LLM and agent calls will be traced automatically. You can view traces in your Langfuse dashboard.
 
 ## LangSmith Tracing (Cloud by LangChain)
 
-Perplexica also supports tracing via [LangSmith](https://smith.langchain.com/), the official observability platform by LangChain.
+YAAWC also supports tracing via [LangSmith](https://smith.langchain.com/), the official observability platform by LangChain.
 
 - To enable LangSmith, follow the official guide: [LangSmith Observability Docs](https://docs.smith.langchain.com/observability)
 - Set the required environment variables as described in their documentation.

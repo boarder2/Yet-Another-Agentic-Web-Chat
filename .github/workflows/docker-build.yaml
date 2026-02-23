@@ -34,7 +34,7 @@ jobs:
         if: github.ref == 'refs/heads/master' && github.event_name == 'push'
         run: |
           DOCKERFILE=app.dockerfile
-          IMAGE_NAME=perplexica
+          IMAGE_NAME=yaawc
           docker buildx build --platform linux/amd64 \
             --cache-from=type=registry,ref=itzcrazykns1337/${IMAGE_NAME}:amd64 \
             --cache-to=type=inline \
@@ -47,7 +47,7 @@ jobs:
         if: github.event_name == 'release'
         run: |
           DOCKERFILE=app.dockerfile
-          IMAGE_NAME=perplexica
+          IMAGE_NAME=yaawc
           docker buildx build --platform linux/amd64 \
             --cache-from=type=registry,ref=itzcrazykns1337/${IMAGE_NAME}:${{ env.RELEASE_VERSION }}-amd64 \
             --cache-to=type=inline \
@@ -82,7 +82,7 @@ jobs:
         if: github.ref == 'refs/heads/master' && github.event_name == 'push'
         run: |
           DOCKERFILE=app.dockerfile
-          IMAGE_NAME=perplexica
+          IMAGE_NAME=yaawc
           docker buildx build --platform linux/arm64 \
             --cache-from=type=registry,ref=itzcrazykns1337/${IMAGE_NAME}:arm64 \
             --cache-to=type=inline \
@@ -95,7 +95,7 @@ jobs:
         if: github.event_name == 'release'
         run: |
           DOCKERFILE=app.dockerfile
-          IMAGE_NAME=perplexica
+          IMAGE_NAME=yaawc
           docker buildx build --platform linux/arm64 \
             --cache-from=type=registry,ref=itzcrazykns1337/${IMAGE_NAME}:${{ env.RELEASE_VERSION }}-arm64 \
             --cache-to=type=inline \
@@ -122,7 +122,7 @@ jobs:
       - name: Create and push multi-arch manifest for main
         if: github.ref == 'refs/heads/master' && github.event_name == 'push'
         run: |
-          IMAGE_NAME=perplexica
+          IMAGE_NAME=yaawc
           docker manifest create itzcrazykns1337/${IMAGE_NAME}:main \
             --amend itzcrazykns1337/${IMAGE_NAME}:amd64 \
             --amend itzcrazykns1337/${IMAGE_NAME}:arm64
@@ -131,7 +131,7 @@ jobs:
       - name: Create and push multi-arch manifest for releases
         if: github.event_name == 'release'
         run: |
-          IMAGE_NAME=perplexica
+          IMAGE_NAME=yaawc
           docker manifest create itzcrazykns1337/${IMAGE_NAME}:${{ env.RELEASE_VERSION }} \
             --amend itzcrazykns1337/${IMAGE_NAME}:${{ env.RELEASE_VERSION }}-amd64 \
             --amend itzcrazykns1337/${IMAGE_NAME}:${{ env.RELEASE_VERSION }}-arm64

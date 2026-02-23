@@ -1,7 +1,8 @@
 import { cn } from '@/lib/utils';
-import { Check, Pencil, X } from 'lucide-react';
+import { Pencil } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { Message } from './ChatWindow';
+import { File, ImageAttachment, Message } from './ChatWindow';
+import MessageInput from './MessageInput';
 import MessageTabs from './MessageTabs';
 import { Document } from '@langchain/core/documents';
 
@@ -19,6 +20,7 @@ const MessageBox = ({
   modelStats,
   gatheringSources,
   actionMessageId,
+  editInputProps,
 }: {
   message: Message;
   messageIndex: number;
@@ -34,7 +36,11 @@ const MessageBox = ({
       suggestions?: string[];
     },
   ) => void;
-  handleEditMessage: (messageId: string, content: string) => void;
+  handleEditMessage: (
+    messageId: string,
+    content: string,
+    images?: ImageAttachment[],
+  ) => void;
   onThinkBoxToggle: (
     messageId: string,
     thinkBoxId: string,
@@ -68,10 +74,30 @@ const MessageBox = ({
     sources: Document[];
   }>;
   actionMessageId?: string;
+  editInputProps: {
+    fileIds: string[];
+    setFileIds: (fileIds: string[]) => void;
+    files: File[];
+    setFiles: (files: File[]) => void;
+    focusMode: string;
+    setFocusMode: (mode: string) => void;
+    systemPromptIds: string[];
+    setSystemPromptIds: (ids: string[]) => void;
+    sendLocation: boolean;
+    setSendLocation: (value: boolean) => void;
+    sendPersonalization: boolean;
+    setSendPersonalization: (value: boolean) => void;
+    personalizationLocation?: string;
+    personalizationAbout?: string;
+    refreshPersonalization?: () => void;
+    imageCapable?: boolean;
+  };
 }) => {
   // Local state for editing functionality
   const [isEditing, setIsEditing] = useState(false);
-  const [editedContent, setEditedContent] = useState('');
+  const [editPendingImages, setEditPendingImages] = useState<ImageAttachment[]>(
+    [],
+  );
   // State for truncation toggle of long user prompts
   const [isExpanded, setIsExpanded] = useState(false);
   const [isOverflowing, setIsOverflowing] = useState(false);
@@ -98,21 +124,23 @@ const MessageBox = ({
 
   // Initialize editing
   const startEditMessage = () => {
+    if (loading) return;
     setIsEditing(true);
-    setEditedContent(message.content);
+    setEditPendingImages(message.images ? [...message.images] : []);
   };
 
   // Cancel editing
   const cancelEditMessage = () => {
     setIsEditing(false);
-    setEditedContent('');
+    setEditPendingImages([]);
   };
 
-  // Save edits
-  const saveEditMessage = () => {
-    handleEditMessage(message.messageId, editedContent);
+  // Submit edit via the reused MessageInput component
+  const handleEditSubmit = (msg: string) => {
+    handleEditMessage(message.messageId, msg, editPendingImages);
     setIsEditing(false);
   };
+
   return (
     <div>
       {message.role === 'user' && (
@@ -125,32 +153,16 @@ const MessageBox = ({
         >
           {isEditing ? (
             <div className="w-full">
-              <textarea
-                className="w-full p-3 text-lg bg-surface rounded-lg transition duration-200 min-h-[120px] font-medium text-fg placeholder:text-fg/40 border border-surface-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
-                value={editedContent}
-                onChange={(e) => setEditedContent(e.target.value)}
-                placeholder="Edit your message..."
-                autoFocus
+              <MessageInput
+                {...editInputProps}
+                sendMessage={handleEditSubmit}
+                loading={false}
+                firstMessage={false}
+                pendingImages={editPendingImages}
+                setPendingImages={setEditPendingImages}
+                initialMessage={message.content}
+                onCancelEdit={cancelEditMessage}
               />
-              <div className="flex flex-row space-x-2 mt-3 justify-end">
-                <button
-                  onClick={cancelEditMessage}
-                  className="p-2 rounded-full bg-surface hover:bg-surface-2 border border-surface-2 transition duration-200 text-fg/80"
-                  aria-label="Cancel"
-                  title="Cancel"
-                >
-                  <X size={18} />
-                </button>
-                <button
-                  onClick={saveEditMessage}
-                  className="p-2 rounded-full bg-accent hover:bg-accent-700 transition duration-200 text-white disabled:opacity-50 disabled:cursor-not-allowed"
-                  aria-label="Save changes"
-                  title="Save changes"
-                  disabled={!editedContent.trim()}
-                >
-                  <Check size={18} />
-                </button>
-              </div>
             </div>
           ) : (
             <>
@@ -190,10 +202,28 @@ const MessageBox = ({
                       {isExpanded ? 'Show less' : 'Show more'}
                     </button>
                   )}
+                  {message.images && message.images.length > 0 && (
+                    <div className="flex flex-row gap-2 mt-3 flex-wrap">
+                      {message.images.map((img) => (
+                        <img
+                          key={img.imageId}
+                          src={`/api/uploads/images/${img.imageId}`}
+                          alt={img.fileName}
+                          className="max-h-40 max-w-[200px] object-cover rounded-lg border border-surface-2"
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <button
                   onClick={startEditMessage}
-                  className="ml-3 p-2 rounded-xl bg-surface hover:bg-surface-2 border border-surface-2 flex-shrink-0"
+                  disabled={loading}
+                  className={cn(
+                    'ml-3 p-2 rounded-xl border border-surface-2 flex-shrink-0',
+                    loading
+                      ? 'opacity-40 cursor-not-allowed bg-surface'
+                      : 'bg-surface hover:bg-surface-2',
+                  )}
                   aria-label="Edit message"
                   title="Edit message"
                 >

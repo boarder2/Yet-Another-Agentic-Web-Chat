@@ -1,7 +1,7 @@
 import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { RunnableConfig } from '@langchain/core/runnables';
-import { Document } from 'langchain/document';
+import { Document } from '@langchain/core/documents';
 import { Command, getCurrentTaskInput } from '@langchain/langgraph';
 import { ToolMessage } from '@langchain/core/messages';
 import { SimplifiedAgentStateType } from '@/lib/state/chatAgentState';
@@ -46,7 +46,29 @@ export const fileSearchTool = tool(
       const { query, maxResults = 12, similarityThreshold = 0.3 } = input;
 
       const currentState = getCurrentTaskInput() as SimplifiedAgentStateType;
-      let currentDocCount = currentState.relevantDocuments.length;
+      let currentDocCount = currentState.relevantDocuments?.length ?? 0;
+
+      // Get signal for cancellation support
+      const retrievalSignal: AbortSignal | undefined =
+        config?.configurable?.retrievalSignal;
+
+      // Check for cancellation early
+      if (retrievalSignal?.aborted || config?.signal?.aborted) {
+        console.log('FileSearchTool: Operation cancelled');
+        return new Command({
+          update: {
+            relevantDocuments: [],
+            messages: [
+              new ToolMessage({
+                content: 'File search cancelled.',
+                tool_call_id: (
+                  config as unknown as { toolCall: { id: string } }
+                )?.toolCall.id,
+              }),
+            ],
+          },
+        });
+      }
 
       // Get fileIds from config (provided by the agent)
       const fileIds: string[] = config?.configurable?.fileIds || [];
@@ -64,7 +86,9 @@ export const fileSearchTool = tool(
             messages: [
               new ToolMessage({
                 content: 'No files attached to search.',
-                tool_call_id: (config as any)?.toolCall.id,
+                tool_call_id: (
+                  config as unknown as { toolCall: { id: string } }
+                )?.toolCall.id,
               }),
             ],
           },
@@ -94,7 +118,9 @@ export const fileSearchTool = tool(
             messages: [
               new ToolMessage({
                 content: 'No searchable content found in attached files.',
-                tool_call_id: (config as any)?.toolCall.id,
+                tool_call_id: (
+                  config as unknown as { toolCall: { id: string } }
+                )?.toolCall.id,
               }),
             ],
           },
@@ -125,7 +151,7 @@ export const fileSearchTool = tool(
       // Add search metadata to documents and remove embeddings to reduce context size
       const documentsWithMetadata = rankedDocuments.map((doc) => {
         // Extract metadata and exclude embeddings
-        const { embeddings: _, ...metadataWithoutEmbeddings } =
+        const { embeddings: _embeddings, ...metadataWithoutEmbeddings } =
           doc.metadata || {};
 
         return new Document({
@@ -154,7 +180,8 @@ export const fileSearchTool = tool(
                 processedFiles: fileIds.length,
                 relevantSections: rankedDocuments.length,
               }),
-              tool_call_id: (config as any)?.toolCall.id,
+              tool_call_id: (config as unknown as { toolCall: { id: string } })
+                ?.toolCall.id,
             }),
           ],
         },
@@ -170,7 +197,8 @@ export const fileSearchTool = tool(
           messages: [
             new ToolMessage({
               content: 'Error occurred during file search: ' + errorMessage,
-              tool_call_id: (config as any)?.toolCall.id,
+              tool_call_id: (config as unknown as { toolCall: { id: string } })
+                ?.toolCall.id,
             }),
           ],
         },

@@ -1,19 +1,27 @@
-# How does Perplexica work?
+# How does YAAWC work?
 
-Curious about how Perplexica works? Don't worry, we'll cover it here. Before we begin, make sure you've read about the architecture of Perplexica to ensure you understand what it's made up of. Haven't read it? You can read it [here](https://github.com/ItzCrazyKns/Perplexica/tree/master/docs/architecture/README.md).
+Curious about how YAAWC works? Don't worry, we'll cover it here. Before we begin, make sure you've read about the architecture of YAAWC to ensure you understand what it's made up of. Haven't read it? You can read it [here](https://github.com/boarder2/Yet-Another-Agentic-Web-Chat/tree/master/docs/architecture/README.md).
 
-We'll understand how Perplexica works by taking an example of a scenario where a user asks: "How does an A.C. work?". We'll break down the process into steps to make it easier to understand. The steps are as follows:
+We'll understand how YAAWC works by taking an example of a scenario where a user asks: "How does an A.C. work?". We'll break down the process into steps to make it easier to understand. The steps are as follows:
 
-1. The message is sent to the `/api/chat` route where it invokes the chain. The chain will depend on your focus mode. For this example, let's assume we use the "webSearch" focus mode.
-2. The chain is now invoked; first, the message is passed to another chain where it first predicts (using the chat history and the question) whether there is a need for sources and searching the web. If there is, it will generate a query (in accordance with the chat history) for searching the web that we'll take up later. If not, the chain will end there, and then the answer generator chain, also known as the response generator, will be started.
-3. The query returned by the first chain is passed to SearXNG to search the web for information.
-4. After the information is retrieved, it is based on keyword-based search. We then convert the information into embeddings and the query as well, then we perform a similarity search to find the most relevant sources to answer the query.
-5. After all this is done, the sources are passed to the response generator. This chain takes all the chat history, the query, and the sources. It generates a response that is streamed to the UI.
+1. The message is sent to the `/api/chat` route (or `/api/search` for the stateless API). The route resolves the selected chat model, system model, and embedding model from the request body and configured providers.
+2. Based on the `focusMode` (e.g., `webSearch`, `localResearch`, `chat`), a `MetaSearchAgent` handler is selected. This handler configures tool availability and prompt behavior for the focus mode.
+3. The `MetaSearchAgent` creates an `AgentSearch` instance, which in turn creates a `SimplifiedAgent` — a LangGraph React Agent. The agent is given a set of tools based on the focus mode:
+   - **Web Search mode**: `web_search`, `url_summarization`, `image_search`, `image_analysis`, `youtube_transcript`, `pdf_loader`, `deep_research`, `todo_list`
+   - **Local Research mode**: `file_search`
+   - **Chat mode**: No tools (the agent responds from its training data)
+4. The agent autonomously reasons about the query and decides which tools to invoke. For a factual question like "How does an A.C. work?", it would typically call the `web_search` tool, which queries SearXNG for results.
+5. Search results are returned to the agent, which may then call `url_summarization` to fetch and read specific web pages for deeper content, or invoke additional tools as needed.
+6. The agent synthesizes all gathered information and streams a response with cited sources back to the user.
 
 ## How are the answers cited?
 
-The LLMs are prompted to do so. We've prompted them so well that they cite the answers themselves, and using some UI magic, we display it to the user.
+The LLMs are prompted to cite sources using numbered references (e.g., `[1]`, `[2]`). The prompt templates instruct the agent to cite inline, and the UI renders these as clickable source links.
+
+## Deep Research
+
+For complex multi-part questions, the agent can invoke the `deep_research` tool. This launches a subagent that breaks the question into sub-tasks, researches each one independently, and returns a comprehensive synthesis. Deep research subagent events are streamed to the UI in real-time.
 
 ## Image and Video Search
 
-Image and video searches are conducted in a similar manner. A query is always generated first, then we search the web for images and videos that match the query. These results are then returned to the user.
+The agent can invoke `image_search` to find images matching the query, and `youtube_transcript` to retrieve and summarize YouTube video transcripts. The `image_analysis` tool allows the agent to analyze images attached to the conversation using multimodal LLM capabilities.

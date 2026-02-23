@@ -42,3 +42,8 @@ db.sqlite
 .ai/
 certificates
 storage/
+package-lock.json
+tsconfig.tsbuildinfo
+next-env.d.ts
+
+.playwright-cli/

@@ -14,9 +14,9 @@ const montserrat = Montserrat({
 });
 
 export const metadata: Metadata = {
-  title: 'Perplexica - Chat with the internet',
+  title: 'YAAWC - Chat with the internet',
   description:
-    'Perplexica is an AI powered chatbot that is connected to the internet.',
+    'YAAWC is an AI powered chatbot that is connected to the internet.',
 };
 
 export default function RootLayout({
@@ -30,7 +30,7 @@ export default function RootLayout({
         <link
           rel="search"
           type="application/opensearchdescription+xml"
-          title="Perplexica Search"
+          title="YAAWC Search"
           href="/api/opensearch"
         />
       </head>

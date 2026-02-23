@@ -1,14 +1,10 @@
 # Configuration Guide
 
-This guide covers all the configuration options available in Perplexica's `config.toml` file.
+This guide covers all the configuration options available in YAAWC's `config.toml` file.
 
 ## Configuration File Structure
 
-Perplexica uses a TOML configuration file to manage settings. Copy `sample.config.toml` to `config.toml` and modify it according to your needs.
-
-```bash
-cp sample.config.toml config.toml
-```
+YAAWC uses a TOML configuration file (`config.toml`) to manage settings. Create a `config.toml` file in the project root based on the example configuration below, or use the Settings page in the web UI to configure models and API keys after starting the application.
 
 ## Configuration Sections
 
@@ -82,9 +78,17 @@ Configuration for OpenAI-compatible APIs (like LMStudio, vLLM, etc.)
 
 - **API_KEY**: Your DeepSeek API key
 
+#### [MODELS.AIMLAPI]
+
+- **API_KEY**: Your AIML API key
+
 #### [MODELS.LM_STUDIO]
 
 - **API_URL**: LM Studio server URL (e.g., `"http://host.docker.internal:1234"`)
+
+#### [MODELS.OPENROUTER]
+
+- **API_KEY**: Your OpenRouter API key
 
 ### [API_ENDPOINTS]
 
@@ -95,16 +99,7 @@ External service endpoints.
 - **Type**: String
 - **Description**: SearxNG API URL for web search functionality
 - **Example**: `"http://localhost:32768"`
-
-## Environment Variables
-
-Some configurations can also be set via environment variables, which take precedence over the config file:
-
-- `OPENAI_API_KEY`
-- `GROQ_API_KEY`
-- `ANTHROPIC_API_KEY`
-- `GEMINI_API_KEY`
-- And others following the pattern `{PROVIDER}_API_KEY`
+- **Note**: Can also be set via the `SEARXNG_API_URL` environment variable, which takes precedence over the config file value.
 
 ## Model Visibility Management
 
@@ -143,15 +138,6 @@ The `HIDDEN_MODELS` setting allows server administrators to control which models
 3. **Ollama connection issues**: Ensure the Ollama server is running and accessible
 4. **SearxNG not working**: Verify the SearxNG endpoint is correct and accessible
 
-### Configuration Validation
-
-The application validates configuration on startup and will log errors for:
-
-- Invalid TOML syntax
-- Missing required fields
-- Invalid URLs or API endpoints
-- Unreachable services
-
 ## Example Configuration
 
 ```toml
@@ -164,8 +150,34 @@ HIDDEN_MODELS = ["gpt-4", "claude-3-opus"]
 [MODELS.OPENAI]
 API_KEY = "sk-your-openai-key-here"
 
+[MODELS.GROQ]
+API_KEY = ""
+
+[MODELS.ANTHROPIC]
+API_KEY = ""
+
+[MODELS.GEMINI]
+API_KEY = ""
+
+[MODELS.DEEPSEEK]
+API_KEY = ""
+
+[MODELS.AIMLAPI]
+API_KEY = ""
+
+[MODELS.OPENROUTER]
+API_KEY = ""
+
 [MODELS.OLLAMA]
 API_URL = "http://localhost:11434"
+
+[MODELS.LM_STUDIO]
+API_URL = "http://localhost:1234"
+
+[MODELS.CUSTOM_OPENAI]
+API_KEY = ""
+API_URL = ""
+MODEL_NAME = ""
 
 [API_ENDPOINTS]
 SEARXNG = "http://localhost:32768"

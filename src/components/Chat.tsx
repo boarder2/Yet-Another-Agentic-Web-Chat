@@ -1,9 +1,10 @@
 'use client';
 
 import { Fragment, useEffect, useRef, useState } from 'react';
-import { File, Message } from './ChatWindow';
+import { File, ImageAttachment, Message } from './ChatWindow';
 import MessageBox from './MessageBox';
 import MessageInput from './MessageInput';
+import TodoWidget, { TodoItemData } from './TodoWidget';
 import { Document } from '@langchain/core/documents';
 
 const Chat = ({
@@ -32,6 +33,10 @@ const Chat = ({
   personalizationLocation,
   personalizationAbout,
   refreshPersonalization,
+  todoItems = [],
+  pendingImages,
+  setPendingImages,
+  imageCapable = false,
 }: {
   messages: Message[];
   sendMessage: (
@@ -51,7 +56,11 @@ const Chat = ({
   setFiles: (files: File[]) => void;
   focusMode: string;
   setFocusMode: (mode: string) => void;
-  handleEditMessage: (messageId: string, content: string) => void;
+  handleEditMessage: (
+    messageId: string,
+    content: string,
+    images?: ImageAttachment[],
+  ) => void;
   analysisProgress: {
     message: string;
     current: number;
@@ -92,6 +101,10 @@ const Chat = ({
   personalizationLocation?: string;
   personalizationAbout?: string;
   refreshPersonalization?: () => void;
+  todoItems?: TodoItemData[];
+  pendingImages: ImageAttachment[];
+  setPendingImages: (images: ImageAttachment[]) => void;
+  imageCapable?: boolean;
 }) => {
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [manuallyScrolledUp, setManuallyScrolledUp] = useState(false);
@@ -149,7 +162,7 @@ const Chat = ({
       }
     };
 
-    const handleTouchStart = (e: TouchEvent) => {
+    const handleTouchStart = (_e: TouchEvent) => {
       // Immediately stop auto-scrolling on any touch interaction
       setManuallyScrolledUp(true);
     };
@@ -171,12 +184,13 @@ const Chat = ({
     };
 
     if (messages.length === 1) {
-      document.title = `${messages[0].content.substring(0, 30)} - Perplexica`;
+      document.title = `${messages[0].content.substring(0, 30)} - YAAWC`;
     }
 
     // Always scroll when user sends a message
     if (messages[messages.length - 1]?.role === 'user') {
       scroll();
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsAtBottom(true); // Reset to true when user sends a message
       setManuallyScrolledUp(false); // Reset manually scrolled flag when user sends a message
     }
@@ -187,6 +201,7 @@ const Chat = ({
     const position = window.innerHeight + window.scrollY;
     const height = document.body.scrollHeight;
     const atBottom = position >= height - SCROLL_THRESHOLD;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsAtBottom(atBottom);
 
     if (isAtBottom && !manuallyScrolledUp && messages.length > 0) {
@@ -225,6 +240,7 @@ const Chat = ({
       const lastUserMsg = [...messages]
         .reverse()
         .find((m) => m.role === 'user');
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCurrentMessageId(lastUserMsg?.messageId);
       //console.log('Set currentMessageId to', lastUserMsg?.messageId, messages);
     } else {
@@ -241,7 +257,7 @@ const Chat = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messageId: currentMessageId }),
       });
-    } catch (e) {
+    } catch (_e) {
       // Optionally handle error
     }
   };
@@ -268,6 +284,24 @@ const Chat = ({
               modelStats={modelStats}
               gatheringSources={gatheringSources}
               actionMessageId={currentMessageId}
+              editInputProps={{
+                fileIds,
+                setFileIds,
+                files,
+                setFiles,
+                focusMode,
+                setFocusMode,
+                systemPromptIds,
+                setSystemPromptIds,
+                sendLocation,
+                setSendLocation,
+                sendPersonalization,
+                setSendPersonalization,
+                personalizationLocation,
+                personalizationAbout,
+                refreshPersonalization,
+                imageCapable,
+              }}
             />
             {!isLast && msg.role === 'assistant' && (
               <div className="h-px w-full bg-surface-2" />
@@ -306,6 +340,7 @@ const Chat = ({
           </div>
         )}
 
+        {todoItems && todoItems.length > 0 && <TodoWidget items={todoItems} />}
         <MessageInput
           firstMessage={messages.length === 0}
           loading={loading}
@@ -326,6 +361,9 @@ const Chat = ({
           personalizationLocation={personalizationLocation}
           personalizationAbout={personalizationAbout}
           refreshPersonalization={refreshPersonalization}
+          pendingImages={pendingImages}
+          setPendingImages={setPendingImages}
+          imageCapable={imageCapable}
         />
       </div>
       <div ref={messageEnd} className="h-0" />

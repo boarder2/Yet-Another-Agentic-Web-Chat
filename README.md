@@ -1,276 +1,279 @@
-# 🚀 Perplexica - An AI-powered search engine 🔎 <!-- omit in toc -->
+# Yet Another Agentic Web Chat (YAAWC) <!-- omit in toc -->
 
-_This is a fork of [ItzCrazyKns/Perplexica](https://github.com/ItzCrazyKns/Perplexica) with additional features and improvements._
+> Because the world definitely needed one more AI-powered search engine. You're welcome.
 
-![preview](.assets/perplexica-screenshot.png?)
+YAAWC (**Pronounced: "yawck"** — as in the sound you make when yet another AI search engine appears.) is an open-source, self-hosted, agentic AI search engine that actually reads web pages, manages research plans, spawns sub-agents for deep dives, and cites its sources — all while letting you pick from a buffet of LLM providers. It uses [SearXNG](https://github.com/searxng/searxng) under the hood so your queries stay private and the results stay fresh.
+
+![preview](.assets/yaawc-screenshot.png?)
 
 ## Table of Contents <!-- omit in toc -->
 
-- [Overview](#overview)
-- [Preview](#preview)
-- [Features](#features)
+- [Why Does This Exist?](#why-does-this-exist)
+- [Features at a Glance](#features-at-a-glance)
+- [Focus Modes](#focus-modes)
+- [Agent Tools](#agent-tools)
+- [Deep Research (Sub-Agents)](#deep-research-sub-agents)
+- [Dashboard Widgets](#dashboard-widgets)
+- [LLM Providers](#llm-providers)
+- [Personalization \& Personas](#personalization--personas)
 - [Installation](#installation)
-  - [Getting Started with Docker (Recommended)](#getting-started-with-docker-recommended)
-  - [Non-Docker Installation](#non-docker-installation)
+  - [Docker (Recommended)](#docker-recommended)
+  - [Manual Setup](#manual-setup)
   - [Ollama Connection Errors](#ollama-connection-errors)
 - [Updating](#updating)
-- [Using as a Search Engine](#using-as-a-search-engine)
-- [Using Perplexica's API](#using-perplexicas-api)
-- [Expose Perplexica to network](#expose-perplexica-to-network)
-  - [Running Behind a Reverse Proxy](#running-behind-a-reverse-proxy)
-- [One-Click Deployment](#one-click-deployment)
-- [Upcoming Features](#upcoming-features)
-- [Fork Improvements](#fork-improvements)
-  - [UI Improvements](#ui-improvements)
-  - [Search and Integration Enhancements](#search-and-integration-enhancements)
-  - [AI Functionality](#ai-functionality)
-  - [Bug Fixes](#bug-fixes)
-- [Support Us](#support-us)
-- [Contribution](#contribution)
-- [Help and Support](#help-and-support)
+- [Using as a Browser Search Engine](#using-as-a-browser-search-engine)
+- [API](#api)
+- [Network \& Reverse Proxy](#network--reverse-proxy)
+- [Observability](#observability)
+- [Contributing](#contributing)
+- [Acknowledgements](#acknowledgements)
 
-## Overview
+## Why Does This Exist?
 
-Perplexica is an open-source AI-powered searching tool or an AI-powered search engine that goes deep into the internet to find answers. Inspired by Perplexity AI, it's an open-source option that not just searches the web but understands your questions. It uses advanced machine learning algorithms like similarity searching and embeddings to refine results and provides clear answers with sources cited.
+Most AI search tools either phone home with your data, cost a subscription, or give you yesterday's answers. YAAWC is fully open source, runs on your hardware, talks to whichever LLM you point it at, and searches the live web through a self-hosted SearXNG instance. It doesn't just retrieve links — it reads pages, extracts the good parts, ranks them by semantic similarity, and writes you a cited answer.
 
-Using SearxNG to stay current and fully open source, Perplexica ensures you always get the most up-to-date information without compromising your privacy.
+Want to know more about the architecture? See [docs/architecture/README.md](docs/architecture/README.md).
 
-Want to know more about its architecture and how it works? You can read it [here](docs/architecture/README.md).
+## Features at a Glance
 
-## Preview
+| Category                    | Highlights                                                                                                                       |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| **Agentic Search**          | LangGraph React agent with tool use, research planning, and multi-step reasoning                                                 |
+| **Deep Research**           | Spawns focused sub-agents that search → read → refine → search again                                                             |
+| **9 Agent Tools**           | Web search, URL summarization, image search & analysis, YouTube transcripts, PDF loading, file search, deep research, todo lists |
+| **10 LLM Providers**        | OpenAI, Anthropic, Groq, Ollama, Gemini, DeepSeek, LM Studio, OpenRouter, AI/ML API, Custom OpenAI                               |
+| **6 Embedding Providers**   | OpenAI, Ollama, Gemini, Xenova Transformers (local), AI/ML API, LM Studio                                                        |
+| **Dashboard Widgets**       | AI-powered info widgets with auto-refresh, drag-and-drop layout, export/import                                                   |
+| **Personas**                | Custom system prompts with built-in templates (scholarly, conversational, etc.)                                                  |
+| **Personalization**         | Per-message location and profile context injection                                                                               |
+| **Privacy**                 | Self-hosted SearXNG — no tracking, no data brokering, no "we updated our privacy policy" emails                                  |
+| **Browser Integration**     | OpenSearch XML, autocomplete, `?q=` URL queries with saved preferences                                                           |
+| **Streaming UI**            | Real-time tool calls, sub-agent progress, todo widgets, thinking/reasoning display                                               |
+| **Image & Video Search**    | Dedicated search with gallery views and video embeds                                                                             |
+| **File Research**           | Upload documents and research them with cited excerpts                                                                           |
+| **Respond Now**             | Interrupt ongoing retrieval and get an immediate answer from what's been gathered so far                                         |
+| **Model Visibility**        | Admins can hide models from the UI to prevent accidental usage                                                                   |
+| **Dual Model Architecture** | Separate Chat and System models, linkable or independent                                                                         |
 
-![video-preview](.assets/perplexica-preview.gif)
+## Focus Modes
 
-## Features
+Switch modes at any time during a conversation:
 
-- **Local LLMs**: You can make use local LLMs such as Llama3 and Mixtral using Ollama.
-- **Two Main Modes:**
-  - **Copilot Mode:** (In development) Boosts search by generating different queries to find more relevant internet sources. Like normal search instead of just using the context by SearxNG, it visits the top matches and tries to find relevant sources to the user's query directly from the page.
-  - **Normal Mode:** Processes your query and performs a web search.
-- **Focus Modes:** Special modes to better answer specific types of questions. Perplexica currently has 7 focus modes:
-  - **All Mode:** Searches the entire web to find the best results.
-  - **Local Research Mode:** Research and interact with local files with citations.
-  - **Chat Mode:** Have a truly creative conversation without web search.
-- **Current Information:** Some search tools might give you outdated info because they use data from crawling bots and convert them into embeddings and store them in a index. Unlike them, Perplexica uses SearxNG, a metasearch engine to get the results and rerank and get the most relevant source out of it, ensuring you always get the latest information without the overhead of daily data updates.
-- **API**: Integrate Perplexica into your existing applications and make use of its capibilities.
+| Mode               | Description                                                | Tools       |
+| ------------------ | ---------------------------------------------------------- | ----------- |
+| **Web Search**     | Full agentic search across the internet                    | All 9 tools |
+| **Chat**           | Creative conversation — no web searching, no tools         | None        |
+| **Local Research** | Research uploaded files with semantic search and citations | File search |
 
-It has many more features like image and video search. Some of the planned features are mentioned in [upcoming features](#upcoming-features).
+Firefox AI prompts are auto-detected and handled conversationally.
+
+## Agent Tools
+
+The LangGraph agent has access to the following tools (individually toggleable per conversation):
+
+| Tool                   | What It Does                                                                                        |
+| ---------------------- | --------------------------------------------------------------------------------------------------- |
+| **Web Search**         | Queries SearXNG, retrieves top results, re-ranks by embedding similarity. Supports `site:` filters. |
+| **URL Summarization**  | Fetches a URL's content (via Readability/Cheerio/Playwright) and summarizes it or uses it directly. |
+| **Image Search**       | Searches for images via SearXNG (Bing Images, Google Images).                                       |
+| **Image Analysis**     | Fetches an image and analyzes it using a vision-capable LLM (PNG, JPEG, GIF, WebP up to 10 MB).     |
+| **YouTube Transcript** | Retrieves the full transcript from a YouTube video.                                                 |
+| **PDF Loader**         | Extracts and returns content from a PDF URL.                                                        |
+| **File Search**        | Semantic similarity search across uploaded documents with configurable threshold.                   |
+| **Deep Research**      | Spawns a focused sub-agent for comprehensive multi-source investigation (see below).                |
+| **Todo List**          | Manages a visible research plan (up to 10 tasks) with live progress in the UI.                      |
+
+## Deep Research (Sub-Agents)
+
+When the agent encounters a question that needs serious digging, it can invoke the **Deep Research** tool, which spawns an independent sub-agent with its own system prompt and tool access (`web_search`, `url_summarization`, `image_search`, `youtube_transcript`, `pdf_loader` — but not `deep_research`, because infinite recursion is nobody's friend).
+
+Sub-agent progress streams live to the UI: task description, nested tool calls, and the final synthesized response — all collapsible and inspectable.
+
+## Dashboard Widgets
+
+The `/dashboard` page provides a configurable grid of AI-powered widgets:
+
+- Fetch content from **web pages** or **HTTP endpoints**
+- Process fetched content with an **AI prompt** using any configured provider/model
+- **Drag, drop, and resize** widgets on a responsive grid
+- **Auto-refresh** at configurable intervals (minutes/hours)
+- **Export/import** dashboard configurations as JSON
+- Date/time template variables for dynamic prompts (`{{current_utc_datetime}}`, `{{current_local_datetime}}`)
+
+## LLM Providers
+
+### Chat Models
+
+| Provider      | Config                                                        |
+| ------------- | ------------------------------------------------------------- |
+| OpenAI        | API key                                                       |
+| Anthropic     | API key                                                       |
+| Groq          | API key                                                       |
+| Google Gemini | API key                                                       |
+| DeepSeek      | API key                                                       |
+| OpenRouter    | API key                                                       |
+| AI/ML API     | API key                                                       |
+| Ollama        | Local URL, configurable context window (512 – 131,072 tokens) |
+| LM Studio     | Local URL                                                     |
+| Custom OpenAI | Base URL + API key + model name                               |
+
+### Embedding Models
+
+OpenAI, Ollama, Google Gemini, Xenova Transformers (fully local — no API needed), AI/ML API, LM Studio.
+
+All provider keys are configurable from the Settings UI or `config.toml`. API keys are never exposed in the frontend.
+
+## Personalization & Personas
+
+### Personalization
+
+- **Location**: Optionally bias search results with a configured location.
+- **About Me**: Free-text profile for tone and context (never sent verbatim to external tools).
+- **Per-message toggles**: Enable or disable location/profile injection on each message.
+
+### Persona Prompts
+
+Create and manage custom system prompts that shape how the agent responds:
+
+- **Built-in templates**: Web Searches, Local Documents, Chat Conversations, Scholarly Articles
+- **One-click copy** of templates as starting points for custom personas
+- **Multiple personas** can be active simultaneously
+- Stored in the local SQLite database
 
 ## Installation
 
-There are mainly 2 ways of installing Perplexica - With Docker, Without Docker. Using Docker is highly recommended.
+### Docker (Recommended)
 
-### Getting Started with Docker (Recommended)
-
-1. Ensure Docker is installed and running on your system.
-2. Clone the Perplexica repository:
+1. Ensure Docker is installed and running.
+2. Clone the repository:
 
    ```bash
-   git clone https://github.com/boarder2/Perplexica.git
+   git clone https://github.com/boarder2/Yet-Another-Agentic-Web-Chat.git
+   cd Yet-Another-Agentic-Web-Chat
    ```
 
-3. After cloning, navigate to the directory containing the project files.
+3. Rename `sample.config.toml` to `config.toml` and fill in the provider keys you plan to use:
 
-4. Rename the `sample.config.toml` file to `config.toml`. For Docker setups, you need only fill in the following fields:
-   - `OPENAI`: Your OpenAI API key. **You only need to fill this if you wish to use OpenAI's models**.
-   - `OLLAMA`: Your Ollama API URL. You should enter it as `http://host.docker.internal:PORT_NUMBER`. If you installed Ollama on port 11434, use `http://host.docker.internal:11434`. For other ports, adjust accordingly. **You need to fill this if you wish to use Ollama's models instead of OpenAI's**.
-   - `GROQ`: Your Groq API key. **You only need to fill this if you wish to use Groq's hosted models**.
-   - `OPENROUTER`: Your OpenRouter API key. **You only need to fill this if you wish to use models via OpenRouter**.
-   - `ANTHROPIC`: Your Anthropic API key. **You only need to fill this if you wish to use Anthropic models**.
-   - `Gemini`: Your Gemini API key. **You only need to fill this if you wish to use Google's models**.
-   - `DEEPSEEK`: Your Deepseek API key. **Only needed if you want Deepseek models.**
-   - `AIMLAPI`: Your AI/ML API key. **Only needed if you want to use AI/ML API models and embeddings.**
+   | Key          | Required When                                                 |
+   | ------------ | ------------------------------------------------------------- |
+   | `OPENAI`     | Using OpenAI models                                           |
+   | `OLLAMA`     | Using Ollama (`http://host.docker.internal:11434` for Docker) |
+   | `GROQ`       | Using Groq                                                    |
+   | `OPENROUTER` | Using OpenRouter                                              |
+   | `ANTHROPIC`  | Using Anthropic                                               |
+   | `GEMINI`     | Using Google Gemini                                           |
+   | `DEEPSEEK`   | Using DeepSeek                                                |
+   | `AIMLAPI`    | Using AI/ML API                                               |
+   | `LM_STUDIO`  | Using LM Studio                                               |
 
-     **Note**: You can change these after starting Perplexica from the settings dialog.
+   > All keys can also be changed later from the Settings page.
 
-   - `SIMILARITY_MEASURE`: The similarity measure to use (This is filled by default; you can leave it as is if you are unsure about it.)
-
-5. Ensure you are in the directory containing the `docker-compose.yaml` file and execute:
+4. Start the stack:
 
    ```bash
    docker compose up -d
    ```
 
-6. Wait a few minutes for the setup to complete. You can access Perplexica at http://localhost:3000 in your web browser.
+5. Open http://localhost:3000.
 
-**Note**: After the containers are built, you can start Perplexica directly from Docker without having to open a terminal.
+### Manual Setup
 
-### Non-Docker Installation
+1. Install and configure [SearXNG](https://github.com/searxng/searxng) with JSON output enabled.
+2. Clone the repo, copy `sample.config.toml` → `config.toml`, and fill in your settings.
+3. Install dependencies and build:
 
-1. Install SearXNG and allow `JSON` format in the SearXNG settings.
-2. Clone the repository and rename the `sample.config.toml` file to `config.toml` in the root directory. Ensure you complete all required fields in this file.
-3. After populating the configuration run `npm i`.
-4. Install the dependencies and then execute `npm run build`.
-5. Finally, start the app by running `npm run start`
+   ```bash
+   npm install
+   npm run build
+   npm run start
+   ```
 
-**Note**: Using Docker is recommended as it simplifies the setup process, especially for managing environment variables and dependencies.
-
-See the [installation documentation](docs/installation) for more information like updating, etc.
+See [docs/installation](docs/installation) for additional configuration, updating, and tracing setup.
 
 ### Ollama Connection Errors
 
-If you're encountering an Ollama connection error, it is likely due to the backend being unable to connect to Ollama's API. To fix this issue you can:
+| OS                     | Recommended URL                     |
+| ---------------------- | ----------------------------------- |
+| Windows / Mac (Docker) | `http://host.docker.internal:11434` |
+| Linux (Docker)         | `http://<host-private-ip>:11434`    |
 
-1. **Check your Ollama API URL:** Ensure that the API URL is correctly set in the settings menu.
-2. **Update API URL Based on OS:**
-   - **Windows:** Use `http://host.docker.internal:11434`
-   - **Mac:** Use `http://host.docker.internal:11434`
-   - **Linux:** Use `http://<private_ip_of_host>:11434`
+On Linux, you may also need to set `Environment="OLLAMA_HOST=0.0.0.0"` in `/etc/systemd/system/ollama.service` and restart Ollama. See the [Ollama FAQ](https://github.com/ollama/ollama/blob/main/docs/faq.md#setting-environment-variables-on-linux) for details.
 
-   Adjust the port number if you're using a different one.
+## Using as a Browser Search Engine
 
-3. **Linux Users - Expose Ollama to Network:**
-   - Inside `/etc/systemd/system/ollama.service`, you need to add `Environment="OLLAMA_HOST=0.0.0.0"`. Then restart Ollama by `systemctl restart ollama`. For more information see [Ollama docs](https://github.com/ollama/ollama/blob/main/docs/faq.md#setting-environment-variables-on-linux)
+1. Open your browser's **Search Engines** settings.
+2. Add a new search engine with URL: `http://localhost:3000/?q=%s`
+   (replace `localhost:3000` with your host and port as needed).
+3. YAAWC also exposes an **OpenSearch description** at `/api/opensearch` with autocomplete support, so some browsers can discover and add it automatically.
 
-   - Ensure that the port (default is 11434) is not blocked by your firewall.
+URL queries via `?q=` automatically apply your saved model preferences for a seamless search-bar experience.
 
-## Updating
+## API
 
-Version `3.0.0` is a major update that switches to running the docker image as a non-privilaged user. When migrating from prior versions, you will need to migrate your data to allow the new user to access it. You can do this by running the following commands in the directory where your `docker-compose.yaml` file is located:
+YAAWC exposes a full API for programmatic access:
 
-Note: If you've changed the names of the volumes in your `docker-compose.yaml`, make sure to replace `perplexica_backend-dbstore`, `perplexica_uploads`, and `perplexica_deep-research` with your custom volume names.
+| Endpoint              | Method              | Description                                                    |
+| --------------------- | ------------------- | -------------------------------------------------------------- |
+| `/api/chat`           | POST                | Streaming chat with tool calls, sources, and live events (SSE) |
+| `/api/search`         | POST                | Programmatic search (streaming or non-streaming)               |
+| `/api/models`         | GET                 | List available models (`?include_hidden=true` for admin view)  |
+| `/api/config`         | GET/POST            | Read/write server configuration                                |
+| `/api/chats`          | GET                 | List all chats                                                 |
+| `/api/chats/[id]`     | GET/DELETE          | Get or delete a specific chat                                  |
+| `/api/suggestions`    | POST                | Generate follow-up suggestions                                 |
+| `/api/system-prompts` | GET/POST/PUT/DELETE | CRUD for persona prompts                                       |
+| `/api/images`         | POST                | Image search                                                   |
+| `/api/videos`         | POST                | Video search                                                   |
+| `/api/uploads`        | POST                | File upload                                                    |
+| `/api/uploads/images` | POST/GET            | Image upload and serving                                       |
+| `/api/tools`          | GET                 | List available agent tools                                     |
+| `/api/dashboard`      | GET/POST            | Dashboard widget CRUD                                          |
+| `/api/respond-now`    | POST                | Interrupt retrieval for immediate response                     |
+| `/api/opensearch`     | GET                 | OpenSearch description XML                                     |
+| `/api/autocomplete`   | GET                 | Search autocomplete (proxied to SearXNG)                       |
 
-```bash
-# Stop the running containers if any
-docker compose down
+For detailed payload schemas, see [docs/API/SEARCH.md](docs/API/SEARCH.md).
 
-# Change ownership of the data directory to UID 1000 (the new user) for the backend-dbstore volume
-docker run --rm -v perplexica_backend-dbstore:/data busybox sh -c 'chown -R 1000:1000 /data'
-# Change ownership of the uploads directory to UID 1000 (the new user) for the uploads volume
-docker run --rm -v perplexica_uploads:/data busybox sh -c 'chown -R 1000:1000 /data'
-# Change ownership of the deep-research directory to UID 1000 (the new user) for the deep-research volume
-docker run --rm -v perplexica_deep-research:/data busybox sh -c 'chown -R 1000:1000 /data'
+## Network & Reverse Proxy
 
-# Start the containers again
-docker compose up -d
+YAAWC runs on Next.js and is accessible on the local network out of the box. For reverse proxy deployments:
+
+1. Set `BASE_URL` in `config.toml` under `[GENERAL]` to your public URL.
+2. Forward headers: `X-Forwarded-Host`, `X-Forwarded-Proto`, `X-Forwarded-Port`.
+
+Example Nginx config:
+
+```nginx
+server {
+  listen 80;
+  server_name yaawc.yourdomain.com;
+
+  location / {
+    proxy_pass http://localhost:3000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-Host $host;
+  }
+}
 ```
 
-## Using as a Search Engine
+## Observability
 
-If you wish to use Perplexica as an alternative to traditional search engines like Google or Bing, or if you want to add a shortcut for quick access from your browser's search bar, follow these steps:
+Built-in support for **Langfuse** and **LangSmith** tracing. Configure via environment variables (`LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASE_URL`). See [docs/installation/TRACING.md](docs/installation/TRACING.md) for setup details.
 
-1. Open your browser's settings.
-2. Navigate to the 'Search Engines' section.
-3. Add a new site search with the following URL: `http://localhost:3000/?q=%s`. Replace `localhost` with your IP address or domain name, and `3000` with the port number if Perplexica is not hosted locally.
-4. Click the add button. Now, you can use Perplexica directly from your browser's search bar.
+The UI also displays live **token usage stats** (chat vs. system model), response times, and model names per message.
 
-## Using Perplexica's API
+## Contributing
 
-Perplexica also provides an API for developers looking to integrate its powerful search engine into their own applications. You can run searches, use multiple models and get answers to your queries.
+Found a bug? Have an idea? Open an issue or submit a PR. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
-For more details, check out the full documentation [here](docs/API/SEARCH.md).
+## Acknowledgements
 
-## Expose Perplexica to network
+YAAWC is built on the foundation of [Perplexica](https://github.com/ItzCrazyKns/Perplexica), an open-source AI-powered search engine. We're grateful for their work and encourage you to check out the original project.
 
-Perplexica runs on Next.js and handles all API requests. It works right away on the same network and stays accessible even with port forwarding.
+## A Note on AI Assistance
 
-### Running Behind a Reverse Proxy
+Yes, a significant portion of this README — and frankly quite a bit of the code in this repo — was written with AI assistance. I know, I know. The irony of using an AI-powered tool to build and document an AI-powered tool is not lost on me. In my defense, I'm a software developer with over 25 years of experience and I review every change, so hopefully the quality bar is *somewhat* higher than "the AI just vibed it." This is a side project for me to explore agentic architectures and AI tooling.
 
-When running Perplexica behind a reverse proxy (like Nginx, Apache, or Traefik), follow these steps to ensure proper functionality:
-
-1. **Configure the BASE_URL setting**:
-   - In `config.toml`, set the `BASE_URL` parameter under the `[GENERAL]` section to your public-facing URL (e.g., `https://perplexica.yourdomain.com`)
-
-2. **Ensure proper headers forwarding**:
-   - Your reverse proxy should forward the following headers:
-     - `X-Forwarded-Host`
-     - `X-Forwarded-Proto`
-     - `X-Forwarded-Port` (if using non-standard ports)
-
-3. **Example Nginx configuration**:
-
-   ```nginx
-   server {
-     listen 80;
-     server_name perplexica.yourdomain.com;
-
-     location / {
-       proxy_pass http://localhost:3000;
-       proxy_set_header Host $host;
-       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-       proxy_set_header X-Forwarded-Proto $scheme;
-       proxy_set_header X-Forwarded-Host $host;
-     }
-   }
-   ```
-
-This ensures that OpenSearch descriptions, browser integrations, and all URLs work properly when accessing Perplexica through your reverse proxy.
-
-## Fork Improvements
-
-This fork adds several enhancements to the original Perplexica project:
-
-### UI Improvements
-
-- ✅ Tabbed interface for message results
-- ✅ Added message editing capability
-- ✅ Ability to select AI models directly while chatting without opening settings
-- ✅ Change focus mode at any time during chat sessions
-- ✅ Auto-scrolling
-- ✅ Syntax highlighting for code blocks
-- ✅ Display search query with the response
-- ✅ Improved styling for all screen sizes
-- ✅ Added model statistics showing model name and response time
-- ✅ Shows progress during processing
-- ✅ Secures API keys by not showing them in the UI
-
-### Search and Integration Enhancements
-
-- ✅ OpenSearch support with dynamic XML generation
-  - Added BASE_URL config to support reverse proxy deployments
-  - Added autocomplete functionality proxied to SearxNG
-- ✅ Query-based settings override for browser search engine integration
-  - Automatically applies user's saved AI model preferences when accessing via URL with `q` parameter
-  - Enables seamless browser search bar integration with personalized settings
-
-### AI Functionality
-
-- ✅ True chat mode implementation (moved writing mode to local research mode)
-- ✅ Enhanced system prompts for more reliable and relevant results
-- ✅ Better parsing for reasoning models
-- ✅ User customizable context window for Ollama models
-- ✅ Toggle for automatic suggestions
-- ✅ Added support for latest Anthropic models
-- ✅ Adds support for multiple user-customizable system prompt enhancement and personas so you can tailor output to your needs
-- ✅ **Model Visibility Management**: Server administrators can hide specific models from the user interface and API responses
-  - Hide expensive models to prevent accidental usage and cost overruns
-  - Remove non-functional or problematic models from user selection
-  - Configurable via settings UI with collapsible provider interface for better organization
-  - API support with `include_hidden` parameter for administrative access
-
-### Unique Features
-
-- ✅ **Agent Mode**: A new mode that uses a headless web browser to retrieve web content and use relevant excerpts to enhance responses.
-  - Automatically extracts relevant information from web pages
-  - Provides more accurate and contextually rich answers
-  - Ideal for complex queries requiring detailed information
-
-- ✅ **Dashboard Widgets**: Create customizable AI-powered widgets for personalized information displays.
-  - Build widgets that combine web content with AI processing using custom prompts
-  - Support for multiple data sources (web pages, HTTP endpoints) with automatic content extraction
-  - Configurable refresh intervals (minutes/hours) for keeping information current
-  - Real-time preview system to test widget output before saving
-  - Automatic refresh of stale widgets when navigating to dashboard
-
-- ✅ **Observability**: Built-in support for tracing and monitoring LLM calls using Langfuse or LangSmith.
-  - See [Tracing LLM Calls in Perplexica](docs/installation/TRACING.md) for more details.
-
-- ✅ **Firefox AI Integration**: Enhanced support for Firefox users with tailored features and optimizations when Firefox AI prompts are detected.
-
-### Bug Fixes
-
-- ✅ Improved history rewriting
-
-## Support Us
-
-If you find Perplexica useful, consider giving us a star on GitHub. This helps more people discover Perplexica and supports the development of new features. Your support is greatly appreciated.
-
-## Contribution
-
-Perplexica is built on the idea that AI and large language models should be easy for everyone to use. If you find bugs or have ideas, please share them in via GitHub Issues. For more information on contributing to Perplexica you can read the [CONTRIBUTING.md](CONTRIBUTING.md) file to learn more about Perplexica and how you can contribute to it.
-
-## Help and Support
-
-If you have any questions or feedback, please feel free to reach out to us. You can create an issue on GitHub to get support or report bugs.
-
-Thank you for exploring Perplexica, the AI-powered search engine designed to enhance your search experience. We are constantly working to improve Perplexica and expand its capabilities. We value your feedback and contributions which help us make Perplexica even better. Don't forget to check back for updates and new features!
+If you find something that looks suspiciously like a hallucination… well, YOLO, right? Just kidding. Please open an issue and I'll fix it ASAP.

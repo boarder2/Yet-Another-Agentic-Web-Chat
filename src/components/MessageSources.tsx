@@ -1,4 +1,3 @@
-/* eslint-disable @next/next/no-img-element */
 import { Document } from '@langchain/core/documents';
 import MessageSource from './MessageSource';
 

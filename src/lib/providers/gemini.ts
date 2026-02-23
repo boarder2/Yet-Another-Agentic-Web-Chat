@@ -16,7 +16,9 @@ import { Embeddings } from '@langchain/core/embeddings';
 const GEMINI_MODELS_ENDPOINT =
   'https://generativelanguage.googleapis.com/v1beta/models';
 
-async function fetchGeminiModels(apiKey: string): Promise<any[]> {
+async function fetchGeminiModels(
+  apiKey: string,
+): Promise<Record<string, unknown>[]> {
   const url = `${GEMINI_MODELS_ENDPOINT}?key=${encodeURIComponent(
     apiKey,
   )}&pageSize=1000`;
@@ -49,7 +51,7 @@ export const loadGeminiChatModels = async () => {
   try {
     const models = await fetchGeminiModels(geminiApiKey);
     const geminiChatModels = models
-      .map((model: any) => {
+      .map((model: Record<string, unknown>) => {
         const rawName = model && model.name ? String(model.name) : '';
         const stripped = rawName.replace(/^models\//i, '');
         return {
@@ -59,7 +61,7 @@ export const loadGeminiChatModels = async () => {
             model && model.displayName ? String(model.displayName) : stripped,
         };
       })
-      .filter((model: any) => {
+      .filter((model: { key: string; displayName: string }) => {
         const key = model.key.toLowerCase();
         const display = (model.displayName || '').toLowerCase();
         const excluded = ['audio', 'embedding', 'image', 'tts'];
@@ -68,11 +70,13 @@ export const loadGeminiChatModels = async () => {
           !excluded.some((s) => key.includes(s) || display.includes(s))
         );
       })
-      .sort((a: any, b: any) => a.key.localeCompare(b.key));
+      .sort((a: { key: string }, b: { key: string }) =>
+        a.key.localeCompare(b.key),
+      );
 
     const chatModels: Record<string, ChatModel> = {};
 
-    geminiChatModels.forEach((model: any) => {
+    geminiChatModels.forEach((model: { key: string; displayName: string }) => {
       chatModels[model.key] = {
         displayName: model.displayName,
         model: new ChatGoogleGenerativeAI({
@@ -98,7 +102,7 @@ export const loadGeminiEmbeddingModels = async () => {
   try {
     const models = await fetchGeminiModels(geminiApiKey);
     const geminiEmbeddingModels = models
-      .map((model: any) => {
+      .map((model: Record<string, unknown>) => {
         const rawName = model && model.name ? String(model.name) : '';
         const display =
           model && model.displayName ? String(model.displayName) : rawName;
@@ -109,23 +113,27 @@ export const loadGeminiEmbeddingModels = async () => {
         };
       })
       .filter(
-        (model: any) =>
+        (model: { key: string; displayName: string }) =>
           model.key.toLowerCase().includes('embedding') ||
           model.displayName.toLowerCase().includes('embedding'),
       )
-      .sort((a: any, b: any) => a.key.localeCompare(b.key));
+      .sort((a: { key: string }, b: { key: string }) =>
+        a.key.localeCompare(b.key),
+      );
 
     const embeddingModels: Record<string, EmbeddingModel> = {};
 
-    geminiEmbeddingModels.forEach((model: any) => {
-      embeddingModels[model.key] = {
-        displayName: model.displayName,
-        model: new GoogleGenerativeAIEmbeddings({
-          apiKey: geminiApiKey,
-          modelName: model.key,
-        }) as unknown as Embeddings,
-      };
-    });
+    geminiEmbeddingModels.forEach(
+      (model: { key: string; displayName: string }) => {
+        embeddingModels[model.key] = {
+          displayName: model.displayName,
+          model: new GoogleGenerativeAIEmbeddings({
+            apiKey: geminiApiKey,
+            modelName: model.key,
+          }) as unknown as Embeddings,
+        };
+      },
+    );
 
     return embeddingModels;
   } catch (err) {

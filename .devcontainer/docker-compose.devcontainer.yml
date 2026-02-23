@@ -3,17 +3,17 @@ services:
     build:
       context: .
     volumes:
-      - backend-dbstore:/home/perplexica/data
-      - uploads:/home/perplexica/uploads
-      - deep_research:/home/perplexica/storage/deep_research
-      - ..:/workspaces/Perplexica:cached
+      - backend-dbstore:/home/yaawc/data
+      - uploads:/home/yaawc/uploads
+      - deep_research:/home/yaawc/storage/deep_research
+      - ..:/workspaces/YAAWC:cached
     environment:
       - SEARXNG_API_URL=https://searxng.int.bit-shift.com
-      - DATA_DIR=/home/perplexica
+      - DATA_DIR=/home/yaawc
     cap_add:
       - SYS_ADMIN
     command: sleep infinity
-    
+
 volumes:
   backend-dbstore:
   uploads:

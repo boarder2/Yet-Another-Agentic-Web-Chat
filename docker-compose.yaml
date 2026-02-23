@@ -6,7 +6,7 @@ services:
     ports:
       - 4000:8080
     networks:
-      - perplexica-network
+      - yaawc-network
     restart: unless-stopped
 
   app:
@@ -17,21 +17,21 @@ services:
       - SYS_ADMIN # Required for Playwright sandboxing
     environment:
       - SEARXNG_API_URL=http://searxng:8080
-      - DATA_DIR=/home/perplexica
+      - DATA_DIR=/home/yaawc
     ports:
       - 3000:3000
     networks:
-      - perplexica-network
+      - yaawc-network
     volumes:
-      - backend-dbstore:/home/perplexica/data
-      - uploads:/home/perplexica/uploads
-      - ./config.toml:/home/perplexica/config.toml
+      - backend-dbstore:/home/yaawc/data
+      - uploads:/home/yaawc/uploads
+      - ./config.toml:/home/yaawc/config.toml
       # Persist deep research artifacts between runs (optional)
-      - deep_research:/home/perplexica/storage/deep_research
+      - deep_research:/home/yaawc/storage/deep_research
     restart: unless-stopped
 
 networks:
-  perplexica-network:
+  yaawc-network:
 
 volumes:
   backend-dbstore:

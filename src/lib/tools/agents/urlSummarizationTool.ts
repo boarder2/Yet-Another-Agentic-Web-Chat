@@ -1,13 +1,13 @@
 import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { RunnableConfig } from '@langchain/core/runnables';
-import { Document } from 'langchain/document';
+import { Document } from '@langchain/core/documents';
 import { getWebContent } from '@/lib/utils/documents';
 import { removeThinkingBlocks } from '@/lib/utils/contentUtils';
 import { Command, getCurrentTaskInput } from '@langchain/langgraph';
 import { SimplifiedAgentStateType } from '@/lib/state/chatAgentState';
 import { ToolMessage } from '@langchain/core/messages';
-import { getLangfuseCallbacks } from '@/lib/tracing/langfuse';
+// import { getLangfuseCallbacks } from '@/lib/tracing/langfuse';
 import { isSoftStop } from '@/lib/utils/runControl';
 
 // Schema for URL summarization tool input
@@ -51,7 +51,7 @@ export const urlSummarizationTool = tool(
       } = input;
 
       const currentState = getCurrentTaskInput() as SimplifiedAgentStateType;
-      let currentDocCount = currentState.relevantDocuments.length;
+      let currentDocCount = currentState.relevantDocuments?.length ?? 0;
 
       console.log(
         `URLSummarizationTool: Processing ${urls.length} \n  URLs for query: "${query}"\n  retrieveHtml: ${retrieveHtml}\n  intent: ${intent}`,
@@ -64,7 +64,9 @@ export const urlSummarizationTool = tool(
             messages: [
               new ToolMessage({
                 content: 'No search results found.',
-                tool_call_id: (config as any)?.toolCall.id,
+                tool_call_id: (
+                  config as unknown as { toolCall: { id: string } }
+                )?.toolCall.id,
               }),
             ],
           },
@@ -76,10 +78,15 @@ export const urlSummarizationTool = tool(
         throw new Error('System LLM not available in config');
       }
       const llm = config.configurable.systemLlm;
-      const retrievalSignal: AbortSignal | undefined = (config as any)
-        ?.configurable?.retrievalSignal;
-      const messageId: string | undefined = (config as any)?.configurable
-        ?.messageId;
+      const emitter = config.configurable?.emitter as
+        | import('events').EventEmitter
+        | undefined;
+      const retrievalSignal: AbortSignal | undefined = (
+        config as unknown as Record<string, Record<string, unknown>>
+      )?.configurable?.retrievalSignal as AbortSignal | undefined;
+      const messageId: string | undefined = (
+        config as unknown as Record<string, Record<string, unknown>>
+      )?.configurable?.messageId as string | undefined;
       const documents: Document[] = [];
 
       // Process each URL
@@ -134,10 +141,10 @@ export const urlSummarizationTool = tool(
 # Critical Instructions
 - Output ONLY a summary of the web page content provided below
 - Focus on information that relates to or helps answer the user's query and processing intent
-- Do NOT add pleasantries, greetings, or conversational elements
-- Do NOT mention missing URLs, other pages, or content not provided
-- Do NOT ask follow-up questions or suggest additional actions
-- Do NOT add commentary about the user's request or query
+- Write in a direct, information-dense style — lead with facts from the page
+- Summarize only what is present in the provided page content
+- Deliver a self-contained summary that stands on its own
+- Keep the focus on the page content itself, presented objectively
 - Present the information in a clear, well-structured format with key facts and details
 - Include all relevant details that could help answer the user's question
 
@@ -154,8 +161,44 @@ Provide a comprehensive summary of the above web page content, focusing on infor
 
             const result = await llm.invoke(summarizationPrompt, {
               signal: retrievalSignal || config?.signal,
-              ...getLangfuseCallbacks(),
+              // ...getLangfuseCallbacks(),
             });
+
+            // Emit token usage from this LLM call so parent agent can accumulate it.
+            // Prefer usage_metadata (standardized LangChain field); fall back to
+            // response_metadata.usage for OpenAI-format providers (Ollama, LM Studio, etc.)
+            // that don't populate usage_metadata but do include prompt_tokens/completion_tokens.
+            const usageData =
+              result.usage_metadata ??
+              (result.response_metadata?.usage as
+                | Record<string, number>
+                | null
+                | undefined);
+            if (emitter && usageData) {
+              const rawUsage = usageData as Record<string, number>;
+              const inputTokens =
+                rawUsage.input_tokens ||
+                rawUsage.prompt_tokens ||
+                rawUsage.promptTokens ||
+                0;
+              const outputTokens =
+                rawUsage.output_tokens ||
+                rawUsage.completion_tokens ||
+                rawUsage.completionTokens ||
+                0;
+              emitter.emit(
+                'tool_llm_usage',
+                JSON.stringify({
+                  target: 'system',
+                  input_tokens: inputTokens,
+                  output_tokens: outputTokens,
+                  total_tokens:
+                    rawUsage.total_tokens ||
+                    rawUsage.totalTokens ||
+                    inputTokens + outputTokens,
+                }),
+              );
+            }
 
             finalContent = removeThinkingBlocks(result.content as string);
             processingType = 'url-content-extraction';
@@ -187,12 +230,15 @@ Provide a comprehensive summary of the above web page content, focusing on infor
               `URLSummarizationTool: No valid content generated for URL: ${url}`,
             );
           }
-        } catch (error: any) {
+        } catch (error: unknown) {
           console.error(
             `URLSummarizationTool: Error processing URL ${url}:`,
             error,
           );
-          if (error?.name === 'AbortError' || error?.name === 'CanceledError') {
+          if (
+            error instanceof Error &&
+            (error.name === 'AbortError' || error.name === 'CanceledError')
+          ) {
             break;
           }
           continue;
@@ -211,7 +257,8 @@ Provide a comprehensive summary of the above web page content, focusing on infor
               content: JSON.stringify({
                 document: documents,
               }),
-              tool_call_id: (config as any)?.toolCall.id,
+              tool_call_id: (config as unknown as { toolCall: { id: string } })
+                ?.toolCall.id,
             }),
           ],
         },
@@ -229,7 +276,8 @@ Provide a comprehensive summary of the above web page content, focusing on infor
           messages: [
             new ToolMessage({
               content: 'Error occurred during URL processing: ' + errorMessage,
-              tool_call_id: (config as any)?.toolCall.id,
+              tool_call_id: (config as unknown as { toolCall: { id: string } })
+                ?.toolCall.id,
             }),
           ],
         },

@@ -5,7 +5,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 
 // Cache config
-const CACHE_DIR = path.join(os.tmpdir(), 'perplexica-webcache');
+const CACHE_DIR = path.join(os.tmpdir(), 'yaawc-webcache');
 const CACHE_MAX_ENTRIES = 200;
 const CACHE_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
 
@@ -16,7 +16,7 @@ export type CachedRecord = {
   title?: string;
   pageContent: string;
   html?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 };
 
 type CacheMeta = {

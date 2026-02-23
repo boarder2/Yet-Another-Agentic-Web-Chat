@@ -1,10 +1,47 @@
 import { BaseMessage } from '@langchain/core/messages';
 import { Annotation } from '@langchain/langgraph';
-import { Document } from 'langchain/document';
+import { Document } from '@langchain/core/documents';
+
+/**
+ * Represents a single subagent execution within a request
+ */
+export interface SubagentExecution {
+  /** Unique execution ID */
+  id: string;
+  /** Subagent name from SubagentDefinition */
+  name: string;
+  /** The specific task assigned to this subagent */
+  task: string;
+  /** Current status of the execution */
+  status: 'running' | 'success' | 'error';
+  /** Start timestamp */
+  startTime: number;
+  /** End timestamp (if completed) */
+  endTime?: number;
+  /** Documents found by this subagent */
+  documents: Document[];
+  /** Summary of findings */
+  summary: string;
+  /** Error message if status is 'error' */
+  error?: string;
+  /** Token usage accumulated by this subagent */
+  tokenUsage?: {
+    usageChat: {
+      input_tokens: number;
+      output_tokens: number;
+      total_tokens: number;
+    };
+    usageSystem: {
+      input_tokens: number;
+      output_tokens: number;
+      total_tokens: number;
+    };
+  };
+}
 
 /**
  * State schema for the simplified chat agent using tool-based workflow
- * This state is designed for use with createReactAgent and focuses on
+ * This state is designed for use with createAgent and focuses on
  * accumulating relevant documents across tool calls while maintaining
  * message history for the agent's decision-making process.
  */
@@ -48,6 +85,14 @@ export const SimplifiedAgentState = Annotation.Root({
    */
   fileIds: Annotation<string[]>({
     reducer: (x, y) => y ?? x,
+    default: () => [],
+  }),
+
+  /**
+   * Subagent executions tracking for complex query decomposition
+   */
+  subagentExecutions: Annotation<SubagentExecution[]>({
+    reducer: (x, y) => x.concat(y),
     default: () => [],
   }),
 });

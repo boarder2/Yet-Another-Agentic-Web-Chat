@@ -1,7 +1,6 @@
 'use client';
 
 import { ReactNode, useState } from 'react';
-import { cn } from '@/lib/utils';
 import { ChevronDown, ChevronUp, BrainCircuit } from 'lucide-react';
 
 interface ThinkBoxProps {
@@ -41,7 +40,7 @@ const ThinkBox = ({ content, expanded, onToggle }: ThinkBoxProps) => {
       </button>
 
       {isExpanded && (
-        <div className="px-4 py-3 text-fg/80 text-sm border-t border-surface-2 bg-surface/50 whitespace-pre-wrap">
+        <div className="px-4 py-3 text-fg/80 text-sm border-t border-surface-2 bg-surface/50">
           {content}
         </div>
       )}

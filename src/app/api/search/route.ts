@@ -6,13 +6,12 @@ import {
   getAvailableEmbeddingModelProviders,
 } from '@/lib/providers';
 import { AIMessage, BaseMessage, HumanMessage } from '@langchain/core/messages';
-import { MetaSearchAgentType } from '@/lib/search/metaSearchAgent';
 import {
   getCustomOpenaiApiKey,
   getCustomOpenaiApiUrl,
   getCustomOpenaiModelName,
 } from '@/lib/config';
-import { searchHandlers } from '@/lib/search';
+import { createSearchAgent } from '@/lib/search/deepAgentFactory';
 import { getPersonaInstructionsOnly } from '@/lib/utils/prompts';
 import { CachedEmbeddings } from '@/lib/utils/cachedEmbeddings';
 import { ChatOllama } from '@langchain/ollama';
@@ -170,15 +169,14 @@ export const POST = async (req: Request) => {
       );
     }
 
-    const searchHandler: MetaSearchAgentType = searchHandlers[body.focusMode];
-
-    if (!searchHandler) {
+    const validFocusModes = ['webSearch', 'localResearch', 'chat'];
+    if (!validFocusModes.includes(body.focusMode)) {
       return Response.json({ message: 'Invalid focus mode' }, { status: 400 });
     }
+
     const abortController = new AbortController();
     const { signal } = abortController;
 
-    // Detect client disconnection via the request's built-in abort signal
     req.signal.addEventListener('abort', () => {
       if (!abortController.signal.aborted) {
         console.log('Search API: Client disconnected, aborting processing');
@@ -186,210 +184,194 @@ export const POST = async (req: Request) => {
       }
     });
 
-    // System instructions are deprecated; only persona prompts are used.
     const personaInstructions = await getPersonaInstructionsOnly(
       body.selectedSystemPromptIds || [],
     );
-    const emitter = await searchHandler.searchAndAnswer(
-      body.query,
-      history,
-      '' /* chatId unavailable in search route; use empty for ephemeral runs */,
+
+    const agent = createSearchAgent({
       chatLlm,
       systemLlm,
-      embeddings,
-      [],
-      signal,
+      focusMode: body.focusMode,
       personaInstructions,
-      body.focusMode,
-      undefined,
-      undefined,
-      {
-        location: body.userLocation,
-        profile: body.userProfile,
-      },
-      body.messageImageIds,
-    );
+      messagesCount: history.length,
+      query: body.query,
+      userLocation: body.userLocation,
+      userProfile: body.userProfile,
+    });
+
+    const humanMessage = new HumanMessage({ content: body.query });
+    const input = { messages: [...history, humanMessage] };
+    const configurable = {
+      embeddings,
+      systemLlm,
+      signal,
+      thread_id: `search-${Date.now()}`,
+    };
 
     if (!body.stream) {
-      return new Promise(
-        (
-          resolve: (value: Response) => void,
-          reject: (value: Response) => void,
-        ) => {
-          let message = '';
-          let sources: Record<string, unknown>[] = [];
-          let modelStats: Record<string, unknown> | undefined;
+      try {
+        let message = '';
+        let sources: Record<string, unknown>[] = [];
 
-          emitter.on('data', (data: string) => {
-            try {
-              const parsedData = JSON.parse(data);
-              if (parsedData.type === 'response') {
-                message += parsedData.data;
-              } else if (parsedData.type === 'sources') {
-                sources = parsedData.data;
+        const eventStream = agent.streamEvents(
+          input,
+          { version: 'v2', configurable },
+        );
+
+        const activeAgentLlmRunIds = new Set<string>();
+
+        for await (const event of eventStream) {
+          if (signal.aborted) break;
+
+          if (
+            event.event === 'on_chat_model_start' &&
+            event.metadata?.langgraph_node === 'model_request'
+          ) {
+            activeAgentLlmRunIds.add(event.run_id);
+          }
+
+          if (
+            event.event === 'on_chat_model_stream' &&
+            event.data.chunk &&
+            activeAgentLlmRunIds.has(event.run_id)
+          ) {
+            const content = event.data.chunk.content;
+            if (typeof content === 'string') {
+              message += content;
+            } else if (Array.isArray(content)) {
+              for (const block of content) {
+                if ((block.type === 'text' || block.type === 'text_delta') && block.text) {
+                  message += block.text;
+                }
               }
-            } catch (_error) {
-              reject(
-                Response.json(
-                  { message: 'Error parsing data' },
-                  { status: 500 },
-                ),
-              );
             }
-          });
+          }
 
-          emitter.on('stats', (data: string) => {
-            try {
-              const parsedData = JSON.parse(data);
-              if (parsedData.type === 'modelStats') {
-                modelStats = parsedData.data;
-              }
-            } catch (_error) {
-              // Ignore stats parse errors
-            }
-          });
+          if (event.event === 'on_chat_model_end') {
+            activeAgentLlmRunIds.delete(event.run_id);
+          }
 
-          emitter.on('end', () => {
-            resolve(
-              Response.json({ message, sources, modelStats }, { status: 200 }),
-            );
-          });
+          if (event.event === 'on_custom_event' && event.name === 'sources') {
+            const eventData = event.data as { sources?: Record<string, unknown>[] };
+            if (eventData.sources) sources = eventData.sources;
+          }
+        }
 
-          emitter.on('error', (error: unknown) => {
-            reject(
-              Response.json(
-                { message: 'Search error', error },
-                { status: 500 },
-              ),
-            );
-          });
-        },
-      );
+        return Response.json({ message, sources }, { status: 200 });
+      } catch (error) {
+        return Response.json(
+          { message: 'Search error', error: String(error) },
+          { status: 500 },
+        );
+      }
     }
 
     const encoder = new TextEncoder();
 
     const stream = new ReadableStream({
-      start(controller) {
-        let sources: Record<string, unknown>[] = [];
+      async start(controller) {
         let isStreamActive = true;
 
         controller.enqueue(
           encoder.encode(
-            JSON.stringify({
-              type: 'init',
-              data: 'Stream connected',
-            }) + '\n',
+            JSON.stringify({ type: 'init', data: 'Stream connected' }) + '\n',
           ),
         );
 
-        // Keep-alive ping mechanism to prevent reverse proxy timeouts
         const pingInterval = setInterval(() => {
           if (isStreamActive && !signal.aborted) {
             try {
               controller.enqueue(
                 encoder.encode(
-                  JSON.stringify({
-                    type: 'ping',
-                    timestamp: Date.now(),
-                  }) + '\n',
+                  JSON.stringify({ type: 'ping', timestamp: Date.now() }) + '\n',
                 ),
               );
-            } catch (_error) {
-              // If enqueueing fails, the connection is likely closed
+            } catch {
               clearInterval(pingInterval);
               isStreamActive = false;
             }
           } else {
             clearInterval(pingInterval);
           }
-        }, 30000); // Send ping every 30 seconds
+        }, 30000);
 
         signal.addEventListener('abort', () => {
           isStreamActive = false;
           clearInterval(pingInterval);
-          emitter.removeAllListeners();
-
-          try {
-            controller.close();
-          } catch (_error) {}
+          try { controller.close(); } catch { /* already closed */ }
         });
 
-        emitter.on('data', (data: string) => {
-          if (signal.aborted) return;
-
-          try {
-            const parsedData = JSON.parse(data);
-
-            if (parsedData.type === 'response') {
-              controller.enqueue(
-                encoder.encode(
-                  JSON.stringify({
-                    type: 'response',
-                    data: parsedData.data,
-                  }) + '\n',
-                ),
-              );
-            } else if (parsedData.type === 'sources') {
-              sources = parsedData.data;
-              controller.enqueue(
-                encoder.encode(
-                  JSON.stringify({
-                    type: 'sources',
-                    data: sources,
-                  }) + '\n',
-                ),
-              );
-            }
-          } catch (error) {
-            controller.error(error);
-          }
-        });
-
-        emitter.on('stats', (data: string) => {
-          if (signal.aborted) return;
-
-          try {
-            const parsedData = JSON.parse(data);
-            if (parsedData.type === 'modelStats') {
-              controller.enqueue(
-                encoder.encode(
-                  JSON.stringify({
-                    type: 'stats',
-                    data: parsedData.data,
-                  }) + '\n',
-                ),
-              );
-            }
-          } catch (_error) {
-            // Ignore stats parse errors
-          }
-        });
-
-        emitter.on('end', () => {
-          if (signal.aborted) return;
-
-          isStreamActive = false;
-          clearInterval(pingInterval);
-
-          controller.enqueue(
-            encoder.encode(
-              JSON.stringify({
-                type: 'done',
-              }) + '\n',
-            ),
+        try {
+          const eventStream = agent.streamEvents(
+            input,
+            { version: 'v2', configurable },
           );
-          controller.close();
-        });
 
-        emitter.on('error', (error: unknown) => {
-          if (signal.aborted) return;
+          const activeAgentLlmRunIds = new Set<string>();
 
+          for await (const event of eventStream) {
+            if (!isStreamActive || signal.aborted) break;
+
+            if (
+              event.event === 'on_chat_model_start' &&
+              event.metadata?.langgraph_node === 'model_request'
+            ) {
+              activeAgentLlmRunIds.add(event.run_id);
+            }
+
+            if (
+              event.event === 'on_chat_model_stream' &&
+              event.data.chunk &&
+              activeAgentLlmRunIds.has(event.run_id)
+            ) {
+              const content = event.data.chunk.content;
+              let text = '';
+              if (typeof content === 'string') text = content;
+              else if (Array.isArray(content)) {
+                for (const block of content) {
+                  if ((block.type === 'text' || block.type === 'text_delta') && block.text) {
+                    text += block.text;
+                  }
+                }
+              }
+              if (text) {
+                controller.enqueue(
+                  encoder.encode(
+                    JSON.stringify({ type: 'response', data: text }) + '\n',
+                  ),
+                );
+              }
+            }
+
+            if (event.event === 'on_chat_model_end') {
+              activeAgentLlmRunIds.delete(event.run_id);
+            }
+
+            if (event.event === 'on_custom_event' && event.name === 'sources') {
+              const eventData = event.data as { sources?: Record<string, unknown>[] };
+              if (eventData.sources) {
+                controller.enqueue(
+                  encoder.encode(
+                    JSON.stringify({ type: 'sources', data: eventData.sources }) + '\n',
+                  ),
+                );
+              }
+            }
+          }
+
+          if (isStreamActive) {
+            isStreamActive = false;
+            clearInterval(pingInterval);
+            controller.enqueue(
+              encoder.encode(JSON.stringify({ type: 'done' }) + '\n'),
+            );
+            controller.close();
+          }
+        } catch (error) {
           isStreamActive = false;
           clearInterval(pingInterval);
-
           controller.error(error);
-        });
+        }
       },
       cancel() {
         abortController.abort();

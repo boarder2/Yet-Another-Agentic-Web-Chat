@@ -7,7 +7,6 @@ import { formattingAndCitationsWeb } from '@/lib/prompts/templates';
 export function buildWebSearchPrompt(
   personaInstructions: string,
   personalizationSection: string,
-  fileIds: string[] = [],
   messagesCount: number = 0,
   query?: string,
   date: Date = new Date(),
@@ -41,38 +40,23 @@ ${formattingAndCitationsWeb}`
 ${personalizationSection}
 
 # Research Process
-1. **Plan**: Break down queries into manageable components. For multi-part queries, use 2-4 parallel deep_research subagents. For simple queries, use web_search and url_summarization.
+1. **Plan**: Break down queries into manageable components. For simple queries, use web_search and url_summarization.
 
 2. **Search Tools**:
    - **web_search**: Initial search to gather preview content with snippets, URLs, and titles.
      - **MAX 4 web searches per turn** — make each query meaningfully distinct to maximize coverage.
      ${alwaysSearchInstruction}
      ${explicitUrlInstruction}
-${
-  fileIds.length > 0
-    ? `   - **file_search**: Search ${fileIds.length} uploaded file${fileIds.length === 1 ? '' : 's'} with specific questions. Tool automatically searches all files.`
-    : ''
-}
 
 3. **Supplement Tools**:
    - **url_summarization**: Retrieve specific sources (max 5 URLs per turn). Pass URLs unchanged. Include user query for context. Use \`retrieveHtml: true\` to get images/links. **When HTML contains relevant images, embed them in the response using Markdown** (\`![alt](src)\`).
    - **image_search**: For visual requests (images, photos, charts, diagrams). Returns URLs and titles. **Embed returned images directly in the response using Markdown** (e.g., \`![description](url)\`) rather than just linking to them — visual context enhances the response.
    - **youtube_transcript**: Provide exact YouTube URL. If it fails, inform user and stop related searches.
    - **pdf_loader**: For PDF URLs (http(s)://...pdf). Provide exact URL.
-   - **deep_research**: Spawn focused subagents for comprehensive investigation. **Max 4 uses per response.**
-     - **Key Principle**: Each call investigates ONE specific aspect, not the entire question.
-     - **Iterative Strategy**: (1) Discover scope first → (2) Research specific items → (3) Synthesize
-     - **Context Requirement**: Follow-up tasks MUST include specific data from prior research. Name exact entities/items discovered.
-       - ✓ "Find medals for Figure Skating and Alpine Skiing at 2026 Olympics"
-       - ✗ "Find medals for remaining sports" (vague)
-     - **Use when**: Multi-part queries (2+ aspects), comparisons ("X vs Y"), comprehensive requests ("tell me everything"), complex topics requiring detailed research
-     - **Reserve for**: Multi-part queries (2+ aspects), comparisons, comprehensive requests — use direct web_search for simple factual questions
-     - **Parallelism**: Run multiple calls in parallel when aspects are known; sequence when discovering scope first
-   - **todo_list**: **RARELY USE**. Reserve for queries with 3+ distinct research areas that exceed what you can track mentally. Max 10 items, 3-5 broad categories. For most queries, maintain your own mental tracking.
 
-4. **Analyze**: Assess information completeness${fileIds.length > 0 ? ' from both web and file sources' : ''}. Repeat Search/Supplement if needed.
+4. **Analyze**: Assess information completeness. Repeat Search/Supplement if needed.
 
-5. **Respond**: Synthesize all information${fileIds.length > 0 ? ' from web and uploaded files' : ''}. Execute additional targeted searches if gaps remain.
+5. **Respond**: Synthesize all information. Execute additional targeted searches if gaps remain.
 
 **Context**: Today's Date - use for time sensitive queries: ${formatDateForLLM(date)}
 `;

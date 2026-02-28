@@ -528,6 +528,13 @@ const MarkdownRenderer = ({
           return <a {...props} target="_blank" rel="noopener noreferrer" />;
         },
       },
+      // Handle <think> tags that reach the Markdown renderer during streaming
+      // (unclosed tags before splitByThinkBlocks can extract them)
+      think: {
+        component: ({ children }: { children?: React.ReactNode }) => (
+          <ThinkBox content={children} />
+        ),
+      },
       // Prevent rendering of certain HTML elements for security
       iframe: () => null, // Don't render iframes
       script: () => null, // Don't render scripts

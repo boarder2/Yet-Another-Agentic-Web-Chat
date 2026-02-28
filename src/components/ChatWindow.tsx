@@ -1,9 +1,17 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { updateToolCallMarkup } from '@/lib/utils/toolCallMarkup';
-import { encodeHtmlAttribute } from '@/lib/utils/html';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useStream,
+  FetchStreamTransport,
+} from '@langchain/langgraph-sdk/react';
+import type {
+  Message as LangGraphMessage,
+  AIMessage as LangGraphAIMessage,
+  ToolMessage as LangGraphToolMessage,
+} from '@langchain/langgraph-sdk';
 import { Document } from '@langchain/core/documents';
+import { escapeAttribute } from '@/lib/utils/toolCallMarkup';
 import Navbar from './Navbar';
 import Chat from './Chat';
 import EmptyChat from './EmptyChat';
@@ -265,10 +273,25 @@ const loadMessages = async (
   const data = await res.json();
 
   const messages = data.messages.map((msg: unknown) => {
-    return {
-      ...(msg as Record<string, unknown>),
-      ...JSON.parse((msg as Record<string, string>).metadata),
-    };
+    const raw = msg as Record<string, unknown>;
+    const meta = JSON.parse(raw.metadata as string) as Record<string, unknown>;
+    // Wrap plain source objects from DB into Document-like shape
+    if (Array.isArray(meta.sources)) {
+      meta.sources = (meta.sources as Array<Record<string, unknown>>).map(
+        (s) => {
+          if (s.metadata) return s; // already a Document
+          return {
+            pageContent: '',
+            metadata: {
+              url: s.url || '',
+              title: s.title || '',
+              ...(s.sourceId !== undefined ? { sourceId: s.sourceId } : {}),
+            },
+          };
+        },
+      );
+    }
+    return { ...raw, ...meta };
   }) as Message[];
 
   setMessages(messages);
@@ -536,6 +559,454 @@ const ChatWindow = ({ id }: { id?: string }) => {
     }
   }, [isMessagesLoaded, isConfigReady]);
 
+  // --- useStream integration ---
+  // payloadRef holds the full request body for the next submit() call.
+  // The FetchStreamTransport.onRequest callback reads from it.
+  const payloadRef = useRef<Record<string, unknown> | null>(null);
+
+  // Track sources and pending message metadata per-stream
+  const streamSourcesRef = useRef<Document[]>([]);
+  const streamSearchQueryRef = useRef<string | undefined>(undefined);
+  const streamActiveRef = useRef(false);
+  // Stable assistant messageId for the current stream (so multiple AI messages
+  // from tool-calling rounds all update the same app-level Message entry)
+  const streamAssistantIdRef = useRef<string>('');
+  // Track the human message for chatHistory update in onFinish
+  const pendingHumanRef = useRef<{
+    message: string;
+    imageIds?: string[];
+  } | null>(null);
+  // Track stream start time for responseTime calculation
+  const streamStartTimeRef = useRef<number>(0);
+
+  const transport = useMemo(
+    () =>
+      new FetchStreamTransport({
+        apiUrl: '/api/chat',
+        onRequest: async (_url, init) => {
+          // Replace the default useStream body with our app's payload
+          if (payloadRef.current) {
+            return { ...init, body: JSON.stringify(payloadRef.current) };
+          }
+          return init;
+        },
+      }),
+    [],
+  );
+
+  // Helper to process sources from either custom events or update events
+  const processSources = useCallback(
+    (rawSources: Array<Record<string, unknown>>, searchQuery?: string) => {
+      const docSources = rawSources.map((s) => {
+        if (s.metadata) return s as unknown as Document;
+        return new Document({
+          pageContent: '',
+          metadata: {
+            url: (s.url as string) || '',
+            title: (s.title as string) || '',
+            ...(s.sourceId !== undefined ? { sourceId: s.sourceId } : {}),
+            ...(s.rank !== undefined ? { rank: s.rank } : {}),
+          },
+        });
+      });
+      // Deduplicate by URL
+      const existingUrls = new Set(
+        streamSourcesRef.current.map((d) => d.metadata?.url),
+      );
+      const newSources = docSources.filter(
+        (d) => !existingUrls.has(d.metadata?.url),
+      );
+      streamSourcesRef.current = [
+        ...streamSourcesRef.current,
+        ...newSources,
+      ];
+      streamSearchQueryRef.current =
+        searchQuery || streamSearchQueryRef.current;
+
+      if (searchQuery && newSources.length > 0) {
+        setGatheringSources((prev) => {
+          const existingIndex = prev.findIndex(
+            (group) => group.searchQuery === searchQuery,
+          );
+          if (existingIndex >= 0) {
+            const updated = [...prev];
+            updated[existingIndex] = {
+              searchQuery: searchQuery,
+              sources: [...updated[existingIndex].sources, ...newSources],
+            };
+            return updated;
+          }
+          return [...prev, { searchQuery: searchQuery, sources: newSources }];
+        });
+      }
+    },
+    [],
+  );
+
+  const stream = useStream({
+    transport,
+    onCustomEvent: (data: unknown) => {
+      // Handle custom events dispatched by tools (e.g., sources)
+      const e = data as {
+        sources?: Array<Record<string, unknown>>;
+        searchQuery?: string;
+        searchUrl?: string;
+      };
+      if (e?.sources && Array.isArray(e.sources)) {
+        processSources(e.sources, e.searchQuery);
+      }
+    },
+    onUpdateEvent: (data: unknown) => {
+      // Extract sources and todos from update events
+      // When agent.stream() with encoding: 'text/event-stream' is used,
+      // dispatchCustomEvent doesn't produce SSE custom events. Instead,
+      // we parse tool results from the updates stream.
+      const update = data as Record<
+        string,
+        { messages?: Array<Record<string, unknown>>; todos?: Array<{ content: string; status: string }> }
+      >;
+      if (!update || typeof update !== 'object') return;
+
+      // Extract todos from any node update (todoListMiddleware uses Command)
+      for (const nodeData of Object.values(update)) {
+        if (nodeData?.todos && Array.isArray(nodeData.todos)) {
+          setTodoItems(nodeData.todos);
+        }
+      }
+      const toolsUpdate = update.tools;
+      if (!toolsUpdate?.messages) return;
+
+      for (const msg of toolsUpdate.messages) {
+        if (msg.type !== 'tool' || typeof msg.content !== 'string') continue;
+        const toolName = msg.name as string;
+        // Only extract sources from search/summarization tools
+        if (
+          !['web_search', 'url_summarization', 'file_search'].includes(toolName)
+        )
+          continue;
+
+        const content = msg.content as string;
+        // Parse [N] Title\nURL: https://... format from tool output
+        const sourceRegex =
+          /\[(\d+)\]\s+(.+?)\nURL:\s+(https?:\/\/[^\s\n]+)/g;
+        let match;
+        const parsedSources: Document[] = [];
+        while ((match = sourceRegex.exec(content)) !== null) {
+          parsedSources.push(
+            new Document({
+              pageContent: '',
+              metadata: {
+                sourceId: parseInt(match[1]),
+                title: match[2].trim(),
+                url: match[3].trim(),
+              },
+            }),
+          );
+        }
+        if (parsedSources.length > 0) {
+          // Determine search query from the tool call args if available
+          const toolCallId = msg.tool_call_id as string | undefined;
+          // Try to find the corresponding tool call in stream messages
+          let searchQuery: string | undefined;
+          if (stream.messages) {
+            for (const m of stream.messages) {
+              if (m.type === 'ai' && 'tool_calls' in m) {
+                const aiMsg = m as LangGraphAIMessage;
+                const tc = aiMsg.tool_calls?.find(
+                  (c: { id?: string }) => c.id === toolCallId,
+                );
+                if (tc?.args && typeof tc.args === 'object') {
+                  searchQuery = (tc.args as Record<string, unknown>)
+                    .query as string;
+                }
+              }
+            }
+          }
+          processSources(
+            parsedSources.map((d) => d.metadata as Record<string, unknown>),
+            searchQuery,
+          );
+        }
+      }
+    },
+    onError: (error: unknown) => {
+      const errMsg =
+        error instanceof Error
+          ? `${error.message}\n${error.stack}`
+          : String(error);
+      console.error('Stream error:', errMsg);
+      toast.error(error instanceof Error ? error.message : String(error));
+      streamActiveRef.current = false;
+      setLoading(false);
+    },
+  });
+
+  // Watch stream.isLoading to detect when stream finishes
+  const wasLoadingRef = useRef(false);
+  useEffect(() => {
+    if (wasLoadingRef.current && !stream.isLoading && streamActiveRef.current) {
+      // Stream just finished
+      streamActiveRef.current = false;
+      setLoading(false);
+      setGatheringSources([]);
+      setAnalysisProgress(null);
+      setTodoItems([]);
+      setScrollTrigger((prev) => prev + 1);
+
+      // Compute final model stats from stream messages
+      const aiMsgs = (stream.messages || []).filter(
+        (m: LangGraphMessage) => m.type === 'ai',
+      ) as LangGraphAIMessage[];
+      let totalIn = 0;
+      let totalOut = 0;
+      for (const aim of aiMsgs) {
+        const u = aim.usage_metadata;
+        if (u) {
+          totalIn += u.input_tokens || 0;
+          totalOut += u.output_tokens || 0;
+        }
+      }
+      const elapsed = Date.now() - streamStartTimeRef.current;
+      const finalModelStats: ModelStats | undefined =
+        totalIn > 0 || totalOut > 0
+          ? {
+              modelName: '',
+              responseTime: elapsed,
+              usage: {
+                input_tokens: totalIn,
+                output_tokens: totalOut,
+                total_tokens: totalIn + totalOut,
+              },
+            }
+          : {
+              modelName: '',
+              responseTime: elapsed,
+            };
+
+      // Stamp final modelStats onto the assistant message
+      const stableId = streamAssistantIdRef.current;
+      if (stableId && finalModelStats) {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.messageId === stableId
+              ? { ...msg, modelStats: finalModelStats }
+              : msg,
+          ),
+        );
+      }
+      setLiveModelStats(null);
+
+      // Update chat history with the completed exchange
+      const pending = pendingHumanRef.current;
+      if (pending) {
+        const lastAssistant = [...messagesRef.current]
+          .reverse()
+          .find((m) => m.role === 'assistant');
+        const assistantContent = lastAssistant?.content || '';
+        setChatHistory((prevHistory) => [
+          ...prevHistory,
+          pending.imageIds?.length
+            ? (['human', pending.message, pending.imageIds] as [
+                string,
+                string,
+                string[],
+              ])
+            : (['human', pending.message] as [string, string]),
+          ['assistant', assistantContent],
+        ]);
+        pendingHumanRef.current = null;
+      }
+
+      // Fetch suggestions if appropriate
+      const lastMsg = messagesRef.current[messagesRef.current.length - 1];
+      if (
+        lastMsg?.role === 'assistant' &&
+        lastMsg.sources &&
+        lastMsg.sources.length > 0 &&
+        !lastMsg.suggestions
+      ) {
+        const autoSuggestions = localStorage.getItem('autoSuggestions');
+        if (autoSuggestions !== 'false') {
+          getSuggestions(messagesRef.current).then((suggestions) => {
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.messageId === lastMsg.messageId
+                  ? { ...msg, suggestions }
+                  : msg,
+              ),
+            );
+          });
+        }
+      }
+    }
+    wasLoadingRef.current = stream.isLoading;
+  }, [stream.isLoading]);
+
+  // Todo extraction is handled via onUpdateEvent callback (no 'values' streamMode needed)
+
+  // Cancel handler — calls stream.stop() to abort the SSE transport
+  const handleCancel = useCallback(() => {
+    stream.stop();
+    streamActiveRef.current = false;
+    setLoading(false);
+  }, [stream]);
+
+  // Derive app messages from useStream messages when streaming is active.
+  // Uses setTimeout(0) to batch rapid SSE events into a single state update
+  // per macrotask, preventing "Maximum update depth exceeded" when many
+  // stream messages arrive faster than React can process them.
+  const prevStreamContentRef = useRef('');
+  const streamUpdateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  // Keep a ref to the latest stream.messages so the deferred callback
+  // always processes the most recent data.
+  const latestStreamMsgsRef = useRef(stream.messages);
+  latestStreamMsgsRef.current = stream.messages;
+
+  useEffect(() => {
+    if (!streamActiveRef.current) return;
+    if (!stream.messages || stream.messages.length === 0) return;
+
+    // Cancel any pending update — only the latest one will run
+    if (streamUpdateTimerRef.current !== null) {
+      clearTimeout(streamUpdateTimerRef.current);
+    }
+
+    streamUpdateTimerRef.current = setTimeout(() => {
+      streamUpdateTimerRef.current = null;
+      const msgs = latestStreamMsgsRef.current;
+      if (!msgs || msgs.length === 0) return;
+
+      // Find the last AI message in the stream
+      const aiMessages = msgs.filter(
+        (m: LangGraphMessage) => m.type === 'ai',
+      ) as LangGraphAIMessage[];
+
+      if (aiMessages.length === 0) return;
+
+      // Collect tool messages for status lookup
+      const toolMessages = msgs.filter(
+        (m: LangGraphMessage) => m.type === 'tool',
+      ) as LangGraphToolMessage[];
+      const toolResultIds = new Set(toolMessages.map((tm) => tm.tool_call_id));
+
+      // Helper to extract text from an AI message
+      const extractText = (msg: LangGraphAIMessage): string => {
+        if (typeof msg.content === 'string') return msg.content;
+        if (Array.isArray(msg.content)) {
+          return msg.content
+            .filter(
+              (block) =>
+                typeof block === 'object' &&
+                block !== null &&
+                'text' in block,
+            )
+            .map((block) => (block as { text: string }).text)
+            .join('');
+        }
+        return '';
+      };
+
+      // Build content by interleaving text and ToolCall markup per AI message
+      // in natural order: thinking text first, then tool calls for each message.
+      // This preserves the chronological "reasoning → action" flow.
+      // Internal tools like write_todos are excluded from markup since they
+      // are shown via the TodoWidget instead.
+      const HIDDEN_TOOLS = new Set(['write_todos']);
+      const parts: string[] = [];
+      for (const aim of aiMessages) {
+        const text = extractText(aim);
+        if (text) parts.push(text);
+        if (aim.tool_calls && aim.tool_calls.length > 0) {
+          for (const tc of aim.tool_calls) {
+            if (HIDDEN_TOOLS.has(tc.name || '')) continue;
+            const status = toolResultIds.has(tc.id ?? '')
+              ? 'success'
+              : 'running';
+            const toolType = tc.name || 'unknown';
+            const toolCallId = tc.id || '';
+            const query = tc.args?.query as string | undefined;
+            const url = tc.args?.url as string | undefined;
+            let attrs = `type="${escapeAttribute(toolType)}" status="${status}" toolCallId="${escapeAttribute(toolCallId)}"`;
+            if (query) attrs += ` query="${escapeAttribute(query)}"`;
+            if (url) attrs += ` url="${escapeAttribute(url)}"`;
+            parts.push(`<ToolCall ${attrs}></ToolCall>`);
+          }
+        }
+      }
+      const content = parts.join('\n');
+
+      // Guard against redundant updates
+      if (content === prevStreamContentRef.current) return;
+      prevStreamContentRef.current = content;
+
+      // Aggregate usage_metadata from all AI messages for live model stats
+      let totalInput = 0;
+      let totalOutput = 0;
+      for (const aim of aiMessages) {
+        const usage = aim.usage_metadata;
+        if (usage) {
+          totalInput += usage.input_tokens || 0;
+          totalOutput += usage.output_tokens || 0;
+        }
+      }
+      if (totalInput > 0 || totalOutput > 0) {
+        const elapsed = Date.now() - streamStartTimeRef.current;
+        setLiveModelStats({
+          modelName: '',
+          responseTime: elapsed,
+          usage: {
+            input_tokens: totalInput,
+            output_tokens: totalOutput,
+            total_tokens: totalInput + totalOutput,
+          },
+        });
+      }
+
+      // Update the assistant message in app state
+      setMessages((prev) => {
+        const stableId = streamAssistantIdRef.current;
+        const currentAssistantIdx = prev.findIndex(
+          (m) => m.role === 'assistant' && m.messageId === stableId,
+        );
+
+        const assistantMsg: Message = {
+          messageId: stableId,
+          chatId: chatId!,
+          role: 'assistant',
+          content,
+          createdAt: new Date(),
+          sources:
+            streamSourcesRef.current.length > 0
+              ? streamSourcesRef.current
+              : undefined,
+          searchQuery: streamSearchQueryRef.current,
+        };
+
+        if (currentAssistantIdx >= 0) {
+          const updated = [...prev];
+          updated[currentAssistantIdx] = {
+            ...updated[currentAssistantIdx],
+            ...assistantMsg,
+          };
+          return updated;
+        } else {
+          return [...prev, assistantMsg];
+        }
+      });
+
+      setScrollTrigger((prev) => prev + 1);
+    }, 0);
+
+    return () => {
+      if (streamUpdateTimerRef.current !== null) {
+        clearTimeout(streamUpdateTimerRef.current);
+        streamUpdateTimerRef.current = null;
+      }
+    };
+  }, [stream.messages, chatId]);
+
   const sendMessage = async (
     message: string,
     options?: {
@@ -573,12 +1044,6 @@ const ChatWindow = ({ id }: { id?: string }) => {
     setLiveModelStats(null);
     setAnalysisProgress(null);
 
-    let sources: Document[] | undefined = undefined;
-    let recievedMessage = '';
-    let messageBuffer = '';
-    let tokenCount = 0;
-    const bufferThreshold = 5;
-    let added = false;
     let messageChatHistory = chatHistory;
 
     // If the user is editing or rewriting a message, we need to remove the messages after it
@@ -629,644 +1094,38 @@ const ChatWindow = ({ id }: { id?: string }) => {
       window.history.replaceState({}, '', `/c/${chatId}`);
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const messageHandler = async (data: Record<string, any>) => {
-      if (data.type === 'error') {
-        toast.error(data.data);
-        setLoading(false);
-        return;
-      }
-
-      if (data.type === 'progress') {
-        setAnalysisProgress(data.data);
-        return;
-      }
-      if (data.type === 'stats') {
-        // live model stats snapshot during run
-        setLiveModelStats(data.data);
-        return;
-      }
-
-      // Handle ping messages to keep connection alive (no action needed)
-      if (data.type === 'ping') {
-        console.debug('Ping received');
-        // Ping messages are used to keep the connection alive during long requests
-        // No action is required on the frontend
-        return;
-      }
-
-      if (data.type === 'sources_added') {
-        // Track gathering sources during search phase with search query
-        if (data.searchQuery && data.searchQuery.trim()) {
-          setGatheringSources((prev) => {
-            const existingIndex = prev.findIndex(
-              (group) => group.searchQuery === data.searchQuery,
-            );
-            if (existingIndex >= 0) {
-              // Update existing group
-              const updated = [...prev];
-              updated[existingIndex] = {
-                searchQuery: data.searchQuery,
-                sources: [...updated[existingIndex].sources, ...data.data],
-              };
-              return updated;
-            } else {
-              // Add new group
-              return [
-                ...prev,
-                {
-                  searchQuery: data.searchQuery,
-                  sources: data.data,
-                },
-              ];
-            }
-          });
-        }
-      }
-
-      if (data.type === 'sources') {
-        sources = data.data;
-
-        if (!added) {
-          setMessages((prevMessages) => [
-            ...prevMessages,
-            {
-              content: '',
-              messageId: data.messageId,
-              chatId: chatId!,
-              role: 'assistant',
-              sources: sources,
-              searchQuery: data.searchQuery,
-              searchUrl: data.searchUrl,
-              createdAt: new Date(),
-            },
-          ]);
-          added = true;
-          setScrollTrigger((prev) => prev + 1);
-        } else {
-          // set the sources
-          setMessages((prev) =>
-            prev.map((message) => {
-              if (message.messageId === data.messageId) {
-                return { ...message, sources: sources };
-              }
-              return message;
-            }),
-          );
-        }
-      }
-
-      // (Inline ToolCall status updater removed; using shared updateToolCallMarkup helper.)
-
-      if (data.type === 'tool_call_started') {
-        const toolContent = data.data.content; // Already a <ToolCall ... status="running" ...>
-        console.log('Tool call started:', toolContent);
-        if (!added) {
-          setMessages((prevMessages) => [
-            ...prevMessages,
-            {
-              content: toolContent,
-              messageId: data.messageId,
-              chatId: chatId!,
-              role: 'assistant',
-              sources: sources,
-              createdAt: new Date(),
-            },
-          ]);
-          added = true;
-        } else {
-          setMessages((prev) =>
-            prev.map((message) =>
-              message.messageId === data.messageId
-                ? { ...message, content: message.content + toolContent }
-                : message,
-            ),
-          );
-        }
-        recievedMessage += toolContent;
-        setScrollTrigger((prev) => prev + 1);
-        return;
-      }
-
-      if (
-        data.type === 'tool_call_success' ||
-        data.type === 'tool_call_error'
-      ) {
-        console.log('Tool call ended:', data);
-        const { toolCallId, status, extra } = data.data;
-        const errorMsg =
-          data.type === 'tool_call_error' ? data.data.error : undefined;
-        setMessages((prev) =>
-          prev.map((message) => {
-            if (message.messageId === data.messageId) {
-              const updatedContent = updateToolCallMarkup(
-                message.content,
-                toolCallId,
-                {
-                  status,
-                  error: errorMsg,
-                  extra,
-                },
-              );
-              return { ...message, content: updatedContent };
-            }
-            return message;
-          }),
-        );
-        recievedMessage = updateToolCallMarkup(recievedMessage, toolCallId, {
-          status,
-          error: errorMsg,
-          extra,
-        });
-        setScrollTrigger((prev) => prev + 1);
-        return;
-      }
-
-      // Handle subagent execution started
-      if (data.type === 'subagent_started') {
-        console.log('ChatWindow: Subagent started:', data);
-        const subagentMarkup = `<SubagentExecution id="${data.executionId}" name="${encodeHtmlAttribute(data.name ?? '')}" task="${encodeHtmlAttribute(data.task ?? '')}" status="running"></SubagentExecution>\n`;
-
-        if (!added) {
-          setMessages((prevMessages) => [
-            ...prevMessages,
-            {
-              content: subagentMarkup,
-              messageId: data.messageId || 'temp',
-              chatId: chatId!,
-              role: 'assistant',
-              sources: sources,
-              createdAt: new Date(),
-            },
-          ]);
-          added = true;
-        } else {
-          setMessages((prev) =>
-            prev.map((message) =>
-              message.messageId === data.messageId
-                ? { ...message, content: message.content + subagentMarkup }
-                : message,
-            ),
-          );
-        }
-        recievedMessage += subagentMarkup;
-        setScrollTrigger((prev) => prev + 1);
-        return;
-      }
-
-      // Handle subagent data (nested events like tool calls and responses)
-      if (data.type === 'subagent_data') {
-        const nestedEvent = data.data;
-        const executionId = data.subagentId;
-
-        // Handle response tokens - accumulate into responseText attribute
-        if (nestedEvent.type === 'response') {
-          const token = nestedEvent.data || '';
-          console.log('ChatWindow: Subagent response token:', {
-            executionId,
-            tokenLength: token.length,
-            token: token.substring(0, 50),
-          });
-          setMessages((prev) =>
-            prev.map((message) => {
-              if (message.messageId === data.messageId) {
-                const subagentRegex = new RegExp(
-                  `<SubagentExecution\\s+id="${executionId}"([^>]*)>`,
-                  'g',
-                );
-
-                const updatedContent = message.content.replace(
-                  subagentRegex,
-                  (match, attrs) => {
-                    // Extract existing responseText
-                    const responseMatch = attrs.match(/responseText="([^"]*)"/);
-                    let existingText = '';
-                    if (responseMatch) {
-                      existingText = responseMatch[1]
-                        .replace(/&quot;/g, '"')
-                        .replace(/&lt;/g, '<')
-                        .replace(/&gt;/g, '>')
-                        .replace(/&amp;/g, '&');
-                    }
-
-                    // Append new token
-                    const newText = existingText + token;
-                    const escapedText = newText
-                      .replace(/&/g, '&amp;')
-                      .replace(/</g, '&lt;')
-                      .replace(/>/g, '&gt;')
-                      .replace(/"/g, '&quot;');
-
-                    // Update or add responseText attribute
-                    let updatedAttrs = attrs.replace(
-                      /responseText="[^"]*"/,
-                      `responseText="${escapedText}"`,
-                    );
-                    if (!updatedAttrs.includes('responseText=')) {
-                      updatedAttrs += ` responseText="${escapedText}"`;
-                    }
-
-                    console.log('ChatWindow: Updated responseText attr:', {
-                      executionId,
-                      textLength: newText.length,
-                      escapedLength: escapedText.length,
-                    });
-
-                    return `<SubagentExecution id="${executionId}"${updatedAttrs}>`;
-                  },
-                );
-
-                return { ...message, content: updatedContent };
-              }
-              return message;
-            }),
-          );
-          return;
-        }
-
-        // Only process tool call events beyond this point
-        if (!nestedEvent.type || !nestedEvent.type.startsWith('tool_call')) {
-          return;
-        }
-
-        console.log('ChatWindow: Subagent tool call:', nestedEvent);
-
-        // Convert tool call event to ToolCall markup
-        let toolCallMarkup = '';
-        if (
-          nestedEvent.type === 'tool_call_started' &&
-          nestedEvent.data?.content
-        ) {
-          toolCallMarkup = nestedEvent.data.content;
-        } else if (
-          nestedEvent.type === 'tool_call_success' &&
-          nestedEvent.data?.toolCallId
-        ) {
-          // Success event will update existing ToolCall, handle in next block
-          setMessages((prev) =>
-            prev.map((message) => {
-              if (message.messageId === data.messageId) {
-                // Update existing ToolCall status
-                const toolCallRegex = new RegExp(
-                  `<ToolCall([^>]*toolCallId="${nestedEvent.data.toolCallId}"[^>]*)>`,
-                  'g',
-                );
-                const updatedContent = message.content.replace(
-                  toolCallRegex,
-                  (match, attrs) => {
-                    let updated = attrs.replace(
-                      /status="[^"]*"/,
-                      'status="success"',
-                    );
-                    if (!updated.includes('status=')) {
-                      updated += ' status="success"';
-                    }
-                    return `<ToolCall${updated}>`;
-                  },
-                );
-                return { ...message, content: updatedContent };
-              }
-              return message;
-            }),
-          );
-          return;
-        } else if (
-          nestedEvent.type === 'tool_call_error' &&
-          nestedEvent.data?.toolCallId
-        ) {
-          // Error event will update existing ToolCall
-          setMessages((prev) =>
-            prev.map((message) => {
-              if (message.messageId === data.messageId) {
-                const toolCallRegex = new RegExp(
-                  `<ToolCall([^>]*toolCallId="${nestedEvent.data.toolCallId}"[^>]*)>`,
-                  'g',
-                );
-                const updatedContent = message.content.replace(
-                  toolCallRegex,
-                  (match, attrs) => {
-                    let updated = attrs.replace(
-                      /status="[^"]*"/,
-                      'status="error"',
-                    );
-                    if (!updated.includes('status=')) {
-                      updated += ' status="error"';
-                    }
-                    if (nestedEvent.data.error) {
-                      const escapedError = nestedEvent.data.error
-                        .replace(/&/g, '&amp;')
-                        .replace(/</g, '&lt;')
-                        .replace(/>/g, '&gt;')
-                        .replace(/"/g, '&quot;');
-                      updated += ` error="${escapedError}"`;
-                    }
-                    return `<ToolCall${updated}>`;
-                  },
-                );
-                return { ...message, content: updatedContent };
-              }
-              return message;
-            }),
-          );
-          return;
-        }
-
-        if (!toolCallMarkup) {
-          return;
-        }
-
-        // Insert ToolCall markup inside SubagentExecution
-        setMessages((prev) =>
-          prev.map((message) => {
-            if (message.messageId === data.messageId) {
-              // Use a more permissive regex that can match existing nested content
-              const subagentRegex = new RegExp(
-                `(<SubagentExecution\\s+id="${executionId}"[^>]*>)(.*?)(</SubagentExecution>)`,
-                'gs',
-              );
-
-              const updatedContent = message.content.replace(
-                subagentRegex,
-                (match, openTag, content, closeTag) => {
-                  console.log(
-                    'ChatWindow: Inserting ToolCall, existing content length:',
-                    content.length,
-                  );
-                  return `${openTag}${content}${toolCallMarkup}\n${closeTag}`;
-                },
-              );
-
-              return { ...message, content: updatedContent };
-            }
-            return message;
-          }),
-        );
-
-        setScrollTrigger((prev) => prev + 1);
-        return;
-      }
-
-      // Handle subagent completion or error
-      if (
-        data.type === 'subagent_completed' ||
-        data.type === 'subagent_error'
-      ) {
-        console.log('ChatWindow: Subagent ended:', data.type, data);
-        const status = data.type === 'subagent_completed' ? 'success' : 'error';
-        const executionId = data.id;
-
-        setMessages((prev) =>
-          prev.map((message) => {
-            if (message.messageId === data.messageId) {
-              // Find and update the specific SubagentExecution tag
-              const subagentRegex = new RegExp(
-                `<SubagentExecution\\s+id="${executionId}"([^>]*)>(.*?)<\\/SubagentExecution>`,
-                'gs',
-              );
-
-              const updatedContent = message.content.replace(
-                subagentRegex,
-                (match, attrs, innerContent) => {
-                  // Update attributes
-                  let updatedAttrs = attrs
-                    .replace(/status="[^"]*"/, `status="${status}"`)
-                    .trim();
-
-                  if (!updatedAttrs.includes('status=')) {
-                    updatedAttrs += ` status="${status}"`;
-                  }
-
-                  if (data.summary && status === 'success') {
-                    // Escape HTML entities in summary
-                    const escapedSummary = data.summary
-                      .replace(/&/g, '&amp;')
-                      .replace(/</g, '&lt;')
-                      .replace(/>/g, '&gt;')
-                      .replace(/"/g, '&quot;');
-                    updatedAttrs += ` summary="${escapedSummary}"`;
-                  }
-
-                  if (data.error && status === 'error') {
-                    const escapedError = data.error
-                      .replace(/&/g, '&amp;')
-                      .replace(/</g, '&lt;')
-                      .replace(/>/g, '&gt;')
-                      .replace(/"/g, '&quot;');
-                    updatedAttrs += ` error="${escapedError}"`;
-                  }
-
-                  // Preserve inner content (ToolCall markup)
-                  return `<SubagentExecution ${updatedAttrs}>${innerContent}</SubagentExecution>`;
-                },
-              );
-
-              return { ...message, content: updatedContent };
-            }
-            return message;
-          }),
-        );
-
-        // Update recievedMessage as well
-        const subagentRegexForPersistence = new RegExp(
-          `<SubagentExecution\\s+id="${executionId}"([^>]*)>(.*?)<\\/SubagentExecution>`,
-          'gs',
-        );
-        recievedMessage = recievedMessage.replace(
-          subagentRegexForPersistence,
-          (match, attrs, innerContent) => {
-            let updatedAttrs = attrs
-              .replace(/status="[^"]*"/, `status="${status}"`)
-              .trim();
-            if (!updatedAttrs.includes('status=')) {
-              updatedAttrs += ` status="${status}"`;
-            }
-            if (data.summary && status === 'success') {
-              const escapedSummary = data.summary
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;');
-              updatedAttrs += ` summary="${escapedSummary}"`;
-            }
-            if (data.error && status === 'error') {
-              const escapedError = data.error
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;');
-              updatedAttrs += ` error="${escapedError}"`;
-            }
-            return `<SubagentExecution ${updatedAttrs}>${innerContent}</SubagentExecution>`;
-          },
-        );
-
-        setScrollTrigger((prev) => prev + 1);
-        return;
-      }
-
-      // Handle todo list updates
-      if (data.type === 'todo_update') {
-        setTodoItems(data.data.todos || []);
-        return;
-      }
-
-      if (data.type === 'response') {
-        // Add to buffer instead of immediately updating UI
-        messageBuffer += data.data;
-        recievedMessage += data.data;
-        tokenCount++;
-
-        // Only update UI every bufferThreshold tokens
-        if (tokenCount >= bufferThreshold || !added) {
-          if (!added) {
-            setMessages((prevMessages) => [
-              ...prevMessages,
-              {
-                content: messageBuffer,
-                messageId: data.messageId, // Use the AI message ID from the backend
-                chatId: chatId!,
-                role: 'assistant',
-                sources: sources,
-                createdAt: new Date(),
-              },
-            ]);
-            added = true;
-          } else {
-            setMessages((prev) =>
-              prev.map((message) => {
-                if (message.messageId === data.messageId) {
-                  return { ...message, content: recievedMessage };
-                }
-                return message;
-              }),
-            );
-          }
-
-          // Reset buffer and counter
-          messageBuffer = '';
-          tokenCount = 0;
-          setScrollTrigger((prev) => prev + 1);
-        }
-      }
-
-      if (data.type === 'messageEnd') {
-        // Clear analysis progress and todo list
-        setAnalysisProgress(null);
-        setLiveModelStats(null);
-        setTodoItems([]);
-
-        // Ensure final message content is displayed (flush any remaining buffer)
-        setMessages((prev) =>
-          prev.map((message) => {
-            if (message.messageId === data.messageId) {
-              const usedLocationFlag =
-                typeof data.usedLocation === 'boolean'
-                  ? data.usedLocation
-                  : undefined;
-              const usedPersonalizationFlag =
-                typeof data.usedPersonalization === 'boolean'
-                  ? data.usedPersonalization
-                  : undefined;
-              const mergedStats = data.modelStats
-                ? {
-                    ...data.modelStats,
-                    ...(usedLocationFlag !== undefined
-                      ? { usedLocation: usedLocationFlag }
-                      : {}),
-                    ...(usedPersonalizationFlag !== undefined
-                      ? { usedPersonalization: usedPersonalizationFlag }
-                      : {}),
-                  }
-                : undefined;
-              return {
-                ...message,
-                content: recievedMessage, // Use the complete received message
-                // Include model stats if available, otherwise null
-                modelStats: mergedStats || null,
-                // Make sure the searchQuery is preserved (if available in the message data)
-                searchQuery: message.searchQuery || data.searchQuery,
-                searchUrl: message.searchUrl || data.searchUrl,
-                ...(usedLocationFlag !== undefined
-                  ? { usedLocation: usedLocationFlag }
-                  : {}),
-                ...(usedPersonalizationFlag !== undefined
-                  ? { usedPersonalization: usedPersonalizationFlag }
-                  : {}),
-              };
-            }
-            return message;
-          }),
-        );
-
-        setChatHistory((prevHistory) => [
-          ...prevHistory,
-          messageImageIds?.length
-            ? (['human', message, messageImageIds] as [
-                string,
-                string,
-                string[],
-              ])
-            : (['human', message] as [string, string]),
-          ['assistant', recievedMessage],
-        ]);
-
-        setLoading(false);
-        setGatheringSources([]); // Clear gathering sources when message is complete
-        setLiveModelStats(null);
-        setScrollTrigger((prev) => prev + 1);
-
-        const lastMsg = messagesRef.current[messagesRef.current.length - 1];
-
-        const autoSuggestions = localStorage.getItem('autoSuggestions');
-
-        if (
-          lastMsg.role === 'assistant' &&
-          lastMsg.sources &&
-          lastMsg.sources.length > 0 &&
-          !lastMsg.suggestions &&
-          autoSuggestions !== 'false' // Default to true if not set
-        ) {
-          const suggestions = await getSuggestions(messagesRef.current);
-          setMessages((prev) =>
-            prev.map((msg) => {
-              if (msg.messageId === lastMsg.messageId) {
-                return { ...msg, suggestions: suggestions };
-              }
-              return msg;
-            }),
-          );
-        }
-      }
-    };
-
     const ollamaContextWindow =
       localStorage.getItem('ollamaContextWindow') || '2048';
 
-    // Get the latest model selection from localStorage
     const currentChatModelProvider = localStorage.getItem('chatModelProvider');
     const currentChatModel = localStorage.getItem('chatModel');
 
-    // Use the most current model selection from localStorage, falling back to the state if not available
     const modelProvider =
       currentChatModelProvider || chatModelProvider.provider;
     const modelName = currentChatModel || chatModelProvider.name;
 
-    // Read System Model selection from localStorage; fallback to chat model
     const systemModelProvider =
       localStorage.getItem('systemModelProvider') || modelProvider;
     const systemModelName = localStorage.getItem('systemModel') || modelName;
 
+    // Reset stream refs for new request
+    streamSourcesRef.current = [];
+    streamSearchQueryRef.current = undefined;
+    streamActiveRef.current = true;
+    streamAssistantIdRef.current = crypto.randomBytes(7).toString('hex');
+    streamStartTimeRef.current = Date.now();
+    prevStreamContentRef.current = '';
+
+    // Store the payload for the FetchStreamTransport onRequest callback
     const payload: Record<string, unknown> = {
-      content: message,
       message: {
         messageId: messageId,
         chatId: chatId!,
         content: message,
       },
-      chatId: chatId!,
-      files: fileIds,
       focusMode: focusMode,
       history: messageChatHistory,
+      files: fileIds,
       chatModel: {
         name: modelName,
         provider: modelProvider,
@@ -1300,38 +1159,21 @@ const ChatWindow = ({ id }: { id?: string }) => {
       payload.userProfile = userProfile;
     }
 
-    const res = await fetch('/api/chat', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
+    payloadRef.current = payload;
+    pendingHumanRef.current = {
+      message,
+      imageIds: messageImageIds,
+    };
 
-    if (!res.body) throw new Error('No response body');
-
-    const reader = res.body?.getReader();
-    const decoder = new TextDecoder('utf-8');
-
-    let partialChunk = '';
-
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-
-      partialChunk += decoder.decode(value, { stream: true });
-
-      try {
-        const messages = partialChunk.split('\n');
-        for (const msg of messages) {
-          if (!msg.trim()) continue;
-          const json = JSON.parse(msg);
-          messageHandler(json);
-        }
-        partialChunk = '';
-      } catch (_error) {
-        console.warn('Incomplete JSON, waiting for next chunk...');
-      }
+    // Submit via useStream transport - this triggers the SSE stream
+    try {
+      await stream.submit(null);
+    } catch (err) {
+      console.error('Stream submit error:', err);
+      toast.error('Failed to send message');
+      setLoading(false);
+      streamActiveRef.current = false;
+      pendingHumanRef.current = null;
     }
   };
 
@@ -1468,6 +1310,7 @@ const ChatWindow = ({ id }: { id?: string }) => {
               pendingImages={pendingImages}
               setPendingImages={setPendingImages}
               imageCapable={imageCapable}
+              onCancel={handleCancel}
             />
           </>
         ) : (

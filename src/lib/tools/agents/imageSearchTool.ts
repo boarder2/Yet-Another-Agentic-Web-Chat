@@ -1,11 +1,8 @@
 import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { RunnableConfig } from '@langchain/core/runnables';
-import { Document } from '@langchain/core/documents';
 import { searchSearxng } from '@/lib/searxng';
-import { Command, getCurrentTaskInput } from '@langchain/langgraph';
-import { SimplifiedAgentStateType } from '@/lib/state/chatAgentState';
-import { ToolMessage } from '@langchain/core/messages';
+import { dispatchCustomEvent } from '@langchain/core/callbacks/dispatch';
 
 // Schema for image search tool input
 const ImageSearchToolSchema = z.object({
@@ -23,11 +20,6 @@ const ImageSearchToolSchema = z.object({
 
 /**
  * ImageSearchTool - Performs image search via SearXNG and returns image results
- *
- * Responsibilities:
- * 1. Execute image-specific search using image engines
- * 2. Normalize results to a consistent structure
- * 3. Return results as Documents in state (metadata contains image fields)
  */
 export const imageSearchTool = tool(
   async (
@@ -37,13 +29,9 @@ export const imageSearchTool = tool(
     try {
       const { query, maxResults = 12 } = input;
 
-      const currentState = getCurrentTaskInput() as SimplifiedAgentStateType;
-      let currentDocCount = currentState.relevantDocuments?.length ?? 0;
-
       console.log(`ImageSearchTool: Searching images for query: "${query}"`);
-      const retrievalSignal: AbortSignal | undefined = (
-        config as unknown as Record<string, Record<string, unknown>>
-      )?.configurable?.retrievalSignal as AbortSignal | undefined;
+      const retrievalSignal: AbortSignal | undefined =
+        config?.configurable?.retrievalSignal as AbortSignal | undefined;
 
       const searchResults = await searchSearxng(
         query,
@@ -59,65 +47,37 @@ export const imageSearchTool = tool(
         .slice(0, maxResults);
 
       if (images.length === 0) {
-        return new Command({
-          update: {
-            messages: [
-              new ToolMessage({
-                content: 'No image results found.',
-                tool_call_id: (
-                  config as unknown as { toolCall: { id: string } }
-                )?.toolCall?.id,
-              }),
-            ],
-          },
-        });
+        return 'No image results found.';
       }
 
-      const documents: Document[] = images.map(
-        (img) =>
-          new Document({
-            pageContent: `${img.title || 'Image'}\n${img.url}`,
-            metadata: {
-              sourceId: ++currentDocCount,
-              title: img.title || 'Image',
-              url: img.url,
-              source: img.url,
-              img_src: img.img_src,
-              thumbnail: img.thumbnail || undefined,
-              processingType: 'image-search',
-              searchQuery: query,
-            },
-          }),
-      );
+      // Emit source metadata as custom event for frontend
+      const sources = images.map((img, i) => ({
+        sourceId: i + 1,
+        title: img.title || 'Image',
+        url: img.url,
+        img_src: img.img_src,
+        thumbnail: img.thumbnail || undefined,
+      }));
 
-      return new Command({
-        update: {
-          relevantDocuments: documents,
-          messages: [
-            new ToolMessage({
-              content: JSON.stringify({ images }),
-              tool_call_id: (config as unknown as { toolCall: { id: string } })
-                ?.toolCall?.id,
-            }),
-          ],
-        },
-      });
+      await dispatchCustomEvent('sources', {
+        sources,
+        searchQuery: query,
+        type: 'images',
+      }, config);
+
+      const formattedResults = images
+        .map(
+          (img, i) =>
+            `[${i + 1}] ${img.title || 'Image'}\nURL: ${img.url}\nImage: ${img.img_src}`,
+        )
+        .join('\n\n');
+
+      return formattedResults;
     } catch (error) {
       console.error('ImageSearchTool: Error during image search:', error);
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
-
-      return new Command({
-        update: {
-          messages: [
-            new ToolMessage({
-              content: 'Error occurred during image search: ' + errorMessage,
-              tool_call_id: (config as unknown as { toolCall: { id: string } })
-                ?.toolCall?.id,
-            }),
-          ],
-        },
-      });
+      return 'Error occurred during image search: ' + errorMessage;
     }
   },
   {

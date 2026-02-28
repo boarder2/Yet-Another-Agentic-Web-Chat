@@ -1,8 +1,7 @@
 import { retrieveYoutubeTranscript } from '@/lib/utils/documents';
-import { ToolMessage } from '@langchain/core/messages';
 import { RunnableConfig } from '@langchain/core/runnables';
 import { tool } from '@langchain/core/tools';
-import { Command } from '@langchain/langgraph';
+import { dispatchCustomEvent } from '@langchain/core/callbacks/dispatch';
 import { z } from 'zod';
 
 // Schema for YouTube transcript tool input
@@ -16,11 +15,6 @@ const YoutubeTranscriptToolSchema = z.object({
 
 /**
  * YoutubeTranscriptTool - Retrieves the transcript of a YouTube video
- *
- * Responsibilities:
- * 1. Extract video ID from the provided URL
- * 2. Fetch the transcript using YouTube API
- * 3. Return the transcript as a string
  */
 export const youtubeTranscriptTool = tool(
   async (
@@ -29,23 +23,11 @@ export const youtubeTranscriptTool = tool(
   ) => {
     const { videoUrl } = input;
 
-    // Check for cancellation early
     const retrievalSignal: AbortSignal | undefined =
       config?.configurable?.retrievalSignal;
     if (retrievalSignal?.aborted || config?.signal?.aborted) {
       console.log('[youtubeTranscriptTool] Operation cancelled');
-      return new Command({
-        update: {
-          relevantDocuments: [],
-          messages: [
-            new ToolMessage({
-              content: 'YouTube transcript retrieval cancelled.',
-              tool_call_id: (config as unknown as { toolCall: { id: string } })
-                ?.toolCall.id,
-            }),
-          ],
-        },
-      });
+      return 'YouTube transcript retrieval cancelled.';
     }
 
     console.log(
@@ -58,23 +40,19 @@ export const youtubeTranscriptTool = tool(
       throw new Error(`Failed to retrieve transcript for video: ${videoUrl}`);
     }
 
+    // Emit source metadata
+    await dispatchCustomEvent('sources', {
+      sources: [{
+        sourceId: 1,
+        title: doc.metadata?.title || 'YouTube Video',
+        url: videoUrl,
+      }],
+    }, config);
+
     console.log(
       `[youtubeTranscriptTool] Retrieved document from video: ${videoUrl}`,
     );
-    return new Command({
-      update: {
-        relevantDocuments: [doc],
-        messages: [
-          new ToolMessage({
-            content: JSON.stringify({
-              document: [doc],
-            }),
-            tool_call_id: (config as unknown as { toolCall: { id: string } })
-              ?.toolCall.id,
-          }),
-        ],
-      },
-    });
+    return `YouTube Transcript (${videoUrl}):\n\n${doc.pageContent}`;
   },
   {
     name: 'youtube_transcript',

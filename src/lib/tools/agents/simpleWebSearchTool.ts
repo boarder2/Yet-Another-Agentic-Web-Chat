@@ -1,13 +1,9 @@
 import { searchSearxng } from '@/lib/searxng';
-import { SimplifiedAgentStateType } from '@/lib/state/chatAgentState';
 import { CachedEmbeddings } from '@/lib/utils/cachedEmbeddings';
 import computeSimilarity from '@/lib/utils/computeSimilarity';
-import { isSoftStop } from '@/lib/utils/runControl';
-import { ToolMessage } from '@langchain/core/messages';
 import { RunnableConfig } from '@langchain/core/runnables';
 import { tool } from '@langchain/core/tools';
-import { Command, getCurrentTaskInput } from '@langchain/langgraph';
-import { Document } from '@langchain/core/documents';
+import { dispatchCustomEvent } from '@langchain/core/callbacks/dispatch';
 import { z } from 'zod';
 
 // Schema for simple web search tool input
@@ -20,13 +16,13 @@ const SimpleWebSearchToolSchema = z.object({
 });
 
 /**
- * SimpleWebSearchTool - Simplified version of WebSearchTool
+ * SimpleWebSearchTool - Performs web search using SearXNG
  *
  * This tool handles:
- * 1. Query optimization for web search
- * 2. Web search execution using SearXNG
- * 3. Document ranking and filtering (top 15: top 3 + ranked top 12)
- * 4. Returns raw search results as documents without analysis or content extraction
+ * 1. Web search execution using SearXNG
+ * 2. Document ranking and filtering (top 3 + ranked top 5)
+ * 3. Returns search results as formatted text
+ * 4. Emits source metadata via custom events for frontend display
  */
 export const simpleWebSearchTool = tool(
   async (
@@ -35,50 +31,21 @@ export const simpleWebSearchTool = tool(
   ) => {
     try {
       const { query } = input;
-      const currentState = getCurrentTaskInput() as SimplifiedAgentStateType;
-      let currentDocCount = currentState.relevantDocuments?.length ?? 0;
 
-      // Get LLM and embeddings from config
-      if (!config?.configurable?.systemLlm) {
-        throw new Error('System LLM not available in config');
-      }
       if (!config?.configurable?.embeddings) {
         throw new Error('Embeddings not available in config');
       }
 
-      const _llm = config.configurable.systemLlm;
       const embeddings: CachedEmbeddings = config.configurable.embeddings;
-      const retrievalSignal: AbortSignal | undefined = (
-        config as unknown as Record<string, Record<string, unknown>>
-      )?.configurable?.retrievalSignal as AbortSignal | undefined;
-      const messageId: string | undefined = (
-        config as unknown as Record<string, Record<string, unknown>>
-      )?.configurable?.messageId as string | undefined;
+      const retrievalSignal: AbortSignal | undefined =
+        config?.configurable?.retrievalSignal as AbortSignal | undefined;
 
-      const searchQuery = query;
       console.log(
-        `SimpleWebSearchTool: Performing web search for query: "${searchQuery}"`,
+        `SimpleWebSearchTool: Performing web search for query: "${query}"`,
       );
 
-      // Step 2: Execute web search
-      if (messageId && isSoftStop(messageId)) {
-        return new Command({
-          update: {
-            relevantDocuments: [],
-            messages: [
-              new ToolMessage({
-                content: 'Soft-stop set; skipping web search.',
-                tool_call_id: (
-                  config as unknown as { toolCall: { id: string } }
-                )?.toolCall.id,
-              }),
-            ],
-          },
-        });
-      }
-
       const searchResults = await searchSearxng(
-        searchQuery,
+        query,
         {
           language: 'en',
           engines: [],
@@ -91,25 +58,12 @@ export const simpleWebSearchTool = tool(
       );
 
       if (!searchResults.results || searchResults.results.length === 0) {
-        return new Command({
-          update: {
-            relevantDocuments: [],
-            messages: [
-              new ToolMessage({
-                content: 'No search results found.',
-                tool_call_id: (
-                  config as unknown as { toolCall: { id: string } }
-                )?.toolCall.id,
-              }),
-            ],
-          },
-        });
+        return 'No search results found.';
       }
 
-      // Step 3: Calculate similarities and rank results
+      // Calculate similarities and rank results
       const queryVector = await embeddings.embedQuery(query);
 
-      // Calculate similarities for all results
       const resultsWithSimilarity = await Promise.all(
         searchResults.results.map(async (result) => {
           const content = result.title + ' ' + (result.content || '');
@@ -119,26 +73,8 @@ export const simpleWebSearchTool = tool(
         }),
       );
 
-      const documents: Document[] = [];
-
       // Always take the top 3 results first
       const top3Results = searchResults.results.slice(0, 3);
-      documents.push(
-        ...top3Results.map((result, _i) => {
-          return new Document({
-            pageContent: `${result.title || 'Untitled'}\n\n${result.content || ''}`,
-            metadata: {
-              sourceId: ++currentDocCount,
-              title: result.title || 'Untitled',
-              url: result.url,
-              source: result.url,
-              processingType: 'preview-only',
-              searchQuery: searchQuery,
-              rank: 'top-3',
-            },
-          });
-        }),
-      );
 
       // Sort by relevance score and take top 5 from the remaining results
       const remainingResults = resultsWithSimilarity
@@ -146,81 +82,53 @@ export const simpleWebSearchTool = tool(
         .sort((a, b) => b.similarity - a.similarity)
         .slice(0, 5);
 
-      documents.push(
-        ...remainingResults.map(({ result }) => {
-          return new Document({
-            pageContent: `${result.title || 'Untitled'}\n\n${result.content || ''}`,
-            metadata: {
-              sourceId: ++currentDocCount,
-              title: result.title || 'Untitled',
-              url: result.url,
-              source: result.url,
-              processingType: 'preview-only',
-              searchQuery: searchQuery,
-              rank: 'ranked',
-            },
-          });
-        }),
-      );
+      const allResults = [
+        ...top3Results.map((r) => ({ result: r, rank: 'top-3' })),
+        ...remainingResults.map(({ result }) => ({
+          result,
+          rank: 'ranked',
+        })),
+      ];
+
+      // Emit source metadata as custom event for frontend
+      const sources = allResults.map(({ result, rank }, i) => ({
+        sourceId: i + 1,
+        title: result.title || 'Untitled',
+        url: result.url,
+        rank,
+      }));
+
+      await dispatchCustomEvent('sources', {
+        sources,
+        searchQuery: query,
+      }, config);
+
+      // Build formatted text for LLM consumption
+      const formattedResults = allResults
+        .map(
+          ({ result }, i) =>
+            `[${i + 1}] ${result.title || 'Untitled'}\nURL: ${result.url}\n${result.content || ''}`,
+        )
+        .join('\n\n');
 
       console.log(
-        `SimpleWebSearchTool: Created ${documents.length} documents from search results`,
-        documents,
+        `SimpleWebSearchTool: Created ${allResults.length} results from search`,
       );
 
-      //return { documents };
-      return new Command({
-        update: {
-          relevantDocuments: documents,
-          messages: [
-            new ToolMessage({
-              content: JSON.stringify({
-                document: documents,
-              }),
-              tool_call_id: (config as unknown as { toolCall: { id: string } })
-                ?.toolCall.id,
-            }),
-          ],
-        },
-      });
+      return formattedResults;
     } catch (error: unknown) {
       console.error('SimpleWebSearchTool: Error during web search:', error);
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
 
-      // Treat abort as non-fatal/no-op update
       if (
         error instanceof Error &&
         (error.name === 'CanceledError' || error.name === 'AbortError')
       ) {
-        return new Command({
-          update: {
-            relevantDocuments: [],
-            messages: [
-              new ToolMessage({
-                content: 'Web search aborted by soft-stop.',
-                tool_call_id: (
-                  config as unknown as { toolCall: { id: string } }
-                )?.toolCall.id,
-              }),
-            ],
-          },
-        });
+        return 'Web search was cancelled.';
       }
 
-      //return { documents: [] };
-      return new Command({
-        update: {
-          relevantDocuments: [],
-          messages: [
-            new ToolMessage({
-              content: 'Error occurred during web search: ' + errorMessage,
-              tool_call_id: (config as unknown as { toolCall: { id: string } })
-                ?.toolCall.id,
-            }),
-          ],
-        },
-      });
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      return 'Error occurred during web search: ' + errorMessage;
     }
   },
   {

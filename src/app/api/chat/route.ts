@@ -1,6 +1,4 @@
-import { updateToolCallMarkup } from '@/lib/utils/toolCallMarkup';
-import { encodeHtmlAttribute } from '@/lib/utils/html';
-import { cleanupCancelToken, registerCancelToken } from '@/lib/cancel-tokens';
+import { cleanupCancelToken } from '@/lib/cancel-tokens';
 import {
   getCustomOpenaiApiKey,
   getCustomOpenaiApiUrl,
@@ -12,21 +10,16 @@ import {
   getAvailableChatModelProviders,
   getAvailableEmbeddingModelProviders,
 } from '@/lib/providers';
-import { searchHandlers } from '@/lib/search';
+import { createSearchAgent } from '@/lib/search/deepAgentFactory';
 import { getFileDetails } from '@/lib/utils/files';
 import { getPersonaInstructionsOnly } from '@/lib/utils/prompts';
+import { escapeAttribute } from '@/lib/utils/toolCallMarkup';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { AIMessage, BaseMessage, HumanMessage } from '@langchain/core/messages';
 import { ChatOllama } from '@langchain/ollama';
 import { ChatOpenAI } from '@langchain/openai';
 import crypto from 'crypto';
 import { and, eq, gt } from 'drizzle-orm';
-import { EventEmitter } from 'stream';
-import {
-  registerRetrieval,
-  cleanupRun,
-  clearSoftStop,
-} from '@/lib/utils/runControl';
 import { CachedEmbeddings } from '@/lib/utils/cachedEmbeddings';
 import { buildMultimodalHumanMessage } from '@/lib/utils/images';
 
@@ -61,9 +54,9 @@ type Body = {
   history: Array<[string, string, string[]?]>;
   files: Array<string>;
   chatModel: ChatModel;
-  systemModel?: SystemModel; // optional; defaults to chatModel
+  systemModel?: SystemModel;
   embeddingModel: EmbeddingModel;
-  selectedSystemPromptIds: string[]; // legacy name; treated as persona prompt IDs
+  selectedSystemPromptIds: string[];
   userLocation?: string;
   userProfile?: string;
   messageImageIds?: string[];
@@ -73,367 +66,6 @@ type Body = {
     mimeType: string;
   }>;
 };
-
-type TokenUsage = {
-  input_tokens: number;
-  output_tokens: number;
-  total_tokens: number;
-};
-type ModelStats = {
-  modelName: string; // legacy
-  responseTime?: number;
-  usage?: TokenUsage; // legacy total
-  modelNameChat?: string;
-  modelNameSystem?: string;
-  usageChat?: TokenUsage;
-  usageSystem?: TokenUsage;
-  usedLocation?: boolean;
-  usedPersonalization?: boolean;
-};
-
-const handleEmitterEvents = async (
-  stream: EventEmitter,
-  writer: WritableStreamDefaultWriter,
-  encoder: TextEncoder,
-  aiMessageId: string,
-  chatId: string,
-  startTime: number,
-  userMessageId: string,
-  abortController: AbortController,
-  usedLocation: boolean,
-  usedPersonalization: boolean,
-) => {
-  let recievedMessage = '';
-  let sources: Record<string, unknown>[] = [];
-  let searchQuery: string | undefined;
-  let searchUrl: string | undefined;
-  let isStreamActive = true;
-  let writerClosed = false;
-
-  // Helper to safely write to the stream; aborts processing if the client has disconnected
-  const safeWrite = (data: string) => {
-    if (!isStreamActive || writerClosed || abortController.signal.aborted)
-      return;
-    writer.write(encoder.encode(data)).catch(() => {
-      if (!isStreamActive) return;
-      isStreamActive = false;
-      if (!abortController.signal.aborted) {
-        console.log('Write failed (client disconnected), aborting processing');
-        abortController.abort();
-      }
-    });
-  };
-
-  const safeClose = () => {
-    if (writerClosed) return;
-    writerClosed = true;
-    writer.close().catch(() => {});
-  };
-
-  // Keep-alive ping mechanism to prevent reverse proxy timeouts
-  const pingInterval = setInterval(() => {
-    if (isStreamActive && !abortController.signal.aborted) {
-      safeWrite(
-        JSON.stringify({
-          type: 'ping',
-          timestamp: Date.now(),
-        }) + '\n',
-      );
-    } else {
-      clearInterval(pingInterval);
-    }
-  }, 30000); // Send ping every 30 seconds
-
-  // Clean up ping interval if request is cancelled
-  abortController.signal.addEventListener('abort', () => {
-    isStreamActive = false;
-    clearInterval(pingInterval);
-  });
-
-  stream.on('data', (data) => {
-    if (!isStreamActive || abortController.signal.aborted) return;
-    const parsedData = JSON.parse(data);
-
-    if (parsedData.type === 'response') {
-      safeWrite(
-        JSON.stringify({
-          type: 'response',
-          data: parsedData.data,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-
-      recievedMessage += parsedData.data;
-    } else if (
-      parsedData.type === 'sources' ||
-      parsedData.type === 'sources_added'
-    ) {
-      // Capture the search query if available
-      if (parsedData.searchQuery) {
-        searchQuery = parsedData.searchQuery;
-      }
-      if (parsedData.searchUrl) {
-        searchUrl = parsedData.searchUrl;
-      }
-
-      safeWrite(
-        JSON.stringify({
-          type: parsedData.type,
-          data: parsedData.data,
-          searchQuery: parsedData.searchQuery,
-          messageId: aiMessageId,
-          searchUrl: searchUrl,
-        }) + '\n',
-      );
-
-      sources = parsedData.data;
-    } else if (
-      parsedData.type === 'tool_call_started' ||
-      parsedData.type === 'tool_call_success' ||
-      parsedData.type === 'tool_call_error'
-    ) {
-      // Forward new granular tool lifecycle events
-      safeWrite(
-        JSON.stringify({
-          type: parsedData.type,
-          data: parsedData.data,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-      if (parsedData.type === 'tool_call_started' && parsedData.data?.content) {
-        // Append initial placeholder markup to message content for persistence
-        recievedMessage += parsedData.data.content;
-      } else if (
-        parsedData.type === 'tool_call_success' ||
-        parsedData.type === 'tool_call_error'
-      ) {
-        // Rewrite existing ToolCall tag with final status (and error if applicable)
-        recievedMessage = updateToolCallMarkup(
-          recievedMessage,
-          parsedData.data.toolCallId,
-          {
-            status: parsedData.data.status,
-            error: parsedData.data.error,
-            extra: parsedData.data.extra,
-          },
-        );
-      }
-    } else if (
-      parsedData.type === 'subagent_started' ||
-      parsedData.type === 'subagent_completed' ||
-      parsedData.type === 'subagent_error' ||
-      parsedData.type === 'subagent_data'
-    ) {
-      // Forward subagent events to client
-      // console.log('API: Forwarding subagent event:', parsedData.type);
-      safeWrite(
-        JSON.stringify({
-          ...parsedData,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-
-      // Update received message for persistence if needed
-      if (parsedData.type === 'subagent_started') {
-        const markup = `<SubagentExecution id="${parsedData.executionId}" name="${encodeHtmlAttribute(parsedData.name ?? '')}" task="${encodeHtmlAttribute(parsedData.task ?? '')}" status="running"></SubagentExecution>\n`;
-        recievedMessage += markup;
-      } else if (parsedData.type === 'subagent_data') {
-        // Persist nested tool call markup inside SubagentExecution tags
-        const nestedEvent = parsedData.data;
-        const executionId = parsedData.subagentId;
-
-        if (
-          nestedEvent?.type === 'tool_call_started' &&
-          nestedEvent.data?.content
-        ) {
-          // Insert ToolCall markup inside the SubagentExecution tag
-          const subagentRegex = new RegExp(
-            `(<SubagentExecution\\s+id="${executionId}"[^>]*>)(.*?)(</SubagentExecution>)`,
-            'gs',
-          );
-          recievedMessage = recievedMessage.replace(
-            subagentRegex,
-            (match, openTag, content, closeTag) => {
-              return `${openTag}${content}${nestedEvent.data.content}\n${closeTag}`;
-            },
-          );
-        } else if (
-          nestedEvent?.type === 'tool_call_success' &&
-          nestedEvent.data?.toolCallId
-        ) {
-          recievedMessage = updateToolCallMarkup(
-            recievedMessage,
-            nestedEvent.data.toolCallId,
-            { status: 'success' },
-          );
-        } else if (
-          nestedEvent?.type === 'tool_call_error' &&
-          nestedEvent.data?.toolCallId
-        ) {
-          recievedMessage = updateToolCallMarkup(
-            recievedMessage,
-            nestedEvent.data.toolCallId,
-            {
-              status: 'error',
-              error: nestedEvent.data.error,
-            },
-          );
-        }
-      } else if (
-        parsedData.type === 'subagent_completed' ||
-        parsedData.type === 'subagent_error'
-      ) {
-        // Update the SubagentExecution markup in received message
-        const status =
-          parsedData.type === 'subagent_completed' ? 'success' : 'error';
-        const executionId = parsedData.id;
-        const subagentRegex = new RegExp(
-          `<SubagentExecution\\s+id="${executionId}"([^>]*)>(.*?)<\\/SubagentExecution>`,
-          'gs',
-        );
-        recievedMessage = recievedMessage.replace(
-          subagentRegex,
-          (match, attrs, innerContent) => {
-            let updatedAttrs = attrs
-              .replace(/status="[^"]*"/, `status="${status}"`)
-              .trim();
-            if (!updatedAttrs.includes('status=')) {
-              updatedAttrs += ` status="${status}"`;
-            }
-            if (parsedData.summary && status === 'success') {
-              const escapedSummary = parsedData.summary
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;');
-              updatedAttrs += ` summary="${escapedSummary}"`;
-            }
-            if (parsedData.error && status === 'error') {
-              const escapedError = parsedData.error
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;');
-              updatedAttrs += ` error="${escapedError}"`;
-            }
-            // Preserve inner content (ToolCall markup)
-            return `<SubagentExecution ${updatedAttrs}>${innerContent}</SubagentExecution>`;
-          },
-        );
-      }
-    } else if (parsedData.type === 'todo_update') {
-      // Forward todo_update event to client (transient UI, not persisted in message)
-      safeWrite(
-        JSON.stringify({
-          type: 'todo_update',
-          data: parsedData.data,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-    }
-  });
-
-  let modelStats: ModelStats = {
-    modelName: '',
-  };
-
-  stream.on('progress', (data) => {
-    if (!isStreamActive || abortController.signal.aborted) return;
-    const parsedData = JSON.parse(data);
-    if (parsedData.type === 'progress') {
-      safeWrite(
-        JSON.stringify({
-          type: 'progress',
-          data: parsedData.data,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-    }
-  });
-
-  stream.on('stats', (data) => {
-    if (!isStreamActive || abortController.signal.aborted) return;
-    const parsedData = JSON.parse(data);
-    if (parsedData.type === 'modelStats') {
-      modelStats = {
-        ...parsedData.data,
-        usedLocation,
-        usedPersonalization,
-      };
-      // Forward stats to client for live updates
-      safeWrite(
-        JSON.stringify({
-          type: 'stats',
-          data: modelStats,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-    }
-  });
-
-  stream.on('end', () => {
-    clearInterval(pingInterval);
-
-    const endTime = Date.now();
-    const duration = endTime - startTime;
-
-    modelStats = {
-      ...modelStats,
-      responseTime: duration,
-      usedLocation,
-      usedPersonalization,
-    };
-
-    safeWrite(
-      JSON.stringify({
-        type: 'messageEnd',
-        messageId: aiMessageId,
-        modelStats: modelStats,
-        searchQuery: searchQuery,
-        searchUrl: searchUrl,
-        usedLocation,
-        usedPersonalization,
-      }) + '\n',
-    );
-    isStreamActive = false;
-    safeClose();
-
-    // Clean up the abort controller reference
-    cleanupCancelToken(userMessageId);
-
-    db.insert(messagesSchema)
-      .values({
-        content: recievedMessage,
-        chatId: chatId,
-        messageId: aiMessageId,
-        role: 'assistant',
-        metadata: JSON.stringify({
-          createdAt: new Date(),
-          ...(sources && sources.length > 0 && { sources }),
-          ...(searchQuery && { searchQuery }),
-          modelStats: modelStats,
-          ...(searchUrl && { searchUrl }),
-          usedLocation,
-          usedPersonalization,
-        }),
-      })
-      .execute();
-  });
-  stream.on('error', (data) => {
-    clearInterval(pingInterval);
-
-    const parsedData = JSON.parse(data);
-    safeWrite(
-      JSON.stringify({
-        type: 'error',
-        data: parsedData.data,
-      }),
-    );
-    isStreamActive = false;
-    safeClose();
-  });
-};
-
 const handleHistorySave = async (
   message: Message,
   humanMessageId: string,
@@ -508,7 +140,6 @@ const handleHistorySave = async (
 
 export const POST = async (req: Request) => {
   try {
-    const startTime = Date.now();
     const body = (await req.json()) as Body;
     const { message, selectedSystemPromptIds } = body;
 
@@ -559,7 +190,6 @@ export const POST = async (req: Request) => {
       chatLlm = new ChatOpenAI({
         apiKey: getCustomOpenaiApiKey(),
         modelName: getCustomOpenaiModelName(),
-        // temperature: 0.7,
         configuration: {
           baseURL: getCustomOpenaiApiUrl(),
         },
@@ -567,7 +197,6 @@ export const POST = async (req: Request) => {
     } else if (chatModelProvider && chatModel) {
       chatLlm = chatModel.model;
 
-      // Set context window size for Ollama models
       if (
         chatLlm instanceof ChatOllama &&
         body.chatModel?.provider === 'ollama'
@@ -576,7 +205,6 @@ export const POST = async (req: Request) => {
       }
     }
 
-    // Build System LLM (defaults to Chat LLM if not provided by client)
     if (body.systemModel) {
       const sysProvider = body.systemModel.provider;
       const sysName = body.systemModel.name;
@@ -621,112 +249,284 @@ export const POST = async (req: Request) => {
 
     const history: BaseMessage[] = body.history.map((msg) => {
       if (msg[0] === 'human') {
-        // If this history entry has image IDs, build a multimodal message
         if (msg[2] && msg[2].length > 0) {
           return buildMultimodalHumanMessage(msg[1], msg[2]);
         }
-        return new HumanMessage({
-          content: msg[1],
-        });
+        return new HumanMessage({ content: msg[1] });
       } else {
-        return new AIMessage({
-          content: msg[1],
-        });
+        return new AIMessage({ content: msg[1] });
       }
     });
 
-    const handler = searchHandlers[body.focusMode];
-
-    if (!handler) {
-      return Response.json(
-        {
-          message: 'Invalid focus mode',
-        },
-        { status: 400 },
-      );
-    }
-
-    // System instructions deprecated; only use persona prompts
     const personaInstructionsContent = await getPersonaInstructionsOnly(
       selectedSystemPromptIds || [],
     );
-    const responseStream = new TransformStream();
-    const writer = responseStream.writable.getWriter();
-    const encoder = new TextEncoder();
 
-    // --- Cancellation logic ---
-    const abortController = new AbortController();
-    registerCancelToken(message.messageId, abortController);
+    let humanMessage: BaseMessage;
+    if (body.messageImageIds && body.messageImageIds.length > 0) {
+      humanMessage = buildMultimodalHumanMessage(
+        message.content,
+        body.messageImageIds,
+      );
+    } else {
+      humanMessage = new HumanMessage({ content: message.content });
+    }
 
-    // Register retrieval-only controller and clear soft-stop at start
-    const retrievalController = new AbortController();
-    registerRetrieval(message.messageId, retrievalController);
-    clearSoftStop(message.messageId);
-
-    // Detect client disconnection via the request's built-in abort signal
-    req.signal.addEventListener('abort', () => {
-      if (!abortController.signal.aborted) {
-        console.log('Client disconnected, aborting all processing');
-        retrievalController.abort();
-        abortController.abort();
-      }
+    const agent = createSearchAgent({
+      chatLlm: chatLlm!,
+      systemLlm: systemLlm!,
+      focusMode: body.focusMode,
+      personaInstructions: personaInstructionsContent,
+      messagesCount: history.length,
+      query: message.content,
+      userLocation: body.userLocation,
+      userProfile: body.userProfile,
     });
 
-    abortController.signal.addEventListener('abort', () => {
-      console.log('Stream aborted, sending cancel event');
-      // Also abort retrieval to stop LangGraph agent processing
-      if (!retrievalController.signal.aborted) {
-        retrievalController.abort();
-      }
-      writer
-        .write(
-          encoder.encode(
-            JSON.stringify({
-              type: 'error',
-              data: 'Request cancelled by user',
-            }),
-          ),
-        )
-        .catch(() => {});
-      writer.close().catch(() => {});
-      cleanupCancelToken(message.messageId);
-      cleanupRun(message.messageId);
-    });
+    // Use a unique thread_id per request to avoid duplicate messages in checkpointer
+    const requestThreadId = `${message.chatId}-${aiMessageId}`;
+    const startTime = Date.now();
 
-    // Pass the abort signal to the search handler
-    const stream = await handler.searchAndAnswer(
-      message.content,
-      history,
-      message.chatId,
-      chatLlm!,
-      systemLlm!,
-      embedding,
-      body.files,
-      abortController.signal,
-      personaInstructionsContent,
-      body.focusMode,
-      message.messageId,
-      retrievalController.signal,
+    // Stream the agent with SSE encoding - produces Uint8Array chunks in SSE format
+    // that useStream's StreamManager can parse directly
+    const sseStream = await agent.stream(
+      { messages: [...history, humanMessage] },
       {
-        location: body.userLocation,
-        profile: body.userProfile,
+        encoding: 'text/event-stream',
+        streamMode: ['updates', 'messages', 'custom'],
+        configurable: {
+          thread_id: requestThreadId,
+          embeddings: embedding,
+          systemLlm: systemLlm,
+        },
       },
-      body.messageImageIds,
     );
 
-    handleEmitterEvents(
-      stream,
-      writer,
-      encoder,
-      aiMessageId,
-      message.chatId,
-      startTime,
-      message.messageId,
-      abortController,
-      body.userLocation ? body.userLocation.length > 0 : false,
-      body.userProfile ? body.userProfile.length > 0 : false,
-    );
+    // Wrap the SSE stream in a ReadableStream, persisting AI message to DB when done
+    const outputStream = new ReadableStream({
+      async start(controller) {
+        let closed = false;
+        try {
+          for await (const chunk of sseStream) {
+            if (closed) break;
+            controller.enqueue(chunk);
+          }
+        } catch (err) {
+          const msg = String(err);
+          if (!msg.includes('Controller is already closed')) {
+            console.error('Agent stream error:', err);
+          }
+          if (!closed) {
+            try {
+              const errorEvent = `event: error\ndata: ${JSON.stringify({ message: msg })}\n\n`;
+              controller.enqueue(new TextEncoder().encode(errorEvent));
+            } catch {
+              // controller already closed
+            }
+          }
+        } finally {
+          if (!closed) {
+            closed = true;
+            try {
+              controller.close();
+            } catch {
+              // already closed
+            }
+          }
 
+          // Persist assistant message from checkpointer state
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const checkpoint = await (agent as any).getState({
+              configurable: { thread_id: requestThreadId },
+            });
+            const cpMessages = checkpoint?.values?.messages;
+            if (cpMessages && cpMessages.length > 0) {
+              // Extract text content from ALL AI messages to preserve thinking content
+              const extractMsgText = (msg: { content: unknown }): string => {
+                if (typeof msg.content === 'string') return msg.content;
+                if (Array.isArray(msg.content)) {
+                  return msg.content
+                    .filter(
+                      (block: unknown) =>
+                        typeof block === 'object' &&
+                        block !== null &&
+                        'text' in (block as Record<string, unknown>),
+                    )
+                    .map(
+                      (block: unknown) =>
+                        (block as { text: string }).text,
+                    )
+                    .join('');
+                }
+                return JSON.stringify(msg.content);
+              };
+
+              const textParts: string[] = [];
+              for (const m of cpMessages) {
+                if (
+                  m._getType?.() === 'ai' ||
+                  m.constructor?.name === 'AIMessage'
+                ) {
+                  const text = extractMsgText(m);
+                  if (text) textParts.push(text);
+                }
+              }
+              const rawContent = textParts.join('\n');
+
+              // Build <ToolCall> markup from tool calls for persistence
+              let toolCallMarkup = '';
+              const toolResultIds = new Set<string>();
+              for (const m of cpMessages) {
+                if (
+                  m._getType?.() === 'tool' ||
+                  m.constructor?.name === 'ToolMessage'
+                ) {
+                  if (m.tool_call_id) toolResultIds.add(m.tool_call_id);
+                }
+              }
+              for (const m of cpMessages) {
+                if (
+                  (m._getType?.() === 'ai' ||
+                    m.constructor?.name === 'AIMessage') &&
+                  m.tool_calls
+                ) {
+                  for (const tc of m.tool_calls) {
+                    const status = toolResultIds.has(tc.id ?? '')
+                      ? 'success'
+                      : 'error';
+                    const toolType = tc.name || 'unknown';
+                    const toolCallId = tc.id || '';
+                    const query = tc.args?.query as string | undefined;
+                    const url = tc.args?.url as string | undefined;
+                    let attrs = `type="${escapeAttribute(toolType)}" status="${status}" toolCallId="${escapeAttribute(toolCallId)}"`;
+                    if (query) attrs += ` query="${escapeAttribute(query)}"`;
+                    if (url) attrs += ` url="${escapeAttribute(url)}"`;
+                    toolCallMarkup += `<ToolCall ${attrs}></ToolCall>\n`;
+                  }
+                }
+              }
+
+              const content = toolCallMarkup + rawContent;
+
+              // Extract sources from tool result messages
+              const sources: Array<Record<string, unknown>> = [];
+              let searchQuery: string | undefined;
+              const sourceRegex =
+                /\[(\d+)\]\s+(.+?)\nURL:\s+(https?:\/\/[^\s\n]+)/g;
+              for (const m of cpMessages) {
+                if (
+                  m._getType?.() === 'tool' ||
+                  m.constructor?.name === 'ToolMessage'
+                ) {
+                  const toolContent =
+                    typeof m.content === 'string'
+                      ? m.content
+                      : JSON.stringify(m.content);
+                  let match;
+                  while (
+                    (match = sourceRegex.exec(toolContent)) !== null
+                  ) {
+                    sources.push({
+                      sourceId: parseInt(match[1]),
+                      title: match[2].trim(),
+                      url: match[3].trim(),
+                    });
+                  }
+                  // Extract search query from the corresponding AI tool call
+                  if (!searchQuery && m.tool_call_id) {
+                    for (const am of cpMessages) {
+                      if (
+                        (am._getType?.() === 'ai' ||
+                          am.constructor?.name === 'AIMessage') &&
+                        am.tool_calls
+                      ) {
+                        const tc = am.tool_calls.find(
+                          (c: { id?: string }) => c.id === m.tool_call_id,
+                        );
+                        if (tc?.args?.query) {
+                          searchQuery = tc.args.query;
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+
+              // Aggregate usage_metadata from all AI messages
+              let totalInput = 0;
+              let totalOutput = 0;
+              let chatModelName = '';
+              for (const m of cpMessages) {
+                if (
+                  m._getType?.() === 'ai' ||
+                  m.constructor?.name === 'AIMessage'
+                ) {
+                  const usage = m.usage_metadata;
+                  if (usage) {
+                    totalInput += usage.input_tokens || 0;
+                    totalOutput += usage.output_tokens || 0;
+                  }
+                  if (!chatModelName && m.response_metadata?.model) {
+                    chatModelName = m.response_metadata.model;
+                  }
+                }
+              }
+
+              const endTime = Date.now();
+              const modelStats =
+                totalInput > 0 || totalOutput > 0
+                  ? {
+                      modelName: chatModelName || body.chatModel?.name || '',
+                      responseTime: endTime - startTime,
+                      usage: {
+                        input_tokens: totalInput,
+                        output_tokens: totalOutput,
+                        total_tokens: totalInput + totalOutput,
+                      },
+                    }
+                  : {
+                      modelName: chatModelName || body.chatModel?.name || '',
+                      responseTime: endTime - startTime,
+                    };
+
+              // Deduplicate sources by URL
+              const seenUrls = new Set<string>();
+              const dedupedSources = sources.filter((s) => {
+                const url = s.url as string;
+                if (seenUrls.has(url)) return false;
+                seenUrls.add(url);
+                return true;
+              });
+
+              await db
+                .insert(messagesSchema)
+                .values({
+                  content,
+                  chatId: message.chatId,
+                  messageId: aiMessageId,
+                  role: 'assistant',
+                  metadata: JSON.stringify({
+                    createdAt: new Date(),
+                    ...(dedupedSources.length > 0 && {
+                      sources: dedupedSources,
+                    }),
+                    ...(searchQuery && { searchQuery }),
+                    modelStats,
+                  }),
+                })
+                .execute();
+            }
+          } catch (dbErr) {
+            console.error('Failed to persist assistant message:', dbErr);
+          }
+
+          cleanupCancelToken(message.messageId);
+        }
+      },
+    });
+
+    // Save the user message / chat history
     handleHistorySave(
       message,
       humanMessageId,
@@ -735,7 +535,7 @@ export const POST = async (req: Request) => {
       body.messageImages,
     );
 
-    return new Response(responseStream.readable, {
+    return new Response(outputStream, {
       headers: {
         'Content-Type': 'text/event-stream',
         Connection: 'keep-alive',

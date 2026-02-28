@@ -1,12 +1,10 @@
 import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { RunnableConfig } from '@langchain/core/runnables';
-import { Command, getCurrentTaskInput } from '@langchain/langgraph';
-import { SimplifiedAgentStateType } from '@/lib/state/chatAgentState';
-import { ToolMessage } from '@langchain/core/messages';
+import { dispatchCustomEvent } from '@langchain/core/callbacks/dispatch';
 import { retrievePdfDoc } from '@/lib/utils/documents';
 
-// Schema for PDF transcript tool input
+// Schema for PDF loader tool input
 const PDFLoaderToolSchema = z.object({
   pdfUrl: z
     .string()
@@ -17,11 +15,6 @@ const PDFLoaderToolSchema = z.object({
 
 /**
  * PDFLoaderTool - Retrieves the content of a PDF document
- *
- * Responsibilities:
- * 1. Extract PDF URL from the provided input
- * 2. Fetch the PDF content using a PDF parsing library
- * 3. Return the content as a string
  */
 export const pdfLoaderTool = tool(
   async (
@@ -31,27 +24,12 @@ export const pdfLoaderTool = tool(
     try {
       const { pdfUrl } = input;
 
-      // Check for cancellation early
       const retrievalSignal: AbortSignal | undefined =
         config?.configurable?.retrievalSignal;
       if (retrievalSignal?.aborted || config?.signal?.aborted) {
         console.log('[pdfLoaderTool] Operation cancelled');
-        return new Command({
-          update: {
-            relevantDocuments: [],
-            messages: [
-              new ToolMessage({
-                content: 'PDF loading cancelled.',
-                tool_call_id: (
-                  config as unknown as { toolCall: { id: string } }
-                )?.toolCall.id,
-              }),
-            ],
-          },
-        });
+        return 'PDF loading cancelled.';
       }
-
-      const _currentState = getCurrentTaskInput() as SimplifiedAgentStateType;
 
       console.log(`[pdfLoaderTool] Retrieving content for PDF: "${pdfUrl}"`);
 
@@ -59,36 +37,20 @@ export const pdfLoaderTool = tool(
 
       if (!doc) {
         console.log(`[pdfLoaderTool] No documents found for PDF: ${pdfUrl}`);
-        return new Command({
-          update: {
-            relevantDocuments: [],
-            messages: [
-              new ToolMessage({
-                content: 'No transcript available for this video.',
-                tool_call_id: (
-                  config as unknown as { toolCall: { id: string } }
-                )?.toolCall.id,
-              }),
-            ],
-          },
-        });
+        return 'No content could be retrieved from this PDF.';
       }
 
+      // Emit source metadata
+      await dispatchCustomEvent('sources', {
+        sources: [{
+          sourceId: 1,
+          title: doc.metadata?.title || 'PDF Document',
+          url: pdfUrl,
+        }],
+      }, config);
+
       console.log(`[pdfLoaderTool] Retrieved document from PDF: ${pdfUrl}`);
-      return new Command({
-        update: {
-          relevantDocuments: [doc],
-          messages: [
-            new ToolMessage({
-              content: JSON.stringify({
-                document: [doc],
-              }),
-              tool_call_id: (config as unknown as { toolCall: { id: string } })
-                ?.toolCall.id,
-            }),
-          ],
-        },
-      });
+      return `PDF Content (${pdfUrl}):\n\n${doc.pageContent}`;
     } catch (error) {
       console.error(
         '[pdfLoaderTool] Error during PDF content retrieval:',
@@ -96,18 +58,7 @@ export const pdfLoaderTool = tool(
       );
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
-
-      return new Command({
-        update: {
-          messages: [
-            new ToolMessage({
-              content: 'Error occurred during image search: ' + errorMessage,
-              tool_call_id: (config as unknown as { toolCall: { id: string } })
-                ?.toolCall?.id,
-            }),
-          ],
-        },
-      });
+      return 'Error occurred during PDF loading: ' + errorMessage;
     }
   },
   {

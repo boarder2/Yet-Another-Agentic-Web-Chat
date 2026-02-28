@@ -1,14 +1,9 @@
 import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { RunnableConfig } from '@langchain/core/runnables';
-import { Document } from '@langchain/core/documents';
 import { getWebContent } from '@/lib/utils/documents';
 import { removeThinkingBlocks } from '@/lib/utils/contentUtils';
-import { Command, getCurrentTaskInput } from '@langchain/langgraph';
-import { SimplifiedAgentStateType } from '@/lib/state/chatAgentState';
-import { ToolMessage } from '@langchain/core/messages';
-// import { getLangfuseCallbacks } from '@/lib/tracing/langfuse';
-import { isSoftStop } from '@/lib/utils/runControl';
+import { dispatchCustomEvent } from '@langchain/core/callbacks/dispatch';
 
 // Schema for URL summarization tool input
 const URLSummarizationToolSchema = z.object({
@@ -17,7 +12,13 @@ const URLSummarizationToolSchema = z.object({
     .string()
     .describe('The user query to guide content extraction and summarization'),
   retrieveHtml: z
-    .boolean()
+    .preprocess(
+      (val) =>
+        typeof val === 'string'
+          ? val.toLowerCase() === 'true'
+          : val,
+      z.boolean(),
+    )
     .optional()
     .default(false)
     .describe('Whether to retrieve the full HTML content of the pages'),
@@ -50,44 +51,22 @@ export const urlSummarizationTool = tool(
         intent = 'extract relevant content',
       } = input;
 
-      const currentState = getCurrentTaskInput() as SimplifiedAgentStateType;
-      let currentDocCount = currentState.relevantDocuments?.length ?? 0;
-
       console.log(
         `URLSummarizationTool: Processing ${urls.length} \n  URLs for query: "${query}"\n  retrieveHtml: ${retrieveHtml}\n  intent: ${intent}`,
       );
 
       if (!urls || urls.length === 0) {
-        console.log('URLSummarizationTool: No URLs provided for processing');
-        return new Command({
-          update: {
-            messages: [
-              new ToolMessage({
-                content: 'No search results found.',
-                tool_call_id: (
-                  config as unknown as { toolCall: { id: string } }
-                )?.toolCall.id,
-              }),
-            ],
-          },
-        });
+        return 'No URLs provided for processing.';
       }
 
-      // Get LLM from config
       if (!config?.configurable?.systemLlm) {
         throw new Error('System LLM not available in config');
       }
       const llm = config.configurable.systemLlm;
-      const emitter = config.configurable?.emitter as
-        | import('events').EventEmitter
-        | undefined;
-      const retrievalSignal: AbortSignal | undefined = (
-        config as unknown as Record<string, Record<string, unknown>>
-      )?.configurable?.retrievalSignal as AbortSignal | undefined;
-      const messageId: string | undefined = (
-        config as unknown as Record<string, Record<string, unknown>>
-      )?.configurable?.messageId as string | undefined;
-      const documents: Document[] = [];
+      const retrievalSignal: AbortSignal | undefined =
+        config?.configurable?.retrievalSignal as AbortSignal | undefined;
+
+      const results: Array<{ title: string; url: string; content: string }> = [];
 
       // Process each URL
       for (const url of urls) {
@@ -95,15 +74,10 @@ export const urlSummarizationTool = tool(
           console.warn('URLSummarizationTool: Operation aborted by signal');
           break;
         }
-        if (messageId && isSoftStop(messageId)) {
-          console.warn('URLSummarizationTool: Soft-stop set; skipping URL');
-          break;
-        }
 
         try {
           console.log(`URLSummarizationTool: Processing ${url}`);
 
-          // Fetch full content using the enhanced web content retrieval
           const webContent = await getWebContent(
             url,
             50000,
@@ -120,18 +94,13 @@ export const urlSummarizationTool = tool(
 
           const contentLength = webContent.pageContent.length;
           let finalContent: string;
-          let processingType: string;
 
-          // If content is short (< 4000 chars), use it directly; otherwise summarize
           if (contentLength < 4000) {
             finalContent = webContent.pageContent;
-            processingType = 'url-direct-content';
-
             console.log(
-              `URLSummarizationTool: Content is short (${contentLength} chars), using directly without summarization`,
+              `URLSummarizationTool: Content is short (${contentLength} chars), using directly`,
             );
           } else {
-            // Content is long, summarize using LLM
             console.log(
               `URLSummarizationTool: Content is long (${contentLength} chars), generating summary`,
             );
@@ -161,69 +130,17 @@ Provide a comprehensive summary of the above web page content, focusing on infor
 
             const result = await llm.invoke(summarizationPrompt, {
               signal: retrievalSignal || config?.signal,
-              // ...getLangfuseCallbacks(),
             });
-
-            // Emit token usage from this LLM call so parent agent can accumulate it.
-            // Prefer usage_metadata (standardized LangChain field); fall back to
-            // response_metadata.usage for OpenAI-format providers (Ollama, LM Studio, etc.)
-            // that don't populate usage_metadata but do include prompt_tokens/completion_tokens.
-            const usageData =
-              result.usage_metadata ??
-              (result.response_metadata?.usage as
-                | Record<string, number>
-                | null
-                | undefined);
-            if (emitter && usageData) {
-              const rawUsage = usageData as Record<string, number>;
-              const inputTokens =
-                rawUsage.input_tokens ||
-                rawUsage.prompt_tokens ||
-                rawUsage.promptTokens ||
-                0;
-              const outputTokens =
-                rawUsage.output_tokens ||
-                rawUsage.completion_tokens ||
-                rawUsage.completionTokens ||
-                0;
-              emitter.emit(
-                'tool_llm_usage',
-                JSON.stringify({
-                  target: 'system',
-                  input_tokens: inputTokens,
-                  output_tokens: outputTokens,
-                  total_tokens:
-                    rawUsage.total_tokens ||
-                    rawUsage.totalTokens ||
-                    inputTokens + outputTokens,
-                }),
-              );
-            }
 
             finalContent = removeThinkingBlocks(result.content as string);
-            processingType = 'url-content-extraction';
           }
 
-          // Web content less than 100 characters probably isn't useful so discard it.
           if (finalContent && finalContent.trim().length > 100) {
-            const document = new Document({
-              pageContent: finalContent,
-              metadata: {
-                sourceId: ++currentDocCount,
-                title: webContent.metadata.title || 'URL Content',
-                url: url,
-                source: url,
-                processingType: processingType,
-                processingIntent: intent,
-                originalContentLength: contentLength,
-                searchQuery: query,
-              },
-            });
-
-            documents.push(document);
+            const title = webContent.metadata.title || 'URL Content';
+            results.push({ title, url, content: finalContent });
 
             console.log(
-              `URLSummarizationTool: Successfully processed content from ${url} (${finalContent.length} characters, ${processingType})`,
+              `URLSummarizationTool: Successfully processed content from ${url} (${finalContent.length} characters)`,
             );
           } else {
             console.warn(
@@ -246,23 +163,34 @@ Provide a comprehensive summary of the above web page content, focusing on infor
       }
 
       console.log(
-        `URLSummarizationTool: Successfully processed ${documents.length} out of ${urls.length} URLs`,
+        `URLSummarizationTool: Successfully processed ${results.length} out of ${urls.length} URLs`,
       );
 
-      return new Command({
-        update: {
-          relevantDocuments: documents,
-          messages: [
-            new ToolMessage({
-              content: JSON.stringify({
-                document: documents,
-              }),
-              tool_call_id: (config as unknown as { toolCall: { id: string } })
-                ?.toolCall.id,
-            }),
-          ],
-        },
-      });
+      if (results.length === 0) {
+        return 'No content could be retrieved from the provided URLs.';
+      }
+
+      // Emit source metadata as custom event for frontend
+      const sources = results.map((r, i) => ({
+        sourceId: i + 1,
+        title: r.title,
+        url: r.url,
+      }));
+
+      await dispatchCustomEvent('sources', {
+        sources,
+        searchQuery: query,
+      }, config);
+
+      // Build formatted text for LLM consumption
+      const formattedResults = results
+        .map(
+          (r, i) =>
+            `[${i + 1}] ${r.title}\nURL: ${r.url}\n${r.content}`,
+        )
+        .join('\n\n---\n\n');
+
+      return formattedResults;
     } catch (error) {
       console.error(
         'URLSummarizationTool: Error during URL processing:',
@@ -270,18 +198,7 @@ Provide a comprehensive summary of the above web page content, focusing on infor
       );
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
-
-      return new Command({
-        update: {
-          messages: [
-            new ToolMessage({
-              content: 'Error occurred during URL processing: ' + errorMessage,
-              tool_call_id: (config as unknown as { toolCall: { id: string } })
-                ?.toolCall.id,
-            }),
-          ],
-        },
-      });
+      return 'Error occurred during URL processing: ' + errorMessage;
     }
   },
   {

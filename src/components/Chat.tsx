@@ -37,6 +37,7 @@ const Chat = ({
   pendingImages,
   setPendingImages,
   imageCapable = false,
+  onCancel,
 }: {
   messages: Message[];
   sendMessage: (
@@ -105,6 +106,7 @@ const Chat = ({
   pendingImages: ImageAttachment[];
   setPendingImages: (images: ImageAttachment[]) => void;
   imageCapable?: boolean;
+  onCancel?: () => void;
 }) => {
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [manuallyScrolledUp, setManuallyScrolledUp] = useState(false);
@@ -112,9 +114,6 @@ const Chat = ({
   const messageEnd = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const SCROLL_THRESHOLD = 250; // pixels from bottom to consider "at bottom"
-  const [currentMessageId, setCurrentMessageId] = useState<string | undefined>(
-    undefined,
-  );
 
   // Check if user is at bottom of page
   useEffect(() => {
@@ -233,34 +232,15 @@ const Chat = ({
     };
   }, []);
 
-  // Track the last user messageId when loading starts
-  useEffect(() => {
-    if (loading) {
-      // Find the last user message
-      const lastUserMsg = [...messages]
-        .reverse()
-        .find((m) => m.role === 'user');
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setCurrentMessageId(lastUserMsg?.messageId);
-      //console.log('Set currentMessageId to', lastUserMsg?.messageId, messages);
-    } else {
-      setCurrentMessageId(undefined);
-    }
-  }, [loading, messages]);
-
-  // Cancel handler
-  const handleCancel = async () => {
-    if (!currentMessageId) return;
-    try {
-      await fetch('/api/chat/cancel', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messageId: currentMessageId }),
-      });
-    } catch (_e) {
-      // Optionally handle error
-    }
+  // Cancel handler - delegates to stream.stop() passed from ChatWindow
+  const handleCancel = () => {
+    onCancel?.();
   };
+
+  // Derive the current user messageId for action indicators (e.g., rewrite button)
+  const currentMessageId = loading
+    ? [...messages].reverse().find((m) => m.role === 'user')?.messageId
+    : undefined;
 
   return (
     <div ref={containerRef} className="space-y-6 pt-8 pb-48 sm:mx-4 md:mx-8">

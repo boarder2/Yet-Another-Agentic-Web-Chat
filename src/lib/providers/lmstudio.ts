@@ -55,6 +55,7 @@ export const loadLMStudioChatModels = async () => {
           // temperature: 0.7,
           streaming: true,
           maxRetries: 3,
+          timeout: 600000, // 10 minutes for slow local models
         }) as unknown as BaseChatModel,
       };
     });

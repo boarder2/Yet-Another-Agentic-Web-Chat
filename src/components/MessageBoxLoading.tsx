@@ -52,8 +52,6 @@ const MessageBoxLoading = ({
                 {progress.subMessage}
               </p>
             )}
-            {/* Phase timeline */}
-            <PhaseTimeline percent={progress.current} />
             <div className="w-full bg-surface-2 rounded-full h-2 overflow-hidden">
               <div
                 className={`h-full bg-accent transition-all duration-300 ease-in-out ${
@@ -244,43 +242,5 @@ const MessageBoxLoading = ({
     </div>
   );
 };
-
-// TokenPill moved to shared component
-
-function PhaseTimeline({ percent }: { percent: number }) {
-  const phases = ['Plan', 'Search', 'Enhance', 'Analyze', 'Answer'];
-  const stepPct = 100 / phases.length;
-  const completed = Math.floor(percent / stepPct + 0.0001);
-  return (
-    <div className="flex items-center gap-2 text-[11px] text-fg/70">
-      {phases.map((p, i) => {
-        const isDone = i < completed;
-        const isCurrent = i === completed;
-        return (
-          <div key={p} className="flex items-center gap-1">
-            <div
-              className={`w-2 h-2 rounded-full ${
-                isDone
-                  ? 'bg-accent'
-                  : isCurrent
-                    ? 'bg-accent/60'
-                    : 'bg-surface-2'
-              }`}
-              title={p}
-            />
-            <span
-              className={`${isDone || isCurrent ? 'text-fg/90' : 'text-fg/50'}`}
-            >
-              {p}
-            </span>
-            {i < phases.length - 1 && (
-              <div className="w-4 h-[1px] bg-surface-2" />
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 export default MessageBoxLoading;

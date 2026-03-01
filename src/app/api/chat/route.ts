@@ -293,7 +293,8 @@ export const POST = async (req: Request) => {
       { messages: [...history, humanMessage] },
       {
         encoding: 'text/event-stream',
-        streamMode: ['updates', 'messages', 'custom'],
+        streamMode: ['updates', 'messages', 'custom', 'values'],
+        subgraphs: true,
         configurable: {
           thread_id: requestThreadId,
           embeddings: embedding,
@@ -339,6 +340,7 @@ export const POST = async (req: Request) => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const checkpoint = await (agent as any).getState({
               configurable: { thread_id: requestThreadId },
+              subgraphs: true,
             });
             const cpMessages = checkpoint?.values?.messages;
             if (cpMessages && cpMessages.length > 0) {
@@ -353,29 +355,94 @@ export const POST = async (req: Request) => {
                         block !== null &&
                         'text' in (block as Record<string, unknown>),
                     )
-                    .map(
-                      (block: unknown) =>
-                        (block as { text: string }).text,
-                    )
+                    .map((block: unknown) => (block as { text: string }).text)
                     .join('');
                 }
                 return JSON.stringify(msg.content);
               };
 
-              const textParts: string[] = [];
-              for (const m of cpMessages) {
-                if (
-                  m._getType?.() === 'ai' ||
-                  m.constructor?.name === 'AIMessage'
-                ) {
-                  const text = extractMsgText(m);
-                  if (text) textParts.push(text);
+              // Build a map from task description to subgraph tool calls.
+              // checkpoint.tasks contains the subgraph states when fetched
+              // with subgraphs: true. We match subgraph tasks to parent
+              // tool calls by the first human message (task description).
+              const subgraphToolCalls = new Map<
+                string,
+                Array<{
+                  name: string;
+                  id: string;
+                  args: Record<string, unknown>;
+                  status: string;
+                }>
+              >();
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const tasks = (checkpoint as any)?.tasks as
+                | Array<{
+                    id: string;
+                    name: string;
+                    state?: {
+                      values?: { messages?: Array<Record<string, unknown>> };
+                    };
+                  }>
+                | undefined;
+              if (tasks) {
+                for (const task of tasks) {
+                  const taskState = task.state?.values?.messages;
+                  if (!taskState || !Array.isArray(taskState)) continue;
+                  // Find the first human message to get the task description
+                  const humanMsg = taskState.find(
+                    (sm: Record<string, unknown>) => sm.type === 'human',
+                  );
+                  const taskDescription = humanMsg
+                    ? String(humanMsg.content || '')
+                    : '';
+                  // Extract tool calls from subgraph AI messages
+                  const subToolCalls: Array<{
+                    name: string;
+                    id: string;
+                    args: Record<string, unknown>;
+                    status: string;
+                  }> = [];
+                  const subToolResultIds = new Set<string>();
+                  for (const sm of taskState) {
+                    if (sm.type === 'tool' && sm.tool_call_id) {
+                      subToolResultIds.add(sm.tool_call_id as string);
+                    }
+                  }
+                  for (const sm of taskState) {
+                    if (sm.type !== 'ai') continue;
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const smToolCalls = (sm as any).tool_calls as
+                      | Array<{
+                          name: string;
+                          id: string;
+                          args: Record<string, unknown>;
+                        }>
+                      | undefined;
+                    if (!smToolCalls) continue;
+                    for (const stc of smToolCalls) {
+                      if (stc.name === 'write_todos') continue;
+                      subToolCalls.push({
+                        name: stc.name,
+                        id: stc.id || '',
+                        args: stc.args || {},
+                        status: subToolResultIds.has(stc.id)
+                          ? 'success'
+                          : 'error',
+                      });
+                    }
+                  }
+                  if (taskDescription && subToolCalls.length > 0) {
+                    subgraphToolCalls.set(taskDescription, subToolCalls);
+                  }
                 }
               }
-              const rawContent = textParts.join('\n');
 
-              // Build <ToolCall> markup from tool calls for persistence
-              let toolCallMarkup = '';
+              // Build content by interleaving text and ToolCall markup per AI
+              // message in natural order: thinking text first, then tool calls
+              // for each message. This matches the live-stream rendering in
+              // ChatWindow and preserves the chronological reasoning → action flow.
+              // 'task' tool calls are rendered as SubagentExecution inline.
+              const HIDDEN_TOOLS = new Set(['write_todos']);
               const toolResultIds = new Set<string>();
               for (const m of cpMessages) {
                 if (
@@ -385,29 +452,91 @@ export const POST = async (req: Request) => {
                   if (m.tool_call_id) toolResultIds.add(m.tool_call_id);
                 }
               }
+              const parts: string[] = [];
               for (const m of cpMessages) {
                 if (
-                  (m._getType?.() === 'ai' ||
-                    m.constructor?.name === 'AIMessage') &&
-                  m.tool_calls
+                  m._getType?.() === 'ai' ||
+                  m.constructor?.name === 'AIMessage'
                 ) {
-                  for (const tc of m.tool_calls) {
-                    const status = toolResultIds.has(tc.id ?? '')
-                      ? 'success'
-                      : 'error';
-                    const toolType = tc.name || 'unknown';
-                    const toolCallId = tc.id || '';
-                    const query = tc.args?.query as string | undefined;
-                    const url = tc.args?.url as string | undefined;
-                    let attrs = `type="${escapeAttribute(toolType)}" status="${status}" toolCallId="${escapeAttribute(toolCallId)}"`;
-                    if (query) attrs += ` query="${escapeAttribute(query)}"`;
-                    if (url) attrs += ` url="${escapeAttribute(url)}"`;
-                    toolCallMarkup += `<ToolCall ${attrs}></ToolCall>\n`;
+                  const text = extractMsgText(m);
+                  if (text) parts.push(text);
+                  if (m.tool_calls && m.tool_calls.length > 0) {
+                    for (const tc of m.tool_calls) {
+                      if (HIDDEN_TOOLS.has(tc.name || '')) continue;
+
+                      // Render 'task' tool calls as SubagentExecution inline
+                      if (tc.name === 'task') {
+                        const taskId = tc.id || '';
+                        const taskStatus = toolResultIds.has(taskId)
+                          ? 'success'
+                          : 'error';
+                        const taskDescription = tc.args?.description || '';
+                        const taskSubagentType =
+                          tc.args?.subagent_type || 'Subagent';
+
+                        // Find the tool result for this task
+                        let taskResult = '';
+                        for (const rm of cpMessages) {
+                          if (
+                            (rm._getType?.() === 'tool' ||
+                              rm.constructor?.name === 'ToolMessage') &&
+                            rm.tool_call_id === taskId
+                          ) {
+                            taskResult =
+                              typeof rm.content === 'string'
+                                ? rm.content
+                                : JSON.stringify(rm.content);
+                            break;
+                          }
+                        }
+
+                        // Build nested ToolCall markup from subgraph state
+                        // Match by the task description (human message content)
+                        let nestedToolCalls = '';
+                        const stcList = subgraphToolCalls.get(taskDescription);
+                        if (stcList) {
+                          for (const stc of stcList) {
+                            const tcType = stc.name || 'unknown';
+                            const tcId = stc.id || '';
+                            const tcQuery = stc.args?.query as
+                              | string
+                              | undefined;
+                            const tcUrl = stc.args?.url as string | undefined;
+                            let tcAttrs = `type="${escapeAttribute(tcType)}" status="${stc.status}" toolCallId="${escapeAttribute(tcId)}"`;
+                            if (tcQuery)
+                              tcAttrs += ` query="${escapeAttribute(tcQuery)}"`;
+                            if (tcUrl)
+                              tcAttrs += ` url="${escapeAttribute(tcUrl)}"`;
+                            nestedToolCalls += `<ToolCall ${tcAttrs}></ToolCall>`;
+                          }
+                        }
+
+                        let attrs = `id="${escapeAttribute(taskId)}" name="${escapeAttribute(taskSubagentType)}" task="${escapeAttribute(taskDescription)}" status="${taskStatus}"`;
+                        if (taskResult)
+                          attrs += ` summary="${escapeAttribute(taskResult)}"`;
+                        parts.push(
+                          `<SubagentExecution ${attrs}>${nestedToolCalls}</SubagentExecution>`,
+                        );
+                        continue;
+                      }
+
+                      const status = toolResultIds.has(tc.id ?? '')
+                        ? 'success'
+                        : 'error';
+                      const toolType = tc.name || 'unknown';
+                      const toolCallId = tc.id || '';
+                      const query = tc.args?.query as string | undefined;
+                      const url = tc.args?.url as string | undefined;
+                      let attrs = `type="${escapeAttribute(toolType)}" status="${status}" toolCallId="${escapeAttribute(toolCallId)}"`;
+                      if (query) attrs += ` query="${escapeAttribute(query)}"`;
+                      if (url) attrs += ` url="${escapeAttribute(url)}"`;
+                      parts.push(`<ToolCall ${attrs}></ToolCall>`);
+                    }
                   }
                 }
               }
 
-              const content = toolCallMarkup + rawContent;
+              const content = parts.join('\n');
 
               // Extract sources from tool result messages
               const sources: Array<Record<string, unknown>> = [];
@@ -424,9 +553,7 @@ export const POST = async (req: Request) => {
                       ? m.content
                       : JSON.stringify(m.content);
                   let match;
-                  while (
-                    (match = sourceRegex.exec(toolContent)) !== null
-                  ) {
+                  while ((match = sourceRegex.exec(toolContent)) !== null) {
                     sources.push({
                       sourceId: parseInt(match[1]),
                       title: match[2].trim(),

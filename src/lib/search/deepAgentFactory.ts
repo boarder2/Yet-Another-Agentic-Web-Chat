@@ -1,4 +1,4 @@
-import { createDeepAgent } from 'deepagents';
+import { createDeepAgent, type SubAgent } from 'deepagents';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { allAgentTools, webSearchTools, coreTools } from '@/lib/tools/agents';
 import { buildChatPrompt } from '@/lib/prompts/simplifiedAgent/chat';
@@ -108,6 +108,25 @@ export function createSearchAgent(options: CreateAgentOptions) {
 
   const systemPrompt = buildSystemPrompt(options);
 
+  // Register a research subagent so the agent can delegate complex,
+  // multi-step research tasks via the `task` tool. The default
+  // general-purpose subagent is also created automatically by deepagents.
+  const subagents: SubAgent[] =
+    tools.length > 0
+      ? [
+          {
+            name: 'Researcher',
+            description:
+              'Research assistant for complex, multi-step research tasks. ' +
+              'Delegates web searches, URL analysis, and information gathering ' +
+              'to produce a synthesized report. Use for any research task that ' +
+              'involves multiple searches or deep investigation of a topic.',
+            systemPrompt,
+            tools,
+          },
+        ]
+      : [];
+
   console.log(
     `createSearchAgent: Creating agent for focus mode "${options.focusMode}" with ${tools.length} tools`,
   );
@@ -117,6 +136,7 @@ export function createSearchAgent(options: CreateAgentOptions) {
     tools,
     systemPrompt,
     checkpointer,
+    subagents,
   });
 
   return agent;

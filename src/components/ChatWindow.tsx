@@ -616,10 +616,7 @@ const ChatWindow = ({ id }: { id?: string }) => {
       const newSources = docSources.filter(
         (d) => !existingUrls.has(d.metadata?.url),
       );
-      streamSourcesRef.current = [
-        ...streamSourcesRef.current,
-        ...newSources,
-      ];
+      streamSourcesRef.current = [...streamSourcesRef.current, ...newSources];
       streamSearchQueryRef.current =
         searchQuery || streamSearchQueryRef.current;
 
@@ -645,6 +642,12 @@ const ChatWindow = ({ id }: { id?: string }) => {
 
   const stream = useStream({
     transport,
+    // Enable subagent message filtering — supported at runtime by the SDK's
+    // StreamManager even though UseStreamCustomOptions types don't expose it.
+    ...({
+      filterSubagentMessages: true,
+      subagentToolNames: ['task'],
+    } as Record<string, unknown>),
     onCustomEvent: (data: unknown) => {
       // Handle custom events dispatched by tools (e.g., sources)
       const e = data as {
@@ -656,76 +659,93 @@ const ChatWindow = ({ id }: { id?: string }) => {
         processSources(e.sources, e.searchQuery);
       }
     },
-    onUpdateEvent: (data: unknown) => {
+    onUpdateEvent: (data: unknown, meta: unknown) => {
       // Extract sources and todos from update events
       // When agent.stream() with encoding: 'text/event-stream' is used,
       // dispatchCustomEvent doesn't produce SSE custom events. Instead,
       // we parse tool results from the updates stream.
       const update = data as Record<
         string,
-        { messages?: Array<Record<string, unknown>>; todos?: Array<{ content: string; status: string }> }
+        {
+          messages?: Array<Record<string, unknown>>;
+          todos?: Array<{ content: string; status: string }>;
+        }
       >;
       if (!update || typeof update !== 'object') return;
 
-      // Extract todos from any node update (todoListMiddleware uses Command)
-      for (const nodeData of Object.values(update)) {
-        if (nodeData?.todos && Array.isArray(nodeData.todos)) {
-          setTodoItems(nodeData.todos);
+      // Check if this update is from a subagent (has namespace like ["tools:..."])
+      const { namespace } = (meta || {}) as { namespace?: string[] };
+      const isSubagentUpdate =
+        namespace &&
+        namespace.length > 0 &&
+        namespace.some((s: string) => s.startsWith('tools:'));
+
+      // Extract todos only from the main agent, not from subagents
+      if (!isSubagentUpdate) {
+        for (const nodeData of Object.values(update)) {
+          if (nodeData?.todos && Array.isArray(nodeData.todos)) {
+            setTodoItems(nodeData.todos);
+          }
         }
       }
-      const toolsUpdate = update.tools;
-      if (!toolsUpdate?.messages) return;
 
-      for (const msg of toolsUpdate.messages) {
-        if (msg.type !== 'tool' || typeof msg.content !== 'string') continue;
-        const toolName = msg.name as string;
-        // Only extract sources from search/summarization tools
-        if (
-          !['web_search', 'url_summarization', 'file_search'].includes(toolName)
-        )
-          continue;
+      // Check ALL node keys for tool messages (not just 'tools')
+      // Subagent tool results arrive under their own node keys in update events
+      for (const [, nodeData] of Object.entries(update)) {
+        if (!nodeData?.messages) continue;
+        for (const msg of nodeData.messages) {
+          if (msg.type !== 'tool' || typeof msg.content !== 'string') continue;
+          const toolName = msg.name as string;
+          // Only extract sources from search/summarization tools
+          if (
+            !['web_search', 'url_summarization', 'file_search'].includes(
+              toolName,
+            )
+          )
+            continue;
 
-        const content = msg.content as string;
-        // Parse [N] Title\nURL: https://... format from tool output
-        const sourceRegex =
-          /\[(\d+)\]\s+(.+?)\nURL:\s+(https?:\/\/[^\s\n]+)/g;
-        let match;
-        const parsedSources: Document[] = [];
-        while ((match = sourceRegex.exec(content)) !== null) {
-          parsedSources.push(
-            new Document({
-              pageContent: '',
-              metadata: {
-                sourceId: parseInt(match[1]),
-                title: match[2].trim(),
-                url: match[3].trim(),
-              },
-            }),
-          );
-        }
-        if (parsedSources.length > 0) {
-          // Determine search query from the tool call args if available
-          const toolCallId = msg.tool_call_id as string | undefined;
-          // Try to find the corresponding tool call in stream messages
-          let searchQuery: string | undefined;
-          if (stream.messages) {
-            for (const m of stream.messages) {
-              if (m.type === 'ai' && 'tool_calls' in m) {
-                const aiMsg = m as LangGraphAIMessage;
-                const tc = aiMsg.tool_calls?.find(
-                  (c: { id?: string }) => c.id === toolCallId,
-                );
-                if (tc?.args && typeof tc.args === 'object') {
-                  searchQuery = (tc.args as Record<string, unknown>)
-                    .query as string;
+          const content = msg.content as string;
+          // Parse [N] Title\nURL: https://... format from tool output
+          const sourceRegex =
+            /\[(\d+)\]\s+(.+?)\nURL:\s+(https?:\/\/[^\s\n]+)/g;
+          let match;
+          const parsedSources: Document[] = [];
+          while ((match = sourceRegex.exec(content)) !== null) {
+            parsedSources.push(
+              new Document({
+                pageContent: '',
+                metadata: {
+                  sourceId: parseInt(match[1]),
+                  title: match[2].trim(),
+                  url: match[3].trim(),
+                },
+              }),
+            );
+          }
+          if (parsedSources.length > 0) {
+            // Determine search query from the tool call args if available
+            const toolCallId = msg.tool_call_id as string | undefined;
+            // Try to find the corresponding tool call in stream messages
+            let searchQuery: string | undefined;
+            if (stream.messages) {
+              for (const m of stream.messages) {
+                if (m.type === 'ai' && 'tool_calls' in m) {
+                  const aiMsg = m as LangGraphAIMessage;
+                  const tc = aiMsg.tool_calls?.find(
+                    (c: { id?: string }) => c.id === toolCallId,
+                  );
+                  if (tc?.args && typeof tc.args === 'object') {
+                    searchQuery = (tc.args as Record<string, unknown>)
+                      .query as string;
+                  }
                 }
               }
             }
+            processSources(
+              parsedSources.map((d) => d.metadata as Record<string, unknown>),
+              searchQuery,
+            );
           }
-          processSources(
-            parsedSources.map((d) => d.metadata as Record<string, unknown>),
-            searchQuery,
-          );
         }
       }
     },
@@ -851,6 +871,23 @@ const ChatWindow = ({ id }: { id?: string }) => {
     setLoading(false);
   }, [stream]);
 
+  // Compute a stable key that changes when subagent state changes.
+  // stream.subagents returns a new Map on every access, so we can't use it
+  // directly in useEffect deps. Instead, derive a string from the subagent
+  // IDs, statuses, and tool call counts so the effect fires only when
+  // subagent state actually changes.
+  const subagentSnapshotKey = useMemo(() => {
+    const subs = stream.subagents;
+    if (!subs || subs.size === 0) return '';
+    const parts: string[] = [];
+    for (const [id, s] of subs) {
+      parts.push(
+        `${id}:${s.status}:${s.toolCalls?.length ?? 0}:${s.messages?.length ?? 0}`,
+      );
+    }
+    return parts.join('|');
+  }, [stream.subagents]);
+
   // Derive app messages from useStream messages when streaming is active.
   // Uses setTimeout(0) to batch rapid SSE events into a single state update
   // per macrotask, preventing "Maximum update depth exceeded" when many
@@ -898,9 +935,7 @@ const ChatWindow = ({ id }: { id?: string }) => {
           return msg.content
             .filter(
               (block) =>
-                typeof block === 'object' &&
-                block !== null &&
-                'text' in block,
+                typeof block === 'object' && block !== null && 'text' in block,
             )
             .map((block) => (block as { text: string }).text)
             .join('');
@@ -912,8 +947,10 @@ const ChatWindow = ({ id }: { id?: string }) => {
       // in natural order: thinking text first, then tool calls for each message.
       // This preserves the chronological "reasoning → action" flow.
       // Internal tools like write_todos are excluded from markup since they
-      // are shown via the TodoWidget instead.
+      // are shown via the TodoWidget instead. 'task' tool calls are rendered
+      // as SubagentExecution components inline at their natural position.
       const HIDDEN_TOOLS = new Set(['write_todos']);
+      const subagents = stream.subagents;
       const parts: string[] = [];
       for (const aim of aiMessages) {
         const text = extractText(aim);
@@ -921,6 +958,104 @@ const ChatWindow = ({ id }: { id?: string }) => {
         if (aim.tool_calls && aim.tool_calls.length > 0) {
           for (const tc of aim.tool_calls) {
             if (HIDDEN_TOOLS.has(tc.name || '')) continue;
+
+            // Render 'task' tool calls as SubagentExecution inline
+            if (tc.name === 'task') {
+              const toolCallId = tc.id || '';
+              const subagent = subagents?.get(toolCallId);
+              if (subagent) {
+                const statusMap: Record<string, string> = {
+                  pending: 'running',
+                  running: 'running',
+                  complete: 'success',
+                  error: 'error',
+                };
+                const saStatus = statusMap[subagent.status] || 'running';
+                const saName = escapeAttribute(
+                  subagent.toolCall?.args?.subagent_type || 'Subagent',
+                );
+                const saTask = escapeAttribute(
+                  subagent.toolCall?.args?.description || '',
+                );
+                const saId = escapeAttribute(toolCallId);
+
+                // Build nested ToolCall markup for subagent's tool calls
+                let nestedToolCalls = '';
+                if (subagent.toolCalls && subagent.toolCalls.length > 0) {
+                  for (const stc of subagent.toolCalls) {
+                    const tcStatus =
+                      stc.state === 'completed'
+                        ? 'success'
+                        : stc.state === 'error'
+                          ? 'error'
+                          : 'running';
+                    const tcType = stc.call.name || 'unknown';
+                    const tcId = stc.call.id || '';
+                    const tcQuery = stc.call.args?.query as string | undefined;
+                    const tcUrl = stc.call.args?.url as string | undefined;
+                    let tcAttrs = `type="${escapeAttribute(tcType)}" status="${tcStatus}" toolCallId="${escapeAttribute(tcId)}"`;
+                    if (tcQuery)
+                      tcAttrs += ` query="${escapeAttribute(tcQuery)}"`;
+                    if (tcUrl) tcAttrs += ` url="${escapeAttribute(tcUrl)}"`;
+                    nestedToolCalls += `<ToolCall ${tcAttrs}></ToolCall>`;
+                  }
+                }
+
+                // Build streaming response text from subagent messages
+                let responseText = '';
+                if (subagent.messages) {
+                  responseText = subagent.messages
+                    .filter((m) => m.type === 'ai')
+                    .map((m) => {
+                      if (typeof m.content === 'string') return m.content;
+                      if (Array.isArray(m.content)) {
+                        return m.content
+                          .filter(
+                            (c) =>
+                              typeof c === 'object' &&
+                              c !== null &&
+                              'text' in c,
+                          )
+                          .map((c) => (c as { text: string }).text)
+                          .join('');
+                      }
+                      return '';
+                    })
+                    .join('');
+                }
+
+                const summary = subagent.result || '';
+                const saError = subagent.error
+                  ? typeof subagent.error === 'string'
+                    ? subagent.error
+                    : String(subagent.error)
+                  : '';
+
+                let attrs = `id="${saId}" name="${saName}" task="${saTask}" status="${saStatus}"`;
+                if (summary) attrs += ` summary="${escapeAttribute(summary)}"`;
+                if (saError) attrs += ` error="${escapeAttribute(saError)}"`;
+                if (responseText && !summary)
+                  attrs += ` responseText="${escapeAttribute(responseText)}"`;
+
+                parts.push(
+                  `<SubagentExecution ${attrs}>${nestedToolCalls}</SubagentExecution>`,
+                );
+              } else {
+                // Subagent not yet registered — show placeholder
+                const saName = escapeAttribute(
+                  (tc.args?.subagent_type as string) || 'Subagent',
+                );
+                const saTask = escapeAttribute(
+                  (tc.args?.description as string) || '',
+                );
+                const saId = escapeAttribute(toolCallId);
+                parts.push(
+                  `<SubagentExecution id="${saId}" name="${saName}" task="${saTask}" status="running"></SubagentExecution>`,
+                );
+              }
+              continue;
+            }
+
             const status = toolResultIds.has(tc.id ?? '')
               ? 'success'
               : 'running';
@@ -932,6 +1067,50 @@ const ChatWindow = ({ id }: { id?: string }) => {
             if (query) attrs += ` query="${escapeAttribute(query)}"`;
             if (url) attrs += ` url="${escapeAttribute(url)}"`;
             parts.push(`<ToolCall ${attrs}></ToolCall>`);
+          }
+        }
+      }
+      // Extract sources from subagent tool call results
+      if (subagents && subagents.size > 0) {
+        for (const [, subagent] of subagents) {
+          if (!subagent.toolCalls) continue;
+          for (const tc of subagent.toolCalls) {
+            if (
+              !['web_search', 'url_summarization', 'file_search'].includes(
+                tc.call.name,
+              )
+            )
+              continue;
+            if (tc.state === 'pending') continue;
+            const resultContent = tc.result;
+            if (!resultContent) continue;
+            const content =
+              typeof resultContent === 'string'
+                ? resultContent
+                : JSON.stringify(resultContent);
+            const sourceRegex =
+              /\[(\d+)\]\s+(.+?)\nURL:\s+(https?:\/\/[^\s\n]+)/g;
+            let match;
+            const parsedSources: Document[] = [];
+            while ((match = sourceRegex.exec(content)) !== null) {
+              parsedSources.push(
+                new Document({
+                  pageContent: '',
+                  metadata: {
+                    sourceId: parseInt(match[1]),
+                    title: match[2].trim(),
+                    url: match[3].trim(),
+                  },
+                }),
+              );
+            }
+            if (parsedSources.length > 0) {
+              const searchQuery = tc.call.args?.query as string | undefined;
+              processSources(
+                parsedSources.map((d) => d.metadata as Record<string, unknown>),
+                searchQuery,
+              );
+            }
           }
         }
       }
@@ -1005,7 +1184,9 @@ const ChatWindow = ({ id }: { id?: string }) => {
         streamUpdateTimerRef.current = null;
       }
     };
-  }, [stream.messages, chatId]);
+    // subagentSnapshotKey is derived from stream.subagents (stable string)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stream.messages, subagentSnapshotKey, chatId, processSources]);
 
   const sendMessage = async (
     message: string,

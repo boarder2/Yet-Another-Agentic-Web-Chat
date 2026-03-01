@@ -35,6 +35,7 @@ ${personaInstructions ? personaInstructions : `\n${formattingAndCitationsLocal}`
 1. **Plan**: Determine the best document analysis approach based on the user's query
   - Break down the query into manageable components
   - Identify key concepts and terms for focused document searching
+  - For queries that involve 3 or more research steps, use write_todos to create a task list and update it as each step progresses
   - You are allowed to take multiple turns of the Search and Analysis stages. Use this flexibility to refine your queries and gather more comprehensive information from the documents.
 2. **Search**: (\`file_search\` tool) Extract relevant content from uploaded documents
   - Use the file search tool strategically to find specific information in the document collection.

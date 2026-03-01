@@ -124,16 +124,20 @@ export const SubagentExecution: React.FC<SubagentExecutionProps> = ({
   };
 
   const getSubagentIcon = (subagentName: string) => {
-    switch (subagentName) {
-      case 'Deep Research':
-        return <Search size={16} className="text-accent" />;
-      case 'File Analyzer':
-        return <FileText size={16} className="text-green-600" />;
-      case 'Content Synthesizer':
-        return <Globe size={16} className="text-purple-600" />;
-      default:
-        return <Bot size={16} className="text-fg/70" />;
-    }
+    const name = subagentName.toLowerCase().replace(/[-_]/g, '');
+    if (name.includes('research'))
+      return <Search size={16} className="text-accent" />;
+    if (name.includes('file') || name.includes('analyzer'))
+      return <FileText size={16} className="text-green-600" />;
+    if (
+      name.includes('content') ||
+      name.includes('synthe') ||
+      name.includes('writer')
+    )
+      return <Globe size={16} className="text-purple-600" />;
+    if (name.includes('general'))
+      return <Bot size={16} className="text-accent" />;
+    return <Bot size={16} className="text-fg/70" />;
   };
 
   return (

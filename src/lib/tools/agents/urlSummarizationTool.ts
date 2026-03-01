@@ -13,10 +13,7 @@ const URLSummarizationToolSchema = z.object({
     .describe('The user query to guide content extraction and summarization'),
   retrieveHtml: z
     .preprocess(
-      (val) =>
-        typeof val === 'string'
-          ? val.toLowerCase() === 'true'
-          : val,
+      (val) => (typeof val === 'string' ? val.toLowerCase() === 'true' : val),
       z.boolean(),
     )
     .optional()
@@ -63,10 +60,29 @@ export const urlSummarizationTool = tool(
         throw new Error('System LLM not available in config');
       }
       const llm = config.configurable.systemLlm;
-      const retrievalSignal: AbortSignal | undefined =
-        config?.configurable?.retrievalSignal as AbortSignal | undefined;
+      const retrievalSignal: AbortSignal | undefined = config?.configurable
+        ?.retrievalSignal as AbortSignal | undefined;
 
-      const results: Array<{ title: string; url: string; content: string }> = [];
+      // Compute a safe maximum content length based on model context window.
+      // Reserve space for the prompt template (~1,500 tokens) and model output (~2,000 tokens).
+      // Use ~3.5 chars/token as a rough conversion factor.
+      const CHARS_PER_TOKEN = 3.5;
+      const RESERVED_TOKENS = 3500; // prompt template + output
+      const maxInputTokens = llm.profile?.maxInputTokens;
+      const effectiveContextTokens = maxInputTokens
+        ? maxInputTokens - RESERVED_TOKENS
+        : 12000; // conservative fallback (~42k chars) for unknown models
+      const maxContentChars = Math.max(
+        4000,
+        Math.floor(effectiveContextTokens * CHARS_PER_TOKEN),
+      );
+
+      console.log(
+        `URLSummarizationTool: Model context window: ${maxInputTokens ?? 'unknown'} tokens, max content chars: ${maxContentChars}`,
+      );
+
+      const results: Array<{ title: string; url: string; content: string }> =
+        [];
 
       // Process each URL
       for (const url of urls) {
@@ -80,7 +96,7 @@ export const urlSummarizationTool = tool(
 
           const webContent = await getWebContent(
             url,
-            50000,
+            maxContentChars,
             retrieveHtml,
             retrievalSignal,
           );
@@ -124,7 +140,7 @@ export const urlSummarizationTool = tool(
 # Content URL: ${url}
 
 # Web Page Content to Summarize:
-${retrieveHtml && webContent.metadata?.html ? webContent.metadata.html : webContent.pageContent}
+${(retrieveHtml && webContent.metadata?.html ? webContent.metadata.html : webContent.pageContent).slice(0, maxContentChars)}
 
 Provide a comprehensive summary of the above web page content, focusing on information relevant to the user's query:`;
 
@@ -177,17 +193,18 @@ Provide a comprehensive summary of the above web page content, focusing on infor
         url: r.url,
       }));
 
-      await dispatchCustomEvent('sources', {
-        sources,
-        searchQuery: query,
-      }, config);
+      await dispatchCustomEvent(
+        'sources',
+        {
+          sources,
+          searchQuery: query,
+        },
+        config,
+      );
 
       // Build formatted text for LLM consumption
       const formattedResults = results
-        .map(
-          (r, i) =>
-            `[${i + 1}] ${r.title}\nURL: ${r.url}\n${r.content}`,
-        )
+        .map((r, i) => `[${i + 1}] ${r.title}\nURL: ${r.url}\n${r.content}`)
         .join('\n\n---\n\n');
 
       return formattedResults;

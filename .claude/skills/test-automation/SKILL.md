@@ -113,6 +113,10 @@ playwright-cli click <model-combobox-ref>     # Open model dropdown
 playwright-cli click <option-ref>             # Select model
 ```
 
+- Unless otherwise specified, use the following models for testing:
+  - Chat: `qwen/qwen3.5-35b-a3b` (Chat + System) - Provider: LM Studio
+  - Embedding: `granite-embedding:278m` - Provider: Ollama
+
 **Image attachment testing:**
 
 ```bash

@@ -4,10 +4,15 @@ YAAWC (Yet Another Agentic Web Chat) is an open-source AI-powered search engine 
 
 ## Architecture
 
-User submits a query → API route → `MetaSearchAgent` routes to focus mode handler → `SimplifiedAgent` (LangGraph React Agent) uses tools to research → streams response with cited sources.
+User submits a query → `/api/chat` route → `createDeepAgent` (from `deepagents`) runs as a LangGraph agent with tools → SSE stream consumed by `useStream` + `FetchStreamTransport` in `ChatWindow.tsx`.
 
 - **Chat Model**: Agent reasoning, final answer generation, streamed user-facing output
-- **System Model**: Tools and internal chains (URL summarization, query generation, task breakdown)
+- **System Model**: Tool-internal chains (URL summarization, query generation) — passed via `configurable.systemLlm`
+- **Agent construction**: `createDeepAgent` in `src/lib/agent/factory.ts` — static at startup, model injected per-request
+- **Streaming**: LangGraph SSE format (`event: {mode}\ndata: {json}\n\n`); subgraph events include namespace (`event: {mode}|{ns_0}|{ns_1}`)
+- **Checkpointing**: Per-request `MemorySaver` scoped to `chatId:aiMessageId` thread; full chat history loaded from DB and passed as `allMessages`
+- **Subagents**: `task` tool built into `createDeepAgent`; deep research subagent defined in `src/lib/agent/subagents.ts`; frontend identifies via `subagentToolNames: ['task']`
+- **Todos**: `TodoListMiddleware` included by default; state key `todos: Array<{ content, status }>` surfaced via `stream.values.todos`
 
 ### Technology Stack
 
@@ -25,13 +30,14 @@ User submits a query → API route → `MetaSearchAgent` routes to focus mode ha
 
 - `/src/app` — Next.js pages and API routes (`/src/app/api`)
 - `/src/components` — React UI components (see **frontend-architecture** skill)
-- `/src/lib/search` — `SimplifiedAgent`, `MetaSearchAgent` router, focus-mode handlers
+- `/src/lib/agent` — Agent construction and tools:
+  - `factory.ts` — `createAgent()` call to `createDeepAgent` with focus-mode tool sets
+  - `subagents.ts` — Deep research subagent definition (passed to `createDeepAgent`)
+  - `tools/` — Custom tool implementations (`webSearchTool`, `urlSummarizationTool`, `fileSearchTool`, `imageSearchTool`, `imageAnalysisTool`, `pdfLoaderTool`, `youtubeTranscriptTool`)
 - `/src/lib/providers` — LLM and embedding model integrations (see **adding-features** skill)
 - `/src/lib/prompts` — Prompt templates including `prompts/simplifiedAgent/*` (see **prompt-system** skill)
-- `/src/lib/tools/agents` — Agent tools (`web_search`, `file_search`, `url_summarization`, `image_search`, `image_analysis`, `deep_research`, `todo_list`, etc.)
 - `/src/lib/db` — Database schema and operations
 - `/src/lib/chains` — Specialized chains (image/video search helpers)
-- `/src/lib/state` — LangGraph agent state annotations
 - `/src/lib/utils` — Utility functions, web content retrieval, personalization
 - `/src/app/dashboard` — Dashboard page with configurable widgets
 
@@ -42,7 +48,28 @@ User submits a query → API route → `MetaSearchAgent` routes to focus mode ha
 - **Chat**: Creative conversation, no tools
 - **Firefox AI**: Auto-detected; tools disabled, conversational response
 
-## Core Commands
+## Extending the System
+
+### Adding a custom tool
+
+1. Create `src/lib/agent/tools/myTool.ts` using `tool()` from `@langchain/core/tools`.
+2. Use `config?.configurable?.embeddings`, `systemLlm`, `messageId`, `retrievalSignal` from `RunnableConfig` for dependencies.
+3. Emit custom events with `writer({ type: 'my_event', ... })` from `@langchain/langgraph` when `streamMode: ['custom']` is active.
+4. Export and add the tool to `src/lib/agent/tools/index.ts`.
+5. Include it in the appropriate tool array in `src/lib/agent/factory.ts` (`webSearchTools`, `localResearchTools`, or `allTools`).
+
+### Adding a focus mode
+
+1. In `src/lib/agent/factory.ts`, add a branch matching the new `focusMode` string.
+2. Define a tool set and a `systemPrompt` string for it.
+3. Call `createDeepAgent({ model: chatLlm, tools, systemPrompt, subagents, checkpointer })`.
+4. Add the focus mode selector option in `src/components/MessageInputActions/Focus.tsx`.
+
+### Adding a subagent
+
+1. In `src/lib/agent/subagents.ts`, add an entry to the `subagents` array passed to `createDeepAgent`.
+2. Shape: `{ name: string, description: string, system_prompt: string, tools: Tool[], model?: BaseChatModel }`.
+3. The built-in `task` tool delegates to registered subagents by name. `useStream` identifies `task` tool calls as subagent events via `subagentToolNames: ['task']`.
 
 - **Development**: `npm run dev` (Turbopack)
 - **Build**: `npm run build` (includes DB push)

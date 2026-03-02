@@ -205,6 +205,7 @@ const MessageBox = ({
                   {message.images && message.images.length > 0 && (
                     <div className="flex flex-row gap-2 mt-3 flex-wrap">
                       {message.images.map((img) => (
+                        // eslint-disable-next-line @next/next/no-img-element
                         <img
                           key={img.imageId}
                           src={`/api/uploads/images/${img.imageId}`}

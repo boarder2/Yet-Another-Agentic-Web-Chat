@@ -16,7 +16,8 @@ import { cn } from '@/lib/utils';
 
 /**
  * Strip think-tag content from text, handling both properly paired
- * <think>...</think> and orphaned </think> (no opening tag) patterns.
+ * <think>...</think> and orphaned </think> (no opening tag) patterns,
+ * as well as unclosed <think> tags at the end of content.
  */
 const stripThinkContent = (text: string): string => {
   // Remove properly paired <think>...</think>
@@ -27,6 +28,11 @@ const stripThinkContent = (text: string): string => {
       /(^|<\/[a-zA-Z][a-zA-Z0-9]*\s*>)[\s\S]*?<\/think>/g,
       '$1',
     );
+  }
+  // Remove unclosed <think> opening tag and everything after it (streaming partial)
+  const openIdx = result.search(/<think(?:\s[^>]*)?>/);
+  if (openIdx !== -1) {
+    result = result.slice(0, openIdx);
   }
   return result.trim();
 };
@@ -99,7 +105,7 @@ export const SubagentExecution: React.FC<SubagentExecutionProps> = ({
   children,
 }) => {
   const [expanded, setExpanded] = useState(false);
-  const [responseExpanded, setResponseExpanded] = useState(false);
+  const [responseExpanded, setResponseExpanded] = useState(true);
 
   // Children contains the ToolCall markup
   const hasActivity = children && React.Children.count(children) > 0;
@@ -123,8 +129,20 @@ export const SubagentExecution: React.FC<SubagentExecutionProps> = ({
     }
   };
 
+  /**
+   * Format a snake_case or raw subagent name to Title Case for display.
+   * e.g. "deep_research" → "Deep Research"
+   */
+  const formatSubagentName = (raw: string): string =>
+    raw
+      .split(/[_\s]+/)
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(' ');
+
   const getSubagentIcon = (subagentName: string) => {
-    switch (subagentName) {
+    // Normalize to Title Case so both "deep_research" and "Deep Research" match
+    const normalized = formatSubagentName(subagentName);
+    switch (normalized) {
       case 'Deep Research':
         return <Search size={16} className="text-accent" />;
       case 'File Analyzer':
@@ -150,7 +168,9 @@ export const SubagentExecution: React.FC<SubagentExecutionProps> = ({
         <div className="flex-1 text-left min-w-0">
           <div className="flex items-center gap-2">
             {name && getSubagentIcon(name)}
-            <span className="font-semibold text-sm">{name || 'Subagent'}</span>
+            <span className="font-semibold text-sm">
+              {name ? formatSubagentName(name) : 'Subagent'}
+            </span>
           </div>
           {task && (
             <div
@@ -203,7 +223,7 @@ export const SubagentExecution: React.FC<SubagentExecutionProps> = ({
               {responseExpanded && (
                 <div
                   className={cn(
-                    'prose prose-sm prose-invert dark:prose-invert max-w-none',
+                    'prose prose-sm dark:prose-invert max-w-none',
                     'prose-p:leading-relaxed prose-p:my-2',
                     'prose-headings:font-semibold prose-h1:text-lg prose-h2:text-base prose-h3:text-sm',
                     'prose-ul:my-2 prose-ol:my-2 prose-li:my-1',

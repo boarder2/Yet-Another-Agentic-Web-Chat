@@ -1,6 +1,3 @@
-import { updateToolCallMarkup } from '@/lib/utils/toolCallMarkup';
-import { encodeHtmlAttribute } from '@/lib/utils/html';
-import { cleanupCancelToken, registerCancelToken } from '@/lib/cancel-tokens';
 import {
   getCustomOpenaiApiKey,
   getCustomOpenaiApiUrl,
@@ -12,32 +9,31 @@ import {
   getAvailableChatModelProviders,
   getAvailableEmbeddingModelProviders,
 } from '@/lib/providers';
-import { searchHandlers } from '@/lib/search';
+import { CachedEmbeddings } from '@/lib/utils/cachedEmbeddings';
 import { getFileDetails } from '@/lib/utils/files';
 import { getPersonaInstructionsOnly } from '@/lib/utils/prompts';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import { AIMessage, BaseMessage, HumanMessage } from '@langchain/core/messages';
+import { AIMessage, HumanMessage } from '@langchain/core/messages';
+import { MemorySaver } from '@langchain/langgraph';
 import { ChatOllama } from '@langchain/ollama';
 import { ChatOpenAI } from '@langchain/openai';
 import crypto from 'crypto';
-import { and, eq, gt } from 'drizzle-orm';
-import { EventEmitter } from 'stream';
+// Configure global undici dispatcher with no body timeout to support slow local LLMs
+// (default undici bodyTimeout of 5 min is too short for 35B+ models)
+import { Agent, setGlobalDispatcher } from 'undici';
+setGlobalDispatcher(new Agent({ bodyTimeout: 0, headersTimeout: 0 }));
+import { and, asc, eq, gt } from 'drizzle-orm';
 import {
   registerRetrieval,
   cleanupRun,
   clearSoftStop,
 } from '@/lib/utils/runControl';
-import { CachedEmbeddings } from '@/lib/utils/cachedEmbeddings';
+import { registerCancelToken, cleanupCancelToken } from '@/lib/cancel-tokens';
 import { buildMultimodalHumanMessage } from '@/lib/utils/images';
+import { createAgent } from '@/lib/agent/factory';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-type Message = {
-  messageId: string;
-  chatId: string;
-  content: string;
-};
 
 type ChatModel = {
   provider: string;
@@ -49,394 +45,97 @@ type SystemModel = {
   name: string;
   ollamaContextWindow?: number;
 };
-
 type EmbeddingModel = {
   provider: string;
   name: string;
 };
 
-type Body = {
-  message: Message;
-  focusMode: string;
-  history: Array<[string, string, string[]?]>;
-  files: Array<string>;
-  chatModel: ChatModel;
-  systemModel?: SystemModel; // optional; defaults to chatModel
-  embeddingModel: EmbeddingModel;
-  selectedSystemPromptIds: string[]; // legacy name; treated as persona prompt IDs
-  userLocation?: string;
-  userProfile?: string;
-  messageImageIds?: string[];
-  messageImages?: Array<{
-    imageId: string;
-    fileName: string;
-    mimeType: string;
-  }>;
+// Body format sent by FetchStreamTransport from useStream.submit()
+type FetchStreamBody = {
+  input?: {
+    messages?: Array<{ role: string; content: string; id?: string }>;
+  };
+  config?: {
+    configurable?: {
+      thread_id?: string; // chatId
+      focusMode?: string;
+      chatModel?: ChatModel;
+      systemModel?: SystemModel;
+      embeddingModel?: EmbeddingModel;
+      selectedSystemPromptIds?: string[];
+      userLocation?: string;
+      userProfile?: string;
+      files?: string[];
+      fileIds?: string[];
+      messageImageIds?: string[];
+      messageImages?: Array<{
+        imageId: string;
+        fileName: string;
+        mimeType: string;
+      }>;
+      humanMessageId?: string; // user message ID for DB dedup/edit + respond-now
+    };
+  };
 };
 
-type TokenUsage = {
-  input_tokens: number;
-  output_tokens: number;
-  total_tokens: number;
-};
 type ModelStats = {
-  modelName: string; // legacy
-  responseTime?: number;
-  usage?: TokenUsage; // legacy total
   modelNameChat?: string;
   modelNameSystem?: string;
-  usageChat?: TokenUsage;
-  usageSystem?: TokenUsage;
+  responseTime?: number;
   usedLocation?: boolean;
   usedPersonalization?: boolean;
 };
 
-const handleEmitterEvents = async (
-  stream: EventEmitter,
-  writer: WritableStreamDefaultWriter,
-  encoder: TextEncoder,
-  aiMessageId: string,
-  chatId: string,
-  startTime: number,
-  userMessageId: string,
-  abortController: AbortController,
-  usedLocation: boolean,
-  usedPersonalization: boolean,
-) => {
-  let recievedMessage = '';
-  let sources: Record<string, unknown>[] = [];
-  let searchQuery: string | undefined;
-  let searchUrl: string | undefined;
-  let isStreamActive = true;
-  let writerClosed = false;
-
-  // Helper to safely write to the stream; aborts processing if the client has disconnected
-  const safeWrite = (data: string) => {
-    if (!isStreamActive || writerClosed || abortController.signal.aborted)
-      return;
-    writer.write(encoder.encode(data)).catch(() => {
-      if (!isStreamActive) return;
-      isStreamActive = false;
-      if (!abortController.signal.aborted) {
-        console.log('Write failed (client disconnected), aborting processing');
-        abortController.abort();
-      }
-    });
-  };
-
-  const safeClose = () => {
-    if (writerClosed) return;
-    writerClosed = true;
-    writer.close().catch(() => {});
-  };
-
-  // Keep-alive ping mechanism to prevent reverse proxy timeouts
-  const pingInterval = setInterval(() => {
-    if (isStreamActive && !abortController.signal.aborted) {
-      safeWrite(
-        JSON.stringify({
-          type: 'ping',
-          timestamp: Date.now(),
-        }) + '\n',
-      );
-    } else {
-      clearInterval(pingInterval);
-    }
-  }, 30000); // Send ping every 30 seconds
-
-  // Clean up ping interval if request is cancelled
-  abortController.signal.addEventListener('abort', () => {
-    isStreamActive = false;
-    clearInterval(pingInterval);
-  });
-
-  stream.on('data', (data) => {
-    if (!isStreamActive || abortController.signal.aborted) return;
-    const parsedData = JSON.parse(data);
-
-    if (parsedData.type === 'response') {
-      safeWrite(
-        JSON.stringify({
-          type: 'response',
-          data: parsedData.data,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-
-      recievedMessage += parsedData.data;
-    } else if (
-      parsedData.type === 'sources' ||
-      parsedData.type === 'sources_added'
-    ) {
-      // Capture the search query if available
-      if (parsedData.searchQuery) {
-        searchQuery = parsedData.searchQuery;
-      }
-      if (parsedData.searchUrl) {
-        searchUrl = parsedData.searchUrl;
-      }
-
-      safeWrite(
-        JSON.stringify({
-          type: parsedData.type,
-          data: parsedData.data,
-          searchQuery: parsedData.searchQuery,
-          messageId: aiMessageId,
-          searchUrl: searchUrl,
-        }) + '\n',
-      );
-
-      sources = parsedData.data;
-    } else if (
-      parsedData.type === 'tool_call_started' ||
-      parsedData.type === 'tool_call_success' ||
-      parsedData.type === 'tool_call_error'
-    ) {
-      // Forward new granular tool lifecycle events
-      safeWrite(
-        JSON.stringify({
-          type: parsedData.type,
-          data: parsedData.data,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-      if (parsedData.type === 'tool_call_started' && parsedData.data?.content) {
-        // Append initial placeholder markup to message content for persistence
-        recievedMessage += parsedData.data.content;
-      } else if (
-        parsedData.type === 'tool_call_success' ||
-        parsedData.type === 'tool_call_error'
-      ) {
-        // Rewrite existing ToolCall tag with final status (and error if applicable)
-        recievedMessage = updateToolCallMarkup(
-          recievedMessage,
-          parsedData.data.toolCallId,
-          {
-            status: parsedData.data.status,
-            error: parsedData.data.error,
-            extra: parsedData.data.extra,
-          },
-        );
-      }
-    } else if (
-      parsedData.type === 'subagent_started' ||
-      parsedData.type === 'subagent_completed' ||
-      parsedData.type === 'subagent_error' ||
-      parsedData.type === 'subagent_data'
-    ) {
-      // Forward subagent events to client
-      // console.log('API: Forwarding subagent event:', parsedData.type);
-      safeWrite(
-        JSON.stringify({
-          ...parsedData,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-
-      // Update received message for persistence if needed
-      if (parsedData.type === 'subagent_started') {
-        const markup = `<SubagentExecution id="${parsedData.executionId}" name="${encodeHtmlAttribute(parsedData.name ?? '')}" task="${encodeHtmlAttribute(parsedData.task ?? '')}" status="running"></SubagentExecution>\n`;
-        recievedMessage += markup;
-      } else if (parsedData.type === 'subagent_data') {
-        // Persist nested tool call markup inside SubagentExecution tags
-        const nestedEvent = parsedData.data;
-        const executionId = parsedData.subagentId;
-
-        if (
-          nestedEvent?.type === 'tool_call_started' &&
-          nestedEvent.data?.content
-        ) {
-          // Insert ToolCall markup inside the SubagentExecution tag
-          const subagentRegex = new RegExp(
-            `(<SubagentExecution\\s+id="${executionId}"[^>]*>)(.*?)(</SubagentExecution>)`,
-            'gs',
-          );
-          recievedMessage = recievedMessage.replace(
-            subagentRegex,
-            (match, openTag, content, closeTag) => {
-              return `${openTag}${content}${nestedEvent.data.content}\n${closeTag}`;
-            },
-          );
-        } else if (
-          nestedEvent?.type === 'tool_call_success' &&
-          nestedEvent.data?.toolCallId
-        ) {
-          recievedMessage = updateToolCallMarkup(
-            recievedMessage,
-            nestedEvent.data.toolCallId,
-            { status: 'success' },
-          );
-        } else if (
-          nestedEvent?.type === 'tool_call_error' &&
-          nestedEvent.data?.toolCallId
-        ) {
-          recievedMessage = updateToolCallMarkup(
-            recievedMessage,
-            nestedEvent.data.toolCallId,
-            {
-              status: 'error',
-              error: nestedEvent.data.error,
-            },
-          );
-        }
-      } else if (
-        parsedData.type === 'subagent_completed' ||
-        parsedData.type === 'subagent_error'
-      ) {
-        // Update the SubagentExecution markup in received message
-        const status =
-          parsedData.type === 'subagent_completed' ? 'success' : 'error';
-        const executionId = parsedData.id;
-        const subagentRegex = new RegExp(
-          `<SubagentExecution\\s+id="${executionId}"([^>]*)>(.*?)<\\/SubagentExecution>`,
-          'gs',
-        );
-        recievedMessage = recievedMessage.replace(
-          subagentRegex,
-          (match, attrs, innerContent) => {
-            let updatedAttrs = attrs
-              .replace(/status="[^"]*"/, `status="${status}"`)
-              .trim();
-            if (!updatedAttrs.includes('status=')) {
-              updatedAttrs += ` status="${status}"`;
-            }
-            if (parsedData.summary && status === 'success') {
-              const escapedSummary = parsedData.summary
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;');
-              updatedAttrs += ` summary="${escapedSummary}"`;
-            }
-            if (parsedData.error && status === 'error') {
-              const escapedError = parsedData.error
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;');
-              updatedAttrs += ` error="${escapedError}"`;
-            }
-            // Preserve inner content (ToolCall markup)
-            return `<SubagentExecution ${updatedAttrs}>${innerContent}</SubagentExecution>`;
-          },
-        );
-      }
-    } else if (parsedData.type === 'todo_update') {
-      // Forward todo_update event to client (transient UI, not persisted in message)
-      safeWrite(
-        JSON.stringify({
-          type: 'todo_update',
-          data: parsedData.data,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-    }
-  });
-
-  let modelStats: ModelStats = {
-    modelName: '',
-  };
-
-  stream.on('progress', (data) => {
-    if (!isStreamActive || abortController.signal.aborted) return;
-    const parsedData = JSON.parse(data);
-    if (parsedData.type === 'progress') {
-      safeWrite(
-        JSON.stringify({
-          type: 'progress',
-          data: parsedData.data,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-    }
-  });
-
-  stream.on('stats', (data) => {
-    if (!isStreamActive || abortController.signal.aborted) return;
-    const parsedData = JSON.parse(data);
-    if (parsedData.type === 'modelStats') {
-      modelStats = {
-        ...parsedData.data,
-        usedLocation,
-        usedPersonalization,
+// Serialize a LangChain message object to a flat dict for SSE output.
+// useStream reads stream.values.messages and expects: { type, id, content, tool_calls, ... }
+// LangChain .toDict() yields { type, data: { content, ... } } — the nested `data` format
+// is NOT understood by useStream, so we flatten it here.
+function serializeLCMessage(m: unknown): unknown {
+  if (m && typeof m === 'object') {
+    const msg = m as Record<string, unknown>;
+    if (typeof msg.toDict === 'function') {
+      const dict = msg.toDict() as Record<string, unknown>;
+      const data = (dict.data as Record<string, unknown>) ?? {};
+      // Return flat format that useStream and FetchStreamTransport understand
+      return {
+        type: dict.type,
+        id: data.id ?? msg.id,
+        content: data.content ?? msg.content ?? '',
+        additional_kwargs: data.additional_kwargs ?? {},
+        response_metadata: data.response_metadata ?? {},
+        tool_calls: data.tool_calls ?? [],
+        tool_call_id: data.tool_call_id,
+        name: data.name,
       };
-      // Forward stats to client for live updates
-      safeWrite(
-        JSON.stringify({
-          type: 'stats',
-          data: modelStats,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
     }
-  });
+  }
+  return m;
+}
 
-  stream.on('end', () => {
-    clearInterval(pingInterval);
-
-    const endTime = Date.now();
-    const duration = endTime - startTime;
-
-    modelStats = {
-      ...modelStats,
-      responseTime: duration,
-      usedLocation,
-      usedPersonalization,
-    };
-
-    safeWrite(
-      JSON.stringify({
-        type: 'messageEnd',
-        messageId: aiMessageId,
-        modelStats: modelStats,
-        searchQuery: searchQuery,
-        searchUrl: searchUrl,
-        usedLocation,
-        usedPersonalization,
-      }) + '\n',
-    );
-    isStreamActive = false;
-    safeClose();
-
-    // Clean up the abort controller reference
-    cleanupCancelToken(userMessageId);
-
-    db.insert(messagesSchema)
-      .values({
-        content: recievedMessage,
-        chatId: chatId,
-        messageId: aiMessageId,
-        role: 'assistant',
-        metadata: JSON.stringify({
-          createdAt: new Date(),
-          ...(sources && sources.length > 0 && { sources }),
-          ...(searchQuery && { searchQuery }),
-          modelStats: modelStats,
-          ...(searchUrl && { searchUrl }),
-          usedLocation,
-          usedPersonalization,
-        }),
-      })
-      .execute();
-  });
-  stream.on('error', (data) => {
-    clearInterval(pingInterval);
-
-    const parsedData = JSON.parse(data);
-    safeWrite(
-      JSON.stringify({
-        type: 'error',
-        data: parsedData.data,
-      }),
-    );
-    isStreamActive = false;
-    safeClose();
-  });
-};
+// Serialize a stream chunk for SSE output.
+// The 'values' mode contains LangChain BaseMessage objects in the messages array.
+// The 'messages' mode chunks are already plain dicts (LangGraph serializes them).
+// All other modes emit plain objects.
+function serializeChunk(mode: string, chunk: unknown): string {
+  if (mode === 'values' && chunk !== null && typeof chunk === 'object') {
+    const c = chunk as Record<string, unknown>;
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(c)) {
+      if (key === 'messages' && Array.isArray(value)) {
+        result[key] = value.map(serializeLCMessage);
+      } else {
+        result[key] = value;
+      }
+    }
+    return JSON.stringify(result);
+  }
+  return JSON.stringify(chunk);
+}
 
 const handleHistorySave = async (
-  message: Message,
+  chatId: string,
   humanMessageId: string,
+  humanContent: string,
   focusMode: string,
   files: string[],
   messageImages?: Array<{
@@ -446,15 +145,15 @@ const handleHistorySave = async (
   }>,
 ) => {
   const chat = await db.query.chats.findFirst({
-    where: eq(chats.id, message.chatId),
+    where: eq(chats.id, chatId),
   });
 
   if (!chat) {
     await db
       .insert(chats)
       .values({
-        id: message.chatId,
-        title: message.content,
+        id: chatId,
+        title: humanContent,
         createdAt: new Date().toString(),
         focusMode: focusMode,
         files: files.map(getFileDetails),
@@ -470,8 +169,8 @@ const handleHistorySave = async (
     await db
       .insert(messagesSchema)
       .values({
-        content: message.content,
-        chatId: message.chatId,
+        content: humanContent,
+        chatId: chatId,
         messageId: humanMessageId,
         role: 'user',
         metadata: JSON.stringify({
@@ -485,7 +184,7 @@ const handleHistorySave = async (
     await db
       .update(messagesSchema)
       .set({
-        content: message.content,
+        content: humanContent,
         metadata: JSON.stringify({
           createdAt: new Date(),
           ...(messageImages &&
@@ -494,12 +193,13 @@ const handleHistorySave = async (
       })
       .where(eq(messagesSchema.messageId, humanMessageId))
       .execute();
+    // Delete messages that came after this one (edit scenario)
     await db
       .delete(messagesSchema)
       .where(
         and(
           gt(messagesSchema.id, messageExists.id),
-          eq(messagesSchema.chatId, message.chatId),
+          eq(messagesSchema.chatId, chatId),
         ),
       )
       .execute();
@@ -509,21 +209,51 @@ const handleHistorySave = async (
 export const POST = async (req: Request) => {
   try {
     const startTime = Date.now();
-    const body = (await req.json()) as Body;
-    const { message, selectedSystemPromptIds } = body;
+    const body = (await req.json()) as FetchStreamBody;
 
-    if (
-      message.content === '' &&
-      !(body.messageImageIds && body.messageImageIds.length > 0)
-    ) {
+    const input = body.input ?? {};
+    const configurable = body.config?.configurable ?? {};
+
+    const {
+      thread_id: chatId,
+      focusMode = 'webSearch',
+      chatModel: chatModelSpec,
+      systemModel: systemModelSpec,
+      embeddingModel: embeddingModelSpec,
+      selectedSystemPromptIds = [],
+      userLocation,
+      userProfile,
+      files = [],
+      fileIds,
+      messageImageIds,
+      messageImages,
+      humanMessageId: requestedHumanMessageId,
+    } = configurable;
+
+    // Extract the new human message from input
+    const inputMessages = input.messages ?? [];
+    const lastInputMessage = inputMessages[inputMessages.length - 1];
+    const humanContent = lastInputMessage?.content ?? '';
+
+    if (!chatId) {
       return Response.json(
-        {
-          message: 'Please provide a message to process',
-        },
+        { error: 'Missing thread_id (chatId)' },
         { status: 400 },
       );
     }
 
+    if (!humanContent && !(messageImageIds && messageImageIds.length > 0)) {
+      return Response.json(
+        { error: 'Please provide a message to process' },
+        { status: 400 },
+      );
+    }
+
+    const humanMessageId =
+      requestedHumanMessageId ?? crypto.randomBytes(7).toString('hex');
+    const aiMessageId = crypto.randomBytes(7).toString('hex');
+
+    // Build LLMs
     const [chatModelProviders, embeddingModelProviders] = await Promise.all([
       getAvailableChatModelProviders(),
       getAvailableEmbeddingModelProviders(),
@@ -531,75 +261,72 @@ export const POST = async (req: Request) => {
 
     const chatModelProvider =
       chatModelProviders[
-        body.chatModel?.provider || Object.keys(chatModelProviders)[0]
+        chatModelSpec?.provider || Object.keys(chatModelProviders)[0]
       ];
-    const chatModel =
-      chatModelProvider[
-        body.chatModel?.name || Object.keys(chatModelProvider)[0]
+    const chatModelDef =
+      chatModelProvider?.[
+        chatModelSpec?.name || Object.keys(chatModelProvider ?? {})[0]
       ];
 
     const embeddingProvider =
       embeddingModelProviders[
-        body.embeddingModel?.provider || Object.keys(embeddingModelProviders)[0]
+        embeddingModelSpec?.provider || Object.keys(embeddingModelProviders)[0]
       ];
-    const embeddingModel =
-      embeddingProvider[
-        body.embeddingModel?.name || Object.keys(embeddingProvider)[0]
+    const embeddingModelDef =
+      embeddingProvider?.[
+        embeddingModelSpec?.name || Object.keys(embeddingProvider ?? {})[0]
       ];
 
     let chatLlm: BaseChatModel | undefined;
     let systemLlm: BaseChatModel | undefined;
-    const embedding = new CachedEmbeddings(
-      embeddingModel.model,
-      body.embeddingModel?.provider || Object.keys(embeddingModelProviders)[0],
-      body.embeddingModel?.name || Object.keys(embeddingProvider)[0],
-    );
 
-    if (body.chatModel?.provider === 'custom_openai') {
+    const embedding = embeddingModelDef
+      ? new CachedEmbeddings(
+          embeddingModelDef.model,
+          embeddingModelSpec?.provider ||
+            Object.keys(embeddingModelProviders)[0],
+          embeddingModelSpec?.name || Object.keys(embeddingProvider ?? {})[0],
+        )
+      : undefined;
+
+    if (chatModelSpec?.provider === 'custom_openai') {
       chatLlm = new ChatOpenAI({
         apiKey: getCustomOpenaiApiKey(),
         modelName: getCustomOpenaiModelName(),
-        // temperature: 0.7,
-        configuration: {
-          baseURL: getCustomOpenaiApiUrl(),
-        },
+        configuration: { baseURL: getCustomOpenaiApiUrl() },
       }) as unknown as BaseChatModel;
-    } else if (chatModelProvider && chatModel) {
-      chatLlm = chatModel.model;
-
-      // Set context window size for Ollama models
+    } else if (chatModelProvider && chatModelDef) {
+      chatLlm = chatModelDef.model;
       if (
         chatLlm instanceof ChatOllama &&
-        body.chatModel?.provider === 'ollama'
+        chatModelSpec?.provider === 'ollama'
       ) {
-        chatLlm.numCtx = body.chatModel.ollamaContextWindow || 2048;
+        chatLlm.numCtx = chatModelSpec.ollamaContextWindow || 2048;
       }
     }
 
-    // Build System LLM (defaults to Chat LLM if not provided by client)
-    if (body.systemModel) {
-      const sysProvider = body.systemModel.provider;
-      const sysName = body.systemModel.name;
+    // Build System LLM (defaults to Chat LLM if not specified)
+    if (systemModelSpec) {
+      const sysProvider = systemModelSpec.provider;
+      const sysName = systemModelSpec.name;
       if (sysProvider === 'custom_openai') {
         systemLlm = new ChatOpenAI({
           apiKey: getCustomOpenaiApiKey(),
           modelName: getCustomOpenaiModelName(),
-          configuration: {
-            baseURL: getCustomOpenaiApiUrl(),
-          },
+          configuration: { baseURL: getCustomOpenaiApiUrl() },
         }) as unknown as BaseChatModel;
       } else if (
         chatModelProviders[sysProvider] &&
         chatModelProviders[sysProvider][sysName]
       ) {
         systemLlm = chatModelProviders[sysProvider][sysName]
-          .model as unknown as BaseChatModel | undefined;
+          .model as unknown as BaseChatModel;
       }
       if (
         systemLlm instanceof ChatOllama &&
-        body.systemModel?.provider === 'ollama'
+        systemModelSpec.provider === 'ollama'
       ) {
-        systemLlm.numCtx = body.systemModel.ollamaContextWindow || 2048;
+        systemLlm.numCtx = systemModelSpec.ollamaContextWindow || 2048;
       }
     }
     if (!systemLlm) systemLlm = chatLlm;
@@ -607,7 +334,6 @@ export const POST = async (req: Request) => {
     if (!chatLlm) {
       return Response.json({ error: 'Invalid chat model' }, { status: 400 });
     }
-
     if (!embedding) {
       return Response.json(
         { error: 'Invalid embedding model' },
@@ -615,125 +341,315 @@ export const POST = async (req: Request) => {
       );
     }
 
-    const humanMessageId =
-      message.messageId ?? crypto.randomBytes(7).toString('hex');
-    const aiMessageId = crypto.randomBytes(7).toString('hex');
-
-    const history: BaseMessage[] = body.history.map((msg) => {
-      if (msg[0] === 'human') {
-        // If this history entry has image IDs, build a multimodal message
-        if (msg[2] && msg[2].length > 0) {
-          return buildMultimodalHumanMessage(msg[1], msg[2]);
-        }
-        return new HumanMessage({
-          content: msg[1],
-        });
-      } else {
-        return new AIMessage({
-          content: msg[1],
-        });
-      }
-    });
-
-    const handler = searchHandlers[body.focusMode];
-
-    if (!handler) {
-      return Response.json(
-        {
-          message: 'Invalid focus mode',
-        },
-        { status: 400 },
-      );
-    }
-
-    // System instructions deprecated; only use persona prompts
+    // Persona instructions
     const personaInstructionsContent = await getPersonaInstructionsOnly(
       selectedSystemPromptIds || [],
     );
-    const responseStream = new TransformStream();
-    const writer = responseStream.writable.getWriter();
-    const encoder = new TextEncoder();
 
-    // --- Cancellation logic ---
+    // Build personalization section for system prompt
+    let personalizationSection = '';
+    if (userLocation) {
+      personalizationSection += `<userLocation>\n${userLocation}\n</userLocation>\n`;
+    }
+    if (userProfile) {
+      personalizationSection += `<userProfile>\n${userProfile}\n</userProfile>\n`;
+    }
+
+    // Setup cancellation
     const abortController = new AbortController();
-    registerCancelToken(message.messageId, abortController);
-
-    // Register retrieval-only controller and clear soft-stop at start
+    registerCancelToken(humanMessageId, abortController);
     const retrievalController = new AbortController();
-    registerRetrieval(message.messageId, retrievalController);
-    clearSoftStop(message.messageId);
+    registerRetrieval(humanMessageId, retrievalController);
+    clearSoftStop(humanMessageId);
 
-    // Detect client disconnection via the request's built-in abort signal
     req.signal.addEventListener('abort', () => {
       if (!abortController.signal.aborted) {
-        console.log('Client disconnected, aborting all processing');
         retrievalController.abort();
         abortController.abort();
       }
     });
 
     abortController.signal.addEventListener('abort', () => {
-      console.log('Stream aborted, sending cancel event');
-      // Also abort retrieval to stop LangGraph agent processing
       if (!retrievalController.signal.aborted) {
         retrievalController.abort();
       }
-      writer
-        .write(
-          encoder.encode(
-            JSON.stringify({
-              type: 'error',
-              data: 'Request cancelled by user',
-            }),
-          ),
-        )
-        .catch(() => {});
-      writer.close().catch(() => {});
-      cleanupCancelToken(message.messageId);
-      cleanupRun(message.messageId);
+      cleanupCancelToken(humanMessageId);
+      cleanupRun(humanMessageId);
     });
 
-    // Pass the abort signal to the search handler
-    const stream = await handler.searchAndAnswer(
-      message.content,
-      history,
-      message.chatId,
-      chatLlm!,
-      systemLlm!,
-      embedding,
-      body.files,
-      abortController.signal,
-      personaInstructionsContent,
-      body.focusMode,
-      message.messageId,
-      retrievalController.signal,
-      {
-        location: body.userLocation,
-        profile: body.userProfile,
-      },
-      body.messageImageIds,
-    );
-
-    handleEmitterEvents(
-      stream,
-      writer,
-      encoder,
-      aiMessageId,
-      message.chatId,
-      startTime,
-      message.messageId,
-      abortController,
-      body.userLocation ? body.userLocation.length > 0 : false,
-      body.userProfile ? body.userProfile.length > 0 : false,
-    );
-
-    handleHistorySave(
-      message,
+    // Save user message first (ensures edit truncation before history load)
+    await handleHistorySave(
+      chatId,
       humanMessageId,
-      body.focusMode,
-      body.files,
-      body.messageImages,
+      humanContent,
+      focusMode,
+      files,
+      messageImages,
     );
+
+    // Load chat history from DB
+    const dbMessages = await db.query.messages.findMany({
+      where: eq(messagesSchema.chatId, chatId),
+      orderBy: [asc(messagesSchema.id)],
+    });
+
+    // Build LangChain message history from DB records
+    const historyMessages = dbMessages.map((m) => {
+      if (m.role === 'user') {
+        const meta = m.metadata as Record<string, unknown> | null;
+        const images = meta?.images as
+          | Array<{ imageId: string; fileName: string; mimeType: string }>
+          | undefined;
+        if (images && images.length > 0) {
+          return buildMultimodalHumanMessage(
+            m.content,
+            images.map((img) => img.imageId),
+          );
+        }
+        return new HumanMessage({ content: m.content });
+      }
+      return new AIMessage({ content: m.content });
+    });
+
+    // The last DB record is the user message we just saved (plain text).
+    // Replace it with the full (possibly multimodal) message object.
+    const currentMessage =
+      messageImageIds && messageImageIds.length > 0
+        ? buildMultimodalHumanMessage(humanContent, messageImageIds)
+        : new HumanMessage({ content: humanContent });
+
+    const historyWithoutCurrentMsg =
+      dbMessages.length > 0 &&
+      dbMessages[dbMessages.length - 1].messageId === humanMessageId
+        ? historyMessages.slice(0, -1)
+        : historyMessages;
+
+    const allMessages = [...historyWithoutCurrentMsg, currentMessage];
+
+    // Create agent per-request (supports dynamic model + personalization)
+    const agent = createAgent({
+      focusMode,
+      chatLlm,
+      fileIds: fileIds ?? files,
+      messagesCount: dbMessages.length,
+      query: humanContent,
+      personaInstructions: personaInstructionsContent,
+      personalizationSection,
+      checkpointer: new MemorySaver(),
+    });
+
+    // Setup SSE response stream
+    const responseStream = new TransformStream<Uint8Array, Uint8Array>();
+    const sseWriter = responseStream.writable.getWriter();
+    let isStreamActive = true;
+    let writerClosed = false;
+
+    const safeWrite = (data: string) => {
+      if (!isStreamActive || writerClosed || abortController.signal.aborted)
+        return;
+      const bytes = new TextEncoder().encode(data);
+      sseWriter.write(bytes).catch(() => {
+        if (!isStreamActive) return;
+        isStreamActive = false;
+        if (!abortController.signal.aborted) {
+          abortController.abort();
+        }
+      });
+    };
+
+    const safeClose = () => {
+      if (writerClosed) return;
+      writerClosed = true;
+      sseWriter.close().catch(() => {});
+    };
+
+    abortController.signal.addEventListener('abort', () => {
+      isStreamActive = false;
+      safeClose();
+    });
+
+    // Keep-alive pings to prevent reverse proxy timeouts
+    const pingInterval = setInterval(() => {
+      if (isStreamActive && !abortController.signal.aborted) {
+        safeWrite(
+          `event: metadata\ndata: ${JSON.stringify({ ping: Date.now() })}\n\n`,
+        );
+      } else {
+        clearInterval(pingInterval);
+      }
+    }, 25000);
+
+    // Run the agent stream asynchronously
+    (async () => {
+      let finalValues: Record<string, unknown> | null = null;
+      let sources: unknown[] = [];
+      let searchQuery: string | undefined;
+
+      // Per-request thread ID for LangGraph (MemorySaver scope)
+      const perRequestThreadId = `${chatId}:${aiMessageId}`;
+
+      // Emit initial metadata so useStream captures thread/run IDs
+      safeWrite(
+        `event: metadata\ndata: ${JSON.stringify({
+          run_id: aiMessageId,
+          thread_id: perRequestThreadId,
+        })}\n\n`,
+      );
+
+      try {
+        const agentStream = await agent.stream(
+          { messages: allMessages },
+          {
+            streamMode: ['custom', 'messages', 'values'],
+            subgraphs: true,
+            signal: abortController.signal,
+            configurable: {
+              thread_id: perRequestThreadId,
+              systemLlm,
+              embeddings: embedding,
+              fileIds: fileIds ?? files,
+              messageId: humanMessageId,
+              retrievalSignal: retrievalController.signal,
+            },
+          },
+        );
+
+        for await (const item of agentStream) {
+          if (abortController.signal.aborted) break;
+
+          // With streamMode array + subgraphs: true → [ns, mode, chunk] tuple
+          const [ns, mode, chunk] = item as [string[], string, unknown];
+
+          const event = ns && ns.length > 0 ? `${mode}|${ns.join('|')}` : mode;
+
+          // Collect root-namespace events for DB persistence
+          if (!ns || ns.length === 0) {
+            if (mode === 'values') {
+              finalValues = chunk as Record<string, unknown>;
+            } else if (mode === 'custom') {
+              const c = chunk as Record<string, unknown> | null;
+              if (c?.type === 'sources_added' && Array.isArray(c.data)) {
+                sources = c.data;
+                if (typeof c.searchQuery === 'string') {
+                  searchQuery = c.searchQuery;
+                }
+              }
+            }
+          }
+
+          safeWrite(
+            `event: ${event}\ndata: ${serializeChunk(mode, chunk)}\n\n`,
+          );
+        }
+      } catch (err: unknown) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        const isAbort =
+          err instanceof Error &&
+          (err.name === 'AbortError' ||
+            err.name === 'CanceledError' ||
+            // undici body timeout or fetch termination from slow local models
+            (err.name === 'TypeError' && errMsg === 'terminated') ||
+            (err as { code?: string }).code === 'UND_ERR_BODY_TIMEOUT' ||
+            // LM Studio may unload model during long requests
+            errMsg.includes('Model unloaded'));
+        if (isAbort) {
+          // Cancelled, timed out, or model unloaded — close stream without emitting an error event
+          console.warn('Agent stream ended early:', errMsg);
+        } else {
+          console.error('Agent stream error:', err);
+          const msg = err instanceof Error ? err.message : 'Unknown error';
+          safeWrite(
+            `event: error\ndata: ${JSON.stringify({
+              error: 'Error',
+              message: msg,
+            })}\n\n`,
+          );
+        }
+      } finally {
+        clearInterval(pingInterval);
+
+        const endTime = Date.now();
+        const modelStats: ModelStats = {
+          modelNameChat: chatModelSpec?.name ?? '',
+          modelNameSystem: systemModelSpec?.name ?? chatModelSpec?.name ?? '',
+          responseTime: endTime - startTime,
+          usedLocation: !!(userLocation && userLocation.length > 0),
+          usedPersonalization: !!(userProfile && userProfile.length > 0),
+        };
+
+        // Emit completion event for the frontend
+        safeWrite(
+          `event: custom\ndata: ${JSON.stringify({
+            type: 'messageEnd',
+            messageId: aiMessageId,
+            humanMessageId,
+            chatId,
+            modelStats,
+            searchQuery,
+          })}\n\n`,
+        );
+
+        isStreamActive = false;
+        safeClose();
+        cleanupCancelToken(humanMessageId);
+        cleanupRun(humanMessageId);
+
+        // Persist AI response to DB
+        if (!abortController.signal.aborted && finalValues) {
+          try {
+            const msgs = (finalValues.messages as unknown[]) ?? [];
+            let lastAiContent = '';
+
+            for (let i = msgs.length - 1; i >= 0; i--) {
+              const m = msgs[i] as Record<string, unknown>;
+              const serialized = serializeLCMessage(m) as Record<
+                string,
+                unknown
+              >;
+              const mType = serialized.type ?? serialized.role;
+              if (mType === 'ai' || mType === 'assistant') {
+                // .toDict() nests fields under `data`; plain objects have content at top-level
+                const data =
+                  (serialized.data as Record<string, unknown> | undefined) ??
+                  serialized;
+                const content = data.content;
+                if (typeof content === 'string') {
+                  lastAiContent = content;
+                } else if (Array.isArray(content)) {
+                  lastAiContent = (
+                    content as Array<{ type?: string; text?: string }>
+                  )
+                    .filter((c) => c?.type === 'text')
+                    .map((c) => c.text ?? '')
+                    .join('');
+                }
+                break;
+              }
+            }
+
+            if (lastAiContent && lastAiContent.trim().length > 0) {
+              await db
+                .insert(messagesSchema)
+                .values({
+                  content: lastAiContent,
+                  chatId: chatId,
+                  messageId: aiMessageId,
+                  role: 'assistant',
+                  metadata: JSON.stringify({
+                    createdAt: new Date(),
+                    ...(sources.length > 0 && { sources }),
+                    ...(searchQuery && { searchQuery }),
+                    modelStats,
+                  }),
+                })
+                .execute();
+            }
+          } catch (dbErr) {
+            console.error('Failed to save AI message to DB:', dbErr);
+          }
+        }
+      }
+    })();
 
     return new Response(responseStream.readable, {
       headers: {
@@ -745,7 +661,7 @@ export const POST = async (req: Request) => {
   } catch (err) {
     console.error('An error occurred while processing chat request:', err);
     return Response.json(
-      { message: 'An error occurred while processing chat request' },
+      { error: 'An error occurred while processing chat request' },
       { status: 500 },
     );
   }

@@ -50,6 +50,8 @@ export const loadLMStudioChatModels = async () => {
           apiKey: 'lm-studio',
           configuration: {
             baseURL: ensureV1Endpoint(endpoint),
+            // Local models can be very slow — allow up to 30 minutes for long requests
+            timeout: 1800000,
           },
           modelName: model.id,
           // temperature: 0.7,

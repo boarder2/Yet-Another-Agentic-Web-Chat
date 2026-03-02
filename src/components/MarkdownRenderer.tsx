@@ -4,14 +4,15 @@ import { cn } from '@/lib/utils';
 import {
   CheckCheck,
   Copy as CopyIcon,
-  Search,
-  FileText,
   Globe,
+  File,
+  FileText,
+  Link,
   Settings,
   Image as ImageIcon,
   ScanEye,
   BotIcon,
-  TvIcon,
+  YoutubeIcon,
   X,
   Loader2,
 } from 'lucide-react';
@@ -139,11 +140,41 @@ const splitByThinkBlocks = (content: string): ContentSegment[] => {
   }
 
   if (lastIndex < content.length) {
-    segments.push({
-      type: 'markdown',
-      content: content.slice(lastIndex),
-      id: `md-${segments.length}`,
-    });
+    const remaining = content.slice(lastIndex);
+    // Handle unclosed <think> at end of content (streaming / partial state).
+    // If there's an opening <think> tag but no closing </think>, treat the
+    // content inside the tag as a think segment (renders as a ThinkBox).
+    const openTagIndex = remaining.search(/<think(?:\s[^>]*)?>/);
+    if (
+      openTagIndex !== -1 &&
+      !remaining.slice(openTagIndex).includes('</think>')
+    ) {
+      const beforeThink = remaining.slice(0, openTagIndex);
+      const afterTag = remaining.slice(
+        openTagIndex +
+          remaining.slice(openTagIndex).match(/<think(?:\s[^>]*)?>/)![0].length,
+      );
+      if (beforeThink.trim()) {
+        segments.push({
+          type: 'markdown',
+          content: beforeThink,
+          id: `md-${segments.length}`,
+        });
+      }
+      if (afterTag.trim()) {
+        segments.push({
+          type: 'think',
+          content: afterTag.trim(),
+          id: `think-${thinkCounter++}`,
+        });
+      }
+    } else {
+      segments.push({
+        type: 'markdown',
+        content: remaining,
+        id: `md-${segments.length}`,
+      });
+    }
   }
 
   return segments;
@@ -189,13 +220,13 @@ const ToolCall = ({
     switch (toolType) {
       case 'search':
       case 'web_search':
-        return <Search size={16} className="text-accent" />;
+        return <Globe size={16} className="text-accent" />;
       case 'file':
       case 'file_search':
-        return <FileText size={16} className="text-green-600" />;
+        return <File size={16} className="text-green-600" />;
       case 'url':
       case 'url_summarization':
-        return <Globe size={16} className="text-purple-600" />;
+        return <Link size={16} className="text-purple-600" />;
       case 'image':
       case 'image_search':
         return <ImageIcon size={16} className="text-blue-600" />;
@@ -204,7 +235,7 @@ const ToolCall = ({
       case 'firefoxAI':
         return <BotIcon size={16} className="text-indigo-600" />;
       case 'youtube_transcript':
-        return <TvIcon size={16} className="text-red-600" />;
+        return <YoutubeIcon size={16} className="text-red-600" />;
       case 'pdf_loader':
         return <FileText size={16} className="text-red-600" />;
       default:
@@ -243,8 +274,7 @@ const ToolCall = ({
         <>
           <span className="mr-2">{getIcon(type)}</span>
           <span>
-            Analyzing {urlCount} web page{urlCount === 1 ? '' : 's'} for
-            additional details
+            Reading {urlCount} {urlCount === 1 ? 'page' : 'pages'}
           </span>
         </>
       );
@@ -294,7 +324,7 @@ const ToolCall = ({
       return (
         <>
           <span className="mr-2">{getIcon(type)}</span>
-          <span>Firefox AI detected, tools disabled</span>
+          <span>Using Firefox AI</span>
         </>
       );
     }
@@ -340,9 +370,7 @@ const ToolCall = ({
         </div>
         <div className="flex items-center h-5">
           {status === 'running' && (
-            <div className="w-4 h-4">
-              <Loader2 className="animate-spin text-fg/70" />
-            </div>
+            <Loader2 size={16} className="animate-spin text-accent" />
           )}
           {status === 'success' && (
             <CheckCheck size={16} className="text-green-500" />

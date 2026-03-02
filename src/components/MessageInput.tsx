@@ -191,6 +191,7 @@ const MessageInput = ({
                 key={img.imageId}
                 className="relative flex-shrink-0 group/thumb"
               >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={`/api/uploads/images/${img.imageId}`}
                   alt={img.fileName}

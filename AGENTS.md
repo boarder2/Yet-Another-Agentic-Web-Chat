@@ -11,7 +11,7 @@ User submits a query → `/api/chat` route → `createDeepAgent` (from `deepagen
 - **Agent construction**: `createDeepAgent` in `src/lib/agent/factory.ts` — static at startup, model injected per-request
 - **Streaming**: LangGraph SSE format (`event: {mode}\ndata: {json}\n\n`); subgraph events include namespace (`event: {mode}|{ns_0}|{ns_1}`)
 - **Checkpointing**: Per-request `MemorySaver` scoped to `chatId:aiMessageId` thread; full chat history loaded from DB and passed as `allMessages`
-- **Subagents**: `task` tool built into `createDeepAgent`; deep research subagent defined in `src/lib/agent/subagents.ts`; frontend identifies via `subagentToolNames: ['task']`
+- **Subagents**: `task` tool built into `createDeepAgent`; deep research subagent defined in `src/lib/agent/subagents.ts`; frontend identifies via `subagentToolNames: ['task']` and shows an immediate placeholder from the `task` tool call until live `stream.subagents` state arrives
 - **Todos**: `TodoListMiddleware` included by default; state key `todos: Array<{ content, status }>` surfaced via `stream.values.todos`
 
 ### Technology Stack
@@ -114,13 +114,7 @@ User submits a query → `/api/chat` route → `createDeepAgent` (from `deepagen
 
 Detailed documentation lives in skills — loaded on demand when relevant:
 
-- **api-endpoints** — Request/response schemas, payload formats, data flow, model routing details
-- **streaming-events** — Tool call lifecycle events, todo updates, subagent events, markup mutation
-- **subagent-architecture** — Deep research subagent design, SubagentExecutor, event flow, tool restrictions
 - **image-attachments** — Upload/serving endpoints, multimodal LLM messages, clipboard paste, security
-- **adding-features** — Step-by-step patterns for adding tools, LLM providers, API routes, focus modes
-- **frontend-architecture** — Component hierarchy, ChatWindow state, streaming dispatch, styling conventions
-- **prompt-system** — Focus mode prompts, citation templates, personalization injection, system prompt management
 - **test-automation** — Static analysis, curl API testing, playwright-cli browser automation
 - **playwright-cli** — Browser interaction tool reference
 

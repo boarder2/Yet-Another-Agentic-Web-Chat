@@ -438,6 +438,9 @@ export const POST = async (req: Request) => {
       checkpointer: new MemorySaver(),
     });
 
+    // Monotonic sequence counter for event ordering
+    let eventSeq = 0;
+
     // Setup SSE response stream
     const responseStream = new TransformStream<Uint8Array, Uint8Array>();
     const sseWriter = responseStream.writable.getWriter();
@@ -468,12 +471,73 @@ export const POST = async (req: Request) => {
       safeClose();
     });
 
+    // Inject event metadata (__threadId, __streamId, __seq) into any data object
+    const injectEventMeta = (
+      data: Record<string, unknown>,
+      streamId: string,
+    ): Record<string, unknown> => ({
+      ...data,
+      __threadId: chatId,
+      __streamId: streamId,
+      __seq: eventSeq++,
+    });
+
+    // Write an SSE event with metadata injected into the data payload
+    const writeEvent = (
+      event: string,
+      data: Record<string, unknown>,
+      streamId: string,
+    ) => {
+      safeWrite(
+        `event: ${event}\ndata: ${JSON.stringify(injectEventMeta(data, streamId))}\n\n`,
+      );
+    };
+
+    // Write an agent-stream event, using serializeChunk then injecting metadata
+    const writeStreamEvent = (
+      event: string,
+      mode: string,
+      chunk: unknown,
+      streamId: string,
+    ) => {
+      const serialized = JSON.parse(serializeChunk(mode, chunk));
+      let withMeta: unknown;
+
+      if (mode === 'messages' && Array.isArray(serialized)) {
+        // messages mode produces [serializedMessage, metadata] arrays.
+        // Inject event metadata into the metadata object (second element)
+        // to preserve the array structure that useStream expects.
+        const [msg, meta, ...rest] = serialized;
+        withMeta = [
+          msg,
+          {
+            ...(meta && typeof meta === 'object' ? meta : {}),
+            __threadId: chatId,
+            __streamId: streamId,
+            __seq: eventSeq++,
+          },
+          ...rest,
+        ];
+      } else if (
+        typeof serialized === 'object' &&
+        serialized !== null &&
+        !Array.isArray(serialized)
+      ) {
+        withMeta = injectEventMeta(
+          serialized as Record<string, unknown>,
+          streamId,
+        );
+      } else {
+        withMeta = injectEventMeta({ __data: serialized }, streamId);
+      }
+
+      safeWrite(`event: ${event}\ndata: ${JSON.stringify(withMeta)}\n\n`);
+    };
+
     // Keep-alive pings to prevent reverse proxy timeouts
     const pingInterval = setInterval(() => {
       if (isStreamActive && !abortController.signal.aborted) {
-        safeWrite(
-          `event: metadata\ndata: ${JSON.stringify({ ping: Date.now() })}\n\n`,
-        );
+        writeEvent('metadata', { ping: Date.now() }, aiMessageId);
       } else {
         clearInterval(pingInterval);
       }
@@ -489,11 +553,10 @@ export const POST = async (req: Request) => {
       const perRequestThreadId = `${chatId}:${aiMessageId}`;
 
       // Emit initial metadata so useStream captures thread/run IDs
-      safeWrite(
-        `event: metadata\ndata: ${JSON.stringify({
-          run_id: aiMessageId,
-          thread_id: perRequestThreadId,
-        })}\n\n`,
+      writeEvent(
+        'metadata',
+        { run_id: aiMessageId, thread_id: perRequestThreadId },
+        aiMessageId,
       );
 
       try {
@@ -537,9 +600,8 @@ export const POST = async (req: Request) => {
             }
           }
 
-          safeWrite(
-            `event: ${event}\ndata: ${serializeChunk(mode, chunk)}\n\n`,
-          );
+          const streamId = ns && ns.length > 0 ? ns.join(':') : aiMessageId;
+          writeStreamEvent(event, mode, chunk, streamId);
         }
       } catch (err: unknown) {
         const errMsg = err instanceof Error ? err.message : String(err);
@@ -558,12 +620,7 @@ export const POST = async (req: Request) => {
         } else {
           console.error('Agent stream error:', err);
           const msg = err instanceof Error ? err.message : 'Unknown error';
-          safeWrite(
-            `event: error\ndata: ${JSON.stringify({
-              error: 'Error',
-              message: msg,
-            })}\n\n`,
-          );
+          writeEvent('error', { error: 'Error', message: msg }, aiMessageId);
         }
       } finally {
         clearInterval(pingInterval);
@@ -578,15 +635,17 @@ export const POST = async (req: Request) => {
         };
 
         // Emit completion event for the frontend
-        safeWrite(
-          `event: custom\ndata: ${JSON.stringify({
+        writeEvent(
+          'custom',
+          {
             type: 'messageEnd',
             messageId: aiMessageId,
             humanMessageId,
             chatId,
             modelStats,
             searchQuery,
-          })}\n\n`,
+          },
+          aiMessageId,
         );
 
         isStreamActive = false;

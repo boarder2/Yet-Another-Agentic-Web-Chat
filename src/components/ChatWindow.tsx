@@ -100,22 +100,41 @@ interface LGMessage {
     args: Record<string, unknown>;
   }>;
   tool_call_id?: string;
+  status?: 'success' | 'error';
   images?: ImageAttachment[];
+  // Event metadata injected by the backend for ordering and association
+  __threadId?: string;
+  __streamId?: string;
+  __seq?: number;
 }
 
 interface SubagentToolCallData {
   id?: string;
-  name: string;
-  args?: Record<string, unknown>;
-  output?: unknown;
+  index?: number;
+  state?: 'pending' | 'completed' | 'error';
+  call?: {
+    name: string;
+    args?: Record<string, unknown> | string;
+  };
+  result?: {
+    content?: unknown;
+    status?: 'success' | 'error';
+  };
 }
 
 interface SubagentData {
-  status: 'running' | 'complete' | 'error';
+  status: 'pending' | 'running' | 'complete' | 'error';
   result?: string;
   error?: unknown;
   toolCall?: { args?: { subagent_type?: string; description?: string } };
   toolCalls?: SubagentToolCallData[];
+  messages?: LGMessage[];
+}
+
+interface PendingSubagentToolCallData {
+  id: string;
+  subagentType?: string;
+  description?: string;
 }
 
 interface StreamRef {
@@ -142,6 +161,44 @@ function extractText(content: unknown): string {
       .join('');
   }
   return '';
+}
+
+function extractContentText(content: unknown): string {
+  const text = extractText(content);
+  if (text) return text;
+  if (content == null) return '';
+
+  try {
+    return JSON.stringify(content);
+  } catch {
+    return String(content);
+  }
+}
+
+function parseToolArgs(
+  args: Record<string, unknown> | string | undefined,
+): Record<string, unknown> {
+  if (!args) return {};
+  if (typeof args === 'string') {
+    try {
+      const parsed = JSON.parse(args) as Record<string, unknown>;
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return args;
+}
+
+function buildSubagentResponseText(messages: LGMessage[] | undefined): string {
+  if (!messages || messages.length === 0) return '';
+
+  return messages
+    .filter((message) => message.type === 'ai')
+    .map((message) => extractText(message.content))
+    .filter(Boolean)
+    .join('\n\n')
+    .trim();
 }
 
 const checkConfig = async (
@@ -434,9 +491,53 @@ const ChatWindow = ({ id }: { id?: string }) => {
 
   // Ref to track current stream messages for use in callbacks
   const streamMessagesRef = useRef<LGMessage[]>([]);
+  const submitInFlightRef = useRef(false);
   useEffect(() => {
     streamMessagesRef.current = stream.messages ?? [];
   }, [stream.messages]);
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'development') return;
+
+    try {
+      if (localStorage.getItem('debugStreamOrdering') !== 'true') return;
+
+      const rootMessages = (stream.messages ?? []).map((message, index) => ({
+        index,
+        id: message.id,
+        type: message.type,
+        content: extractText(message.content).slice(0, 120),
+        toolCalls:
+          message.tool_calls?.map((toolCall) => ({
+            id: toolCall.id,
+            name: toolCall.name,
+          })) ?? [],
+      }));
+
+      const subagentExecutions = Array.from(
+        stream.subagents?.entries() ?? [],
+      ).map(([id, subagent]) => ({
+        id,
+        status: subagent.status,
+        task: subagent.toolCall?.args?.description,
+        toolCalls:
+          subagent.toolCalls?.map((toolCall) => ({
+            id: toolCall.id,
+            name: toolCall.call?.name,
+            state: toolCall.state,
+          })) ?? [],
+        responsePreview: buildSubagentResponseText(subagent.messages).slice(
+          0,
+          120,
+        ),
+      }));
+
+      console.debug('[stream-order] root-messages', rootMessages);
+      console.debug('[stream-order] subagents', subagentExecutions);
+    } catch (error) {
+      console.debug('[stream-order] failed to log ordering state', error);
+    }
+  }, [stream.messages, stream.subagents]);
 
   // Transform stream.messages (LangGraph format) → Message[] (display format)
   const messages = useMemo((): Message[] => {
@@ -445,24 +546,32 @@ const ChatWindow = ({ id }: { id?: string }) => {
 
     const result: Message[] = [];
 
-    // Collect completed tool call IDs (from ToolMessages)
-    const completedToolCallIds = new Set<string>(
+    const toolMessageResults = new Map<
+      string,
+      { status: 'success' | 'error'; content: string }
+    >(
       streamMsgs
-        .filter((m) => m.type === 'tool' && m.tool_call_id)
-        .map((m) => m.tool_call_id as string),
+        .filter(
+          (m): m is LGMessage & { tool_call_id: string } =>
+            m.type === 'tool' && typeof m.tool_call_id === 'string',
+        )
+        .map((m) => [
+          m.tool_call_id,
+          {
+            status: m.status === 'error' ? 'error' : 'success',
+            content: extractContentText(m.content),
+          },
+        ]),
     );
+
+    // Collect completed tool call IDs (from ToolMessages)
+    const completedToolCallIds = new Set<string>(toolMessageResults.keys());
 
     // Get subagents map
     const subagentsMap = stream.subagents ?? new Map<string, SubagentData>();
 
-    let pendingToolCalls: Array<{
-      id: string;
-      name: string;
-      args: Record<string, unknown>;
-    }> = [];
-    let pendingContent = '';
+    let pendingBlocks: string[] = [];
     let pendingMsgId = '';
-    let pendingSubagentIds: string[] = [];
 
     const streamIsLoading = stream.isLoading;
     const buildToolCallMarkup = (
@@ -490,41 +599,79 @@ const ChatWindow = ({ id }: { id?: string }) => {
         .join('\n');
     };
 
-    const buildSubagentMarkup = (subagentIds: string[]) => {
-      return subagentIds
-        .map((saId) => {
-          const sa = subagentsMap.get(saId);
-          if (!sa) return '';
-          const saName = sa.toolCall?.args?.subagent_type ?? 'Research';
-          const saTask = sa.toolCall?.args?.description ?? '';
+    const buildSubagentMarkup = (
+      subagentToolCalls: PendingSubagentToolCallData[],
+    ) => {
+      return subagentToolCalls
+        .map(({ id, subagentType, description }) => {
+          const sa = subagentsMap.get(id);
+          const toolResult = toolMessageResults.get(id);
+
+          if (!sa && !streamIsLoading && !toolResult) return '';
+
+          const saName = sa?.toolCall?.args?.subagent_type ?? subagentType;
+          const saTask = sa?.toolCall?.args?.description ?? description ?? '';
           const saStatus =
-            sa.status === 'complete'
+            sa?.status === 'complete'
               ? 'success'
-              : sa.status === 'error'
+              : sa?.status === 'error'
                 ? 'error'
-                : streamIsLoading
-                  ? 'running'
-                  : 'error';
-          let attrs = `id="${saId}" name="${encodeHtmlAttribute(saName)}" task="${encodeHtmlAttribute(saTask)}" status="${saStatus}"`;
-          if (sa.result && sa.status === 'complete') {
-            attrs += ` summary="${encodeHtmlAttribute(sa.result)}"`;
+                : toolResult?.status === 'error'
+                  ? 'error'
+                  : toolResult
+                    ? 'success'
+                    : 'running';
+
+          let attrs = `id="${id}" name="${encodeHtmlAttribute(saName ?? 'Research')}" task="${encodeHtmlAttribute(saTask)}" status="${saStatus}"`;
+
+          const summary =
+            sa?.status === 'complete'
+              ? sa.result
+              : toolResult?.status === 'success'
+                ? toolResult.content
+                : undefined;
+          if (summary) {
+            attrs += ` summary="${encodeHtmlAttribute(summary)}"`;
           }
-          if (sa.error) {
-            attrs += ` error="${encodeHtmlAttribute(String(sa.error))}"`;
+
+          const responseText = buildSubagentResponseText(sa?.messages);
+          if (responseText) {
+            attrs += ` responseText="${encodeHtmlAttribute(responseText)}"`;
+          }
+
+          const error =
+            sa?.status === 'error'
+              ? sa.error
+              : toolResult?.status === 'error'
+                ? toolResult.content
+                : undefined;
+          if (error) {
+            attrs += ` error="${encodeHtmlAttribute(String(error))}"`;
           }
           // Nested tool calls inside subagent
-          const saToolCalls = sa.toolCalls ?? [];
+          const saToolCalls = sa?.toolCalls ?? [];
           const nestedMarkup = saToolCalls
             .map((stc: SubagentToolCallData) => {
+              const stcArgs = parseToolArgs(stc.call?.args);
+              const stcName = stc.call?.name ?? 'unknown';
               const stcStatus =
-                stc.output !== undefined ? 'success' : 'running';
-              let stcAttrs = `type="${stc.name}" status="${stcStatus}" toolCallId="${stc.id ?? ''}"`;
-              if (stc.args?.query)
-                stcAttrs += ` query="${encodeHtmlAttribute(String(stc.args.query))}"`;
-              if (stc.args?.url)
-                stcAttrs += ` url="${encodeHtmlAttribute(String(stc.args.url))}"`;
-              if (Array.isArray(stc.args?.urls) && stc.args.urls.length > 0)
-                stcAttrs += ` count="${stc.args.urls.length}"`;
+                stc.state === 'completed'
+                  ? 'success'
+                  : stc.state === 'error'
+                    ? 'error'
+                    : 'running';
+              let stcAttrs = `type="${stcName}" status="${stcStatus}" toolCallId="${stc.id ?? ''}"`;
+              if (stcArgs.query)
+                stcAttrs += ` query="${encodeHtmlAttribute(String(stcArgs.query))}"`;
+              if (stcArgs.url)
+                stcAttrs += ` url="${encodeHtmlAttribute(String(stcArgs.url))}"`;
+              if (Array.isArray(stcArgs.urls) && stcArgs.urls.length > 0)
+                stcAttrs += ` count="${stcArgs.urls.length}"`;
+              if (stcStatus === 'error' && stc.result?.content) {
+                stcAttrs += ` error="${encodeHtmlAttribute(
+                  extractContentText(stc.result.content),
+                )}"`;
+              }
               return `<ToolCall ${stcAttrs}></ToolCall>`;
             })
             .join('\n');
@@ -534,22 +681,12 @@ const ChatWindow = ({ id }: { id?: string }) => {
     };
 
     const flushAssistant = () => {
-      if (
-        !pendingContent &&
-        pendingToolCalls.length === 0 &&
-        pendingSubagentIds.length === 0
-      ) {
-        pendingToolCalls = [];
-        pendingContent = '';
+      if (pendingBlocks.length === 0) {
+        pendingBlocks = [];
         pendingMsgId = '';
-        pendingSubagentIds = [];
         return;
       }
-      const toolCallMarkup = buildToolCallMarkup(pendingToolCalls);
-      const subagentMarkup = buildSubagentMarkup(pendingSubagentIds);
-      const fullContent = [subagentMarkup, toolCallMarkup, pendingContent]
-        .filter(Boolean)
-        .join('\n');
+      const fullContent = pendingBlocks.filter(Boolean).join('\n');
 
       const extra = messageExtras[pendingMsgId] ?? {};
       result.push({
@@ -563,10 +700,8 @@ const ChatWindow = ({ id }: { id?: string }) => {
         searchQuery: extra.searchQuery,
         suggestions: extra.suggestions,
       });
-      pendingToolCalls = [];
-      pendingContent = '';
+      pendingBlocks = [];
       pendingMsgId = '';
-      pendingSubagentIds = [];
     };
 
     for (const msg of streamMsgs) {
@@ -581,27 +716,49 @@ const ChatWindow = ({ id }: { id?: string }) => {
           images: msg.images as ImageAttachment[] | undefined,
         });
       } else if (msg.type === 'ai') {
-        const msgToolCalls: Array<{
-          id: string;
-          name: string;
-          args: Record<string, unknown>;
-        }> = (msg.tool_calls ?? []).filter(
-          (tc) => tc.name !== 'write_todos' && tc.name !== 'task',
-        );
-        const subagentToolCalls = (msg.tool_calls ?? []).filter(
-          (tc) => tc.name === 'task',
-        );
-
-        if (msgToolCalls.length > 0) {
-          pendingToolCalls.push(...msgToolCalls);
-        }
-        // Track subagent IDs to render
-        for (const stc of subagentToolCalls) {
-          if (stc.id) pendingSubagentIds.push(stc.id);
-        }
+        const aiParts: string[] = [];
         const text = extractText(msg.content);
         if (text) {
-          pendingContent = text;
+          aiParts.push(text);
+        }
+
+        const orderedToolMarkup = (msg.tool_calls ?? [])
+          .filter((toolCall) => toolCall.name !== 'write_todos')
+          .map((toolCall) => {
+            if (toolCall.name === 'task') {
+              if (!toolCall.id) return '';
+              return buildSubagentMarkup([
+                {
+                  id: toolCall.id,
+                  subagentType:
+                    typeof toolCall.args?.subagent_type === 'string'
+                      ? toolCall.args.subagent_type
+                      : undefined,
+                  description:
+                    typeof toolCall.args?.description === 'string'
+                      ? toolCall.args.description
+                      : undefined,
+                },
+              ]);
+            }
+
+            return buildToolCallMarkup([
+              {
+                id: toolCall.id,
+                name: toolCall.name,
+                args: toolCall.args,
+              },
+            ]);
+          })
+          .filter(Boolean)
+          .join('\n');
+
+        if (orderedToolMarkup) {
+          aiParts.push(orderedToolMarkup);
+        }
+
+        if (aiParts.length > 0) {
+          pendingBlocks.push(aiParts.join('\n'));
         }
         if (msg.id) pendingMsgId = msg.id;
       }
@@ -620,6 +777,20 @@ const ChatWindow = ({ id }: { id?: string }) => {
 
   // Use preloadedMessages (from DB) when useStream has not yet populated messages
   const displayMessages = messages.length > 0 ? messages : preloadedMessages;
+  const lastNonEmptyDisplayMessagesRef = useRef<Message[]>([]);
+
+  useEffect(() => {
+    if (displayMessages.length > 0) {
+      lastNonEmptyDisplayMessagesRef.current = displayMessages;
+    }
+  }, [displayMessages]);
+
+  const renderedMessages =
+    displayMessages.length > 0
+      ? displayMessages
+      : id
+        ? lastNonEmptyDisplayMessagesRef.current
+        : displayMessages;
 
   // Todos from stream state values — only shown while streaming is active
   const todoItems = useMemo(() => {
@@ -804,6 +975,7 @@ const ChatWindow = ({ id }: { id?: string }) => {
       setInitialValues(null);
       setIsMessagesLoaded(true);
       setNotFound(false);
+      lastNonEmptyDisplayMessagesRef.current = [];
       document.title = 'YAAWC';
     }
   }, [pathname, id]);
@@ -889,7 +1061,9 @@ const ChatWindow = ({ id }: { id?: string }) => {
       return;
     }
 
-    if (stream.isLoading || !isConfigReady) return;
+    if (submitInFlightRef.current || stream.isLoading || !isConfigReady) {
+      return;
+    }
 
     const humanMessageId =
       options?.messageId ??
@@ -975,10 +1149,15 @@ const ChatWindow = ({ id }: { id?: string }) => {
       configurable.messageImages = imageAttachments;
     }
 
-    await stream.submit(
-      { messages: [{ role: 'human', content: message, id: humanMessageId }] },
-      { config: { configurable } },
-    );
+    submitInFlightRef.current = true;
+    try {
+      await stream.submit(
+        { messages: [{ role: 'human', content: message, id: humanMessageId }] },
+        { config: { configurable } },
+      );
+    } finally {
+      submitInFlightRef.current = false;
+    }
   };
 
   const rewrite = (messageId: string) => {
@@ -1069,12 +1248,12 @@ const ChatWindow = ({ id }: { id?: string }) => {
 
   return (
     <div>
-      {displayMessages.length > 0 ? (
+      {renderedMessages.length > 0 ? (
         <>
-          <Navbar chatId={chatId!} messages={displayMessages} />
+          <Navbar chatId={chatId!} messages={renderedMessages} />
           <Chat
             loading={stream.isLoading}
-            messages={displayMessages}
+            messages={renderedMessages}
             sendMessage={sendMessage}
             scrollTrigger={scrollTrigger}
             rewrite={rewrite}

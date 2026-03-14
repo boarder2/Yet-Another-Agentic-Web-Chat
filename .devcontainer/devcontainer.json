@@ -29,7 +29,8 @@
         "files.watcherExclude": {
           "**/.next/**": true,
           "**/node_modules/**": true
-        }
+        },
+        "terminal.integrated.defaultProfile.linux": "zsh"
       },
       "extensions": [
         "dbaeumer.vscode-eslint",

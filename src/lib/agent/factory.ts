@@ -1,4 +1,5 @@
 import { createDeepAgent } from 'deepagents';
+import { createMiddleware } from 'langchain';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import type { BaseCheckpointSaver } from '@langchain/langgraph';
 
@@ -27,6 +28,77 @@ export interface AgentConfig {
   isFirefoxAI?: boolean;
   checkpointer?: BaseCheckpointSaver;
 }
+
+type TodoItem = {
+  content: string;
+  status: 'pending' | 'in_progress' | 'completed';
+};
+
+function normalizeTodosArg(value: unknown): TodoItem[] | undefined {
+  const normalizeTodo = (item: unknown): TodoItem | null => {
+    if (!item || typeof item !== 'object') return null;
+
+    const candidate = item as Record<string, unknown>;
+    const content =
+      typeof candidate.content === 'string' ? candidate.content.trim() : '';
+    const status =
+      candidate.status === 'pending' ||
+      candidate.status === 'in_progress' ||
+      candidate.status === 'completed'
+        ? candidate.status
+        : null;
+
+    if (!content || !status) return null;
+
+    return { content, status };
+  };
+
+  if (Array.isArray(value)) {
+    const todos = value.map(normalizeTodo).filter(Boolean) as TodoItem[];
+    return todos.length > 0 ? todos : undefined;
+  }
+
+  if (typeof value !== 'string') return undefined;
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed)) return undefined;
+    const todos = parsed.map(normalizeTodo).filter(Boolean) as TodoItem[];
+    return todos.length > 0 ? todos : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+const normalizeWriteTodosMiddleware = createMiddleware({
+  name: 'normalizeWriteTodosMiddleware',
+  wrapToolCall: async (request, handler) => {
+    if (request.toolCall.name !== 'write_todos') {
+      return handler(request);
+    }
+
+    const rawArgs =
+      request.toolCall.args && typeof request.toolCall.args === 'object'
+        ? (request.toolCall.args as Record<string, unknown>)
+        : {};
+    const normalizedTodos = normalizeTodosArg(rawArgs.todos);
+
+    if (!normalizedTodos) {
+      return handler(request);
+    }
+
+    return handler({
+      ...request,
+      toolCall: {
+        ...request.toolCall,
+        args: {
+          ...rawArgs,
+          todos: normalizedTodos,
+        },
+      },
+    });
+  },
+});
 
 /**
  * Build a system prompt for the given focus mode and runtime context.
@@ -106,6 +178,7 @@ export function createAgent(config: AgentConfig) {
     tools,
     systemPrompt,
     subagents,
+    middleware: [normalizeWriteTodosMiddleware] as never,
     ...(checkpointer && { checkpointer }),
   });
 }

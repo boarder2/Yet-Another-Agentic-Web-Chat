@@ -13,6 +13,33 @@ This project does not use a formal test framework. Instead, use the following ma
 2. Wait until `curl -s http://localhost:3000/api/config` returns JSON before running tests.
 3. Configure models via the Settings page or localStorage before testing LLM-dependent features.
 
+### Model Configuration for UI Automation Tests
+
+When testing the UI via automation (Layer 3+), the following models **must** be configured before running tests:
+
+- **Chat Model**: `mlx-community/qwen3.5-35b-a3b` (LM Studio provider)
+- **System Model**: `mlx-community/qwen3.5-35b-a3b` (LM Studio provider)
+- **Embedding Model**: `BGE Small` (Hugging Face provider)
+
+Use playwright-cli to configure these via the Settings page before running automated UI tests.
+If any of these models are not available, ask the user which models they want to use by showing them the available options and have them select one for each category before proceeding with the tests.
+
+### Standard Test Prompts
+
+Use the following test prompts to validate basic and advanced functionality:
+
+**Basic Functionality Test:**
+
+Prompt: `Who won the 2026 super bowl?`
+
+Expected: The response should explain that the **Seattle Seahawks** won the 2026 Super Bowl.
+
+**Subagent Deep Research Test:**
+
+Prompt: `Use subagents to deeply research how the 2025 F1 season unfolded for the top 2 teams in the constructor's championship and explain the story in detail.`
+
+Expected: The response should explain that **McLaren** won the constructor's championship and **Mercedes** came in second, with detailed analysis of both teams' 2025 seasons.
+
 ## Layer 1: Static Analysis
 
 Run these first — they catch most issues without needing a running server:

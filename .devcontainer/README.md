@@ -18,4 +18,5 @@ Then open:
 
 - The repo is mounted into the container at `/workspaces/YAAWC` for live editing.
 - SQLite + uploads + deep research artifacts are persisted in Docker volumes (not written into your git workspace).
+- Claude Code user config (`~/.claude`, `~/.claude.json`), Copilot CLI user config (`~/.copilot`), and Zsh history (`~/.zsh_history`) are also persisted in a Docker volume across devcontainer rebuilds.
 - `config.toml` is read from the workspace root (it is gitignored).

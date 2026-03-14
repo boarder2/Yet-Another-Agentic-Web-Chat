@@ -52,6 +52,13 @@ interface Config {
   API_ENDPOINTS: {
     SEARXNG: string;
   };
+  SELECTED_MODELS?: {
+    SYSTEM_PROVIDER?: string;
+    SYSTEM_MODEL?: string;
+    EMBEDDING_PROVIDER?: string;
+    EMBEDDING_MODEL?: string;
+    LINK_SYSTEM_TO_CHAT?: boolean;
+  };
 }
 
 type RecursivePartial<T> = {
@@ -144,6 +151,27 @@ export const getCustomOpenaiModelName = () =>
 
 export const getLMStudioApiEndpoint = () =>
   loadConfig().MODELS.LM_STUDIO.API_URL;
+
+export const getSelectedSystemModel = () => {
+  const config = loadConfig();
+  return {
+    provider: config.SELECTED_MODELS?.SYSTEM_PROVIDER || '',
+    name: config.SELECTED_MODELS?.SYSTEM_MODEL || '',
+  };
+};
+
+export const getSelectedEmbeddingModel = () => {
+  const config = loadConfig();
+  return {
+    provider: config.SELECTED_MODELS?.EMBEDDING_PROVIDER || '',
+    name: config.SELECTED_MODELS?.EMBEDDING_MODEL || '',
+  };
+};
+
+export const getLinkSystemToChat = () => {
+  const config = loadConfig();
+  return config.SELECTED_MODELS?.LINK_SYSTEM_TO_CHAT ?? true;
+};
 
 const mergeConfigs = (
   current: Record<string, unknown>,

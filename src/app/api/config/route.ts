@@ -13,6 +13,9 @@ import {
   getAimlApiKey,
   getLMStudioApiEndpoint,
   getHiddenModels,
+  getSelectedSystemModel,
+  getSelectedEmbeddingModel,
+  getLinkSystemToChat,
   updateConfig,
 } from '@/lib/config';
 import {
@@ -77,6 +80,15 @@ export const GET = async (_req: Request) => {
     config['customOpenaiModelName'] = getCustomOpenaiModelName();
     config['baseUrl'] = getBaseUrl();
     config['hiddenModels'] = getHiddenModels();
+
+    // Selected model preferences
+    const selectedSystem = getSelectedSystemModel();
+    const selectedEmbedding = getSelectedEmbeddingModel();
+    config['selectedSystemModelProvider'] = selectedSystem.provider;
+    config['selectedSystemModel'] = selectedSystem.name;
+    config['selectedEmbeddingModelProvider'] = selectedEmbedding.provider;
+    config['selectedEmbeddingModel'] = selectedEmbedding.name;
+    config['linkSystemToChat'] = getLinkSystemToChat();
 
     return Response.json({ ...config }, { status: 200 });
   } catch (err) {
@@ -161,6 +173,30 @@ export const POST = async (req: Request) => {
     };
 
     updateConfig(updatedConfig);
+
+    // Save selected model preferences if provided
+    const modelSelections: Partial<
+      NonNullable<Parameters<typeof updateConfig>[0]['SELECTED_MODELS']>
+    > = {};
+    if (config.selectedSystemModelProvider !== undefined) {
+      modelSelections.SYSTEM_PROVIDER = config.selectedSystemModelProvider;
+    }
+    if (config.selectedSystemModel !== undefined) {
+      modelSelections.SYSTEM_MODEL = config.selectedSystemModel;
+    }
+    if (config.selectedEmbeddingModelProvider !== undefined) {
+      modelSelections.EMBEDDING_PROVIDER =
+        config.selectedEmbeddingModelProvider;
+    }
+    if (config.selectedEmbeddingModel !== undefined) {
+      modelSelections.EMBEDDING_MODEL = config.selectedEmbeddingModel;
+    }
+    if (config.linkSystemToChat !== undefined) {
+      modelSelections.LINK_SYSTEM_TO_CHAT = config.linkSystemToChat;
+    }
+    if (Object.keys(modelSelections).length > 0) {
+      updateConfig({ SELECTED_MODELS: modelSelections });
+    }
 
     return Response.json({ message: 'Config updated' }, { status: 200 });
   } catch (err) {

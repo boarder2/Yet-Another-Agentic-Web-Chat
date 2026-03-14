@@ -29,6 +29,9 @@ import {
 } from '@/lib/utils/runControl';
 import { CachedEmbeddings } from '@/lib/utils/cachedEmbeddings';
 import { buildMultimodalHumanMessage } from '@/lib/utils/images';
+import { retrieveRelevantMemories } from '@/lib/utils/memoryRetrieval';
+import { buildMemorySection } from '@/lib/prompts/memory/memoryContext';
+import { processExtraction } from '@/lib/utils/memoryExtraction';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -72,6 +75,8 @@ type Body = {
     fileName: string;
     mimeType: string;
   }>;
+  memoryEnabled?: boolean;
+  memoryAutoDetection?: boolean;
 };
 
 type TokenUsage = {
@@ -102,6 +107,7 @@ const handleEmitterEvents = async (
   abortController: AbortController,
   usedLocation: boolean,
   usedPersonalization: boolean,
+  memoriesUsed: Array<{ id: string; content: string }> = [],
 ) => {
   let recievedMessage = '';
   let sources: Record<string, unknown>[] = [];
@@ -393,6 +399,7 @@ const handleEmitterEvents = async (
         searchUrl: searchUrl,
         usedLocation,
         usedPersonalization,
+        memoriesUsed: memoriesUsed.length > 0 ? memoriesUsed : undefined,
       }) + '\n',
     );
     isStreamActive = false;
@@ -415,6 +422,7 @@ const handleEmitterEvents = async (
           ...(searchUrl && { searchUrl }),
           usedLocation,
           usedPersonalization,
+          ...(memoriesUsed.length > 0 && { memoriesUsed }),
         }),
       })
       .execute();
@@ -620,7 +628,7 @@ export const POST = async (req: Request) => {
     const aiMessageId = crypto.randomBytes(7).toString('hex');
 
     const history: BaseMessage[] = body.history.map((msg) => {
-      if (msg[0] === 'human') {
+      if (msg[0] === 'human' || msg[0] === 'user') {
         // If this history entry has image IDs, build a multimodal message
         if (msg[2] && msg[2].length > 0) {
           return buildMultimodalHumanMessage(msg[1], msg[2]);
@@ -693,6 +701,31 @@ export const POST = async (req: Request) => {
       cleanupRun(message.messageId);
     });
 
+    // --- Memory retrieval ---
+    let memorySection = '';
+    let memoriesUsed: Array<{ id: string; content: string }> = [];
+
+    if (body.memoryEnabled) {
+      try {
+        const relevantMemories = await retrieveRelevantMemories(
+          message.content,
+          embedding,
+        );
+        if (relevantMemories.length > 0) {
+          memorySection = buildMemorySection(relevantMemories);
+          memoriesUsed = relevantMemories.map((m) => ({
+            id: m.id,
+            content: m.content,
+          }));
+        }
+      } catch (err) {
+        console.warn(
+          'Memory retrieval failed, continuing without memories:',
+          err,
+        );
+      }
+    }
+
     // Pass the abort signal to the search handler
     const stream = await handler.searchAndAnswer(
       message.content,
@@ -712,6 +745,8 @@ export const POST = async (req: Request) => {
         profile: body.userProfile,
       },
       body.messageImageIds,
+      body.memoryEnabled ?? false,
+      memorySection,
     );
 
     handleEmitterEvents(
@@ -725,7 +760,51 @@ export const POST = async (req: Request) => {
       abortController,
       body.userLocation ? body.userLocation.length > 0 : false,
       body.userProfile ? body.userProfile.length > 0 : false,
+      memoriesUsed,
     );
+
+    // Post-response automatic memory extraction (fire-and-forget)
+    if (body.memoryAutoDetection && systemLlm) {
+      stream.on('end', () => {
+        processExtraction(
+          message.content,
+          '', // assistant response text is captured in handleEmitterEvents
+          systemLlm!,
+          embedding,
+          message.chatId,
+        )
+          .then((result) => {
+            if (result.saved > 0 || result.updated > 0) {
+              // Emit memory_updated event if the writer is hopefully still accessible
+              try {
+                const memoryEvent =
+                  JSON.stringify({
+                    type: 'memory_updated',
+                    data: {
+                      saved: result.saved,
+                      updated: result.updated,
+                      memoryIds: result.memories.map((m) => m.id),
+                    },
+                  }) + '\n';
+                writer.write(encoder.encode(memoryEvent)).catch(() => {});
+              } catch {
+                // Writer already closed, log the result
+                console.log(
+                  `Memory extraction: ${result.saved} saved, ${result.updated} updated`,
+                );
+              }
+            }
+            if (result.blocked > 0) {
+              console.log(
+                `Memory extraction: ${result.blocked} blocked (sensitive content)`,
+              );
+            }
+          })
+          .catch((err) => {
+            console.warn('Post-response memory extraction failed:', err);
+          });
+      });
+    }
 
     handleHistorySave(
       message,

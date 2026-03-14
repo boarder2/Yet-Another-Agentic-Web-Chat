@@ -20,6 +20,8 @@ export interface MetaSearchAgentType {
     retrievalSignal?: AbortSignal,
     personalization?: PersonalizationContext,
     messageImageIds?: string[],
+    memoryEnabled?: boolean,
+    memorySection?: string,
   ) => Promise<eventEmitter>;
 }
 
@@ -65,6 +67,8 @@ class MetaSearchAgent implements MetaSearchAgentType {
     retrievalSignal?: AbortSignal,
     personalization?: PersonalizationContext,
     messageImageIds?: string[],
+    memoryEnabled?: boolean,
+    memorySection?: string,
   ) {
     try {
       const agentSearch = new AgentSearch(
@@ -79,6 +83,8 @@ class MetaSearchAgent implements MetaSearchAgentType {
         messageId,
         retrievalSignal,
         personalization,
+        memoryEnabled ?? false,
+        memorySection ?? '',
       );
 
       // Execute the agent workflow
@@ -118,6 +124,8 @@ class MetaSearchAgent implements MetaSearchAgentType {
     retrievalSignal?: AbortSignal,
     personalization?: PersonalizationContext,
     messageImageIds?: string[],
+    memoryEnabled?: boolean,
+    memorySection?: string,
   ) {
     const emitter = new eventEmitter();
 
@@ -138,6 +146,8 @@ class MetaSearchAgent implements MetaSearchAgentType {
       retrievalSignal || signal,
       personalization,
       messageImageIds,
+      memoryEnabled,
+      memorySection,
     );
 
     return emitter;

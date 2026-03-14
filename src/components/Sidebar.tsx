@@ -3,6 +3,7 @@
 import { cn } from '@/lib/utils';
 import {
   BookOpenText,
+  Brain,
   Home,
   SquarePen,
   Settings,
@@ -40,6 +41,12 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
       href: '/library',
       active: segments.includes('library'),
       label: 'Library',
+    },
+    {
+      icon: Brain,
+      href: '/memory',
+      active: segments.includes('memory'),
+      label: 'Memory',
     },
   ];
 

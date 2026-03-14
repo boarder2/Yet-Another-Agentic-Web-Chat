@@ -9,6 +9,7 @@ import {
   coreTools,
   fileSearchTools,
   webSearchTools,
+  memoryTools,
 } from '@/lib/tools/agents';
 // import {
 //   getLangfuseCallbacks,
@@ -135,6 +136,9 @@ export class SimplifiedAgent {
   private retrievalSignal?: AbortSignal;
   private userLocation?: string;
   private userProfile?: string;
+  private memoryEnabled: boolean;
+  private memorySection: string;
+  private chatId?: string;
 
   constructor(
     chatLlm: BaseChatModel,
@@ -147,6 +151,9 @@ export class SimplifiedAgent {
     retrievalSignal?: AbortSignal,
     userLocation?: string,
     userProfile?: string,
+    memoryEnabled: boolean = false,
+    memorySection: string = '',
+    chatId?: string,
   ) {
     this.chatLlm = chatLlm;
     this.systemLlm = systemLlm;
@@ -158,6 +165,9 @@ export class SimplifiedAgent {
     this.retrievalSignal = retrievalSignal;
     this.userLocation = userLocation;
     this.userProfile = userProfile;
+    this.memoryEnabled = memoryEnabled;
+    this.memorySection = memorySection;
+    this.chatId = chatId;
   }
 
   private emitResponse(text: string) {
@@ -270,30 +280,44 @@ export class SimplifiedAgent {
    * Get tools based on focus mode
    */
   private getToolsForFocusMode(focusMode: string, fileIds: string[] = []) {
+    let tools;
     switch (focusMode) {
       case 'chat':
         // Chat mode: Only core tools for conversational interaction
-        return coreTools;
+        tools = [...coreTools];
+        break;
       case 'webSearch':
         // Web search mode: ALL available tools for comprehensive research
         // Include file search tools if files are available
         if (fileIds.length > 0) {
-          return [...webSearchTools, ...fileSearchTools];
+          tools = [...webSearchTools, ...fileSearchTools];
+        } else {
+          tools = [...allAgentTools];
         }
-        return allAgentTools;
+        break;
       case 'localResearch':
         // Local research mode: File search tools + core tools
-        return [...coreTools, ...fileSearchTools];
+        tools = [...coreTools, ...fileSearchTools];
+        break;
       default:
         // Default to web search mode for unknown focus modes
         console.warn(
           `SimplifiedAgent: Unknown focus mode "${focusMode}", defaulting to webSearch tools`,
         );
         if (fileIds.length > 0) {
-          return [...webSearchTools, ...fileSearchTools];
+          tools = [...webSearchTools, ...fileSearchTools];
+        } else {
+          tools = [...allAgentTools];
         }
-        return allAgentTools;
+        break;
     }
+
+    // Add memory tools when memory is enabled
+    if (this.memoryEnabled) {
+      tools = [...tools, ...memoryTools];
+    }
+
+    return tools;
   }
 
   private createEnhancedSystemPrompt(
@@ -309,50 +333,73 @@ export class SimplifiedAgent {
       profile: this.userProfile,
     });
 
+    let basePrompt: string;
+
     if (firefoxAIDetected) {
-      return buildFirefoxAIPrompt(
+      basePrompt = buildFirefoxAIPrompt(
         personaInstructions,
         personalizationSection,
         new Date(),
       );
+    } else {
+      // Create focus-mode-specific prompts
+      switch (focusMode) {
+        case 'chat':
+          basePrompt = buildChatPrompt(
+            personaInstructions,
+            personalizationSection,
+            new Date(),
+          );
+          break;
+        case 'webSearch':
+          basePrompt = buildWebSearchPrompt(
+            personaInstructions,
+            personalizationSection,
+            fileIds,
+            messagesCount ?? 0,
+            query,
+            new Date(),
+          );
+          break;
+        case 'localResearch':
+          basePrompt = buildLocalResearchPrompt(
+            personaInstructions,
+            personalizationSection,
+            new Date(),
+          );
+          break;
+        default:
+          console.warn(
+            `SimplifiedAgent: Unknown focus mode "${focusMode}", using webSearch prompt`,
+          );
+          basePrompt = buildWebSearchPrompt(
+            personaInstructions,
+            personalizationSection,
+            fileIds,
+            messagesCount ?? 0,
+            query,
+            new Date(),
+          );
+          break;
+      }
     }
 
-    // Create focus-mode-specific prompts
-    switch (focusMode) {
-      case 'chat':
-        return buildChatPrompt(
-          personaInstructions,
-          personalizationSection,
-          new Date(),
-        );
-      case 'webSearch':
-        return buildWebSearchPrompt(
-          personaInstructions,
-          personalizationSection,
-          fileIds,
-          messagesCount ?? 0,
-          query,
-          new Date(),
-        );
-      case 'localResearch':
-        return buildLocalResearchPrompt(
-          personaInstructions,
-          personalizationSection,
-          new Date(),
-        );
-      default:
-        console.warn(
-          `SimplifiedAgent: Unknown focus mode "${focusMode}", using webSearch prompt`,
-        );
-        return buildWebSearchPrompt(
-          personaInstructions,
-          personalizationSection,
-          fileIds,
-          messagesCount ?? 0,
-          query,
-          new Date(),
-        );
+    // Append memory section if available
+    if (this.memorySection) {
+      basePrompt += '\n\n' + this.memorySection;
     }
+
+    // Append memory tool instructions when memory is enabled
+    if (this.memoryEnabled) {
+      basePrompt += `\n\n## Memory Tools
+- Use \`save_memory\` ONLY when the user explicitly asks you to remember something (e.g., "remember that...", "save this...").
+- Use \`delete_memory\` ONLY when the user explicitly asks you to forget something (e.g., "forget that...", "delete the memory about...").
+- Use \`list_memories\` ONLY when the user explicitly asks what you remember (e.g., "what do you remember?", "list my memories").
+- NEVER invoke memory tools without explicit user intent.
+- Always confirm success or failure after memory operations.`;
+    }
+
+    return basePrompt;
   }
 
   /**
@@ -450,6 +497,7 @@ export class SimplifiedAgent {
           retrievalSignal: this.retrievalSignal,
           userLocation: this.userLocation,
           userProfile: this.userProfile,
+          chatId: this.chatId,
         },
         recursionLimit: 150, // Increased to handle complex multi-task research with todo_list
         signal: this.retrievalSignal,

@@ -16,6 +16,7 @@ import { pdfLoaderTool } from './pdfLoaderTool';
 import { deepResearchTool } from './deepResearchTool';
 import { todoListTool } from './todoListTool';
 import { imageAnalysisTool } from './imageAnalysisTool';
+import { memoryTools } from './memoryTools';
 
 export { simpleWebSearchTool };
 export { fileSearchTool };
@@ -25,6 +26,7 @@ export { youtubeTranscriptTool };
 export { pdfLoaderTool };
 export { deepResearchTool };
 export { todoListTool };
+export { memoryTools };
 
 // Array containing all available agent tools for the simplified chat agent
 // This will be used by the createAgent implementation

@@ -33,6 +33,7 @@ export type ModelStats = {
   usageSystem?: TokenUsage;
   usedLocation?: boolean;
   usedPersonalization?: boolean;
+  memoriesUsed?: number;
 };
 
 export type Message = {
@@ -95,17 +96,26 @@ const checkConfig = async (
     let embeddingModel = localStorage.getItem('embeddingModel');
     let embeddingModelProvider = localStorage.getItem('embeddingModelProvider');
 
-    const providers = await fetch(`/api/models`, {
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    }).then(async (res) => {
-      if (!res.ok)
-        throw new Error(
-          `Failed to fetch models: ${res.status} ${res.statusText}`,
-        );
-      return res.json();
-    });
+    const [providers, serverConfig] = await Promise.all([
+      fetch(`/api/models`, {
+        headers: { 'Content-Type': 'application/json' },
+      }).then(async (res) => {
+        if (!res.ok)
+          throw new Error(
+            `Failed to fetch models: ${res.status} ${res.statusText}`,
+          );
+        return res.json();
+      }),
+      // Fetch server config for saved model preferences
+      !chatModel ||
+      !chatModelProvider ||
+      !embeddingModel ||
+      !embeddingModelProvider
+        ? fetch('/api/config')
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null)
+        : Promise.resolve(null),
+    ]);
 
     if (
       !chatModel ||
@@ -119,25 +129,44 @@ const checkConfig = async (
 
         if (!chatModelProviders || chatModelProvidersKeys.length === 0) {
           return toast.error('No chat models available');
+        }
+
+        // Try server config first, then fall back to first available provider
+        const serverChatProvider = serverConfig?.selectedSystemModelProvider;
+        if (
+          serverChatProvider &&
+          chatModelProviders[serverChatProvider] &&
+          Object.keys(chatModelProviders[serverChatProvider]).length > 0
+        ) {
+          chatModelProvider = serverChatProvider;
+          const serverModel = serverConfig.selectedSystemModel;
+          if (
+            serverModel &&
+            chatModelProviders[serverChatProvider][serverModel]
+          ) {
+            chatModel = serverModel;
+          } else {
+            chatModel = Object.keys(chatModelProviders[serverChatProvider])[0];
+          }
         } else {
           chatModelProvider =
             chatModelProvidersKeys.find(
               (provider) =>
                 Object.keys(chatModelProviders[provider]).length > 0,
             ) || chatModelProvidersKeys[0];
-        }
 
-        if (
-          chatModelProvider === 'custom_openai' &&
-          Object.keys(chatModelProviders[chatModelProvider]).length === 0
-        ) {
-          toast.error(
-            "Looks like you haven't configured any chat model providers. Please configure them from the settings page or the config file.",
-          );
-          return setHasError(true);
-        }
+          if (
+            chatModelProvider === 'custom_openai' &&
+            Object.keys(chatModelProviders[chatModelProvider]).length === 0
+          ) {
+            toast.error(
+              "Looks like you haven't configured any chat model providers. Please configure them from the settings page or the config file.",
+            );
+            return setHasError(true);
+          }
 
-        chatModel = Object.keys(chatModelProviders[chatModelProvider])[0];
+          chatModel = Object.keys(chatModelProviders[chatModelProvider])[0];
+        }
       }
 
       if (!embeddingModel || !embeddingModelProvider) {
@@ -149,10 +178,27 @@ const checkConfig = async (
         )
           return toast.error('No embedding models available');
 
-        embeddingModelProvider = Object.keys(embeddingModelProviders)[0];
-        embeddingModel = Object.keys(
-          embeddingModelProviders[embeddingModelProvider],
-        )[0];
+        // Try server config first
+        const serverEmbProvider = serverConfig?.selectedEmbeddingModelProvider;
+        if (serverEmbProvider && embeddingModelProviders[serverEmbProvider]) {
+          embeddingModelProvider = serverEmbProvider;
+          const serverModel = serverConfig.selectedEmbeddingModel;
+          if (
+            serverModel &&
+            embeddingModelProviders[serverEmbProvider][serverModel]
+          ) {
+            embeddingModel = serverModel;
+          } else {
+            embeddingModel = Object.keys(
+              embeddingModelProviders[serverEmbProvider],
+            )[0];
+          }
+        } else {
+          embeddingModelProvider = Object.keys(embeddingModelProviders)[0];
+          embeddingModel = Object.keys(
+            embeddingModelProviders[embeddingModelProvider],
+          )[0];
+        }
       }
 
       localStorage.setItem('chatModel', chatModel!);
@@ -274,7 +320,8 @@ const loadMessages = async (
   setMessages(messages);
 
   const history = messages.map((msg) => {
-    const entry: [string, string, string[]?] = [msg.role, msg.content];
+    const role = msg.role === 'user' ? 'human' : msg.role;
+    const entry: [string, string, string[]?] = [role, msg.content];
     if (msg.role === 'user' && msg.images && msg.images.length > 0) {
       entry[2] = msg.images.map((img: ImageAttachment) => img.imageId);
     }
@@ -1167,6 +1214,11 @@ const ChatWindow = ({ id }: { id?: string }) => {
                 typeof data.usedPersonalization === 'boolean'
                   ? data.usedPersonalization
                   : undefined;
+              const memoriesUsedCount = Array.isArray(data.memoriesUsed)
+                ? data.memoriesUsed.length
+                : typeof data.memoriesUsed === 'number'
+                  ? data.memoriesUsed
+                  : undefined;
               const mergedStats = data.modelStats
                 ? {
                     ...data.modelStats,
@@ -1175,6 +1227,9 @@ const ChatWindow = ({ id }: { id?: string }) => {
                       : {}),
                     ...(usedPersonalizationFlag !== undefined
                       ? { usedPersonalization: usedPersonalizationFlag }
+                      : {}),
+                    ...(memoriesUsedCount !== undefined
+                      ? { memoriesUsed: memoriesUsedCount }
                       : {}),
                   }
                 : undefined;
@@ -1298,6 +1353,19 @@ const ChatWindow = ({ id }: { id?: string }) => {
     }
     if (userProfile) {
       payload.userProfile = userProfile;
+    }
+
+    // Memory settings from localStorage
+    const memEnabled = localStorage.getItem('memoryEnabled') !== 'false';
+    const memRetrievalEnabled =
+      localStorage.getItem('memoryRetrievalEnabled') !== 'false';
+    const memAutoDetection =
+      localStorage.getItem('memoryAutoDetectionEnabled') !== 'false';
+    if (memEnabled && memRetrievalEnabled) {
+      payload.memoryEnabled = true;
+    }
+    if (memEnabled && memAutoDetection) {
+      payload.memoryAutoDetection = true;
     }
 
     const res = await fetch('/api/chat', {

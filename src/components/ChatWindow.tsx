@@ -202,9 +202,9 @@ const checkConfig = async (
       }
 
       localStorage.setItem('chatModel', chatModel!);
-      localStorage.setItem('chatModelProvider', chatModelProvider);
+      localStorage.setItem('chatModelProvider', chatModelProvider!);
       localStorage.setItem('embeddingModel', embeddingModel!);
-      localStorage.setItem('embeddingModelProvider', embeddingModelProvider);
+      localStorage.setItem('embeddingModelProvider', embeddingModelProvider!);
     } else {
       const chatModelProviders = providers.chatModelProviders;
       const embeddingModelProviders = providers.embeddingModelProviders;
@@ -269,12 +269,12 @@ const checkConfig = async (
 
     setChatModelProvider({
       name: chatModel!,
-      provider: chatModelProvider,
+      provider: chatModelProvider!,
     });
 
     setEmbeddingModelProvider({
       name: embeddingModel!,
-      provider: embeddingModelProvider,
+      provider: embeddingModelProvider!,
     });
 
     setIsConfigReady(true);

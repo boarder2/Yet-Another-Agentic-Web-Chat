@@ -14,6 +14,9 @@ import {
   TvIcon,
   X,
   Loader2,
+  Brain,
+  Trash2,
+  List,
 } from 'lucide-react';
 import Markdown, { MarkdownToJSX } from 'markdown-to-jsx';
 import { useState } from 'react';
@@ -192,21 +195,27 @@ const ToolCall = ({
         return <Search size={16} className="text-accent" />;
       case 'file':
       case 'file_search':
-        return <FileText size={16} className="text-green-600" />;
+        return <FileText size={16} className="text-accent" />;
       case 'url':
       case 'url_summarization':
-        return <Globe size={16} className="text-purple-600" />;
+        return <Globe size={16} className="text-accent" />;
       case 'image':
       case 'image_search':
-        return <ImageIcon size={16} className="text-blue-600" />;
+        return <ImageIcon size={16} className="text-accent" />;
       case 'image_analysis':
-        return <ScanEye size={16} className="text-teal-600" />;
+        return <ScanEye size={16} className="text-accent" />;
       case 'firefoxAI':
-        return <BotIcon size={16} className="text-indigo-600" />;
+        return <BotIcon size={16} className="text-accent" />;
       case 'youtube_transcript':
         return <TvIcon size={16} className="text-red-600" />;
       case 'pdf_loader':
         return <FileText size={16} className="text-red-600" />;
+      case 'save_memory':
+        return <Brain size={16} className="text-accent" />;
+      case 'delete_memory':
+        return <Trash2 size={16} className="text-red-600" />;
+      case 'list_memories':
+        return <List size={16} className="text-accent" />;
       default:
         return <Settings size={16} className="text-fg/70" />;
     }
@@ -317,6 +326,43 @@ const ToolCall = ({
             </div>
           </div>
         </div>
+      );
+    }
+
+    if (type === 'save_memory') {
+      return (
+        <>
+          <span className="mr-2">{getIcon(type)}</span>
+          <span>Saving memory:</span>
+          {query && (
+            <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded font-mono text-sm truncate max-w-md">
+              {decodeHtmlEntities(query)}
+            </span>
+          )}
+        </>
+      );
+    }
+
+    if (type === 'delete_memory') {
+      return (
+        <>
+          <span className="mr-2">{getIcon(type)}</span>
+          <span>Deleting memory:</span>
+          {query && (
+            <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded font-mono text-sm truncate max-w-md">
+              {decodeHtmlEntities(query)}
+            </span>
+          )}
+        </>
+      );
+    }
+
+    if (type === 'list_memories') {
+      return (
+        <>
+          <span className="mr-2">{getIcon(type)}</span>
+          <span>Retrieving stored memories</span>
+        </>
       );
     }
 

@@ -33,6 +33,7 @@ export type ModelStats = {
   usageSystem?: TokenUsage;
   usedLocation?: boolean;
   usedPersonalization?: boolean;
+  memoriesUsed?: number;
 };
 
 export type Message = {
@@ -95,17 +96,26 @@ const checkConfig = async (
     let embeddingModel = localStorage.getItem('embeddingModel');
     let embeddingModelProvider = localStorage.getItem('embeddingModelProvider');
 
-    const providers = await fetch(`/api/models`, {
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    }).then(async (res) => {
-      if (!res.ok)
-        throw new Error(
-          `Failed to fetch models: ${res.status} ${res.statusText}`,
-        );
-      return res.json();
-    });
+    const [providers, serverConfig] = await Promise.all([
+      fetch(`/api/models`, {
+        headers: { 'Content-Type': 'application/json' },
+      }).then(async (res) => {
+        if (!res.ok)
+          throw new Error(
+            `Failed to fetch models: ${res.status} ${res.statusText}`,
+          );
+        return res.json();
+      }),
+      // Fetch server config for saved model preferences
+      !chatModel ||
+      !chatModelProvider ||
+      !embeddingModel ||
+      !embeddingModelProvider
+        ? fetch('/api/config')
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null)
+        : Promise.resolve(null),
+    ]);
 
     if (
       !chatModel ||
@@ -119,25 +129,44 @@ const checkConfig = async (
 
         if (!chatModelProviders || chatModelProvidersKeys.length === 0) {
           return toast.error('No chat models available');
+        }
+
+        // Try server config first, then fall back to first available provider
+        const serverChatProvider = serverConfig?.selectedSystemModelProvider;
+        if (
+          serverChatProvider &&
+          chatModelProviders[serverChatProvider] &&
+          Object.keys(chatModelProviders[serverChatProvider]).length > 0
+        ) {
+          chatModelProvider = serverChatProvider;
+          const serverModel = serverConfig.selectedSystemModel;
+          if (
+            serverModel &&
+            chatModelProviders[serverChatProvider][serverModel]
+          ) {
+            chatModel = serverModel;
+          } else {
+            chatModel = Object.keys(chatModelProviders[serverChatProvider])[0];
+          }
         } else {
           chatModelProvider =
             chatModelProvidersKeys.find(
               (provider) =>
                 Object.keys(chatModelProviders[provider]).length > 0,
             ) || chatModelProvidersKeys[0];
-        }
 
-        if (
-          chatModelProvider === 'custom_openai' &&
-          Object.keys(chatModelProviders[chatModelProvider]).length === 0
-        ) {
-          toast.error(
-            "Looks like you haven't configured any chat model providers. Please configure them from the settings page or the config file.",
-          );
-          return setHasError(true);
-        }
+          if (
+            chatModelProvider === 'custom_openai' &&
+            Object.keys(chatModelProviders[chatModelProvider]).length === 0
+          ) {
+            toast.error(
+              "Looks like you haven't configured any chat model providers. Please configure them from the settings page or the config file.",
+            );
+            return setHasError(true);
+          }
 
-        chatModel = Object.keys(chatModelProviders[chatModelProvider])[0];
+          chatModel = Object.keys(chatModelProviders[chatModelProvider])[0];
+        }
       }
 
       if (!embeddingModel || !embeddingModelProvider) {
@@ -149,16 +178,33 @@ const checkConfig = async (
         )
           return toast.error('No embedding models available');
 
-        embeddingModelProvider = Object.keys(embeddingModelProviders)[0];
-        embeddingModel = Object.keys(
-          embeddingModelProviders[embeddingModelProvider],
-        )[0];
+        // Try server config first
+        const serverEmbProvider = serverConfig?.selectedEmbeddingModelProvider;
+        if (serverEmbProvider && embeddingModelProviders[serverEmbProvider]) {
+          embeddingModelProvider = serverEmbProvider;
+          const serverModel = serverConfig.selectedEmbeddingModel;
+          if (
+            serverModel &&
+            embeddingModelProviders[serverEmbProvider][serverModel]
+          ) {
+            embeddingModel = serverModel;
+          } else {
+            embeddingModel = Object.keys(
+              embeddingModelProviders[serverEmbProvider],
+            )[0];
+          }
+        } else {
+          embeddingModelProvider = Object.keys(embeddingModelProviders)[0];
+          embeddingModel = Object.keys(
+            embeddingModelProviders[embeddingModelProvider],
+          )[0];
+        }
       }
 
       localStorage.setItem('chatModel', chatModel!);
-      localStorage.setItem('chatModelProvider', chatModelProvider);
+      localStorage.setItem('chatModelProvider', chatModelProvider!);
       localStorage.setItem('embeddingModel', embeddingModel!);
-      localStorage.setItem('embeddingModelProvider', embeddingModelProvider);
+      localStorage.setItem('embeddingModelProvider', embeddingModelProvider!);
     } else {
       const chatModelProviders = providers.chatModelProviders;
       const embeddingModelProviders = providers.embeddingModelProviders;
@@ -223,12 +269,12 @@ const checkConfig = async (
 
     setChatModelProvider({
       name: chatModel!,
-      provider: chatModelProvider,
+      provider: chatModelProvider!,
     });
 
     setEmbeddingModelProvider({
       name: embeddingModel!,
-      provider: embeddingModelProvider,
+      provider: embeddingModelProvider!,
     });
 
     setIsConfigReady(true);
@@ -248,6 +294,7 @@ const loadMessages = async (
   setNotFound: (notFound: boolean) => void,
   setFiles: (files: File[]) => void,
   setFileIds: (fileIds: string[]) => void,
+  setIsPrivateSession?: (isPrivate: boolean) => void,
 ) => {
   const res = await fetch(`/api/chats/${chatId}`, {
     method: 'GET',
@@ -274,7 +321,8 @@ const loadMessages = async (
   setMessages(messages);
 
   const history = messages.map((msg) => {
-    const entry: [string, string, string[]?] = [msg.role, msg.content];
+    const role = msg.role === 'user' ? 'human' : msg.role;
+    const entry: [string, string, string[]?] = [role, msg.content];
     if (msg.role === 'user' && msg.images && msg.images.length > 0) {
       entry[2] = msg.images.map((img: ImageAttachment) => img.imageId);
     }
@@ -298,6 +346,9 @@ const loadMessages = async (
 
   setChatHistory(history);
   setFocusMode(data.chat.focusMode);
+  if (setIsPrivateSession) {
+    setIsPrivateSession(data.chat.isPrivate === 1);
+  }
   setIsMessagesLoaded(true);
 };
 
@@ -371,6 +422,10 @@ const ChatWindow = ({ id }: { id?: string }) => {
   const [isMessagesLoaded, setIsMessagesLoaded] = useState(false);
 
   const [notFound, setNotFound] = useState(false);
+
+  const [isPrivateSession, setIsPrivateSession] = useState(
+    () => searchParams.get('private') === '1',
+  );
 
   // State for tracking sources during gathering phase
   const [gatheringSources, setGatheringSources] = useState<
@@ -485,6 +540,7 @@ const ChatWindow = ({ id }: { id?: string }) => {
         setNotFound,
         setFiles,
         setFileIds,
+        setIsPrivateSession,
       );
     } else if (!chatId) {
       setNewChatCreated(true);
@@ -499,6 +555,36 @@ const ChatWindow = ({ id }: { id?: string }) => {
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
+
+  // When the user navigates to /?private=1 from /, the pathname doesn't change
+  // so the pathname effect below won't fire. Watch searchParams directly and
+  // reset + activate private mode when the private param appears or disappears.
+  const prevSearchParamsRef = useRef(searchParams);
+  useEffect(() => {
+    if (prevSearchParamsRef.current === searchParams) return;
+    prevSearchParamsRef.current = searchParams;
+
+    // Only act when we're on the root path (not a /c/... chat)
+    if (pathname !== '/' || id) return;
+
+    const isPriv = searchParams.get('private') === '1';
+    setMessages([]);
+    setChatHistory([]);
+    setFiles([]);
+    setFileIds([]);
+    setPendingImages([]);
+    setNewChatCreated(true);
+    setIsMessagesLoaded(true);
+    setLoading(false);
+    setGatheringSources([]);
+    setTodoItems([]);
+    setAnalysisProgress(null);
+    setLiveModelStats(null);
+    setNotFound(false);
+    setIsPrivateSession(isPriv);
+    setChatId(crypto.randomBytes(20).toString('hex'));
+    document.title = 'Chat - YAAWC';
+  }, [searchParams, pathname, id]);
 
   // Reset to a fresh chat when the user navigates back to "/" (e.g. via the
   // sidebar "new chat" Link).  window.history.replaceState is used earlier to
@@ -521,6 +607,7 @@ const ChatWindow = ({ id }: { id?: string }) => {
       setAnalysisProgress(null);
       setLiveModelStats(null);
       setNotFound(false);
+      setIsPrivateSession(searchParams.get('private') === '1');
       setChatId(crypto.randomBytes(20).toString('hex'));
       document.title = 'Chat - YAAWC';
     }
@@ -545,8 +632,10 @@ const ChatWindow = ({ id }: { id?: string }) => {
       images?: ImageAttachment[];
     },
   ) => {
-    const userLocation = sendLocation ? personalizationLocation : '';
-    const userProfile = sendPersonalization ? personalizationAbout : '';
+    const userLocation =
+      !isPrivateSession && sendLocation ? personalizationLocation : '';
+    const userProfile =
+      !isPrivateSession && sendPersonalization ? personalizationAbout : '';
 
     setScrollTrigger((x) => (x === 0 ? -1 : 0));
     // Special case: If we're just updating an existing message with suggestions
@@ -1167,6 +1256,11 @@ const ChatWindow = ({ id }: { id?: string }) => {
                 typeof data.usedPersonalization === 'boolean'
                   ? data.usedPersonalization
                   : undefined;
+              const memoriesUsedCount = Array.isArray(data.memoriesUsed)
+                ? data.memoriesUsed.length
+                : typeof data.memoriesUsed === 'number'
+                  ? data.memoriesUsed
+                  : undefined;
               const mergedStats = data.modelStats
                 ? {
                     ...data.modelStats,
@@ -1175,6 +1269,9 @@ const ChatWindow = ({ id }: { id?: string }) => {
                       : {}),
                     ...(usedPersonalizationFlag !== undefined
                       ? { usedPersonalization: usedPersonalizationFlag }
+                      : {}),
+                    ...(memoriesUsedCount !== undefined
+                      ? { memoriesUsed: memoriesUsedCount }
                       : {}),
                   }
                 : undefined;
@@ -1298,6 +1395,25 @@ const ChatWindow = ({ id }: { id?: string }) => {
     }
     if (userProfile) {
       payload.userProfile = userProfile;
+    }
+
+    // Memory settings from localStorage (disabled in private sessions)
+    if (!isPrivateSession) {
+      const memEnabled = localStorage.getItem('memoryEnabled') !== 'false';
+      const memRetrievalEnabled =
+        localStorage.getItem('memoryRetrievalEnabled') !== 'false';
+      const memAutoDetection =
+        localStorage.getItem('memoryAutoDetectionEnabled') !== 'false';
+      if (memEnabled && memRetrievalEnabled) {
+        payload.memoryEnabled = true;
+      }
+      if (memEnabled && memAutoDetection) {
+        payload.memoryAutoDetection = true;
+      }
+    }
+
+    if (isPrivateSession) {
+      payload.isPrivate = true;
     }
 
     const res = await fetch('/api/chat', {
@@ -1437,7 +1553,11 @@ const ChatWindow = ({ id }: { id?: string }) => {
       <div>
         {messages.length > 0 ? (
           <>
-            <Navbar chatId={chatId!} messages={messages} />
+            <Navbar
+              chatId={chatId!}
+              messages={messages}
+              isPrivateSession={isPrivateSession}
+            />
             <Chat
               loading={loading}
               messages={messages}
@@ -1468,6 +1588,7 @@ const ChatWindow = ({ id }: { id?: string }) => {
               pendingImages={pendingImages}
               setPendingImages={setPendingImages}
               imageCapable={imageCapable}
+              isPrivateSession={isPrivateSession}
             />
           </>
         ) : (
@@ -1491,6 +1612,7 @@ const ChatWindow = ({ id }: { id?: string }) => {
             pendingImages={pendingImages}
             setPendingImages={setPendingImages}
             imageCapable={imageCapable}
+            isPrivateSession={isPrivateSession}
           />
         )}
       </div>

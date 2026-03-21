@@ -37,6 +37,7 @@ const Chat = ({
   pendingImages,
   setPendingImages,
   imageCapable = false,
+  isPrivateSession = false,
 }: {
   messages: Message[];
   sendMessage: (
@@ -105,6 +106,7 @@ const Chat = ({
   pendingImages: ImageAttachment[];
   setPendingImages: (images: ImageAttachment[]) => void;
   imageCapable?: boolean;
+  isPrivateSession?: boolean;
 }) => {
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [manuallyScrolledUp, setManuallyScrolledUp] = useState(false);
@@ -364,6 +366,7 @@ const Chat = ({
           pendingImages={pendingImages}
           setPendingImages={setPendingImages}
           imageCapable={imageCapable}
+          isPrivateSession={isPrivateSession}
         />
       </div>
       <div ref={messageEnd} className="h-0" />

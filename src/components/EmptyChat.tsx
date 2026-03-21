@@ -1,7 +1,8 @@
-import { Settings } from 'lucide-react';
+import { EyeOff, Settings } from 'lucide-react';
 import { File, ImageAttachment } from './ChatWindow';
 import Link from 'next/link';
 import MessageInput from './MessageInput';
+import { cn } from '@/lib/utils';
 
 const EmptyChat = ({
   sendMessage,
@@ -23,6 +24,7 @@ const EmptyChat = ({
   pendingImages,
   setPendingImages,
   imageCapable = false,
+  isPrivateSession = false,
 }: {
   sendMessage: (message: string) => void;
   focusMode: string;
@@ -43,6 +45,7 @@ const EmptyChat = ({
   pendingImages: ImageAttachment[];
   setPendingImages: (images: ImageAttachment[]) => void;
   imageCapable?: boolean;
+  isPrivateSession?: boolean;
 }) => {
   return (
     <div className="relative">
@@ -53,7 +56,22 @@ const EmptyChat = ({
       </div>
       <div className="flex flex-col items-center justify-center min-h-screen max-w-screen-sm mx-auto p-2 space-y-4">
         <div className="flex flex-col items-center justify-center w-full space-y-8">
-          {/* <h2 className="text-3xl font-medium -mt-8">Research begins here.</h2> */}
+          <Link
+            href={isPrivateSession ? '/' : '/?private=1'}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2 rounded-full border text-sm transition-colors',
+              isPrivateSession
+                ? 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400'
+                : 'bg-transparent border-surface-2 text-fg/40 hover:text-fg/70 hover:border-fg/20',
+            )}
+          >
+            <EyeOff size={15} />
+            <span>
+              {isPrivateSession
+                ? 'Private session — no personalization or memories'
+                : 'Start private session'}
+            </span>
+          </Link>
           <MessageInput
             firstMessage={true}
             loading={false}
@@ -76,6 +94,7 @@ const EmptyChat = ({
             pendingImages={pendingImages}
             setPendingImages={setPendingImages}
             imageCapable={imageCapable}
+            isPrivateSession={isPrivateSession}
           />
         </div>
       </div>

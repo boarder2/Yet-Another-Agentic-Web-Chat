@@ -33,6 +33,7 @@ const MessageInput = ({
   imageCapable = false,
   initialMessage,
   onCancelEdit,
+  isPrivateSession = false,
 }: {
   sendMessage: (
     message: string,
@@ -64,6 +65,7 @@ const MessageInput = ({
   imageCapable?: boolean;
   initialMessage?: string;
   onCancelEdit?: () => void;
+  isPrivateSession?: boolean;
 }) => {
   const [message, setMessage] = useState(initialMessage || '');
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -187,10 +189,7 @@ const MessageInput = ({
         {(pendingImages.length > 0 || isUploadingImage) && (
           <div className="flex flex-row gap-2 mb-2 overflow-x-auto pb-1">
             {pendingImages.map((img) => (
-              <div
-                key={img.imageId}
-                className="relative flex-shrink-0 group/thumb"
-              >
+              <div key={img.imageId} className="relative shrink-0 group/thumb">
                 <img
                   src={`/api/uploads/images/${img.imageId}`}
                   alt={img.fileName}
@@ -211,7 +210,7 @@ const MessageInput = ({
               </div>
             ))}
             {isUploadingImage && (
-              <div className="h-20 w-20 flex-shrink-0 flex items-center justify-center rounded-lg border border-surface-2 bg-surface-2/50">
+              <div className="h-20 w-20 shrink-0 flex items-center justify-center rounded-lg border border-surface-2 bg-surface-2/50">
                 <div className="w-5 h-5 border-2 border-fg/30 border-t-fg animate-spin rounded-full" />
               </div>
             )}
@@ -252,17 +251,19 @@ const MessageInput = ({
               selectedPromptIds={systemPromptIds}
               onSelectedPromptIdsChange={setSystemPromptIds}
             />
-            <PersonalizationPicker
-              hasLocation={personalizationLocation?.trim() !== ''}
-              hasProfile={personalizationAbout?.trim() !== ''}
-              sendLocation={sendLocation}
-              setSendLocation={setSendLocation}
-              sendPersonalization={sendPersonalization}
-              setSendPersonalization={setSendPersonalization}
-              locationPreview={personalizationLocation}
-              profilePreview={personalizationAbout}
-              onRefresh={refreshPersonalization}
-            />
+            {!isPrivateSession && (
+              <PersonalizationPicker
+                hasLocation={personalizationLocation?.trim() !== ''}
+                hasProfile={personalizationAbout?.trim() !== ''}
+                sendLocation={sendLocation}
+                setSendLocation={setSendLocation}
+                sendPersonalization={sendPersonalization}
+                setSendPersonalization={setSendPersonalization}
+                locationPreview={personalizationLocation}
+                profilePreview={personalizationAbout}
+                onRefresh={refreshPersonalization}
+              />
+            )}
             {loading ? (
               <button
                 type="button"
@@ -273,7 +274,7 @@ const MessageInput = ({
                 {loading && (
                   <div className="absolute inset-0 rounded-full border-2 border-fg/30 border-t-fg animate-spin" />
                 )}
-                <span className="relative flex items-center justify-center w-[17px] h-[17px]">
+                <span className="relative flex items-center justify-center w-4.25 h-4.25">
                   <Square size={17} className="text-white" />
                 </span>
               </button>

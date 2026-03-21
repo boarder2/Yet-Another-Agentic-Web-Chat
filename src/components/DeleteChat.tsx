@@ -1,4 +1,4 @@
-import { Trash } from 'lucide-react';
+import { ShieldAlert, Trash } from 'lucide-react';
 import {
   Description,
   Dialog,
@@ -17,11 +17,15 @@ const DeleteChat = ({
   chats,
   setChats,
   redirect = false,
+  isPrivate = false,
+  expiresIn,
 }: {
   chatId: string;
   chats: Chat[];
   setChats: (chats: Chat[]) => void;
   redirect?: boolean;
+  isPrivate?: boolean;
+  expiresIn?: string;
 }) => {
   const [confirmationDialogOpen, setConfirmationDialogOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -57,14 +61,25 @@ const DeleteChat = ({
 
   return (
     <>
-      <button
-        onClick={() => {
-          setConfirmationDialogOpen(true);
-        }}
-        className="bg-transparent text-red-400 hover:scale-105 transition duration-200"
-      >
-        <Trash size={17} />
-      </button>
+      {isPrivate ? (
+        <button
+          onClick={() => setConfirmationDialogOpen(true)}
+          className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-red-500/10 border border-red-500/20 text-red-500 hover:bg-red-500/20 transition duration-200 text-xs"
+        >
+          <ShieldAlert size={14} />
+          <span>Delete</span>
+          {expiresIn && <span className="opacity-60">· {expiresIn}</span>}
+        </button>
+      ) : (
+        <button
+          onClick={() => {
+            setConfirmationDialogOpen(true);
+          }}
+          className="bg-transparent text-red-400 hover:scale-105 transition duration-200"
+        >
+          <Trash size={17} />
+        </button>
+      )}
       <Transition appear show={confirmationDialogOpen} as={Fragment}>
         <Dialog
           as="div"

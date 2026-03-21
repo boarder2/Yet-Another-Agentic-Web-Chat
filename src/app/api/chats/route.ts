@@ -4,6 +4,10 @@ import {
   messages as messagesTable,
 } from '@/lib/db/schema';
 import { desc, sql, like, or, inArray } from 'drizzle-orm';
+import { cleanupExpiredPrivateSessions } from '@/lib/privateSessionCleanup';
+
+let lastCleanup = 0;
+const CLEANUP_INTERVAL_MS = 60 * 1000; // throttle to once per minute
 
 function extractExcerpt(
   content: string,
@@ -33,6 +37,15 @@ function extractExcerpt(
 
 export const GET = async (req: Request) => {
   try {
+    // Lazily clean up expired private sessions (throttled)
+    const now = Date.now();
+    if (now - lastCleanup > CLEANUP_INTERVAL_MS) {
+      lastCleanup = now;
+      cleanupExpiredPrivateSessions().catch((err) =>
+        console.warn('Private session cleanup failed:', err),
+      );
+    }
+
     const { searchParams } = new URL(req.url);
     const limitParam = searchParams.get('limit');
     const offsetParam = searchParams.get('offset');

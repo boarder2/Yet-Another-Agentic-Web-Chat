@@ -15,6 +15,20 @@
       "when": 1752728893879,
       "tag": "0001_tricky_thor",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1773513439509,
+      "tag": "0002_tricky_nick_fury",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1774000000000,
+      "tag": "0003_add_private_chats",
+      "breakpoints": true
     }
   ]
 }

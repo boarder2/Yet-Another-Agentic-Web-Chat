@@ -2,7 +2,14 @@
 
 import DeleteChat from '@/components/DeleteChat';
 import { cn, formatTimeDifference } from '@/lib/utils';
-import { BookOpenText, ClockIcon, Search, Sparkles, X } from 'lucide-react';
+import {
+  BookOpenText,
+  ClockIcon,
+  EyeOff,
+  Search,
+  Sparkles,
+  X,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 
@@ -11,7 +18,18 @@ export interface Chat {
   title: string;
   createdAt: string;
   focusMode: string;
+  isPrivate?: number;
   matchExcerpt?: string | null;
+}
+
+function getPrivateExpiresIn(
+  createdAt: string,
+  durationMs: number = 24 * 60 * 60 * 1000,
+): string {
+  const expiresAt = new Date(createdAt).getTime() + durationMs;
+  const remaining = expiresAt - Date.now();
+  if (remaining <= 0) return 'expiring soon';
+  return formatTimeDifference(new Date(), new Date(expiresAt));
 }
 
 const HighlightedExcerpt = ({
@@ -40,6 +58,10 @@ const HighlightedExcerpt = ({
 };
 
 const Page = () => {
+  const [privateSessionDurationMs, setPrivateSessionDurationMs] = useState(
+    24 * 60 * 60 * 1000,
+  );
+
   // Paginated chats (normal mode)
   const [chats, setChats] = useState<Chat[]>([]);
   const [loading, setLoading] = useState(true);
@@ -90,6 +112,16 @@ const Page = () => {
 
   useEffect(() => {
     fetchPage(0);
+    fetch('/api/config')
+      .then((r) => r.json())
+      .then((data) => {
+        if (typeof data.privateSessionDurationMinutes === 'number') {
+          setPrivateSessionDurationMs(
+            data.privateSessionDurationMinutes * 60 * 1000,
+          );
+        }
+      })
+      .catch(() => {});
   }, []);
 
   // Infinite scroll (only active when not in search mode)
@@ -359,12 +391,20 @@ const Page = () => {
               )}
               key={chat.id}
             >
-              <Link
-                href={`/c/${chat.id}`}
-                className="lg:text-xl font-medium truncate transition duration-200 cursor-pointer"
-              >
-                {chat.title}
-              </Link>
+              <div className="flex items-center gap-2">
+                <Link
+                  href={`/c/${chat.id}`}
+                  className="lg:text-xl font-medium truncate transition duration-200 cursor-pointer"
+                >
+                  {chat.title}
+                </Link>
+                {chat.isPrivate === 1 && (
+                  <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-xs font-medium whitespace-nowrap">
+                    <EyeOff size={11} />
+                    Private
+                  </span>
+                )}
+              </div>
               {isSearchMode && chat.matchExcerpt && (
                 <p className="text-sm text-fg/60 line-clamp-2 -mt-1">
                   <HighlightedExcerpt
@@ -377,10 +417,25 @@ const Page = () => {
               )}
               <div className="flex flex-row items-center justify-between w-full">
                 <div className="flex flex-row items-center space-x-1 lg:space-x-1.5 opacity-70">
-                  <ClockIcon size={15} />
-                  <p className="text-xs">
-                    {formatTimeDifference(new Date(), chat.createdAt)} Ago
-                  </p>
+                  {chat.isPrivate === 1 ? (
+                    <>
+                      <ClockIcon size={15} />
+                      <p className="text-xs">
+                        Expires in{' '}
+                        {getPrivateExpiresIn(
+                          chat.createdAt,
+                          privateSessionDurationMs,
+                        )}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <ClockIcon size={15} />
+                      <p className="text-xs">
+                        {formatTimeDifference(new Date(), chat.createdAt)} Ago
+                      </p>
+                    </>
+                  )}
                 </div>
                 <DeleteChat
                   chatId={chat.id}
@@ -393,6 +448,15 @@ const Page = () => {
                       setOffset((prev) => Math.max(prev - 1, 0));
                     }
                   }}
+                  isPrivate={chat.isPrivate === 1}
+                  expiresIn={
+                    chat.isPrivate === 1
+                      ? getPrivateExpiresIn(
+                          chat.createdAt,
+                          privateSessionDurationMs,
+                        )
+                      : undefined
+                  }
                 />
               </div>
             </div>

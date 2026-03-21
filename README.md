@@ -15,6 +15,8 @@ YAAWC (**Pronounced: "yawck"** — as in the sound you make when yet another AI 
 - [Deep Research (Sub-Agents)](#deep-research-sub-agents)
 - [Dashboard Widgets](#dashboard-widgets)
 - [LLM Providers](#llm-providers)
+- [Memory](#memory)
+- [Private Sessions](#private-sessions)
 - [Personalization \& Personas](#personalization--personas)
 - [Installation](#installation)
   - [Docker (Recommended)](#docker-recommended)
@@ -36,24 +38,26 @@ Want to know more about the architecture? See [docs/architecture/README.md](docs
 
 ## Features at a Glance
 
-| Category                    | Highlights                                                                                                                       |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| **Agentic Search**          | LangGraph React agent with tool use, research planning, and multi-step reasoning                                                 |
-| **Deep Research**           | Spawns focused sub-agents that search → read → refine → search again                                                             |
-| **9 Agent Tools**           | Web search, URL summarization, image search & analysis, YouTube transcripts, PDF loading, file search, deep research, todo lists |
-| **10 LLM Providers**        | OpenAI, Anthropic, Groq, Ollama, Gemini, DeepSeek, LM Studio, OpenRouter, AI/ML API, Custom OpenAI                               |
-| **6 Embedding Providers**   | OpenAI, Ollama, Gemini, Xenova Transformers (local), AI/ML API, LM Studio                                                        |
-| **Dashboard Widgets**       | AI-powered info widgets with auto-refresh, drag-and-drop layout, export/import                                                   |
-| **Personas**                | Custom system prompts with built-in templates (scholarly, conversational, etc.)                                                  |
-| **Personalization**         | Per-message location and profile context injection                                                                               |
-| **Privacy**                 | Self-hosted SearXNG — no tracking, no data brokering, no "we updated our privacy policy" emails                                  |
-| **Browser Integration**     | OpenSearch XML, autocomplete, `?q=` URL queries with saved preferences                                                           |
-| **Streaming UI**            | Real-time tool calls, sub-agent progress, todo widgets, thinking/reasoning display                                               |
-| **Image & Video Search**    | Dedicated search with gallery views and video embeds                                                                             |
-| **File Research**           | Upload documents and research them with cited excerpts                                                                           |
-| **Respond Now**             | Interrupt ongoing retrieval and get an immediate answer from what's been gathered so far                                         |
-| **Model Visibility**        | Admins can hide models from the UI to prevent accidental usage                                                                   |
-| **Dual Model Architecture** | Separate Chat and System models, linkable or independent                                                                         |
+| Category                    | Highlights                                                                                                                                                  |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Agentic Search**          | LangGraph React agent with tool use, research planning, and multi-step reasoning                                                                            |
+| **Deep Research**           | Spawns focused sub-agents that search → read → refine → search again                                                                                        |
+| **12 Agent Tools**          | Web search, URL summarization, image search & analysis, YouTube transcripts, PDF loading, file search, deep research, todo lists, memory (save/delete/list) |
+| **10 LLM Providers**        | OpenAI, Anthropic, Groq, Ollama, Gemini, DeepSeek, LM Studio, OpenRouter, AI/ML API, Custom OpenAI                                                          |
+| **6 Embedding Providers**   | OpenAI, Ollama, Gemini, Xenova Transformers (local), AI/ML API, LM Studio                                                                                   |
+| **Dashboard Widgets**       | AI-powered info widgets with auto-refresh, drag-and-drop layout, export/import                                                                              |
+| **Personas**                | Custom system prompts with built-in templates (scholarly, conversational, etc.)                                                                             |
+| **Personalization**         | Per-message location and profile context injection                                                                                                          |
+| **Memory**                  | Long-term memory with semantic retrieval, automatic extraction, deduplication, and a full management UI                                                     |
+| **Private Sessions**        | Temporary conversations with auto-expiry — no personalization, no memory, no trace left behind                                                              |
+| **Privacy**                 | Self-hosted SearXNG — no tracking, no data brokering, no "we updated our privacy policy" emails                                                             |
+| **Browser Integration**     | OpenSearch XML, autocomplete, `?q=` URL queries with saved preferences                                                                                      |
+| **Streaming UI**            | Real-time tool calls, sub-agent progress, todo widgets, thinking/reasoning display                                                                          |
+| **Image & Video Search**    | Dedicated search with gallery views and video embeds                                                                                                        |
+| **File Research**           | Upload documents and research them with cited excerpts                                                                                                      |
+| **Respond Now**             | Interrupt ongoing retrieval and get an immediate answer from what's been gathered so far                                                                    |
+| **Model Visibility**        | Admins can hide models from the UI to prevent accidental usage                                                                                              |
+| **Dual Model Architecture** | Separate Chat and System models, linkable or independent                                                                                                    |
 
 ## Focus Modes
 
@@ -82,6 +86,9 @@ The LangGraph agent has access to the following tools (individually toggleable p
 | **File Search**        | Semantic similarity search across uploaded documents with configurable threshold.                   |
 | **Deep Research**      | Spawns a focused sub-agent for comprehensive multi-source investigation (see below).                |
 | **Todo List**          | Manages a visible research plan (up to 10 tasks) with live progress in the UI.                      |
+| **Save Memory**        | Stores a fact or preference to long-term memory with automatic categorization.                      |
+| **Delete Memory**      | Removes a memory by ID or fuzzy content match.                                                      |
+| **List Memories**      | Lists all stored memories grouped by category.                                                      |
 
 ## Deep Research (Sub-Agents)
 
@@ -122,6 +129,57 @@ The `/dashboard` page provides a configurable grid of AI-powered widgets:
 OpenAI, Ollama, Google Gemini, Xenova Transformers (fully local — no API needed), AI/ML API, LM Studio.
 
 All provider keys are configurable from the Settings UI or `config.toml`. API keys are never exposed in the frontend.
+
+## Memory
+
+YAAWC includes a long-term memory system that lets the agent remember facts, preferences, and instructions across conversations.
+
+### How It Works
+
+- **Semantic retrieval**: Before each response, relevant memories are retrieved using embedding similarity and injected into the prompt as context.
+- **Automatic extraction**: After each response, the agent can automatically detect and store new facts from the conversation (toggleable in Settings).
+- **Deduplication**: New memories are checked for exact matches, near-duplicates, and contradictions before being stored — preventing bloat and keeping context clean.
+- **Sensitivity filtering**: Passwords, API keys, emails, and other sensitive data are blocked from automatic extraction.
+
+### Memory Categories
+
+Memories are automatically classified into five categories: **Preference**, **Profile**, **Professional**, **Project**, and **Instruction**.
+
+### Managing Memories
+
+- Navigate to `/memory` to view, search, add, edit, and delete memories.
+- Filter by category, sort by creation date / last accessed / times used.
+- Memories can be added manually or extracted automatically from conversations.
+- Use the **Re-index** button to regenerate all embeddings after changing your embedding model.
+
+### Agent Memory Tools
+
+The agent can also manage memories directly during a conversation using the **Save Memory**, **Delete Memory**, and **List Memories** tools.
+
+### Settings
+
+- **Enable/disable** the memory feature entirely.
+- **Toggle automatic memory detection** on or off.
+- Changing the embedding model triggers an automatic re-index of all stored memories.
+
+## Private Sessions
+
+Private sessions are temporary conversations that leave no lasting trace — personalization and memory are fully disabled, and the conversation is automatically deleted after a configurable duration.
+
+### Starting a Private Session
+
+Click **"Start private session"** at the bottom of the chat page, or navigate to `/?private=1`.
+
+### What's Different
+
+- **No personalization**: Location and profile context are stripped from messages.
+- **No memory**: Memories are neither retrieved nor created during the session.
+- **Auto-deletion**: The conversation and all its messages are deleted after the configured expiry time.
+- **Visual indicator**: An amber "Private" badge with a lock icon appears in the navbar, showing the remaining time until expiry.
+
+### Configuration
+
+Set `PRIVATE_SESSION_DURATION_MINUTES` in `config.toml` or via the Settings page. Predefined options: 1 hour, 8 hours, 24 hours, or a custom duration. Default is 24 hours (1440 minutes).
 
 ## Personalization & Personas
 
@@ -212,25 +270,28 @@ URL queries via `?q=` automatically apply your saved model preferences for a sea
 
 YAAWC exposes a full API for programmatic access:
 
-| Endpoint              | Method              | Description                                                    |
-| --------------------- | ------------------- | -------------------------------------------------------------- |
-| `/api/chat`           | POST                | Streaming chat with tool calls, sources, and live events (SSE) |
-| `/api/search`         | POST                | Programmatic search (streaming or non-streaming)               |
-| `/api/models`         | GET                 | List available models (`?include_hidden=true` for admin view)  |
-| `/api/config`         | GET/POST            | Read/write server configuration                                |
-| `/api/chats`          | GET                 | List all chats                                                 |
-| `/api/chats/[id]`     | GET/DELETE          | Get or delete a specific chat                                  |
-| `/api/suggestions`    | POST                | Generate follow-up suggestions                                 |
-| `/api/system-prompts` | GET/POST/PUT/DELETE | CRUD for persona prompts                                       |
-| `/api/images`         | POST                | Image search                                                   |
-| `/api/videos`         | POST                | Video search                                                   |
-| `/api/uploads`        | POST                | File upload                                                    |
-| `/api/uploads/images` | POST/GET            | Image upload and serving                                       |
-| `/api/tools`          | GET                 | List available agent tools                                     |
-| `/api/dashboard`      | GET/POST            | Dashboard widget CRUD                                          |
-| `/api/respond-now`    | POST                | Interrupt retrieval for immediate response                     |
-| `/api/opensearch`     | GET                 | OpenSearch description XML                                     |
-| `/api/autocomplete`   | GET                 | Search autocomplete (proxied to SearXNG)                       |
+| Endpoint                | Method              | Description                                                    |
+| ----------------------- | ------------------- | -------------------------------------------------------------- |
+| `/api/chat`             | POST                | Streaming chat with tool calls, sources, and live events (SSE) |
+| `/api/search`           | POST                | Programmatic search (streaming or non-streaming)               |
+| `/api/models`           | GET                 | List available models (`?include_hidden=true` for admin view)  |
+| `/api/config`           | GET/POST            | Read/write server configuration                                |
+| `/api/chats`            | GET                 | List all chats                                                 |
+| `/api/chats/[id]`       | GET/DELETE          | Get or delete a specific chat                                  |
+| `/api/suggestions`      | POST                | Generate follow-up suggestions                                 |
+| `/api/system-prompts`   | GET/POST/PUT/DELETE | CRUD for persona prompts                                       |
+| `/api/images`           | POST                | Image search                                                   |
+| `/api/videos`           | POST                | Video search                                                   |
+| `/api/uploads`          | POST                | File upload                                                    |
+| `/api/uploads/images`   | POST/GET            | Image upload and serving                                       |
+| `/api/memories`         | GET/POST/DELETE     | List, add, or delete all memories                              |
+| `/api/memories/[id]`    | PUT/DELETE          | Update or delete a specific memory                             |
+| `/api/memories/reindex` | POST                | Regenerate all memory embeddings                               |
+| `/api/tools`            | GET                 | List available agent tools                                     |
+| `/api/dashboard`        | GET/POST            | Dashboard widget CRUD                                          |
+| `/api/respond-now`      | POST                | Interrupt retrieval for immediate response                     |
+| `/api/opensearch`       | GET                 | OpenSearch description XML                                     |
+| `/api/autocomplete`     | GET                 | Search autocomplete (proxied to SearXNG)                       |
 
 For detailed payload schemas, see [docs/API/SEARCH.md](docs/API/SEARCH.md).
 
@@ -274,6 +335,6 @@ YAAWC is built on the foundation of [Perplexica](https://github.com/ItzCrazyKns/
 
 ## A Note on AI Assistance
 
-Yes, a significant portion of this README — and frankly quite a bit of the code in this repo — was written with AI assistance. I know, I know. The irony of using an AI-powered tool to build and document an AI-powered tool is not lost on me. In my defense, I'm a software developer with over 25 years of experience and I review every change, so hopefully the quality bar is *somewhat* higher than "the AI just vibed it." This is a side project for me to explore agentic architectures and AI tooling.
+Yes, a significant portion of this README — and frankly quite a bit of the code in this repo — was written with AI assistance. I know, I know. The irony of using an AI-powered tool to build and document an AI-powered tool is not lost on me. In my defense, I'm a software developer with over 25 years of experience and I review every change, so hopefully the quality bar is _somewhat_ higher than "the AI just vibed it." This is a side project for me to explore agentic architectures and AI tooling.
 
 If you find something that looks suspiciously like a hallucination… well, YOLO, right? Just kidding. Please open an issue and I'll fix it ASAP.

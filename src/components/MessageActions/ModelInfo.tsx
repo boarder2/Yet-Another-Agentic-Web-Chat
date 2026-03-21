@@ -182,6 +182,14 @@ const ModelInfoButton: React.FC<ModelInfoButtonProps> = ({ modelStats }) => {
                   </div>
                 </>
               )}
+
+              {modelStats?.memoriesUsed !== undefined &&
+                modelStats.memoriesUsed > 0 && (
+                  <>
+                    <div className="opacity-70">Memories used</div>
+                    <div className="font-medium">{modelStats.memoriesUsed}</div>
+                  </>
+                )}
             </div>
           </div>
         </div>

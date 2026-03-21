@@ -21,6 +21,7 @@ import { Switch } from '@headlessui/react';
 import ThemeSwitcher from '@/components/theme/Switcher';
 import { Layers3 } from 'lucide-react';
 import Link from 'next/link';
+import { toast } from 'sonner';
 import {
   formattingAndCitationsLocal,
   formattingAndCitationsScholarly,
@@ -52,6 +53,12 @@ interface SettingsType {
   customOpenaiModelName: string;
   ollamaContextWindow: number;
   hiddenModels: string[];
+  selectedSystemModelProvider: string;
+  selectedSystemModel: string;
+  selectedEmbeddingModelProvider: string;
+  selectedEmbeddingModel: string;
+  linkSystemToChat: boolean;
+  privateSessionDurationMinutes: number;
 }
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
@@ -209,6 +216,18 @@ const predefinedContextSizes = [
   1024, 2048, 3072, 4096, 8192, 16384, 32768, 65536, 131072,
 ];
 
+const PREDEFINED_DURATIONS = [
+  { label: '5 minutes', value: 5 },
+  { label: '15 minutes', value: 15 },
+  { label: '30 minutes', value: 30 },
+  { label: '1 hour', value: 60 },
+  { label: '8 hours', value: 480 },
+  { label: '24 hours', value: 1440 },
+  { label: '3 days', value: 4320 },
+  { label: '7 days', value: 10080 },
+  { label: 'Custom', value: -1 },
+];
+
 export default function SettingsPage() {
   const [config, setConfig] = useState<SettingsType | null>(null);
   const [_chatModels, setChatModels] = useState<Record<string, unknown>>({});
@@ -238,9 +257,20 @@ export default function SettingsPage() {
   const [automaticSuggestions, setAutomaticSuggestions] = useState(true);
   const [personalizationLocation, setPersonalizationLocation] = useState('');
   const [personalizationAbout, setPersonalizationAbout] = useState('');
+  const [memoryEnabled, setMemoryEnabled] = useState(false);
+  const [memoryRetrievalEnabled, setMemoryRetrievalEnabled] = useState(false);
+  const [memoryAutoDetectionEnabled, setMemoryAutoDetectionEnabled] =
+    useState(false);
   const [savingStates, setSavingStates] = useState<Record<string, boolean>>({});
   const [contextWindowSize, setContextWindowSize] = useState(2048);
   const [isCustomContextWindow, setIsCustomContextWindow] = useState(false);
+
+  // Private session duration
+  const [privateSessionDurationMinutes, setPrivateSessionDurationMinutes] =
+    useState(1440);
+  const [isCustomPrivateDuration, setIsCustomPrivateDuration] = useState(false);
+  const [customPrivateDurationInput, setCustomPrivateDurationInput] =
+    useState('');
 
   const [userSystemPrompts, setUserSystemPrompts] = useState<Prompt[]>([]);
   const [editingPrompt, setEditingPrompt] = useState<Prompt | null>(null);
@@ -302,46 +332,66 @@ export default function SettingsPage() {
           ? data.chatModelProviders[chatModelProvider][0].name
           : undefined) ||
         '';
-      const systemModelProvider =
-        localStorage.getItem('systemModelProvider') ||
-        defaultChatModelProvider ||
-        '';
-      const systemModel =
-        localStorage.getItem('systemModel') ||
-        (data.chatModelProviders &&
-        data.chatModelProviders[systemModelProvider]?.length > 0
-          ? data.chatModelProviders[systemModelProvider][0].name
-          : undefined) ||
-        '';
+
+      // System and embedding models: config is source of truth, sync to localStorage
+      const linkFlag = data.linkSystemToChat ?? true;
+      setLinkSystemToChat(linkFlag);
+
+      const systemModelProvider = linkFlag
+        ? chatModelProvider
+        : data.selectedSystemModelProvider || defaultChatModelProvider || '';
+      const systemModel = linkFlag
+        ? chatModel
+        : data.selectedSystemModel ||
+          (data.chatModelProviders &&
+          data.chatModelProviders[systemModelProvider]?.length > 0
+            ? data.chatModelProviders[systemModelProvider][0].name
+            : undefined) ||
+          '';
+
       const embeddingModelProvider =
-        localStorage.getItem('embeddingModelProvider') ||
+        data.selectedEmbeddingModelProvider ||
         defaultEmbeddingModelProvider ||
         '';
       const embeddingModel =
-        localStorage.getItem('embeddingModel') ||
+        data.selectedEmbeddingModel ||
         (data.embeddingModelProviders &&
           data.embeddingModelProviders[embeddingModelProvider]?.[0].name) ||
         '';
 
       setSelectedChatModelProvider(chatModelProvider);
       setSelectedChatModel(chatModel);
+      setSelectedSystemModelProvider(systemModelProvider);
+      setSelectedSystemModel(systemModel);
       setSelectedEmbeddingModelProvider(embeddingModelProvider);
       setSelectedEmbeddingModel(embeddingModel);
-      // Initialize link flag (default ON)
-      const linkStored = localStorage.getItem('linkSystemToChat');
-      const linkFlag = linkStored === null ? true : linkStored === 'true';
-      setLinkSystemToChat(linkFlag);
 
-      // Initialize System Model selection, respecting link behavior
-      if (linkFlag && chatModelProvider && chatModel) {
-        setSelectedSystemModelProvider(chatModelProvider);
-        setSelectedSystemModel(chatModel);
-        localStorage.setItem('systemModelProvider', chatModelProvider);
-        localStorage.setItem('systemModel', chatModel);
-      } else {
-        setSelectedSystemModelProvider(systemModelProvider);
-        setSelectedSystemModel(systemModel);
+      // Sync to localStorage for ChatWindow to read
+      localStorage.setItem('systemModelProvider', systemModelProvider);
+      localStorage.setItem('systemModel', systemModel);
+      localStorage.setItem('embeddingModelProvider', embeddingModelProvider);
+      localStorage.setItem('embeddingModel', embeddingModel);
+      localStorage.setItem('linkSystemToChat', linkFlag.toString());
+
+      // Seed config with resolved defaults if no selections saved yet
+      if (
+        !data.selectedEmbeddingModelProvider ||
+        !data.selectedEmbeddingModel
+      ) {
+        fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...data,
+            selectedSystemModelProvider: systemModelProvider,
+            selectedSystemModel: systemModel,
+            selectedEmbeddingModelProvider: embeddingModelProvider,
+            selectedEmbeddingModel: embeddingModel,
+            linkSystemToChat: linkFlag,
+          }),
+        }).catch(() => {});
       }
+
       setChatModels(data.chatModelProviders || {});
       setEmbeddingModels(data.embeddingModelProviders || {});
 
@@ -361,6 +411,25 @@ export default function SettingsPage() {
       const storedAbout = localStorage.getItem('personalization.about') || '';
       setPersonalizationLocation(storedLocation);
       setPersonalizationAbout(storedAbout);
+
+      setMemoryEnabled(localStorage.getItem('memoryEnabled') === 'true');
+      setMemoryRetrievalEnabled(
+        localStorage.getItem('memoryRetrievalEnabled') === 'true',
+      );
+      setMemoryAutoDetectionEnabled(
+        localStorage.getItem('memoryAutoDetectionEnabled') === 'true',
+      );
+
+      // Private session duration
+      const duration = data.privateSessionDurationMinutes ?? 1440;
+      setPrivateSessionDurationMinutes(duration);
+      const isPredefined = [5, 15, 30, 60, 480, 1440, 4320, 10080].includes(
+        duration,
+      );
+      setIsCustomPrivateDuration(!isPredefined);
+      if (!isPredefined) {
+        setCustomPrivateDurationInput(String(duration));
+      }
 
       setIsLoading(false);
     };
@@ -434,13 +503,55 @@ export default function SettingsPage() {
     setSavingStates((prev) => ({ ...prev, [key]: true }));
 
     try {
-      // Client-only settings for System Model: do not POST to backend
-      if (key === 'systemModelProvider' || key === 'systemModel') {
-        if (key === 'systemModelProvider') {
-          localStorage.setItem('systemModelProvider', value as string);
-        } else if (key === 'systemModel') {
-          localStorage.setItem('systemModel', value as string);
+      // Model selection keys that go to config SELECTED_MODELS section
+      const modelSelectionKeys = [
+        'systemModelProvider',
+        'systemModel',
+        'embeddingModelProvider',
+        'embeddingModel',
+        'linkSystemToChat',
+      ];
+
+      // Map to config field names
+      const configKeyMap: Record<string, string> = {
+        systemModelProvider: 'selectedSystemModelProvider',
+        systemModel: 'selectedSystemModel',
+        embeddingModelProvider: 'selectedEmbeddingModelProvider',
+        embeddingModel: 'selectedEmbeddingModel',
+        linkSystemToChat: 'linkSystemToChat',
+      };
+
+      if (modelSelectionKeys.includes(key)) {
+        // Sync to localStorage for ChatWindow
+        localStorage.setItem(key, value.toString());
+
+        // Save to server config
+        const configPayload = {
+          ...config,
+          [configKeyMap[key]]: value,
+        } as SettingsType;
+
+        await fetch(`/api/config`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(configPayload),
+        });
+
+        // Trigger memory re-indexing when embedding model changes
+        if (key === 'embeddingModel' || key === 'embeddingModelProvider') {
+          fetch('/api/memories/reindex', { method: 'POST' })
+            .then((res) => {
+              if (res.ok) {
+                toast.success(
+                  'Memories are being re-indexed with the new embedding model',
+                );
+              }
+            })
+            .catch(() => {
+              toast.error('Failed to trigger memory re-indexing');
+            });
         }
+
         setTimeout(() => {
           setSavingStates((prev) => ({ ...prev, [key]: false }));
         }, 300);
@@ -631,16 +742,6 @@ export default function SettingsPage() {
         localStorage.setItem('chatModelProvider', value as string);
       } else if (key === 'chatModel') {
         localStorage.setItem('chatModel', value as string);
-      } else if (key === 'systemModelProvider') {
-        // handled above (local-only)
-        localStorage.setItem('systemModelProvider', value as string);
-      } else if (key === 'systemModel') {
-        // handled above (local-only)
-        localStorage.setItem('systemModel', value as string);
-      } else if (key === 'embeddingModelProvider') {
-        localStorage.setItem('embeddingModelProvider', value as string);
-      } else if (key === 'embeddingModel') {
-        localStorage.setItem('embeddingModel', value as string);
       } else if (key === 'ollamaContextWindow') {
         localStorage.setItem('ollamaContextWindow', value.toString());
       }
@@ -973,6 +1074,228 @@ export default function SettingsPage() {
               </SettingsSection>
             </div>
 
+            <SettingsSection
+              title="Memory"
+              tooltip="Memory allows YAAWC to remember facts about you across conversations.\nMemories are separate from chat history.\nAutomatic detection uses additional LLM tokens.\nYou can review, edit, or delete memories at any time."
+            >
+              <p className="text-xs text-fg/60">
+                When enabled, YAAWC can remember facts about you across
+                conversations to provide more personalized responses. Memories
+                are stored separately from chat history and can be managed on
+                the Memory page.
+              </p>
+              <div className="flex flex-col space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Memory</p>
+                    <p className="text-xs text-fg/60">
+                      Enable cross-conversation memory
+                    </p>
+                  </div>
+                  <Switch
+                    checked={memoryEnabled}
+                    onChange={(val: boolean) => {
+                      setMemoryEnabled(val);
+                      localStorage.setItem('memoryEnabled', String(val));
+                    }}
+                    className={cn(
+                      'group relative inline-flex h-5 w-10 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none',
+                      memoryEnabled ? 'bg-accent' : 'bg-surface-2',
+                    )}
+                  >
+                    <span className="sr-only">Enable memory</span>
+                    <span
+                      className={cn(
+                        'pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+                        memoryEnabled ? 'translate-x-5' : 'translate-x-0',
+                      )}
+                    />
+                  </Switch>
+                </div>
+
+                {memoryEnabled && (
+                  <>
+                    <div className="flex items-center justify-between pl-4 border-l-2 border-surface-2">
+                      <div>
+                        <p className="text-sm font-medium">
+                          Use saved memories in chats
+                        </p>
+                        <p className="text-xs text-fg/60">
+                          Include relevant memories to personalize responses
+                        </p>
+                      </div>
+                      <Switch
+                        checked={memoryRetrievalEnabled}
+                        onChange={(val: boolean) => {
+                          setMemoryRetrievalEnabled(val);
+                          localStorage.setItem(
+                            'memoryRetrievalEnabled',
+                            String(val),
+                          );
+                        }}
+                        className={cn(
+                          'group relative inline-flex h-5 w-10 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none',
+                          memoryRetrievalEnabled ? 'bg-accent' : 'bg-surface-2',
+                        )}
+                      >
+                        <span className="sr-only">
+                          Use saved memories in chats
+                        </span>
+                        <span
+                          className={cn(
+                            'pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+                            memoryRetrievalEnabled
+                              ? 'translate-x-5'
+                              : 'translate-x-0',
+                          )}
+                        />
+                      </Switch>
+                    </div>
+
+                    <div className="flex items-center justify-between pl-4 border-l-2 border-surface-2">
+                      <div>
+                        <p className="text-sm font-medium">
+                          Automatic memory detection
+                        </p>
+                        <p className="text-xs text-fg/60">
+                          Analyze conversations to identify facts worth
+                          remembering. Uses additional calls to your System
+                          Model.
+                        </p>
+                      </div>
+                      <Switch
+                        checked={memoryAutoDetectionEnabled}
+                        onChange={(val: boolean) => {
+                          setMemoryAutoDetectionEnabled(val);
+                          localStorage.setItem(
+                            'memoryAutoDetectionEnabled',
+                            String(val),
+                          );
+                        }}
+                        className={cn(
+                          'group relative inline-flex h-5 w-10 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none',
+                          memoryAutoDetectionEnabled
+                            ? 'bg-accent'
+                            : 'bg-surface-2',
+                        )}
+                      >
+                        <span className="sr-only">
+                          Automatic memory detection
+                        </span>
+                        <span
+                          className={cn(
+                            'pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+                            memoryAutoDetectionEnabled
+                              ? 'translate-x-5'
+                              : 'translate-x-0',
+                          )}
+                        />
+                      </Switch>
+                    </div>
+                  </>
+                )}
+
+                <div className="flex items-center gap-3">
+                  <Link
+                    href="/memory"
+                    className="text-sm text-accent hover:underline"
+                  >
+                    Manage memories →
+                  </Link>
+                </div>
+
+                <button
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        'Are you sure you want to delete all memories? This action cannot be undone.',
+                      )
+                    ) {
+                      fetch('/api/memories', { method: 'DELETE' }).then(() => {
+                        // Show brief confirmation
+                        alert('All memories deleted.');
+                      });
+                    }
+                  }}
+                  className="text-sm text-red-500 hover:text-red-600 text-left"
+                >
+                  Delete all memories
+                </button>
+              </div>
+            </SettingsSection>
+
+            <SettingsSection
+              title="Private Sessions"
+              tooltip="Private sessions are automatically deleted after the configured duration.\nNo personalization or memories are used in private sessions."
+            >
+              <p className="text-xs text-fg/60">
+                Private sessions are automatically deleted after the configured
+                duration. Personalization and memories are disabled in private
+                sessions.
+              </p>
+              <div className="flex flex-col space-y-3">
+                <div className="flex flex-col space-y-1">
+                  <p className="text-sm font-medium">Session Duration</p>
+                  <Select
+                    value={
+                      isCustomPrivateDuration
+                        ? '-1'
+                        : String(privateSessionDurationMinutes)
+                    }
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value);
+                      if (val === -1) {
+                        setIsCustomPrivateDuration(true);
+                        setCustomPrivateDurationInput(
+                          String(privateSessionDurationMinutes),
+                        );
+                      } else {
+                        setIsCustomPrivateDuration(false);
+                        setPrivateSessionDurationMinutes(val);
+                        setConfig((prev) => ({
+                          ...prev!,
+                          privateSessionDurationMinutes: val,
+                        }));
+                        saveConfig('privateSessionDurationMinutes', val);
+                      }
+                    }}
+                    options={PREDEFINED_DURATIONS.map((d) => ({
+                      value: String(d.value),
+                      label: d.label,
+                    }))}
+                  />
+                </div>
+                {isCustomPrivateDuration && (
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm">Custom duration (minutes)</p>
+                    <InputComponent
+                      type="number"
+                      min={1}
+                      value={customPrivateDurationInput}
+                      placeholder="Duration in minutes"
+                      isSaving={savingStates['privateSessionDurationMinutes']}
+                      onChange={(e) => {
+                        setCustomPrivateDurationInput(e.target.value);
+                      }}
+                      onSave={(value) => {
+                        const numValue = Math.max(1, parseInt(value) || 1440);
+                        setPrivateSessionDurationMinutes(numValue);
+                        setCustomPrivateDurationInput(String(numValue));
+                        setConfig((prev) => ({
+                          ...prev!,
+                          privateSessionDurationMinutes: numValue,
+                        }));
+                        saveConfig('privateSessionDurationMinutes', numValue);
+                      }}
+                    />
+                    <p className="text-xs text-fg/60">
+                      Enter a custom duration in minutes (minimum 1).
+                    </p>
+                  </div>
+                )}
+              </div>
+            </SettingsSection>
+
             {/* System Prompts removed */}
 
             <SettingsSection
@@ -1196,8 +1519,8 @@ export default function SettingsPage() {
                           if (linkSystemToChat) {
                             setSelectedSystemModelProvider(value);
                             setSelectedSystemModel(firstModel);
-                            localStorage.setItem('systemModelProvider', value);
-                            localStorage.setItem('systemModel', firstModel);
+                            saveConfig('systemModelProvider', value);
+                            saveConfig('systemModel', firstModel);
                           }
                         }
                       }}
@@ -1234,11 +1557,11 @@ export default function SettingsPage() {
                                 selectedChatModelProvider,
                               );
                               setSelectedSystemModel(value);
-                              localStorage.setItem(
+                              saveConfig(
                                 'systemModelProvider',
                                 selectedChatModelProvider,
                               );
-                              localStorage.setItem('systemModel', value);
+                              saveConfig('systemModel', value);
                             }
                           }}
                           options={(() => {
@@ -1362,10 +1685,7 @@ export default function SettingsPage() {
                       checked={linkSystemToChat}
                       onChange={(checked) => {
                         setLinkSystemToChat(checked);
-                        localStorage.setItem(
-                          'linkSystemToChat',
-                          checked.toString(),
-                        );
+                        saveConfig('linkSystemToChat', checked);
                         if (
                           checked &&
                           selectedChatModelProvider &&
@@ -1376,14 +1696,11 @@ export default function SettingsPage() {
                             selectedChatModelProvider,
                           );
                           setSelectedSystemModel(selectedChatModel);
-                          localStorage.setItem(
+                          saveConfig(
                             'systemModelProvider',
                             selectedChatModelProvider,
                           );
-                          localStorage.setItem(
-                            'systemModel',
-                            selectedChatModel,
-                          );
+                          saveConfig('systemModel', selectedChatModel);
                         }
                       }}
                       className={cn(

@@ -29,6 +29,8 @@ export class AgentSearch {
     private messageId?: string,
     private retrievalSignal?: AbortSignal,
     private personalization?: PersonalizationContext,
+    private memoryEnabled: boolean = false,
+    private memorySection: string = '',
   ) {
     this.emitter = emitter;
     this.agentMode = agentMode;
@@ -44,6 +46,9 @@ export class AgentSearch {
       this.retrievalSignal,
       this.personalization?.location,
       this.personalization?.profile,
+      this.memoryEnabled,
+      this.memorySection,
+      this.chatId,
     );
   }
 

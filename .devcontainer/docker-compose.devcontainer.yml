@@ -6,6 +6,7 @@ services:
       - backend-dbstore:/home/yaawc/data
       - uploads:/home/yaawc/uploads
       - deep_research:/home/yaawc/storage/deep_research
+      - devcontainer-user-state:/home/node/.persist
       - ..:/workspaces/YAAWC:cached
     environment:
       - SEARXNG_API_URL=https://searxng.int.bit-shift.com
@@ -13,8 +14,10 @@ services:
     cap_add:
       - SYS_ADMIN
     command: sleep infinity
+    network_mode: host
 
 volumes:
   backend-dbstore:
   uploads:
   deep_research:
+  devcontainer-user-state:

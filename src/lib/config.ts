@@ -14,6 +14,7 @@ interface Config {
     KEEP_ALIVE: string;
     BASE_URL?: string;
     HIDDEN_MODELS: string[];
+    PRIVATE_SESSION_DURATION_MINUTES?: number;
   };
   MODELS: {
     OPENAI: {
@@ -51,6 +52,13 @@ interface Config {
   };
   API_ENDPOINTS: {
     SEARXNG: string;
+  };
+  SELECTED_MODELS?: {
+    SYSTEM_PROVIDER?: string;
+    SYSTEM_MODEL?: string;
+    EMBEDDING_PROVIDER?: string;
+    EMBEDDING_MODEL?: string;
+    LINK_SYSTEM_TO_CHAT?: boolean;
   };
 }
 
@@ -114,6 +122,9 @@ export const getBaseUrl = () => loadConfig().GENERAL.BASE_URL;
 
 export const getHiddenModels = () => loadConfig().GENERAL.HIDDEN_MODELS;
 
+export const getPrivateSessionDurationMinutes = () =>
+  loadConfig().GENERAL.PRIVATE_SESSION_DURATION_MINUTES ?? 1440;
+
 export const getOpenaiApiKey = () => loadConfig().MODELS.OPENAI.API_KEY;
 
 export const getGroqApiKey = () => loadConfig().MODELS.GROQ.API_KEY;
@@ -144,6 +155,27 @@ export const getCustomOpenaiModelName = () =>
 
 export const getLMStudioApiEndpoint = () =>
   loadConfig().MODELS.LM_STUDIO.API_URL;
+
+export const getSelectedSystemModel = () => {
+  const config = loadConfig();
+  return {
+    provider: config.SELECTED_MODELS?.SYSTEM_PROVIDER || '',
+    name: config.SELECTED_MODELS?.SYSTEM_MODEL || '',
+  };
+};
+
+export const getSelectedEmbeddingModel = () => {
+  const config = loadConfig();
+  return {
+    provider: config.SELECTED_MODELS?.EMBEDDING_PROVIDER || '',
+    name: config.SELECTED_MODELS?.EMBEDDING_MODEL || '',
+  };
+};
+
+export const getLinkSystemToChat = () => {
+  const config = loadConfig();
+  return config.SELECTED_MODELS?.LINK_SYSTEM_TO_CHAT ?? true;
+};
 
 const mergeConfigs = (
   current: Record<string, unknown>,

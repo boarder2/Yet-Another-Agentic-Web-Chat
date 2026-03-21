@@ -3,6 +3,7 @@
 import { cn } from '@/lib/utils';
 import {
   BookOpenText,
+  Brain,
   Home,
   SquarePen,
   Settings,
@@ -18,6 +19,21 @@ const VerticalIconContainer = ({ children }: { children: ReactNode }) => {
     <div className="flex flex-col items-center gap-y-3 w-full">{children}</div>
   );
 };
+
+const NewChatButton = () => (
+  <Link href="/" className="cursor-pointer">
+    <SquarePen />
+  </Link>
+);
+
+const NewChatButtonMobile = () => (
+  <div className="flex flex-col items-center space-y-1 text-center w-full">
+    <Link href="/" className="cursor-pointer">
+      <SquarePen size={20} />
+    </Link>
+    <p className="text-xs">New</p>
+  </div>
+);
 
 const Sidebar = ({ children }: { children: React.ReactNode }) => {
   const segments = useSelectedLayoutSegments();
@@ -41,15 +57,19 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
       active: segments.includes('library'),
       label: 'Library',
     },
+    {
+      icon: Brain,
+      href: '/memory',
+      active: segments.includes('memory'),
+      label: 'Memory',
+    },
   ];
 
   return (
     <div>
       <div className="hidden lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-20 lg:flex-col">
         <div className="flex grow flex-col items-center justify-between gap-y-5 overflow-y-auto bg-surface px-2 py-8">
-          <Link href="/">
-            <SquarePen className="cursor-pointer" />
-          </Link>
+          <NewChatButton />
           <VerticalIconContainer>
             {navLinks.map((link, i) => (
               <Link
@@ -75,6 +95,7 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
       </div>
 
       <div className="fixed bottom-0 w-full z-50 flex flex-row items-center gap-x-6 bg-bg px-4 py-4 shadow-sm lg:hidden">
+        <NewChatButtonMobile />
         {navLinks.map((link, i) => (
           <Link
             href={link.href}

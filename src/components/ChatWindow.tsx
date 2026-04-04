@@ -6,6 +6,7 @@ import { encodeHtmlAttribute } from '@/lib/utils/html';
 import { Document } from '@langchain/core/documents';
 import Navbar from './Navbar';
 import Chat from './Chat';
+import { PendingExecution } from './CodeExecution';
 import EmptyChat from './EmptyChat';
 import crypto from 'crypto';
 import { toast } from 'sonner';
@@ -406,6 +407,10 @@ const ChatWindow = ({ id }: { id?: string }) => {
     Array<{ content: string; status: string }>
   >([]);
 
+  const [pendingExecutions, setPendingExecutions] = useState<
+    Record<string, PendingExecution[]>
+  >({});
+
   const [files, setFiles] = useState<File[]>([]);
   const [fileIds, setFileIds] = useState<string[]>([]);
 
@@ -578,6 +583,7 @@ const ChatWindow = ({ id }: { id?: string }) => {
     setLoading(false);
     setGatheringSources([]);
     setTodoItems([]);
+    setPendingExecutions({});
     setAnalysisProgress(null);
     setLiveModelStats(null);
     setNotFound(false);
@@ -604,6 +610,7 @@ const ChatWindow = ({ id }: { id?: string }) => {
       setLoading(false);
       setGatheringSources([]);
       setTodoItems([]);
+      setPendingExecutions({});
       setAnalysisProgress(null);
       setLiveModelStats(null);
       setNotFound(false);
@@ -664,6 +671,8 @@ const ChatWindow = ({ id }: { id?: string }) => {
 
     let sources: Document[] | undefined = undefined;
     let recievedMessage = '';
+    // Map executionId → runId for correlating code_execution_result with the correct ToolCall markup
+    const codeExecutionRunIdMap = new Map<string, string>();
     let messageBuffer = '';
     let tokenCount = 0;
     const bufferThreshold = 5;
@@ -1193,6 +1202,80 @@ const ChatWindow = ({ id }: { id?: string }) => {
         return;
       }
 
+      if (data.type === 'code_execution_pending') {
+        // Correlate this execution with the ToolCall markup's toolCallId
+        // (provided by codeExecutionCorrelation module via markupToolCallId).
+        const runId = data.data?.markupToolCallId;
+        if (runId && data.data?.executionId) {
+          codeExecutionRunIdMap.set(data.data.executionId, runId);
+        }
+        setPendingExecutions((prev) => ({
+          ...prev,
+          [data.messageId]: [
+            ...(prev[data.messageId] ?? []),
+            {
+              executionId: data.data.executionId,
+              code: data.data.code,
+              description: data.data.description,
+              toolCallId: data.data.toolCallId,
+              status: 'pending' as const,
+            },
+          ],
+        }));
+        setScrollTrigger((prev) => prev + 1);
+        return;
+      }
+
+      if (data.type === 'code_execution_result') {
+        setPendingExecutions((prev) => ({
+          ...prev,
+          [data.messageId]: (prev[data.messageId] ?? []).map((execution) =>
+            execution.executionId === data.data.executionId
+              ? {
+                  ...execution,
+                  status: (data.data.denied ? 'denied' : 'completed') as
+                    | 'denied'
+                    | 'completed',
+                  result: data.data,
+                }
+              : execution,
+          ),
+        }));
+        // Also update ToolCall markup with result data for persistence
+        // Look up the correct runId for this execution from the correlation map
+        const tcId =
+          codeExecutionRunIdMap.get(data.data.executionId) ||
+          data.data.toolCallId;
+        if (tcId) {
+          const d = data.data;
+          const extra: Record<string, string> = {};
+          if (d.exitCode !== undefined) extra.exitCode = String(d.exitCode);
+          if (d.stdout) extra.stdout = d.stdout.slice(0, 2000);
+          if (d.stderr) extra.stderr = d.stderr.slice(0, 1000);
+          if (d.timedOut) extra.timedOut = 'true';
+          if (d.oomKilled) extra.oomKilled = 'true';
+          if (d.denied) extra.denied = 'true';
+          setMessages((prev) =>
+            prev.map((message) => {
+              if (message.messageId === data.messageId) {
+                const updatedContent = updateToolCallMarkup(
+                  message.content,
+                  tcId,
+                  { extra },
+                );
+                return { ...message, content: updatedContent };
+              }
+              return message;
+            }),
+          );
+          recievedMessage = updateToolCallMarkup(recievedMessage, tcId, {
+            extra,
+          });
+        }
+        setScrollTrigger((prev) => prev + 1);
+        return;
+      }
+
       // Handle todo list updates
       if (data.type === 'todo_update') {
         setTodoItems(data.data.todos || []);
@@ -1585,6 +1668,25 @@ const ChatWindow = ({ id }: { id?: string }) => {
               personalizationAbout={personalizationAbout}
               refreshPersonalization={refreshPersonalization}
               todoItems={todoItems}
+              pendingExecutions={pendingExecutions}
+              onExecutionAction={(executionId: string, approved: boolean) => {
+                setPendingExecutions((prev) => {
+                  const updated: Record<string, PendingExecution[]> = {};
+                  for (const [msgId, executions] of Object.entries(prev)) {
+                    updated[msgId] = executions.map((e) =>
+                      e.executionId === executionId
+                        ? {
+                            ...e,
+                            status: approved
+                              ? ('approved' as const)
+                              : ('denied' as const),
+                          }
+                        : e,
+                    );
+                  }
+                  return updated;
+                });
+              }}
               pendingImages={pendingImages}
               setPendingImages={setPendingImages}
               imageCapable={imageCapable}

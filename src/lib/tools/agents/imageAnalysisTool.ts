@@ -8,8 +8,6 @@ import { SimplifiedAgentStateType } from '@/lib/state/chatAgentState';
 import { ToolMessage } from '@langchain/core/messages';
 import { removeThinkingBlocks } from '@/lib/utils/contentUtils';
 import { isSoftStop } from '@/lib/utils/runControl';
-import axios from 'axios';
-
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10 MB
 
 const ALLOWED_MIME_PREFIXES = [
@@ -78,11 +76,12 @@ export const imageAnalysisTool = tool(
       let imageBuffer: Buffer;
       let contentType: string;
       try {
-        const response = await axios.get(url, {
-          responseType: 'arraybuffer',
-          timeout: 30000,
-          maxContentLength: MAX_IMAGE_SIZE,
-          signal: retrievalSignal,
+        const fetchSignal = retrievalSignal
+          ? AbortSignal.any([retrievalSignal, AbortSignal.timeout(30000)])
+          : AbortSignal.timeout(30000);
+
+        const response = await fetch(url, {
+          signal: fetchSignal,
           headers: {
             Accept: 'image/*',
             'User-Agent':
@@ -90,8 +89,21 @@ export const imageAnalysisTool = tool(
           },
         });
 
-        contentType = (response.headers['content-type'] || '').toLowerCase();
-        imageBuffer = Buffer.from(response.data);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        // Check content-length before downloading the body
+        const contentLength = response.headers.get('content-length');
+        if (contentLength && parseInt(contentLength, 10) > MAX_IMAGE_SIZE) {
+          throw new Error(
+            `Image exceeds maximum size of ${MAX_IMAGE_SIZE} bytes`,
+          );
+        }
+
+        contentType = (
+          response.headers.get('content-type') || ''
+        ).toLowerCase();
+        const arrayBuffer = await response.arrayBuffer();
+        imageBuffer = Buffer.from(arrayBuffer);
       } catch (fetchError: unknown) {
         const msg =
           fetchError instanceof Error

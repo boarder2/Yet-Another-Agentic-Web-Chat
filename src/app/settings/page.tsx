@@ -1,231 +1,30 @@
 'use client';
-import {
-  Settings as SettingsIcon,
-  ArrowLeft,
-  Loader2,
-  Info,
-  Trash2,
-  Edit3,
-  PlusCircle,
-  Save,
-  X,
-  RotateCcw,
-  ChevronDown,
-  ChevronRight,
-  Eye,
-  EyeOff,
-} from 'lucide-react';
-import { useEffect, useState, useRef } from 'react';
-import { cn } from '@/lib/utils';
-import { Switch } from '@headlessui/react';
-import ThemeSwitcher from '@/components/theme/Switcher';
-import { Layers3 } from 'lucide-react';
+
+import { Settings as SettingsIcon, ArrowLeft } from 'lucide-react';
+import { useEffect, useState, useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import {
-  formattingAndCitationsLocal,
-  formattingAndCitationsScholarly,
-  formattingAndCitationsWeb,
-  formattingChat,
-} from '@/lib/prompts/templates';
-import { PROVIDER_METADATA } from '@/lib/providers';
-import ModelSelector from '@/components/MessageInputActions/ModelSelector';
 import { Prompt } from '@/lib/types/prompt';
 
-interface SettingsType {
-  chatModelProviders: {
-    [key: string]: { name: string; displayName: string }[];
-  };
-  embeddingModelProviders: {
-    [key: string]: { name: string; displayName: string }[];
-  };
-  openaiApiKey: string;
-  groqApiKey: string;
-  openrouterApiKey: string;
-  anthropicApiKey: string;
-  geminiApiKey: string;
-  ollamaApiUrl: string;
-  lmStudioApiUrl: string;
-  deepseekApiKey: string;
-  aimlApiKey: string;
-  customOpenaiApiKey: string;
-  customOpenaiApiUrl: string;
-  customOpenaiModelName: string;
-  ollamaContextWindow: number;
-  hiddenModels: string[];
-  selectedSystemModelProvider: string;
-  selectedSystemModel: string;
-  selectedEmbeddingModelProvider: string;
-  selectedEmbeddingModel: string;
-  linkSystemToChat: boolean;
-  privateSessionDurationMinutes: number;
-}
-
-interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
-  isSaving?: boolean;
-  onSave?: (value: string) => void;
-}
-
-const InputComponent = ({
-  className,
-  isSaving,
-  onSave,
-  ...restProps
-}: InputProps) => {
-  return (
-    <div className="relative">
-      <input
-        {...restProps}
-        className={cn(
-          'bg-surface w-full px-3 py-2 flex items-center overflow-hidden rounded-lg text-sm',
-          isSaving && 'pr-10',
-          className,
-        )}
-        onBlur={(e) => onSave?.(e.target.value)}
-      />
-      {isSaving && (
-        <div className="absolute right-3 top-1/2 -translate-y-1/2">
-          <Loader2 size={16} className="animate-spin" />
-        </div>
-      )}
-    </div>
-  );
-};
-
-interface TextareaProps extends React.InputHTMLAttributes<HTMLTextAreaElement> {
-  isSaving?: boolean;
-  onSave?: (value: string) => void;
-}
-
-const TextareaComponent = ({
-  className: _className,
-  isSaving,
-  onSave,
-  ...restProps
-}: TextareaProps) => {
-  return (
-    <div className="relative">
-      <textarea
-        placeholder="Any special instructions for the LLM"
-        className="placeholder:text-sm text-sm w-full flex items-center justify-between p-3 bg-surface rounded-lg hover:bg-surface-2 transition-colors"
-        rows={4}
-        onBlur={(e) => onSave?.(e.target.value)}
-        {...restProps}
-      />
-      {isSaving && (
-        <div className="absolute right-3 top-3">
-          <Loader2 size={16} className="animate-spin" />
-        </div>
-      )}
-    </div>
-  );
-};
-
-const Select = ({
-  className,
-  options,
-  ...restProps
-}: React.SelectHTMLAttributes<HTMLSelectElement> & {
-  options: { value: string; label: string; disabled?: boolean }[];
-}) => {
-  return (
-    <select
-      {...restProps}
-      className={cn(
-        'bg-surface px-3 py-2 flex items-center overflow-hidden border border-surface-2 rounded-lg text-sm',
-        className,
-      )}
-    >
-      {options.map(({ label, value, disabled }) => (
-        <option key={value} value={value} disabled={disabled}>
-          {label}
-        </option>
-      ))}
-    </select>
-  );
-};
-
-const SettingsSection = ({
-  title,
-  children,
-  tooltip,
-}: {
-  title: string;
-  children: React.ReactNode;
-  tooltip?: string;
-}) => {
-  const [showTooltip, setShowTooltip] = useState(false);
-  const tooltipRef = useRef<HTMLDivElement>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        tooltipRef.current &&
-        !tooltipRef.current.contains(event.target as Node) &&
-        buttonRef.current &&
-        !buttonRef.current.contains(event.target as Node)
-      ) {
-        setShowTooltip(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
-
-  return (
-    <div className="flex flex-col space-y-4 p-4 bg-surface rounded-xl border border-surface-2">
-      <div className="flex items-center gap-2">
-        <h2 className="font-medium">{title}</h2>
-        {tooltip && (
-          <div className="relative">
-            <button
-              ref={buttonRef}
-              className="p-1 rounded-full hover:bg-surface-2 transition duration-200"
-              onClick={() => setShowTooltip(!showTooltip)}
-              aria-label="Show section information"
-            >
-              <Info size={16} />
-            </button>
-            {showTooltip && (
-              <div
-                ref={tooltipRef}
-                className="absolute z-10 left-6 top-0 w-96 rounded-md shadow-lg bg-surface border border-surface-2"
-              >
-                <div className="py-2 px-3">
-                  <div className="space-y-1 text-xs">
-                    {tooltip.split('\\n').map((line, index) => (
-                      <div key={index}>{line}</div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-      {children}
-    </div>
-  );
-};
+import { SettingsType, SectionKey } from './types';
+import {
+  MobileSettingsNav,
+  DesktopSettingsNav,
+} from './components/SettingsNav';
+import PreferencesSection from './sections/PreferencesSection';
+import AutomaticSearchSection from './sections/AutomaticSearchSection';
+import PersonalizationSection from './sections/PersonalizationSection';
+import MemorySection from './sections/MemorySection';
+import PrivateSessionsSection from './sections/PrivateSessionsSection';
+import PersonaPromptsSection from './sections/PersonaPromptsSection';
+import DefaultSearchSection from './sections/DefaultSearchSection';
+import ModelSettingsSection from './sections/ModelSettingsSection';
+import ModelVisibilitySection from './sections/ModelVisibilitySection';
+import ApiKeysSection from './sections/ApiKeysSection';
 
 const predefinedContextSizes = [
   1024, 2048, 3072, 4096, 8192, 16384, 32768, 65536, 131072,
-];
-
-const PREDEFINED_DURATIONS = [
-  { label: '5 minutes', value: 5 },
-  { label: '15 minutes', value: 15 },
-  { label: '30 minutes', value: 30 },
-  { label: '1 hour', value: 60 },
-  { label: '8 hours', value: 480 },
-  { label: '24 hours', value: 1440 },
-  { label: '3 days', value: 4320 },
-  { label: '7 days', value: 10080 },
-  { label: 'Custom', value: -1 },
 ];
 
 export default function SettingsPage() {
@@ -240,7 +39,6 @@ export default function SettingsPage() {
   const [selectedChatModel, setSelectedChatModel] = useState<string | null>(
     null,
   );
-  // System Model selection (used for internal non-user facing tasks)
   const [selectedSystemModelProvider, setSelectedSystemModelProvider] =
     useState<string | null>(null);
   const [selectedSystemModel, setSelectedSystemModel] = useState<string | null>(
@@ -251,7 +49,6 @@ export default function SettingsPage() {
   const [selectedEmbeddingModel, setSelectedEmbeddingModel] = useState<
     string | null
   >(null);
-  // Link System to Chat (client-only preference)
   const [linkSystemToChat, setLinkSystemToChat] = useState<boolean>(true);
   const [isLoading, setIsLoading] = useState(true);
   const [automaticSuggestions, setAutomaticSuggestions] = useState(true);
@@ -265,7 +62,6 @@ export default function SettingsPage() {
   const [contextWindowSize, setContextWindowSize] = useState(2048);
   const [isCustomContextWindow, setIsCustomContextWindow] = useState(false);
 
-  // Private session duration
   const [privateSessionDurationMinutes, setPrivateSessionDurationMinutes] =
     useState(1440);
   const [isCustomPrivateDuration, setIsCustomPrivateDuration] = useState(false);
@@ -279,7 +75,6 @@ export default function SettingsPage() {
   const [newPromptType, setNewPromptType] = useState<'persona'>('persona');
   const [isAddingNewPrompt, setIsAddingNewPrompt] = useState(false);
 
-  // Model visibility state variables
   const [allModels, setAllModels] = useState<{
     chat: Record<string, Record<string, { displayName: string }>>;
     embedding: Record<string, Record<string, { displayName: string }>>;
@@ -289,10 +84,24 @@ export default function SettingsPage() {
     new Set(),
   );
 
-  // Default Search Settings state variables
   const [searchChatModelProvider, setSearchChatModelProvider] =
     useState<string>('');
   const [searchChatModel, setSearchChatModel] = useState<string>('');
+
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const activeSection: SectionKey =
+    (searchParams.get('section') as SectionKey) || 'preferences';
+
+  const setActiveSection = useCallback(
+    (key: SectionKey) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('section', key);
+      router.replace(`?${params.toString()}`, { scroll: false });
+    },
+    [router, searchParams],
+  );
 
   useEffect(() => {
     const fetchConfig = async () => {
@@ -306,7 +115,6 @@ export default function SettingsPage() {
 
       setConfig(data);
 
-      // Populate hiddenModels state from config
       setHiddenModels(data.hiddenModels || []);
 
       const chatModelProvidersKeys = Object.keys(data.chatModelProviders || {});
@@ -333,7 +141,6 @@ export default function SettingsPage() {
           : undefined) ||
         '';
 
-      // System and embedding models: config is source of truth, sync to localStorage
       const linkFlag = data.linkSystemToChat ?? true;
       setLinkSystemToChat(linkFlag);
 
@@ -366,14 +173,12 @@ export default function SettingsPage() {
       setSelectedEmbeddingModelProvider(embeddingModelProvider);
       setSelectedEmbeddingModel(embeddingModel);
 
-      // Sync to localStorage for ChatWindow to read
       localStorage.setItem('systemModelProvider', systemModelProvider);
       localStorage.setItem('systemModel', systemModel);
       localStorage.setItem('embeddingModelProvider', embeddingModelProvider);
       localStorage.setItem('embeddingModel', embeddingModel);
       localStorage.setItem('linkSystemToChat', linkFlag.toString());
 
-      // Seed config with resolved defaults if no selections saved yet
       if (
         !data.selectedEmbeddingModelProvider ||
         !data.selectedEmbeddingModel
@@ -396,7 +201,7 @@ export default function SettingsPage() {
       setEmbeddingModels(data.embeddingModelProviders || {});
 
       setAutomaticSuggestions(
-        localStorage.getItem('autoSuggestions') !== 'false', // default to true if not set
+        localStorage.getItem('autoSuggestions') !== 'false',
       );
       const storedContextWindow = parseInt(
         localStorage.getItem('ollamaContextWindow') ?? '2048',
@@ -420,7 +225,6 @@ export default function SettingsPage() {
         localStorage.getItem('memoryAutoDetectionEnabled') === 'true',
       );
 
-      // Private session duration
       const duration = data.privateSessionDurationMinutes ?? 1440;
       setPrivateSessionDurationMinutes(duration);
       const isPredefined = [5, 15, 30, 60, 480, 1440, 4320, 10080].includes(
@@ -436,7 +240,6 @@ export default function SettingsPage() {
 
     const fetchAllModels = async () => {
       try {
-        // Fetch complete model list including hidden models
         const res = await fetch(`/api/models?include_hidden=true`, {
           headers: {
             'Content-Type': 'application/json',
@@ -458,7 +261,6 @@ export default function SettingsPage() {
     fetchConfig();
     fetchAllModels();
 
-    // Load search settings from localStorage
     const loadSearchSettings = () => {
       const storedSearchChatModelProvider = localStorage.getItem(
         'searchChatModelProvider',
@@ -503,7 +305,6 @@ export default function SettingsPage() {
     setSavingStates((prev) => ({ ...prev, [key]: true }));
 
     try {
-      // Model selection keys that go to config SELECTED_MODELS section
       const modelSelectionKeys = [
         'systemModelProvider',
         'systemModel',
@@ -512,7 +313,6 @@ export default function SettingsPage() {
         'linkSystemToChat',
       ];
 
-      // Map to config field names
       const configKeyMap: Record<string, string> = {
         systemModelProvider: 'selectedSystemModelProvider',
         systemModel: 'selectedSystemModel',
@@ -522,10 +322,8 @@ export default function SettingsPage() {
       };
 
       if (modelSelectionKeys.includes(key)) {
-        // Sync to localStorage for ChatWindow
         localStorage.setItem(key, value.toString());
 
-        // Save to server config
         const configPayload = {
           ...config,
           [configKeyMap[key]]: value,
@@ -537,7 +335,6 @@ export default function SettingsPage() {
           body: JSON.stringify(configPayload),
         });
 
-        // Trigger memory re-indexing when embedding model changes
         if (key === 'embeddingModel' || key === 'embeddingModelProvider') {
           fetch('/api/memories/reindex', { method: 'POST' })
             .then((res) => {
@@ -640,7 +437,6 @@ export default function SettingsPage() {
           }
         }
 
-        // Ensure System Model stays valid when providers update
         const currentSystemProvider = selectedSystemModelProvider;
         const newSystemProviders = Object.keys(data.chatModelProviders || {});
 
@@ -766,25 +562,24 @@ export default function SettingsPage() {
   };
 
   const handlePersonalizationChange = (
-    key: 'personalization.location' | 'personalization.about',
-    setter: (value: string) => void,
+    field: 'location' | 'about',
     rawValue: string,
   ) => {
+    const key =
+      field === 'location'
+        ? 'personalization.location'
+        : 'personalization.about';
+    const setter =
+      field === 'location'
+        ? setPersonalizationLocation
+        : setPersonalizationAbout;
+
     setter(rawValue);
     if (rawValue.trim()) {
       localStorage.setItem(key, rawValue);
     } else {
       localStorage.removeItem(key);
     }
-    dispatchPersonalizationEvent();
-  };
-
-  const _handlePersonalizationClear = (
-    key: 'personalization.location' | 'personalization.about',
-    setter: (value: string) => void,
-  ) => {
-    setter('');
-    localStorage.removeItem(key);
     dispatchPersonalizationEvent();
   };
 
@@ -795,22 +590,17 @@ export default function SettingsPage() {
     let updatedHiddenModels: string[];
 
     if (isVisible) {
-      // Model should be visible, remove from hidden list
       updatedHiddenModels = hiddenModels.filter((m) => m !== modelKey);
     } else {
-      // Model should be hidden, add to hidden list
       updatedHiddenModels = [...hiddenModels, modelKey];
     }
 
-    // Update local state immediately
     setHiddenModels(updatedHiddenModels);
 
-    // Persist changes to backend
     try {
       await saveConfig('hiddenModels', updatedHiddenModels);
     } catch (error) {
       console.error('Failed to save hidden models:', error);
-      // Revert local state on error
       setHiddenModels(hiddenModels);
     }
   };
@@ -823,27 +613,22 @@ export default function SettingsPage() {
     let updatedHiddenModels: string[];
 
     if (showAll) {
-      // Show all models in this provider, remove all from hidden list
       updatedHiddenModels = hiddenModels.filter(
         (modelKey) => !modelKeys.includes(modelKey),
       );
     } else {
-      // Hide all models in this provider, add all to hidden list
       const modelsToHide = modelKeys.filter(
         (modelKey) => !hiddenModels.includes(modelKey),
       );
       updatedHiddenModels = [...hiddenModels, ...modelsToHide];
     }
 
-    // Update local state immediately
     setHiddenModels(updatedHiddenModels);
 
-    // Persist changes to backend
     try {
       await saveConfig('hiddenModels', updatedHiddenModels);
     } catch (error) {
       console.error('Failed to save hidden models:', error);
-      // Revert local state on error
       setHiddenModels(hiddenModels);
     }
   };
@@ -938,7 +723,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div>
       <div className="flex flex-col pt-4">
         <div className="flex items-center space-x-2">
           <Link href="/" className="lg:hidden">
@@ -973,1357 +758,163 @@ export default function SettingsPage() {
         </div>
       ) : (
         config && (
-          <div className="flex flex-col space-y-6 pb-28 lg:pb-8">
-            <SettingsSection title="Preferences">
-              <div className="flex flex-col space-y-1">
-                <p className="text-sm">Theme</p>
-                <ThemeSwitcher />
-              </div>
-            </SettingsSection>
+          <>
+            <MobileSettingsNav
+              activeSection={activeSection}
+              onSelect={setActiveSection}
+            />
 
-            <SettingsSection title="Automatic Search">
-              <div className="flex flex-col space-y-4">
-                <div className="flex items-center justify-between p-3 bg-surface rounded-lg hover:bg-surface-2 transition-colors">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-surface-2 rounded-lg">
-                      <Layers3 size={18} />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">
-                        Automatic Suggestions
-                      </p>
-                      <p className="text-xs mt-0.5">
-                        Automatically show related suggestions after responses
-                      </p>
-                    </div>
-                  </div>
-                  <Switch
-                    checked={automaticSuggestions}
-                    onChange={(checked) => {
+            <div className="flex flex-row gap-8 pb-28 lg:pb-8">
+              <DesktopSettingsNav
+                activeSection={activeSection}
+                onSelect={setActiveSection}
+              />
+              <div className="flex-1 min-w-0">
+                {activeSection === 'preferences' && <PreferencesSection />}
+
+                {activeSection === 'automatic-search' && (
+                  <AutomaticSearchSection
+                    automaticSuggestions={automaticSuggestions}
+                    onToggle={(checked) => {
                       setAutomaticSuggestions(checked);
                       saveConfig('automaticSuggestions', checked);
                     }}
-                    className={cn(
-                      automaticSuggestions ? 'bg-accent' : 'bg-surface-2',
-                      'relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none',
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        automaticSuggestions
-                          ? 'translate-x-6'
-                          : 'translate-x-1',
-                        'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
-                      )}
-                    />
-                  </Switch>
-                </div>
+                  />
+                )}
+
+                {activeSection === 'personalization' && (
+                  <PersonalizationSection
+                    location={personalizationLocation}
+                    about={personalizationAbout}
+                    onChange={handlePersonalizationChange}
+                  />
+                )}
+
+                {activeSection === 'memory' && (
+                  <MemorySection
+                    memoryEnabled={memoryEnabled}
+                    memoryRetrievalEnabled={memoryRetrievalEnabled}
+                    memoryAutoDetectionEnabled={memoryAutoDetectionEnabled}
+                    setMemoryEnabled={setMemoryEnabled}
+                    setMemoryRetrievalEnabled={setMemoryRetrievalEnabled}
+                    setMemoryAutoDetectionEnabled={
+                      setMemoryAutoDetectionEnabled
+                    }
+                  />
+                )}
+
+                {activeSection === 'private-sessions' && (
+                  <PrivateSessionsSection
+                    privateSessionDurationMinutes={
+                      privateSessionDurationMinutes
+                    }
+                    isCustomPrivateDuration={isCustomPrivateDuration}
+                    customPrivateDurationInput={customPrivateDurationInput}
+                    savingStates={savingStates}
+                    setPrivateSessionDurationMinutes={
+                      setPrivateSessionDurationMinutes
+                    }
+                    setIsCustomPrivateDuration={setIsCustomPrivateDuration}
+                    setCustomPrivateDurationInput={
+                      setCustomPrivateDurationInput
+                    }
+                    setConfig={setConfig}
+                    saveConfig={saveConfig}
+                  />
+                )}
+
+                {activeSection === 'persona-prompts' && (
+                  <PersonaPromptsSection
+                    userSystemPrompts={userSystemPrompts}
+                    editingPrompt={editingPrompt}
+                    newPromptName={newPromptName}
+                    newPromptContent={newPromptContent}
+                    isAddingNewPrompt={isAddingNewPrompt}
+                    setEditingPrompt={setEditingPrompt}
+                    setNewPromptName={setNewPromptName}
+                    setNewPromptContent={setNewPromptContent}
+                    setIsAddingNewPrompt={setIsAddingNewPrompt}
+                    onAddOrUpdate={handleAddOrUpdateSystemPrompt}
+                    onDelete={handleDeleteSystemPrompt}
+                  />
+                )}
+
+                {activeSection === 'default-search' && (
+                  <DefaultSearchSection
+                    searchChatModelProvider={searchChatModelProvider}
+                    searchChatModel={searchChatModel}
+                    onModelChange={(provider, model) => {
+                      setSearchChatModelProvider(provider);
+                      setSearchChatModel(model);
+                      saveSearchSetting('searchChatModelProvider', provider);
+                      saveSearchSetting('searchChatModel', model);
+                    }}
+                    onReset={() => {
+                      setSearchChatModelProvider('');
+                      setSearchChatModel('');
+                      localStorage.removeItem('searchChatModelProvider');
+                      localStorage.removeItem('searchChatModel');
+                    }}
+                  />
+                )}
+
+                {activeSection === 'model-settings' && (
+                  <ModelSettingsSection
+                    config={config}
+                    selectedChatModelProvider={selectedChatModelProvider}
+                    selectedChatModel={selectedChatModel}
+                    selectedSystemModelProvider={selectedSystemModelProvider}
+                    selectedSystemModel={selectedSystemModel}
+                    selectedEmbeddingModelProvider={
+                      selectedEmbeddingModelProvider
+                    }
+                    selectedEmbeddingModel={selectedEmbeddingModel}
+                    linkSystemToChat={linkSystemToChat}
+                    contextWindowSize={contextWindowSize}
+                    isCustomContextWindow={isCustomContextWindow}
+                    savingStates={savingStates}
+                    setSelectedChatModelProvider={setSelectedChatModelProvider}
+                    setSelectedChatModel={setSelectedChatModel}
+                    setSelectedSystemModelProvider={
+                      setSelectedSystemModelProvider
+                    }
+                    setSelectedSystemModel={setSelectedSystemModel}
+                    setSelectedEmbeddingModelProvider={
+                      setSelectedEmbeddingModelProvider
+                    }
+                    setSelectedEmbeddingModel={setSelectedEmbeddingModel}
+                    setLinkSystemToChat={setLinkSystemToChat}
+                    setContextWindowSize={setContextWindowSize}
+                    setIsCustomContextWindow={setIsCustomContextWindow}
+                    setConfig={setConfig}
+                    saveConfig={saveConfig}
+                  />
+                )}
+
+                {activeSection === 'model-visibility' && (
+                  <ModelVisibilitySection
+                    allModels={allModels}
+                    hiddenModels={hiddenModels}
+                    expandedProviders={expandedProviders}
+                    onToggleModel={handleModelVisibilityToggle}
+                    onToggleProvider={handleProviderVisibilityToggle}
+                    onToggleExpand={toggleProviderExpansion}
+                  />
+                )}
+
+                {activeSection === 'api-keys' && (
+                  <ApiKeysSection
+                    config={config}
+                    savingStates={savingStates}
+                    setConfig={setConfig}
+                    saveConfig={saveConfig}
+                  />
+                )}
               </div>
-            </SettingsSection>
-
-            <div id="personalization">
-              <SettingsSection title="Personalization">
-                <p className="text-xs text-fg/60">
-                  Saved locally in your browser. You can choose to send this
-                  info per message.
-                </p>
-                <div className="flex flex-col space-y-4">
-                  <div className="flex flex-col space-y-2">
-                    <label
-                      className="text-sm font-medium"
-                      htmlFor="personalization-location"
-                    >
-                      Location
-                    </label>
-                    <InputComponent
-                      id="personalization-location"
-                      type="text"
-                      value={personalizationLocation}
-                      placeholder="Seattle, WA or Greater Chicago Area"
-                      onChange={(e) =>
-                        handlePersonalizationChange(
-                          'personalization.location',
-                          setPersonalizationLocation,
-                          e.target.value,
-                        )
-                      }
-                    />
-                  </div>
-
-                  <div className="flex flex-col space-y-2">
-                    <label
-                      className="text-sm font-medium"
-                      htmlFor="personalization-about"
-                    >
-                      About Me
-                    </label>
-                    <TextareaComponent
-                      id="personalization-about"
-                      value={personalizationAbout}
-                      placeholder="I am a YouTube travel vlogger who enjoys playing video games in my spare time. I have a wife, two kids, and one dog."
-                      onChange={(e) =>
-                        handlePersonalizationChange(
-                          'personalization.about',
-                          setPersonalizationAbout,
-                          e.target.value,
-                        )
-                      }
-                    />
-                  </div>
-                </div>
-              </SettingsSection>
             </div>
-
-            <SettingsSection
-              title="Memory"
-              tooltip="Memory allows YAAWC to remember facts about you across conversations.\nMemories are separate from chat history.\nAutomatic detection uses additional LLM tokens.\nYou can review, edit, or delete memories at any time."
-            >
-              <p className="text-xs text-fg/60">
-                When enabled, YAAWC can remember facts about you across
-                conversations to provide more personalized responses. Memories
-                are stored separately from chat history and can be managed on
-                the Memory page.
-              </p>
-              <div className="flex flex-col space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium">Memory</p>
-                    <p className="text-xs text-fg/60">
-                      Enable cross-conversation memory
-                    </p>
-                  </div>
-                  <Switch
-                    checked={memoryEnabled}
-                    onChange={(val: boolean) => {
-                      setMemoryEnabled(val);
-                      localStorage.setItem('memoryEnabled', String(val));
-                    }}
-                    className={cn(
-                      'group relative inline-flex h-5 w-10 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none',
-                      memoryEnabled ? 'bg-accent' : 'bg-surface-2',
-                    )}
-                  >
-                    <span className="sr-only">Enable memory</span>
-                    <span
-                      className={cn(
-                        'pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
-                        memoryEnabled ? 'translate-x-5' : 'translate-x-0',
-                      )}
-                    />
-                  </Switch>
-                </div>
-
-                {memoryEnabled && (
-                  <>
-                    <div className="flex items-center justify-between pl-4 border-l-2 border-surface-2">
-                      <div>
-                        <p className="text-sm font-medium">
-                          Use saved memories in chats
-                        </p>
-                        <p className="text-xs text-fg/60">
-                          Include relevant memories to personalize responses
-                        </p>
-                      </div>
-                      <Switch
-                        checked={memoryRetrievalEnabled}
-                        onChange={(val: boolean) => {
-                          setMemoryRetrievalEnabled(val);
-                          localStorage.setItem(
-                            'memoryRetrievalEnabled',
-                            String(val),
-                          );
-                        }}
-                        className={cn(
-                          'group relative inline-flex h-5 w-10 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none',
-                          memoryRetrievalEnabled ? 'bg-accent' : 'bg-surface-2',
-                        )}
-                      >
-                        <span className="sr-only">
-                          Use saved memories in chats
-                        </span>
-                        <span
-                          className={cn(
-                            'pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
-                            memoryRetrievalEnabled
-                              ? 'translate-x-5'
-                              : 'translate-x-0',
-                          )}
-                        />
-                      </Switch>
-                    </div>
-
-                    <div className="flex items-center justify-between pl-4 border-l-2 border-surface-2">
-                      <div>
-                        <p className="text-sm font-medium">
-                          Automatic memory detection
-                        </p>
-                        <p className="text-xs text-fg/60">
-                          Analyze conversations to identify facts worth
-                          remembering. Uses additional calls to your System
-                          Model.
-                        </p>
-                      </div>
-                      <Switch
-                        checked={memoryAutoDetectionEnabled}
-                        onChange={(val: boolean) => {
-                          setMemoryAutoDetectionEnabled(val);
-                          localStorage.setItem(
-                            'memoryAutoDetectionEnabled',
-                            String(val),
-                          );
-                        }}
-                        className={cn(
-                          'group relative inline-flex h-5 w-10 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none',
-                          memoryAutoDetectionEnabled
-                            ? 'bg-accent'
-                            : 'bg-surface-2',
-                        )}
-                      >
-                        <span className="sr-only">
-                          Automatic memory detection
-                        </span>
-                        <span
-                          className={cn(
-                            'pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
-                            memoryAutoDetectionEnabled
-                              ? 'translate-x-5'
-                              : 'translate-x-0',
-                          )}
-                        />
-                      </Switch>
-                    </div>
-                  </>
-                )}
-
-                <div className="flex items-center gap-3">
-                  <Link
-                    href="/memory"
-                    className="text-sm text-accent hover:underline"
-                  >
-                    Manage memories →
-                  </Link>
-                </div>
-
-                <button
-                  onClick={() => {
-                    if (
-                      window.confirm(
-                        'Are you sure you want to delete all memories? This action cannot be undone.',
-                      )
-                    ) {
-                      fetch('/api/memories', { method: 'DELETE' }).then(() => {
-                        // Show brief confirmation
-                        alert('All memories deleted.');
-                      });
-                    }
-                  }}
-                  className="text-sm text-red-500 hover:text-red-600 text-left"
-                >
-                  Delete all memories
-                </button>
-              </div>
-            </SettingsSection>
-
-            <SettingsSection
-              title="Private Sessions"
-              tooltip="Private sessions are automatically deleted after the configured duration.\nNo personalization or memories are used in private sessions."
-            >
-              <p className="text-xs text-fg/60">
-                Private sessions are automatically deleted after the configured
-                duration. Personalization and memories are disabled in private
-                sessions.
-              </p>
-              <div className="flex flex-col space-y-3">
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium">Session Duration</p>
-                  <Select
-                    value={
-                      isCustomPrivateDuration
-                        ? '-1'
-                        : String(privateSessionDurationMinutes)
-                    }
-                    onChange={(e) => {
-                      const val = parseInt(e.target.value);
-                      if (val === -1) {
-                        setIsCustomPrivateDuration(true);
-                        setCustomPrivateDurationInput(
-                          String(privateSessionDurationMinutes),
-                        );
-                      } else {
-                        setIsCustomPrivateDuration(false);
-                        setPrivateSessionDurationMinutes(val);
-                        setConfig((prev) => ({
-                          ...prev!,
-                          privateSessionDurationMinutes: val,
-                        }));
-                        saveConfig('privateSessionDurationMinutes', val);
-                      }
-                    }}
-                    options={PREDEFINED_DURATIONS.map((d) => ({
-                      value: String(d.value),
-                      label: d.label,
-                    }))}
-                  />
-                </div>
-                {isCustomPrivateDuration && (
-                  <div className="flex flex-col space-y-1">
-                    <p className="text-sm">Custom duration (minutes)</p>
-                    <InputComponent
-                      type="number"
-                      min={1}
-                      value={customPrivateDurationInput}
-                      placeholder="Duration in minutes"
-                      isSaving={savingStates['privateSessionDurationMinutes']}
-                      onChange={(e) => {
-                        setCustomPrivateDurationInput(e.target.value);
-                      }}
-                      onSave={(value) => {
-                        const numValue = Math.max(1, parseInt(value) || 1440);
-                        setPrivateSessionDurationMinutes(numValue);
-                        setCustomPrivateDurationInput(String(numValue));
-                        setConfig((prev) => ({
-                          ...prev!,
-                          privateSessionDurationMinutes: numValue,
-                        }));
-                        saveConfig('privateSessionDurationMinutes', numValue);
-                      }}
-                    />
-                    <p className="text-xs text-fg/60">
-                      Enter a custom duration in minutes (minimum 1).
-                    </p>
-                  </div>
-                )}
-              </div>
-            </SettingsSection>
-
-            {/* System Prompts removed */}
-
-            <SettingsSection
-              title="Persona Prompts"
-              tooltip="Persona prompts apply only to the final response and define tone, style, or structure.\nWhen one or more persona prompts are active, the system will NOT send formatting or citation instructions to the LLM for that turn.\nPersona behavior overrides any system formatting/citation rules.\n\nUse cases:\n- 'You are a pirate that speaks in riddles.'\n- 'Provide answers formatted with bullet points and tables.'"
-            >
-              <div className="flex flex-col space-y-4">
-                <div className="flex items-center justify-between p-3 bg-surface rounded-lg border border-surface-2 gap-3">
-                  <div className="text-sm">
-                    Copy a starter Formatting & Citations template
-                  </div>
-                  <CopyTemplatePicker />
-                </div>
-                {userSystemPrompts
-                  .filter((prompt) => prompt.type === 'persona')
-                  .map((prompt) => (
-                    <div
-                      key={prompt.id}
-                      className="p-3 border border-surface-2 rounded-md bg-surface-2"
-                    >
-                      {editingPrompt && editingPrompt.id === prompt.id ? (
-                        <div className="space-y-3">
-                          <InputComponent
-                            type="text"
-                            value={editingPrompt.name}
-                            onChange={(
-                              e: React.ChangeEvent<HTMLInputElement>,
-                            ) =>
-                              setEditingPrompt({
-                                ...editingPrompt,
-                                name: e.target.value,
-                              })
-                            }
-                            placeholder="Prompt Name"
-                            className=""
-                          />
-                          <TextareaComponent
-                            value={editingPrompt.content}
-                            onChange={(
-                              e: React.ChangeEvent<HTMLTextAreaElement>,
-                            ) =>
-                              setEditingPrompt({
-                                ...editingPrompt,
-                                content: e.target.value,
-                              })
-                            }
-                            placeholder="Prompt Content"
-                            className="min-h-[100px]"
-                          />
-                          <div className="flex space-x-2 justify-end">
-                            <button
-                              onClick={() => setEditingPrompt(null)}
-                              className="px-3 py-2 text-sm rounded-md bg-surface hover:bg-surface-2 flex items-center gap-1.5"
-                            >
-                              <X size={16} />
-                              Cancel
-                            </button>
-                            <button
-                              onClick={handleAddOrUpdateSystemPrompt}
-                              className="px-3 py-2 text-sm rounded-md bg-accent flex items-center gap-1.5"
-                            >
-                              <Save size={16} />
-                              Save
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex justify-between items-start">
-                          <div className="flex-grow">
-                            <h4 className="font-semibold">{prompt.name}</h4>
-                            <p
-                              className="text-sm mt-1 whitespace-pre-wrap overflow-hidden text-ellipsis"
-                              style={{
-                                maxHeight: '3.6em',
-                                display: '-webkit-box',
-                                WebkitLineClamp: 2,
-                                WebkitBoxOrient: 'vertical',
-                              }}
-                            >
-                              {prompt.content}
-                            </p>
-                          </div>
-                          <div className="flex space-x-1 flex-shrink-0 ml-2">
-                            <button
-                              onClick={() => setEditingPrompt({ ...prompt })}
-                              title="Edit"
-                              className="p-1.5 rounded-md hover:bg-surface-2"
-                            >
-                              <Edit3 size={18} />
-                            </button>
-                            <button
-                              onClick={() =>
-                                handleDeleteSystemPrompt(prompt.id)
-                              }
-                              title="Delete"
-                              className="p-1.5 rounded-md hover:bg-surface-2 text-red-500 hover:text-red-600"
-                            >
-                              <Trash2 size={18} />
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                {isAddingNewPrompt && newPromptType === 'persona' && (
-                  <div className="p-3 border border-dashed border-surface-2 rounded-md space-y-3 bg-surface-2">
-                    <InputComponent
-                      type="text"
-                      value={newPromptName}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                        setNewPromptName(e.target.value)
-                      }
-                      placeholder="Persona Prompt Name"
-                      className=""
-                    />
-                    <TextareaComponent
-                      value={newPromptContent}
-                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-                        setNewPromptContent(e.target.value)
-                      }
-                      placeholder="Persona prompt content (e.g., You are a helpful assistant that speaks like a pirate and uses nautical metaphors.)"
-                      className="min-h-[100px]"
-                    />
-                    <div className="flex space-x-2 justify-end">
-                      <button
-                        onClick={() => {
-                          setIsAddingNewPrompt(false);
-                          setNewPromptName('');
-                          setNewPromptContent('');
-                          setNewPromptType('persona');
-                        }}
-                        className="px-3 py-2 text-sm rounded-md bg-surface hover:bg-surface-2 flex items-center gap-1.5"
-                      >
-                        <X size={16} />
-                        Cancel
-                      </button>
-                      <button
-                        onClick={handleAddOrUpdateSystemPrompt}
-                        className="px-3 py-2 text-sm rounded-md bg-accent flex items-center gap-1.5"
-                      >
-                        <Save size={16} />
-                        Add Persona Prompt
-                      </button>
-                    </div>
-                  </div>
-                )}
-                {!isAddingNewPrompt && (
-                  <button
-                    onClick={() => {
-                      setIsAddingNewPrompt(true);
-                      setNewPromptType('persona');
-                    }}
-                    className="self-start px-3 py-2 text-sm rounded-md border border-surface-2 hover:bg-surface-2 flex items-center gap-1.5"
-                  >
-                    <PlusCircle size={18} /> Add Persona Prompt
-                  </button>
-                )}
-              </div>
-            </SettingsSection>
-
-            <SettingsSection
-              title="Default Search Settings"
-              tooltip='Select the settings that will be used when navigating to the site with a search query, such as "example.com/search?q=your+query".\nThese settings will override the global settings for search queries.\n\nIf settings are not specified, the global settings will be used.'
-            >
-              <div className="flex flex-col space-y-4">
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm">Chat Model</p>
-                  <div className="flex justify-start items-center space-x-2">
-                    <ModelSelector
-                      selectedModel={{
-                        provider: searchChatModelProvider,
-                        model: searchChatModel,
-                      }}
-                      setSelectedModel={(model) => {
-                        setSearchChatModelProvider(model.provider);
-                        setSearchChatModel(model.model);
-                        saveSearchSetting(
-                          'searchChatModelProvider',
-                          model.provider,
-                        );
-                        saveSearchSetting('searchChatModel', model.model);
-                      }}
-                      truncateModelName={false}
-                    />
-                    {(searchChatModelProvider || searchChatModel) && (
-                      <button
-                        onClick={() => {
-                          setSearchChatModelProvider('');
-                          setSearchChatModel('');
-                          localStorage.removeItem('searchChatModelProvider');
-                          localStorage.removeItem('searchChatModel');
-                        }}
-                        className="p-1.5 rounded-md hover:bg-surface-2 transition-colors"
-                        title="Reset chat model"
-                      >
-                        <RotateCcw size={16} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </SettingsSection>
-
-            <SettingsSection title="Model Settings">
-              {config.chatModelProviders && (
-                <div className="flex flex-col space-y-4">
-                  <div className="flex flex-col space-y-1">
-                    <p className="text-sm">Chat Model Provider</p>
-                    <Select
-                      value={selectedChatModelProvider ?? undefined}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setSelectedChatModelProvider(value);
-                        saveConfig('chatModelProvider', value);
-                        const firstModel =
-                          config.chatModelProviders[value]?.[0]?.name;
-                        if (firstModel) {
-                          setSelectedChatModel(firstModel);
-                          saveConfig('chatModel', firstModel);
-                          // Mirror to System when linked
-                          if (linkSystemToChat) {
-                            setSelectedSystemModelProvider(value);
-                            setSelectedSystemModel(firstModel);
-                            saveConfig('systemModelProvider', value);
-                            saveConfig('systemModel', firstModel);
-                          }
-                        }
-                      }}
-                      options={Object.keys(config.chatModelProviders).map(
-                        (provider) => ({
-                          value: provider,
-                          label:
-                            (
-                              PROVIDER_METADATA as Record<
-                                string,
-                                { displayName?: string }
-                              >
-                            )[provider]?.displayName ||
-                            provider.charAt(0).toUpperCase() +
-                              provider.slice(1),
-                        }),
-                      )}
-                    />
-                  </div>
-
-                  {selectedChatModelProvider &&
-                    selectedChatModelProvider != 'custom_openai' && (
-                      <div className="flex flex-col space-y-1">
-                        <p className="text-sm">Chat Model</p>
-                        <Select
-                          value={selectedChatModel ?? undefined}
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            setSelectedChatModel(value);
-                            saveConfig('chatModel', value);
-                            // Mirror to System when linked
-                            if (linkSystemToChat && selectedChatModelProvider) {
-                              setSelectedSystemModelProvider(
-                                selectedChatModelProvider,
-                              );
-                              setSelectedSystemModel(value);
-                              saveConfig(
-                                'systemModelProvider',
-                                selectedChatModelProvider,
-                              );
-                              saveConfig('systemModel', value);
-                            }
-                          }}
-                          options={(() => {
-                            const chatModelProvider =
-                              config.chatModelProviders[
-                                selectedChatModelProvider
-                              ];
-                            return chatModelProvider
-                              ? chatModelProvider.length > 0
-                                ? chatModelProvider.map((model) => ({
-                                    value: model.name,
-                                    label: model.displayName,
-                                  }))
-                                : [
-                                    {
-                                      value: '',
-                                      label: 'No models available',
-                                      disabled: true,
-                                    },
-                                  ]
-                              : [
-                                  {
-                                    value: '',
-                                    label:
-                                      'Invalid provider, please check backend logs',
-                                    disabled: true,
-                                  },
-                                ];
-                          })()}
-                        />
-                        {selectedChatModelProvider === 'ollama' && (
-                          <div className="flex flex-col space-y-1">
-                            <p className="text-sm">Chat Context Window Size</p>
-                            <Select
-                              value={
-                                isCustomContextWindow
-                                  ? 'custom'
-                                  : contextWindowSize.toString()
-                              }
-                              onChange={(e) => {
-                                const value = e.target.value;
-                                if (value === 'custom') {
-                                  setIsCustomContextWindow(true);
-                                } else {
-                                  setIsCustomContextWindow(false);
-                                  const numValue = parseInt(value);
-                                  setContextWindowSize(numValue);
-                                  setConfig((prev) => ({
-                                    ...prev!,
-                                    ollamaContextWindow: numValue,
-                                  }));
-                                  saveConfig('ollamaContextWindow', numValue);
-                                }
-                              }}
-                              options={[
-                                ...predefinedContextSizes.map((size) => ({
-                                  value: size.toString(),
-                                  label: `${size.toLocaleString()} tokens`,
-                                })),
-                                { value: 'custom', label: 'Custom...' },
-                              ]}
-                            />
-                            {isCustomContextWindow && (
-                              <div className="mt-2">
-                                <InputComponent
-                                  type="number"
-                                  min={512}
-                                  value={contextWindowSize}
-                                  placeholder="Custom context window size (minimum 512)"
-                                  isSaving={savingStates['ollamaContextWindow']}
-                                  onChange={(e) => {
-                                    // Allow any value to be typed
-                                    const value =
-                                      parseInt(e.target.value) ||
-                                      contextWindowSize;
-                                    setContextWindowSize(value);
-                                  }}
-                                  onSave={(value) => {
-                                    // Validate only when saving
-                                    const numValue = Math.max(
-                                      512,
-                                      parseInt(value) || 2048,
-                                    );
-                                    setContextWindowSize(numValue);
-                                    setConfig((prev) => ({
-                                      ...prev!,
-                                      ollamaContextWindow: numValue,
-                                    }));
-                                    saveConfig('ollamaContextWindow', numValue);
-                                  }}
-                                />
-                              </div>
-                            )}
-                            <p className="text-xs mt-0.5">
-                              {isCustomContextWindow
-                                ? 'Adjust the context window size for Ollama models (minimum 512 tokens)'
-                                : 'Adjust the context window size for Ollama models'}
-                            </p>
-                          </div>
-                        )}
-                        <p className="text-xs mt-0.5">
-                          Used for chat responses and agentic tasks.
-                        </p>
-                      </div>
-                    )}
-                </div>
-              )}
-
-              {/* System Model selection (internal tasks) */}
-              {config.chatModelProviders && (
-                <div className="flex flex-col space-y-4 mt-6">
-                  <div className="flex items-center justify-between p-3 bg-surface rounded-lg border border-surface-2">
-                    <div>
-                      <p className="text-sm font-medium">Link System to Chat</p>
-                      <p className="text-xs mt-0.5 text-fg/60">
-                        When enabled, the System model mirrors the Chat model
-                        and is disabled below.
-                      </p>
-                    </div>
-                    <Switch
-                      checked={linkSystemToChat}
-                      onChange={(checked) => {
-                        setLinkSystemToChat(checked);
-                        saveConfig('linkSystemToChat', checked);
-                        if (
-                          checked &&
-                          selectedChatModelProvider &&
-                          selectedChatModel
-                        ) {
-                          // Immediately mirror current chat selection
-                          setSelectedSystemModelProvider(
-                            selectedChatModelProvider,
-                          );
-                          setSelectedSystemModel(selectedChatModel);
-                          saveConfig(
-                            'systemModelProvider',
-                            selectedChatModelProvider,
-                          );
-                          saveConfig('systemModel', selectedChatModel);
-                        }
-                      }}
-                      className={cn(
-                        linkSystemToChat ? 'bg-accent' : 'bg-surface-2',
-                        'relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none',
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          linkSystemToChat ? 'translate-x-6' : 'translate-x-1',
-                          'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
-                        )}
-                      />
-                    </Switch>
-                  </div>
-                  <div className="flex flex-col space-y-1">
-                    <p className="text-sm">System Model Provider</p>
-                    <Select
-                      value={selectedSystemModelProvider ?? undefined}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setSelectedSystemModelProvider(value);
-                        // Persist only in localStorage via saveConfig shim
-                        saveConfig('systemModelProvider', value);
-                        const firstModel =
-                          config.chatModelProviders[value]?.[0]?.name;
-                        if (firstModel) {
-                          setSelectedSystemModel(firstModel);
-                          saveConfig('systemModel', firstModel);
-                        }
-                      }}
-                      disabled={linkSystemToChat}
-                      options={Object.keys(config.chatModelProviders).map(
-                        (provider) => ({
-                          value: provider,
-                          label:
-                            (
-                              PROVIDER_METADATA as Record<
-                                string,
-                                { displayName?: string }
-                              >
-                            )[provider]?.displayName ||
-                            provider.charAt(0).toUpperCase() +
-                              provider.slice(1),
-                        }),
-                      )}
-                    />
-                  </div>
-
-                  {selectedSystemModelProvider &&
-                    selectedSystemModelProvider != 'custom_openai' && (
-                      <div className="flex flex-col space-y-1">
-                        <p className="text-sm">System Model</p>
-                        <Select
-                          value={selectedSystemModel ?? undefined}
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            setSelectedSystemModel(value);
-                            saveConfig('systemModel', value);
-                          }}
-                          disabled={linkSystemToChat}
-                          options={(() => {
-                            const providerModels =
-                              config.chatModelProviders[
-                                selectedSystemModelProvider
-                              ];
-                            return providerModels
-                              ? providerModels.length > 0
-                                ? providerModels.map((model) => ({
-                                    value: model.name,
-                                    label: model.displayName,
-                                  }))
-                                : [
-                                    {
-                                      value: '',
-                                      label: 'No models available',
-                                      disabled: true,
-                                    },
-                                  ]
-                              : [
-                                  {
-                                    value: '',
-                                    label:
-                                      'Invalid provider, please check backend logs',
-                                    disabled: true,
-                                  },
-                                ];
-                          })()}
-                        />
-                        <p className="text-xs mt-0.5">
-                          Used for internal tasks like web summarization and
-                          query generation. You may want to select a
-                          faster/cheaper/instruct model rather than your main
-                          chat model.
-                        </p>
-                      </div>
-                    )}
-                </div>
-              )}
-
-              {selectedChatModelProvider &&
-                selectedChatModelProvider === 'custom_openai' && (
-                  <div className="flex flex-col space-y-4">
-                    <div className="flex flex-col space-y-1">
-                      <p className="text-sm">Model Name</p>
-                      <InputComponent
-                        type="text"
-                        placeholder="Model name"
-                        value={config.customOpenaiModelName}
-                        isSaving={savingStates['customOpenaiModelName']}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                          setConfig((prev) => ({
-                            ...prev!,
-                            customOpenaiModelName: e.target.value,
-                          }));
-                        }}
-                        onSave={(value) =>
-                          saveConfig('customOpenaiModelName', value)
-                        }
-                      />
-                    </div>
-                    <div className="flex flex-col space-y-1">
-                      <p className="text-sm">Custom OpenAI API Key</p>
-                      <InputComponent
-                        type="password"
-                        placeholder="Custom OpenAI API Key"
-                        value={config.customOpenaiApiKey}
-                        isSaving={savingStates['customOpenaiApiKey']}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                          setConfig((prev) => ({
-                            ...prev!,
-                            customOpenaiApiKey: e.target.value,
-                          }));
-                        }}
-                        onSave={(value) =>
-                          saveConfig('customOpenaiApiKey', value)
-                        }
-                      />
-                    </div>
-                    <div className="flex flex-col space-y-1">
-                      <p className="text-sm">Custom OpenAI Base URL</p>
-                      <InputComponent
-                        type="text"
-                        placeholder="Custom OpenAI Base URL"
-                        value={config.customOpenaiApiUrl}
-                        isSaving={savingStates['customOpenaiApiUrl']}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                          setConfig((prev) => ({
-                            ...prev!,
-                            customOpenaiApiUrl: e.target.value,
-                          }));
-                        }}
-                        onSave={(value) =>
-                          saveConfig('customOpenaiApiUrl', value)
-                        }
-                      />
-                    </div>
-                  </div>
-                )}
-
-              {config.embeddingModelProviders && (
-                <div className="flex flex-col space-y-4 mt-4 pt-4 border-t border-surface-2">
-                  <div className="flex flex-col space-y-1">
-                    <p className="text-sm">Embedding Model Provider</p>
-                    <Select
-                      value={selectedEmbeddingModelProvider ?? undefined}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setSelectedEmbeddingModelProvider(value);
-                        saveConfig('embeddingModelProvider', value);
-                        const firstModel =
-                          config.embeddingModelProviders[value]?.[0]?.name;
-                        if (firstModel) {
-                          setSelectedEmbeddingModel(firstModel);
-                          saveConfig('embeddingModel', firstModel);
-                        }
-                      }}
-                      options={Object.keys(config.embeddingModelProviders).map(
-                        (provider) => ({
-                          value: provider,
-                          label:
-                            (
-                              PROVIDER_METADATA as Record<
-                                string,
-                                { displayName?: string }
-                              >
-                            )[provider]?.displayName ||
-                            provider.charAt(0).toUpperCase() +
-                              provider.slice(1),
-                        }),
-                      )}
-                    />
-                  </div>
-
-                  {selectedEmbeddingModelProvider && (
-                    <div className="flex flex-col space-y-1">
-                      <p className="text-sm">Embedding Model</p>
-                      <Select
-                        value={selectedEmbeddingModel ?? undefined}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          setSelectedEmbeddingModel(value);
-                          saveConfig('embeddingModel', value);
-                        }}
-                        options={(() => {
-                          const embeddingModelProvider =
-                            config.embeddingModelProviders[
-                              selectedEmbeddingModelProvider
-                            ];
-                          return embeddingModelProvider
-                            ? embeddingModelProvider.length > 0
-                              ? embeddingModelProvider.map((model) => ({
-                                  value: model.name,
-                                  label: model.displayName,
-                                }))
-                              : [
-                                  {
-                                    value: '',
-                                    label: 'No models available',
-                                    disabled: true,
-                                  },
-                                ]
-                            : [
-                                {
-                                  value: '',
-                                  label:
-                                    'Invalid provider, please check backend logs',
-                                  disabled: true,
-                                },
-                              ];
-                        })()}
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
-            </SettingsSection>
-
-            <SettingsSection
-              title="Model Visibility"
-              tooltip="Hide models from the API to prevent them from appearing in model lists.\nHidden models will not be available for selection in the interface.\nThis allows server admins to disable models that may incur large costs or won't work with the application."
-            >
-              <div className="flex flex-col space-y-3">
-                {/* Unified Models List */}
-                {(() => {
-                  // Combine all models from both chat and embedding providers
-                  const allProviders: Record<
-                    string,
-                    Record<string, { displayName: string }>
-                  > = {};
-
-                  // Add chat models
-                  Object.entries(allModels.chat).forEach(
-                    ([provider, models]) => {
-                      if (!allProviders[provider]) {
-                        allProviders[provider] = {};
-                      }
-                      Object.entries(models).forEach(([modelKey, model]) => {
-                        allProviders[provider][modelKey] = model;
-                      });
-                    },
-                  );
-
-                  // Add embedding models
-                  Object.entries(allModels.embedding).forEach(
-                    ([provider, models]) => {
-                      if (!allProviders[provider]) {
-                        allProviders[provider] = {};
-                      }
-                      Object.entries(models).forEach(([modelKey, model]) => {
-                        allProviders[provider][modelKey] = model;
-                      });
-                    },
-                  );
-
-                  return Object.keys(allProviders).length > 0 ? (
-                    Object.entries(allProviders).map(([provider, models]) => {
-                      const providerId = `provider-${provider}`;
-                      const isExpanded = expandedProviders.has(providerId);
-                      const modelEntries = Object.entries(models);
-                      const hiddenCount = modelEntries.filter(([modelKey]) =>
-                        hiddenModels.includes(modelKey),
-                      ).length;
-                      const totalCount = modelEntries.length;
-
-                      return (
-                        <div
-                          key={providerId}
-                          className="border border-surface-2 rounded-lg overflow-hidden"
-                        >
-                          <button
-                            onClick={() => toggleProviderExpansion(providerId)}
-                            className="w-full p-3 bg-surface hover:bg-surface-2 transition-colors flex items-center justify-between"
-                          >
-                            <div className="flex items-center space-x-3">
-                              {isExpanded ? (
-                                <ChevronDown size={16} />
-                              ) : (
-                                <ChevronRight size={16} />
-                              )}
-                              <h4 className="text-sm font-medium">
-                                {(
-                                  PROVIDER_METADATA as Record<
-                                    string,
-                                    { displayName?: string }
-                                  >
-                                )[provider]?.displayName ||
-                                  provider.charAt(0).toUpperCase() +
-                                    provider.slice(1)}
-                              </h4>
-                            </div>
-                            <div className="flex items-center space-x-2 text-xs">
-                              <span>{totalCount - hiddenCount} visible</span>
-                              {hiddenCount > 0 && (
-                                <span className="px-2 py-1 bg-red-100 text-red-700 rounded">
-                                  {hiddenCount} hidden
-                                </span>
-                              )}
-                            </div>
-                          </button>
-
-                          {isExpanded && (
-                            <div className="p-3 bg-surface-2 border-t border-surface-2">
-                              <div className="flex justify-end mb-3 space-x-2">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleProviderVisibilityToggle(
-                                      models,
-                                      true,
-                                    );
-                                  }}
-                                  className="px-3 py-1.5 text-xs rounded-md bg-green-100 hover:bg-green-200 text-green-700 flex items-center gap-1.5 transition-colors"
-                                  title="Show all models in this provider"
-                                >
-                                  <Eye size={14} />
-                                  Show All
-                                </button>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleProviderVisibilityToggle(
-                                      models,
-                                      false,
-                                    );
-                                  }}
-                                  className="px-3 py-1.5 text-xs rounded-md bg-red-100 hover:bg-red-200 text-red-700 flex items-center gap-1.5 transition-colors"
-                                  title="Hide all models in this provider"
-                                >
-                                  <EyeOff size={14} />
-                                  Hide All
-                                </button>
-                              </div>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                {modelEntries.map(([modelKey, model]) => (
-                                  <div
-                                    key={`${provider}-${modelKey}`}
-                                    className="flex items-center justify-between p-2 bg-surface rounded-md"
-                                  >
-                                    <span className="text-sm">
-                                      {model.displayName || modelKey}
-                                    </span>
-                                    <Switch
-                                      checked={!hiddenModels.includes(modelKey)}
-                                      onChange={(checked) => {
-                                        handleModelVisibilityToggle(
-                                          modelKey,
-                                          checked,
-                                        );
-                                      }}
-                                      className={cn(
-                                        !hiddenModels.includes(modelKey)
-                                          ? 'bg-accent'
-                                          : 'bg-surface-2',
-                                        'relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none',
-                                      )}
-                                    >
-                                      <span
-                                        className={cn(
-                                          !hiddenModels.includes(modelKey)
-                                            ? 'translate-x-5'
-                                            : 'translate-x-1',
-                                          'inline-block h-3 w-3 transform rounded-full bg-white transition-transform',
-                                        )}
-                                      />
-                                    </Switch>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <p className="text-sm italic">No models available</p>
-                  );
-                })()}
-              </div>
-            </SettingsSection>
-
-            <SettingsSection
-              title="API Keys"
-              tooltip="API Key values can be viewed in the config.toml file"
-            >
-              <div className="flex flex-col space-y-4">
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm">OpenAI API Key</p>
-                  <InputComponent
-                    type="password"
-                    placeholder="OpenAI API Key"
-                    value={config.openaiApiKey}
-                    isSaving={savingStates['openaiApiKey']}
-                    onChange={(e) => {
-                      setConfig((prev) => ({
-                        ...prev!,
-                        openaiApiKey: e.target.value,
-                      }));
-                    }}
-                    onSave={(value) => saveConfig('openaiApiKey', value)}
-                  />
-                </div>
-
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm">Ollama API URL</p>
-                  <InputComponent
-                    type="text"
-                    placeholder="Ollama API URL"
-                    value={config.ollamaApiUrl}
-                    isSaving={savingStates['ollamaApiUrl']}
-                    onChange={(e) => {
-                      setConfig((prev) => ({
-                        ...prev!,
-                        ollamaApiUrl: e.target.value,
-                      }));
-                    }}
-                    onSave={(value) => saveConfig('ollamaApiUrl', value)}
-                  />
-                </div>
-
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm">GROQ API Key</p>
-                  <InputComponent
-                    type="password"
-                    placeholder="GROQ API Key"
-                    value={config.groqApiKey}
-                    isSaving={savingStates['groqApiKey']}
-                    onChange={(e) => {
-                      setConfig((prev) => ({
-                        ...prev!,
-                        groqApiKey: e.target.value,
-                      }));
-                    }}
-                    onSave={(value) => saveConfig('groqApiKey', value)}
-                  />
-                </div>
-
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm">OpenRouter API Key</p>
-                  <InputComponent
-                    type="password"
-                    placeholder="OpenRouter API Key"
-                    value={config.openrouterApiKey}
-                    isSaving={savingStates['openrouterApiKey']}
-                    onChange={(e) => {
-                      setConfig((prev) => ({
-                        ...prev!,
-                        openrouterApiKey: e.target.value,
-                      }));
-                    }}
-                    onSave={(value) => saveConfig('openrouterApiKey', value)}
-                  />
-                </div>
-
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm">Anthropic API Key</p>
-                  <InputComponent
-                    type="password"
-                    placeholder="Anthropic API key"
-                    value={config.anthropicApiKey}
-                    isSaving={savingStates['anthropicApiKey']}
-                    onChange={(e) => {
-                      setConfig((prev) => ({
-                        ...prev!,
-                        anthropicApiKey: e.target.value,
-                      }));
-                    }}
-                    onSave={(value) => saveConfig('anthropicApiKey', value)}
-                  />
-                </div>
-
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm">Gemini API Key</p>
-                  <InputComponent
-                    type="password"
-                    placeholder="Gemini API key"
-                    value={config.geminiApiKey}
-                    isSaving={savingStates['geminiApiKey']}
-                    onChange={(e) => {
-                      setConfig((prev) => ({
-                        ...prev!,
-                        geminiApiKey: e.target.value,
-                      }));
-                    }}
-                    onSave={(value) => saveConfig('geminiApiKey', value)}
-                  />
-                </div>
-
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm">Deepseek API Key</p>
-                  <InputComponent
-                    type="password"
-                    placeholder="Deepseek API Key"
-                    value={config.deepseekApiKey}
-                    isSaving={savingStates['deepseekApiKey']}
-                    onChange={(e) => {
-                      setConfig((prev) => ({
-                        ...prev!,
-                        deepseekApiKey: e.target.value,
-                      }));
-                    }}
-                    onSave={(value) => saveConfig('deepseekApiKey', value)}
-                  />
-                </div>
-
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm">AI/ML API Key</p>
-                  <InputComponent
-                    type="text"
-                    placeholder="AI/ML API Key"
-                    value={config.aimlApiKey}
-                    isSaving={savingStates['aimlApiKey']}
-                    onChange={(e) => {
-                      setConfig((prev) => ({
-                        ...prev!,
-                        aimlApiKey: e.target.value,
-                      }));
-                    }}
-                    onSave={(value) => saveConfig('aimlApiKey', value)}
-                  />
-                </div>
-
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm">LM Studio API URL</p>
-                  <InputComponent
-                    type="text"
-                    placeholder="LM Studio API URL"
-                    value={config.lmStudioApiUrl}
-                    isSaving={savingStates['lmStudioApiUrl']}
-                    onChange={(e) => {
-                      setConfig((prev) => ({
-                        ...prev!,
-                        lmStudioApiUrl: e.target.value,
-                      }));
-                    }}
-                    onSave={(value) => saveConfig('lmStudioApiUrl', value)}
-                  />
-                </div>
-              </div>
-            </SettingsSection>
-          </div>
+          </>
         )
       )}
-    </div>
-  );
-}
-
-function CopyTemplatePicker() {
-  const [copied, setCopied] = useState(false);
-  const [selected, setSelected] = useState<string>('web');
-
-  const getTemplateText = () => {
-    switch (selected) {
-      case 'local':
-        return formattingAndCitationsLocal.content;
-      case 'chat':
-        return formattingChat.content;
-      case 'scholarly':
-        return formattingAndCitationsScholarly.content;
-      case 'web':
-      default:
-        return formattingAndCitationsWeb.content;
-    }
-  };
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(getTemplateText());
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch (e) {
-      console.error('Failed to copy template:', e);
-    }
-  };
-
-  return (
-    <div className="flex items-center gap-2">
-      <Select
-        value={selected}
-        onChange={(e) => setSelected(e.target.value)}
-        options={[
-          { value: 'web', label: 'Web (default web rules)' },
-          { value: 'local', label: 'Local (files research)' },
-          { value: 'chat', label: 'Chat (light formatting)' },
-          { value: 'scholarly', label: 'Scholarly (academic)' },
-        ]}
-      />
-      <button
-        onClick={handleCopy}
-        className={cn(
-          'px-3 py-2 text-sm rounded-md border border-surface-2 hover:bg-surface-2 flex items-center gap-1.5',
-          copied && 'bg-green-100 text-green-800 border-green-200',
-        )}
-        title="Copy selected template"
-      >
-        {copied ? (
-          <span>Copied</span>
-        ) : (
-          <>
-            <PlusCircle size={16} /> Copy
-          </>
-        )}
-      </button>
     </div>
   );
 }

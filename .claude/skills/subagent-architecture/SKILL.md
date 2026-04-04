@@ -142,12 +142,12 @@ export interface SubagentDefinition {
 
 The `deep_research` tool is registered in `src/lib/tools/agents/index.ts` and included in the `webSearchTools` and `allAgentTools` arrays. It is available to the main agent in web search mode.
 
-`AgentSearch` (`src/lib/search/agentSearch.ts`) runs `SimplifiedAgent` directly — no supervisor or pre-routing.
+The chat API route creates `SimplifiedAgent` directly — no supervisor or pre-routing.
 
 ## Event Flow
 
 ```
-API Route → AgentSearch → SimplifiedAgent
+API Route → SimplifiedAgent
                               ↓
                     [Agent calls deep_research tool]
                               ↓

@@ -3,7 +3,6 @@
 import { cn } from '@/lib/utils';
 import {
   CheckCheck,
-  Copy as CopyIcon,
   Search,
   FileText,
   Globe,
@@ -17,18 +16,15 @@ import {
   Brain,
   Trash2,
   List,
+  Terminal,
 } from 'lucide-react';
-import Markdown, { MarkdownToJSX } from 'markdown-to-jsx';
 import { useState } from 'react';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import {
-  oneDark,
-  oneLight,
-} from 'react-syntax-highlighter/dist/cjs/styles/prism';
+import Markdown, { MarkdownToJSX } from 'markdown-to-jsx';
 import ThinkBox from './ThinkBox';
+import { CodeBlock } from './CodeBlock';
 import { Document } from '@langchain/core/documents';
 import CitationLink from './CitationLink';
-import { decodeHtmlEntities } from '@/lib/utils/html';
+import { decodeHtmlEntities, decodeBase64 } from '@/lib/utils/html';
 import { SubagentExecution } from './MessageActions/SubagentExecution';
 
 /**
@@ -176,6 +172,14 @@ const ToolCall = ({
   count,
   status,
   error,
+  code,
+  description,
+  exitCode,
+  stdout,
+  stderr,
+  timedOut,
+  oomKilled,
+  denied,
   children,
 }: {
   type?: string;
@@ -186,8 +190,18 @@ const ToolCall = ({
   count?: string;
   status?: string; // running | success | error
   error?: string;
+  code?: string;
+  description?: string;
+  exitCode?: string;
+  stdout?: string;
+  stderr?: string;
+  timedOut?: string;
+  oomKilled?: string;
+  denied?: string;
+  executionId?: string;
   children?: React.ReactNode;
 }) => {
+  const [expanded, setExpanded] = useState(false);
   const getIcon = (toolType: string) => {
     switch (toolType) {
       case 'search':
@@ -216,6 +230,8 @@ const ToolCall = ({
         return <Trash2 size={16} className="text-red-600" />;
       case 'list_memories':
         return <List size={16} className="text-accent" />;
+      case 'code_execution':
+        return <Terminal size={16} className="text-accent" />;
       default:
         return <Settings size={16} className="text-fg/70" />;
     }
@@ -366,6 +382,50 @@ const ToolCall = ({
       );
     }
 
+    if (type === 'code_execution') {
+      return (
+        <>
+          <span className="mr-2">{getIcon(type)}</span>
+          <span>Code execution{description ? ':' : ''}</span>
+          {description && (
+            <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded font-mono text-sm truncate max-w-md">
+              {description}
+            </span>
+          )}
+          {denied === 'true' && (
+            <span className="ml-2 px-2 py-0.5 bg-red-500/10 text-red-400 rounded text-xs">
+              Denied
+            </span>
+          )}
+          {timedOut === 'true' && (
+            <span className="ml-2 px-2 py-0.5 bg-red-500/10 text-red-400 rounded text-xs">
+              Timed out
+            </span>
+          )}
+          {oomKilled === 'true' && (
+            <span className="ml-2 px-2 py-0.5 bg-red-500/10 text-red-400 rounded text-xs">
+              Out of memory
+            </span>
+          )}
+          {expanded &&
+            exitCode !== undefined &&
+            denied !== 'true' &&
+            timedOut !== 'true' &&
+            oomKilled !== 'true' && (
+              <span
+                className={`ml-2 px-2 py-0.5 rounded text-xs ${
+                  exitCode === '0'
+                    ? 'bg-green-500/10 text-green-500'
+                    : 'bg-red-500/10 text-red-400'
+                }`}
+              >
+                Exit code: {exitCode}
+              </span>
+            )}
+        </>
+      );
+    }
+
     // Fallback for unknown tool types
     return (
       <>
@@ -379,26 +439,87 @@ const ToolCall = ({
   };
 
   return (
-    <div className="my-3 px-4 py-3 bg-surface border border-surface-2 rounded-lg">
-      <div className="flex items-start justify-between gap-2 text-sm font-medium">
+    <div className="my-3 bg-surface border border-surface-2 rounded-lg overflow-hidden">
+      <div
+        className={`flex items-start justify-between gap-2 text-sm font-medium px-4 py-3 ${
+          type === 'code_execution' && code
+            ? 'cursor-pointer hover:bg-surface-2/50 transition-colors'
+            : ''
+        }`}
+        onClick={
+          type === 'code_execution' && code
+            ? () => setExpanded(!expanded)
+            : undefined
+        }
+      >
         <div className="flex items-center flex-wrap gap-1">
           {formatToolMessage()}
         </div>
-        <div className="flex items-center h-5">
+        <div className="flex items-center gap-2 h-5">
+          {type === 'code_execution' && code && (
+            <svg
+              className={`w-4 h-4 text-fg/50 transition-transform ${expanded ? 'rotate-180' : ''}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 9l-7 7-7-7"
+              />
+            </svg>
+          )}
           {status === 'running' && (
             <div className="w-4 h-4">
               <Loader2 className="animate-spin text-fg/70" />
             </div>
           )}
-          {status === 'success' && (
-            <CheckCheck size={16} className="text-green-500" />
+          {status === 'success' &&
+            denied !== 'true' &&
+            exitCode !== undefined &&
+            exitCode !== '0' && <X size={16} className="text-red-500" />}
+          {status === 'success' &&
+            denied !== 'true' &&
+            (exitCode === undefined || exitCode === '0') && (
+              <CheckCheck size={16} className="text-green-500" />
+            )}
+          {(status === 'error' || denied === 'true') && (
+            <X size={16} className="text-red-500" />
           )}
-          {status === 'error' && <X size={16} className="text-red-500" />}
         </div>
       </div>
       {status === 'error' && error && (
-        <div className="mt-2 text-xs text-red-400 break-words font-mono whitespace-pre-wrap">
+        <div className="px-4 pb-3 text-xs text-red-400 break-words font-mono whitespace-pre-wrap">
           {decodeHtmlEntities(error)}
+        </div>
+      )}
+      {type === 'code_execution' && expanded && code && (
+        <div className="border-t border-surface-2">
+          <CodeBlock className="language-javascript">
+            {decodeBase64(code)}
+          </CodeBlock>
+          {stdout && (
+            <div className="border-t border-surface-2">
+              <div className="px-4 py-1 text-xs text-fg/50 font-mono bg-surface-2/50">
+                stdout
+              </div>
+              <CodeBlock className="language-text">
+                {decodeBase64(stdout)}
+              </CodeBlock>
+            </div>
+          )}
+          {stderr && (
+            <div className="border-t border-red-500/20">
+              <div className="px-4 py-1 text-xs text-red-400 font-mono bg-red-500/5">
+                stderr
+              </div>
+              <CodeBlock className="language-text">
+                {decodeBase64(stderr)}
+              </CodeBlock>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -428,75 +549,6 @@ const ThinkTagProcessor = ({
     />
   );
 };
-const CodeBlock = ({
-  className,
-  children,
-}: {
-  className?: string;
-  children: React.ReactNode;
-}) => {
-  // Extract language from className (format could be "language-javascript" or "lang-javascript")
-  let language = '';
-  if (className) {
-    if (className.startsWith('language-')) {
-      language = className.replace('language-', '');
-    } else if (className.startsWith('lang-')) {
-      language = className.replace('lang-', '');
-    }
-  }
-
-  const content = children as string;
-  const [isCopied, setIsCopied] = useState(false);
-
-  const handleCopyCode = () => {
-    navigator.clipboard.writeText(content);
-    setIsCopied(true);
-    setTimeout(() => setIsCopied(false), 2000);
-  };
-
-  const root = document.documentElement;
-  const isDark = root.classList.contains('dark');
-
-  const syntaxStyle = isDark ? oneDark : oneLight;
-  const backgroundStyle = isDark ? '#1c1c1c' : '#fafafa';
-
-  return (
-    <div className="rounded-md overflow-hidden my-4 relative group border border-surface-2">
-      <div className="flex justify-between items-center px-4 py-2 bg-surface-2 border-b border-surface-2 text-xs text-fg/70 font-mono">
-        <span>{language}</span>
-        <button
-          onClick={handleCopyCode}
-          className="p-1 rounded-md hover:bg-surface transition duration-200"
-          aria-label="Copy code to clipboard"
-        >
-          {isCopied ? (
-            <CheckCheck size={14} className="text-green-500" />
-          ) : (
-            <CopyIcon size={14} className="text-fg" />
-          )}
-        </button>
-      </div>
-      <SyntaxHighlighter
-        language={language || 'text'}
-        style={syntaxStyle}
-        customStyle={{
-          margin: 0,
-          padding: '1rem',
-          borderRadius: 0,
-          backgroundColor: backgroundStyle,
-        }}
-        wrapLines
-        wrapLongLines
-        showLineNumbers={language !== '' && content.split('\n').length > 1}
-        useInlineStyles
-        PreTag="div"
-      >
-        {content}
-      </SyntaxHighlighter>
-    </div>
-  );
-};
-
 const MarkdownRenderer = ({
   content,
   className,

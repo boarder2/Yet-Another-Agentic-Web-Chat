@@ -40,6 +40,8 @@ db.sqlite
 
 # AI stuff for planning and implementation
 .ai/
+.claude/settings.local.json
+
 certificates
 storage/
 package-lock.json

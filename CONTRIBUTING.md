@@ -14,20 +14,17 @@ YAAWC's codebase is organized as follows:
     - Main app routes include: home (`/`), chat (`/c`), discover (`/discover`), library (`/library`), and settings (`/settings`).
   - **API Routes (`src/app/api`)**: API endpoints implemented with Next.js API routes.
     - `/api/chat`: Handles chat interactions.
-    - `/api/search`: Provides direct access to YAAWC's search capabilities.
     - Other endpoints for models, files, and suggestions.
 - **Backend Logic (`src/lib`)**: Contains all the backend functionality including search, database, and API logic.
   - The search functionality is present inside `src/lib/search` directory.
-  - All of the focus modes are implemented using the Meta Search Agent class in `src/lib/search/metaSearchAgent.ts`.
+  - Focus modes are handled by `SimplifiedAgent` in `src/lib/search/simplifiedAgent.ts`, which selects tools and prompts based on the mode.
   - Database functionality is in `src/lib/db`.
   - Chat model and embedding model providers are managed in `src/lib/providers`.
   - Prompt templates and LLM chain definitions are in `src/lib/prompts` and `src/lib/chains` respectively.
 
 ## API Documentation
 
-YAAWC exposes several API endpoints for programmatic access, including:
-
-- **Search API**: Access YAAWC's advanced search capabilities directly via the `/api/search` endpoint. For detailed documentation, see `docs/api/search.md`.
+YAAWC exposes API endpoints for programmatic access. The primary endpoint is `/api/chat` for streaming chat interactions. See the README for a full endpoint listing.
 
 ## Setting Up Your Environment
 

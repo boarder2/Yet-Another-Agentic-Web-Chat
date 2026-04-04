@@ -17,6 +17,8 @@ import { deepResearchTool } from './deepResearchTool';
 import { todoListTool } from './todoListTool';
 import { imageAnalysisTool } from './imageAnalysisTool';
 import { memoryTools } from './memoryTools';
+import { getCodeExecutionConfig } from '@/lib/config';
+import { codeExecutionTool } from './codeExecutionTool';
 
 export { simpleWebSearchTool };
 export { fileSearchTool };
@@ -27,9 +29,9 @@ export { pdfLoaderTool };
 export { deepResearchTool };
 export { todoListTool };
 export { memoryTools };
+export { codeExecutionTool };
 
-// Array containing all available agent tools for the simplified chat agent
-// This will be used by the createAgent implementation
+// Base tool arrays (non-interactive, used by subagents)
 export const allAgentTools = [
   simpleWebSearchTool,
   fileSearchTool,
@@ -42,7 +44,6 @@ export const allAgentTools = [
   todoListTool,
 ];
 
-// Export tool categories for selective tool loading based on focus mode
 export const webSearchTools = [
   simpleWebSearchTool,
   urlSummarizationTool,
@@ -56,5 +57,18 @@ export const webSearchTools = [
 
 export const fileSearchTools = [fileSearchTool];
 
-// Core tools that are always available
 export const coreTools: typeof allAgentTools = [];
+
+// Helper to conditionally append code execution tool for top-level interactive use
+function withCodeExecution<T>(tools: T[]): T[] {
+  const config = getCodeExecutionConfig();
+  if (config.enabled && !('validationError' in config)) {
+    return [...tools, codeExecutionTool as unknown as T];
+  }
+  return tools;
+}
+
+// Dynamic getters that include code execution when enabled
+export const getAllAgentTools = () => withCodeExecution([...allAgentTools]);
+export const getWebSearchTools = () => withCodeExecution([...webSearchTools]);
+export const getCoreTools = () => withCodeExecution([...coreTools]);

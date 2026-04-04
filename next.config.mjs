@@ -8,7 +8,7 @@ const nextConfig = {
       },
     ],
   },
-  serverExternalPackages: ['pdf-parse', 'crawlee', 'playwright'],
+  serverExternalPackages: ['pdf-parse', 'crawlee', 'playwright', 'dockerode'],
 };
 
 export default nextConfig;

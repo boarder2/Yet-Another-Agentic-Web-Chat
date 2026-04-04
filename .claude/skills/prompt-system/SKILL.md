@@ -65,7 +65,7 @@ The function generates a `## Personalization` block appended to the system promp
 1. User toggles location/about-me in `PersonalizationPicker` component
 2. Preferences stored in localStorage (`sendLocation`, `sendProfile`)
 3. `ChatWindow.sendMessage()` reads toggles and includes `userLocation`/`userProfile` in payload
-4. API route passes them through to `MetaSearchAgent` → `SimplifiedAgent`
+4. API route passes them directly to `SimplifiedAgent`
 5. `SimplifiedAgent` calls `buildPersonalizationSection(userLocation, userProfile)` and appends to system prompt
 6. Subagents receive `userLocation`/`userProfile` for search context but get empty `personaInstructions`
 
@@ -106,10 +106,6 @@ Stored in the `systemPrompts` database table:
 - `PUT /api/system-prompts/[id]` — Update a prompt
 - `DELETE /api/system-prompts/[id]` — Delete a prompt
 
-## Legacy Prompts
-
-The `src/lib/prompts/` root directory contains older prompt files (`webSearchRetriever`, `webSearchResponse`, `localResearch`, `chat`). These are referenced in `MetaSearchAgent` config but the actual agent uses the `simplifiedAgent/` prompts. The legacy prompts are effectively unused in the current architecture.
-
 ## Modifying Prompts
 
 When changing agent behavior:
@@ -117,4 +113,4 @@ When changing agent behavior:
 1. **Change what the agent says/does**: Edit the focus mode prompt in `src/lib/prompts/simplifiedAgent/`
 2. **Change citation format**: Edit or add templates in `src/lib/prompts/templates.ts`
 3. **Change personalization behavior**: Edit `src/lib/utils/personalization.ts`
-4. **Add a new focus mode prompt**: Create a new file in `simplifiedAgent/`, register in `SimplifiedAgent.getToolsForFocusMode()` and `src/lib/search/index.ts`
+4. **Add a new focus mode prompt**: Create a new file in `simplifiedAgent/`, register in `SimplifiedAgent.getToolsForFocusMode()`

@@ -1,4 +1,3 @@
-import axios from 'axios';
 import { getKeepAlive, getOllamaApiEndpoint } from '../config';
 import { ChatModel, EmbeddingModel } from '.';
 
@@ -15,13 +14,15 @@ export const loadOllamaChatModels = async () => {
   if (!ollamaApiEndpoint) return {};
 
   try {
-    const res = await axios.get(`${ollamaApiEndpoint}/api/tags`, {
+    const res = await fetch(`${ollamaApiEndpoint}/api/tags`, {
       headers: {
         'Content-Type': 'application/json',
       },
     });
 
-    const { models } = res.data;
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const { models } = await res.json();
 
     const chatModels: Record<string, ChatModel> = {};
 
@@ -50,13 +51,15 @@ export const loadOllamaEmbeddingModels = async () => {
   if (!ollamaApiEndpoint) return {};
 
   try {
-    const res = await axios.get(`${ollamaApiEndpoint}/api/tags`, {
+    const res = await fetch(`${ollamaApiEndpoint}/api/tags`, {
       headers: {
         'Content-Type': 'application/json',
       },
     });
 
-    const { models } = res.data;
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const { models } = await res.json();
 
     const embeddingModels: Record<string, EmbeddingModel> = {};
 

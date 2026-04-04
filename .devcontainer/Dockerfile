@@ -18,8 +18,11 @@ RUN apt-get update \
     jq \
     zsh \
     unzip \
+    sudo \
     libsecret-1-0 libsecret-1-dev libsecret-common gnome-keyring gnome-keyring-pkcs11 seahorse \
-  && apt-get clean && rm -rf /var/lib/apt/lists/*
+  && apt-get clean && rm -rf /var/lib/apt/lists/* \
+  && echo 'node ALL=(root) NOPASSWD:ALL' > /etc/sudoers.d/node \
+  && chmod 0440 /etc/sudoers.d/node
 
 # Enable Yarn via Corepack (ships with Node)
 RUN corepack enable

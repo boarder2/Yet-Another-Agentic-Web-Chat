@@ -238,11 +238,8 @@ Focus modes control which tools and prompts the agent uses.
 2. **Add tool selection** in `src/lib/search/simplifiedAgent.ts`:
    - In `getToolsForFocusMode()`, add a case for your focus mode returning the appropriate tool set
 
-3. **Register handler** in `src/lib/search/index.ts`:
-   - Add entry to the `searchHandlers` map with a new `MetaSearchAgent` config
-
-4. **Add UI button** in `src/components/MessageInputActions/Focus.tsx`:
+3. **Add UI button** in `src/components/MessageInputActions/Focus.tsx`:
    - Add the new mode to the focus mode selector with icon and label
 
-5. **Update API validation** in `src/app/api/chat/route.ts` and `src/app/api/search/route.ts`:
+4. **Update API validation** in `src/app/api/chat/route.ts`:
    - Ensure the new focus mode string is accepted

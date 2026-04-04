@@ -15,7 +15,6 @@ import { createAgent } from 'langchain';
 import { allTools } from '@/lib/tools';
 import { Source } from '@/lib/types/widget';
 import { WidgetProcessRequest } from '@/lib/types/api';
-import axios from 'axios';
 // import { getLangfuseCallbacks } from '@/lib/tracing/langfuse';
 
 // Helper function to fetch content from a single source
@@ -30,9 +29,11 @@ async function fetchSourceContent(
       document = await getWebContent(source.url, 50000);
     } else {
       // Use faster fetch for HTTP data/APIs
-      const response = await axios.get(source.url, { transformResponse: [] });
+      const response = await fetch(source.url);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const text = await response.text();
       document = new Document({
-        pageContent: response.data || '',
+        pageContent: text || '',
         metadata: { source: source.url },
       });
     }

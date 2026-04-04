@@ -5,7 +5,6 @@ import { File, ImageAttachment, Message } from './ChatWindow';
 import MessageInput from './MessageInput';
 import MessageTabs from './MessageTabs';
 import { Document } from '@langchain/core/documents';
-
 const MessageBox = ({
   message,
   messageIndex,

@@ -1,5 +1,5 @@
 {
-    "browser": {
-        "browserName": "firefox"
-    }
+  "browser": {
+    "browserName": "firefox"
+  }
 }

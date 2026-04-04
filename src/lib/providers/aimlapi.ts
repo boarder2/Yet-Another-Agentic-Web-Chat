@@ -3,8 +3,6 @@ import { getAimlApiKey } from '../config';
 import { ChatModel, EmbeddingModel } from '.';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { Embeddings } from '@langchain/core/embeddings';
-import axios from 'axios';
-
 export const PROVIDER_INFO = {
   key: 'aimlapi',
   displayName: 'AI/ML API',
@@ -24,16 +22,19 @@ export const loadAimlApiChatModels = async () => {
   if (!apiKey) return {};
 
   try {
-    const response = await axios.get(`${API_URL}/models`, {
+    const response = await fetch(`${API_URL}/models`, {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
       },
     });
 
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+    const responseData = await response.json();
     const chatModels: Record<string, ChatModel> = {};
 
-    response.data.data.forEach((model: AimlApiModel) => {
+    responseData.data.forEach((model: AimlApiModel) => {
       if (model.type === 'chat-completion') {
         chatModels[model.id] = {
           displayName: model.name || model.id,
@@ -61,16 +62,19 @@ export const loadAimlApiEmbeddingModels = async () => {
   if (!apiKey) return {};
 
   try {
-    const response = await axios.get(`${API_URL}/models`, {
+    const response = await fetch(`${API_URL}/models`, {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
       },
     });
 
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+    const responseData = await response.json();
     const embeddingModels: Record<string, EmbeddingModel> = {};
 
-    response.data.data.forEach((model: AimlApiModel) => {
+    responseData.data.forEach((model: AimlApiModel) => {
       if (model.type === 'embedding') {
         embeddingModels[model.id] = {
           displayName: model.name || model.id,

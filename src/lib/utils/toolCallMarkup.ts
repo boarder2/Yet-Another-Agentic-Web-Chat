@@ -4,17 +4,27 @@
  * the Next.js API route (Node) and frontend React (browser) code.
  */
 
+import { encodeBase64 } from '@/lib/utils/html';
+
 /** Escape an attribute value for safe inclusion inside double quotes. */
 export function escapeAttribute(value: string): string {
   return value
     .replace(/&/g, '&amp;')
     .replace(/"/g, '&quot;')
     .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/>/g, '&gt;')
+    .replace(/\n/g, '&#10;')
+    .replace(/\r/g, '&#13;');
 }
 
+/**
+ * Attributes that use base64 encoding instead of HTML entity escaping.
+ * These are long content attributes that would otherwise break the markdown parser.
+ */
+const BASE64_ATTRIBUTES = new Set(['code', 'stdout', 'stderr']);
+
 export interface UpdateToolCallOptions {
-  status: string; // running | success | error
+  status?: string; // running | success | error — if omitted, preserves existing status
   error?: string;
   extra?: Record<string, string | undefined>;
 }
@@ -53,7 +63,9 @@ export function updateToolCallMarkup(
   }
 
   // Apply mutations
-  attrs.status = status;
+  if (status !== undefined) {
+    attrs.status = status;
+  }
   if (error) {
     attrs.error = escapeAttribute(error.slice(0, 300));
   } else if (status === 'success') {
@@ -63,7 +75,11 @@ export function updateToolCallMarkup(
   if (extra) {
     for (const [k, v] of Object.entries(extra)) {
       if (typeof v === 'string' && v.length > 0) {
-        attrs[k] = escapeAttribute(v.slice(0, 500));
+        if (BASE64_ATTRIBUTES.has(k)) {
+          attrs[k] = encodeBase64(v);
+        } else {
+          attrs[k] = escapeAttribute(v);
+        }
       }
     }
   }

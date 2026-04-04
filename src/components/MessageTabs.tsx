@@ -321,7 +321,7 @@ const MessageTabs = ({
               onThinkBoxToggle={onThinkBoxToggle}
               showThinking={true}
               sources={message.sources}
-            />{' '}
+            />
             {loading && isLast ? null : (
               <div className="flex flex-row items-center justify-between w-full px-4 py-4">
                 <div className="flex flex-row items-center space-x-1">

@@ -61,22 +61,6 @@ curl -s -m 120 -X POST http://localhost:3000/api/chat \
 # Expected: streaming JSON lines with type "response" containing LLM output
 ```
 
-**Search endpoint example (streaming):**
-
-```bash
-curl -s -m 90 -N -X POST http://localhost:3000/api/search \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "query": "test query",
-    "focusMode": "chat",
-    "history": [],
-    "stream": true,
-    "chatModel": {"provider":"<provider>","name":"<model>"},
-    "embeddingModel": {"provider":"<provider>","name":"<model>"}
-  }' | head -20
-# Expected: JSON lines starting with {"type":"init"}, then {"type":"response",...}
-```
-
 **Key patterns:**
 
 - Use `head -N` or `--max-time` to avoid hanging on streaming endpoints.

@@ -13,7 +13,7 @@ Users can attach images to chat messages via clipboard paste or file picker. Ima
 2. Thumbnails shown in MessageInput; user can remove individual images before sending
 3. On send, `messageImageIds` and `messageImages` are included in the API payload
 4. `chat/route.ts` converts image-bearing messages to multimodal `HumanMessage` with `image_url` content parts (base64 data URLs)
-5. Image references are threaded through `MetaSearchAgent` → `AgentSearch` → `SimplifiedAgent`
+5. Image references are passed directly to `SimplifiedAgent`
 6. Images are persisted in the user message's `metadata` JSON column for history replay
 7. Chat history tuples are extended to `[human, ai, imageIds?]` to carry images across conversation turns
 

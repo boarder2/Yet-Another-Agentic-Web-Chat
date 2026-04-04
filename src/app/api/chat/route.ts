@@ -12,7 +12,6 @@ import {
   getAvailableChatModelProviders,
   getAvailableEmbeddingModelProviders,
 } from '@/lib/providers';
-import { searchHandlers } from '@/lib/search';
 import { getFileDetails } from '@/lib/utils/files';
 import { getPersonaInstructionsOnly } from '@/lib/utils/prompts';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
@@ -32,6 +31,8 @@ import { buildMultimodalHumanMessage } from '@/lib/utils/images';
 import { retrieveRelevantMemories } from '@/lib/utils/memoryRetrieval';
 import { buildMemorySection } from '@/lib/prompts/memory/memoryContext';
 import { processExtraction } from '@/lib/utils/memoryExtraction';
+import { denyApprovalsForMessage } from '@/lib/sandbox/pendingApprovals';
+import { SimplifiedAgent } from '@/lib/search/simplifiedAgent';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -111,6 +112,8 @@ const handleEmitterEvents = async (
   memoriesUsed: Array<{ id: string; content: string }> = [],
 ) => {
   let recievedMessage = '';
+  // Map executionId → runId for correlating code_execution_result with the correct ToolCall markup
+  const codeExecutionRunIdMap = new Map<string, string>();
   let sources: Record<string, unknown>[] = [];
   let searchQuery: string | undefined;
   let searchUrl: string | undefined;
@@ -155,6 +158,8 @@ const handleEmitterEvents = async (
   abortController.signal.addEventListener('abort', () => {
     isStreamActive = false;
     clearInterval(pingInterval);
+    // Auto-deny any pending code execution approvals for this message
+    denyApprovalsForMessage(userMessageId);
   });
 
   stream.on('data', (data) => {
@@ -337,6 +342,48 @@ const handleEmitterEvents = async (
           messageId: aiMessageId,
         }) + '\n',
       );
+    } else if (parsedData.type === 'code_execution_pending') {
+      // Correlate this execution with the ToolCall markup's toolCallId
+      // (provided by codeExecutionCorrelation module via markupToolCallId).
+      const runId = parsedData.data?.markupToolCallId;
+      if (runId && parsedData.data?.executionId) {
+        codeExecutionRunIdMap.set(parsedData.data.executionId, runId);
+      }
+      // Forward code execution pending event to client
+      safeWrite(
+        JSON.stringify({
+          type: parsedData.type,
+          data: parsedData.data,
+          messageId: aiMessageId,
+        }) + '\n',
+      );
+    } else if (parsedData.type === 'code_execution_result') {
+      // Forward to client
+      safeWrite(
+        JSON.stringify({
+          type: parsedData.type,
+          data: parsedData.data,
+          messageId: aiMessageId,
+        }) + '\n',
+      );
+      // Persist result data in ToolCall markup
+      // Look up the correct runId for this execution from the correlation map
+      const tcId =
+        codeExecutionRunIdMap.get(parsedData.data?.executionId) ||
+        parsedData.data?.toolCallId;
+      if (tcId) {
+        const d = parsedData.data;
+        const extra: Record<string, string> = {};
+        if (d.exitCode !== undefined) extra.exitCode = String(d.exitCode);
+        if (d.stdout) extra.stdout = d.stdout.slice(0, 2000);
+        if (d.stderr) extra.stderr = d.stderr.slice(0, 1000);
+        if (d.timedOut) extra.timedOut = 'true';
+        if (d.oomKilled) extra.oomKilled = 'true';
+        if (d.denied) extra.denied = 'true';
+        recievedMessage = updateToolCallMarkup(recievedMessage, tcId, {
+          extra,
+        });
+      }
     }
   });
 
@@ -646,17 +693,6 @@ export const POST = async (req: Request) => {
       }
     });
 
-    const handler = searchHandlers[body.focusMode];
-
-    if (!handler) {
-      return Response.json(
-        {
-          message: 'Invalid focus mode',
-        },
-        { status: 400 },
-      );
-    }
-
     // System instructions deprecated; only use persona prompts
     const personaInstructionsContent = await getPersonaInstructionsOnly(
       selectedSystemPromptIds || [],
@@ -737,27 +773,35 @@ export const POST = async (req: Request) => {
       }
     }
 
-    // Pass the abort signal to the search handler
-    const stream = await handler.searchAndAnswer(
-      message.content,
-      history,
-      message.chatId,
-      chatLlm!,
+    const stream = new EventEmitter();
+
+    const handler = new SimplifiedAgent(
+      chatLlm,
       systemLlm!,
       embedding,
-      body.files,
-      abortController.signal,
+      stream,
       personaInstructionsContent,
-      body.focusMode,
+      abortController.signal,
       message.messageId,
       retrievalController.signal,
-      {
-        location: body.userLocation,
-        profile: body.userProfile,
-      },
-      body.messageImageIds,
-      body.memoryEnabled ?? false,
+      body.userLocation,
+      body.userProfile,
+      body.memoryEnabled,
       memorySection,
+      message.chatId,
+      true, // interactiveSession enabled for streaming responses with source updates
+    );
+
+    // Pass the abort signal to the search handler
+    // Not awaited since the handler will manage its own lifecycle and emit events as data is processed
+    handler.searchAndAnswer(
+      message.content,
+      history,
+      body.files,
+      body.focusMode,
+      undefined, // customTools
+      undefined, // customSystemPrompt
+      body.messageImageIds,
     );
 
     handleEmitterEvents(

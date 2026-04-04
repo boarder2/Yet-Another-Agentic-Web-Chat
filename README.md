@@ -12,6 +12,7 @@ YAAWC (**Pronounced: "yawck"** — as in the sound you make when yet another AI 
 - [Features at a Glance](#features-at-a-glance)
 - [Focus Modes](#focus-modes)
 - [Agent Tools](#agent-tools)
+- [Code Execution (Sandbox)](#code-execution-sandbox)
 - [Deep Research (Sub-Agents)](#deep-research-sub-agents)
 - [Dashboard Widgets](#dashboard-widgets)
 - [LLM Providers](#llm-providers)
@@ -38,26 +39,26 @@ Want to know more about the architecture? See [docs/architecture/README.md](docs
 
 ## Features at a Glance
 
-| Category                    | Highlights                                                                                                                                                  |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Agentic Search**          | LangGraph React agent with tool use, research planning, and multi-step reasoning                                                                            |
-| **Deep Research**           | Spawns focused sub-agents that search → read → refine → search again                                                                                        |
-| **12 Agent Tools**          | Web search, URL summarization, image search & analysis, YouTube transcripts, PDF loading, file search, deep research, todo lists, memory (save/delete/list) |
-| **10 LLM Providers**        | OpenAI, Anthropic, Groq, Ollama, Gemini, DeepSeek, LM Studio, OpenRouter, AI/ML API, Custom OpenAI                                                          |
-| **6 Embedding Providers**   | OpenAI, Ollama, Gemini, Xenova Transformers (local), AI/ML API, LM Studio                                                                                   |
-| **Dashboard Widgets**       | AI-powered info widgets with auto-refresh, drag-and-drop layout, export/import                                                                              |
-| **Personas**                | Custom system prompts with built-in templates (scholarly, conversational, etc.)                                                                             |
-| **Personalization**         | Per-message location and profile context injection                                                                                                          |
-| **Memory**                  | Long-term memory with semantic retrieval, automatic extraction, deduplication, and a full management UI                                                     |
-| **Private Sessions**        | Temporary conversations with auto-expiry — no personalization, no memory, no trace left behind                                                              |
-| **Privacy**                 | Self-hosted SearXNG — no tracking, no data brokering, no "we updated our privacy policy" emails                                                             |
-| **Browser Integration**     | OpenSearch XML, autocomplete, `?q=` URL queries with saved preferences                                                                                      |
-| **Streaming UI**            | Real-time tool calls, sub-agent progress, todo widgets, thinking/reasoning display                                                                          |
-| **Image & Video Search**    | Dedicated search with gallery views and video embeds                                                                                                        |
-| **File Research**           | Upload documents and research them with cited excerpts                                                                                                      |
-| **Respond Now**             | Interrupt ongoing retrieval and get an immediate answer from what's been gathered so far                                                                    |
-| **Model Visibility**        | Admins can hide models from the UI to prevent accidental usage                                                                                              |
-| **Dual Model Architecture** | Separate Chat and System models, linkable or independent                                                                                                    |
+| Category                    | Highlights                                                                                                                                                                            |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Agentic Search**          | LangGraph React agent with tool use, research planning, and multi-step reasoning                                                                                                      |
+| **Deep Research**           | Spawns focused sub-agents that search → read → refine → search again                                                                                                                  |
+| **13 Agent Tools**          | Web search, URL summarization, image search & analysis, YouTube transcripts, PDF loading, file search, deep research, sandboxed code execution, todo lists, memory (save/delete/list) |
+| **10 LLM Providers**        | OpenAI, Anthropic, Groq, Ollama, Gemini, DeepSeek, LM Studio, OpenRouter, AI/ML API, Custom OpenAI                                                                                    |
+| **6 Embedding Providers**   | OpenAI, Ollama, Gemini, Xenova Transformers (local), AI/ML API, LM Studio                                                                                                             |
+| **Dashboard Widgets**       | AI-powered info widgets with auto-refresh, drag-and-drop layout, export/import                                                                                                        |
+| **Personas**                | Custom system prompts with built-in templates (scholarly, conversational, etc.)                                                                                                       |
+| **Personalization**         | Per-message location and profile context injection                                                                                                                                    |
+| **Memory**                  | Long-term memory with semantic retrieval, automatic extraction, deduplication, and a full management UI                                                                               |
+| **Private Sessions**        | Temporary conversations with auto-expiry — no personalization, no memory, no trace left behind                                                                                        |
+| **Privacy**                 | Self-hosted SearXNG — no tracking, no data brokering, no "we updated our privacy policy" emails                                                                                       |
+| **Browser Integration**     | OpenSearch XML, autocomplete, `?q=` URL queries with saved preferences                                                                                                                |
+| **Streaming UI**            | Real-time tool calls, sub-agent progress, todo widgets, thinking/reasoning display                                                                                                    |
+| **Image & Video Search**    | Dedicated search with gallery views and video embeds                                                                                                                                  |
+| **File Research**           | Upload documents and research them with cited excerpts                                                                                                                                |
+| **Respond Now**             | Interrupt ongoing retrieval and get an immediate answer from what's been gathered so far                                                                                              |
+| **Model Visibility**        | Admins can hide models from the UI to prevent accidental usage                                                                                                                        |
+| **Dual Model Architecture** | Separate Chat and System models, linkable or independent                                                                                                                              |
 
 ## Focus Modes
 
@@ -85,10 +86,103 @@ The LangGraph agent has access to the following tools (individually toggleable p
 | **PDF Loader**         | Extracts and returns content from a PDF URL.                                                        |
 | **File Search**        | Semantic similarity search across uploaded documents with configurable threshold.                   |
 | **Deep Research**      | Spawns a focused sub-agent for comprehensive multi-source investigation (see below).                |
+| **Code Execution**     | Runs user-approved JavaScript in a sandboxed Docker container (see below).                          |
 | **Todo List**          | Manages a visible research plan (up to 10 tasks) with live progress in the UI.                      |
 | **Save Memory**        | Stores a fact or preference to long-term memory with automatic categorization.                      |
 | **Delete Memory**      | Removes a memory by ID or fuzzy content match.                                                      |
 | **List Memories**      | Lists all stored memories grouped by category.                                                      |
+
+## Code Execution (Sandbox)
+
+YAAWC can run JavaScript code in isolated Docker containers with strict security constraints (no network, read-only filesystem, memory/CPU limits, all capabilities dropped). The agent proposes code, the user approves it in the UI, and the output is returned to the conversation.
+
+### Enabling Code Execution
+
+1. Set the following in `config.toml`:
+
+   ```toml
+   [TOOLS.CODE_EXECUTION]
+   ENABLED = true
+   DOCKER_IMAGE = "node:22-slim"
+   DOCKER_HOST = "unix:///var/run/docker.sock"
+   TIMEOUT_SECONDS = 30
+   MEMORY_MB = 128
+   MAX_OUTPUT_CHARS = 10000
+   ```
+
+2. The app needs access to a Docker daemon to create sandbox containers.
+
+### Docker Deployment
+
+When YAAWC itself runs in Docker (via `docker-compose`), the app creates **sibling containers** on the host Docker daemon — not Docker-in-Docker. To set this up:
+
+1. **Mount the Docker socket** — uncomment the socket volume in `docker-compose.yaml`:
+
+   ```yaml
+   volumes:
+     - /var/run/docker.sock:/var/run/docker.sock
+   ```
+
+2. **Grant socket permissions** — the app runs as the `node` user (UID 1000), which needs read/write access to the Docker socket. Uncomment and configure `group_add` in `docker-compose.yaml`:
+
+   ```yaml
+   group_add:
+     - '${DOCKER_GID:-999}'
+   ```
+
+   Find your host's Docker group ID with:
+
+   ```bash
+   stat -c '%g' /var/run/docker.sock
+   ```
+
+   Then either export `DOCKER_GID` or replace `${DOCKER_GID:-999}` with the actual value. On **Docker Desktop** (Mac/Windows), the socket is generally accessible without `group_add`.
+
+3. **Restart the stack**:
+
+   ```bash
+   docker compose up -d
+   ```
+
+### Docker Socket Proxy (More Secure)
+
+Instead of mounting the raw Docker socket, you can use a proxy like [tecnativa/docker-socket-proxy](https://github.com/Tecnativa/docker-socket-proxy) to restrict which Docker API calls are allowed:
+
+```yaml
+# Add to docker-compose.yaml
+docker-socket-proxy:
+  image: tecnativa/docker-socket-proxy
+  volumes:
+    - /var/run/docker.sock:/var/run/docker.sock
+  environment:
+    CONTAINERS: 1
+    IMAGES: 1
+    POST: 1
+  networks:
+    - yaawc-network
+```
+
+Then set the `DOCKER_HOST` in `config.toml`:
+
+```toml
+DOCKER_HOST = "http://docker-socket-proxy:2375"
+```
+
+### Manual (Non-Docker) Setup
+
+If YAAWC runs directly on the host, just ensure Docker is installed and the user running the app has access to the Docker socket (typically by being in the `docker` group).
+
+### Security Notes
+
+Each sandbox container runs with:
+
+- **No network access** — complete isolation from the internet and local services
+- **Read-only root filesystem** — no persistent changes
+- **All Linux capabilities dropped** — no privileged operations
+- **Memory and CPU limits** — configurable, defaults to 128 MB / 0.5 CPU
+- **Process limits** — max 32 processes (prevents fork bombs)
+- **Non-root execution** — runs as UID 1000
+- **User approval required** — code is shown in the UI and must be explicitly approved before execution
 
 ## Deep Research (Sub-Agents)
 
@@ -273,7 +367,6 @@ YAAWC exposes a full API for programmatic access:
 | Endpoint                | Method              | Description                                                    |
 | ----------------------- | ------------------- | -------------------------------------------------------------- |
 | `/api/chat`             | POST                | Streaming chat with tool calls, sources, and live events (SSE) |
-| `/api/search`           | POST                | Programmatic search (streaming or non-streaming)               |
 | `/api/models`           | GET                 | List available models (`?include_hidden=true` for admin view)  |
 | `/api/config`           | GET/POST            | Read/write server configuration                                |
 | `/api/chats`            | GET                 | List all chats                                                 |
@@ -293,7 +386,7 @@ YAAWC exposes a full API for programmatic access:
 | `/api/opensearch`       | GET                 | OpenSearch description XML                                     |
 | `/api/autocomplete`     | GET                 | Search autocomplete (proxied to SearXNG)                       |
 
-For detailed payload schemas, see [docs/API/SEARCH.md](docs/API/SEARCH.md).
+For detailed payload schemas, see the [API documentation](docs/API/).
 
 ## Network & Reverse Proxy
 

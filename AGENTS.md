@@ -4,7 +4,7 @@ YAAWC (Yet Another Agentic Web Chat) is an open-source AI-powered search engine 
 
 ## Architecture
 
-User submits a query → API route → `MetaSearchAgent` routes to focus mode handler → `SimplifiedAgent` (LangGraph React Agent) uses tools to research → streams response with cited sources.
+User submits a query → API route → `SimplifiedAgent` (LangGraph React Agent) uses tools to research → streams response with cited sources.
 
 - **Chat Model**: Agent reasoning, final answer generation, streamed user-facing output
 - **System Model**: Tools and internal chains (URL summarization, query generation, task breakdown)
@@ -25,7 +25,7 @@ User submits a query → API route → `MetaSearchAgent` routes to focus mode ha
 
 - `/src/app` — Next.js pages and API routes (`/src/app/api`)
 - `/src/components` — React UI components (see **frontend-architecture** skill)
-- `/src/lib/search` — `SimplifiedAgent`, `MetaSearchAgent` router, focus-mode handlers
+- `/src/lib/search` — `SimplifiedAgent` agent, focus-mode tool/prompt selection
 - `/src/lib/providers` — LLM and embedding model integrations (see **adding-features** skill)
 - `/src/lib/prompts` — Prompt templates including `prompts/simplifiedAgent/*` (see **prompt-system** skill)
 - `/src/lib/tools/agents` — Agent tools (`web_search`, `file_search`, `url_summarization`, `image_search`, `image_analysis`, `deep_research`, `todo_list`, etc.)

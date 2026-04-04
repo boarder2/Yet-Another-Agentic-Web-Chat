@@ -53,6 +53,16 @@ interface Config {
   API_ENDPOINTS: {
     SEARXNG: string;
   };
+  TOOLS?: {
+    CODE_EXECUTION?: {
+      ENABLED?: boolean;
+      DOCKER_IMAGE?: string;
+      DOCKER_HOST?: string;
+      TIMEOUT_SECONDS?: number;
+      MEMORY_MB?: number;
+      MAX_OUTPUT_CHARS?: number;
+    };
+  };
   SELECTED_MODELS?: {
     SYSTEM_PROVIDER?: string;
     SYSTEM_MODEL?: string;
@@ -221,6 +231,55 @@ const mergeConfigs = (
   }
 
   return result;
+};
+
+const ALLOWED_IMAGE_PATTERN = /^node:\d+(-slim|-alpine)?$/;
+const ALLOWED_DOCKER_HOST_PATTERN =
+  /^(unix:\/\/\/var\/run\/docker\.sock|https?:\/\/[A-Za-z0-9.-]+(?::\d+)?)$/;
+
+export const getCodeExecutionConfig = () => {
+  const config = loadConfig();
+  const ce = config.TOOLS?.CODE_EXECUTION;
+  const dockerImage = ce?.DOCKER_IMAGE ?? 'node:22-slim';
+  const dockerHost = ce?.DOCKER_HOST ?? 'unix:///var/run/docker.sock';
+
+  const disabledConfig = {
+    enabled: false,
+    dockerImage: 'node:22-slim',
+    dockerHost: 'unix:///var/run/docker.sock',
+    timeoutSeconds: 30,
+    memoryMb: 128,
+    maxOutputChars: 10000,
+  };
+
+  if (!ALLOWED_IMAGE_PATTERN.test(dockerImage)) {
+    console.warn(
+      `Invalid TOOLS.CODE_EXECUTION.DOCKER_IMAGE "${dockerImage}". Disabling code execution feature.`,
+    );
+    return {
+      ...disabledConfig,
+      validationError: `Invalid DOCKER_IMAGE "${dockerImage}". Must match pattern: node:<version>[-slim|-alpine]`,
+    };
+  }
+
+  if (!ALLOWED_DOCKER_HOST_PATTERN.test(dockerHost)) {
+    console.warn(
+      `Invalid TOOLS.CODE_EXECUTION.DOCKER_HOST "${dockerHost}". Disabling code execution feature.`,
+    );
+    return {
+      ...disabledConfig,
+      validationError: `Invalid DOCKER_HOST "${dockerHost}". Must be unix:///var/run/docker.sock or an explicit http(s) proxy URL.`,
+    };
+  }
+
+  return {
+    enabled: ce?.ENABLED ?? false,
+    dockerImage,
+    dockerHost,
+    timeoutSeconds: ce?.TIMEOUT_SECONDS ?? 30,
+    memoryMb: ce?.MEMORY_MB ?? 128,
+    maxOutputChars: ce?.MAX_OUTPUT_CHARS ?? 10000,
+  };
 };
 
 export const updateConfig = (config: RecursivePartial<Config>) => {

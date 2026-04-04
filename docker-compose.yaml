@@ -15,6 +15,7 @@ services:
       dockerfile: app.dockerfile
     cap_add:
       - SYS_ADMIN # Required for Playwright sandboxing
+    init: true
     environment:
       - SEARXNG_API_URL=http://searxng:8080
       - DATA_DIR=/home/yaawc
@@ -28,6 +29,14 @@ services:
       - ./config.toml:/home/yaawc/config.toml
       # Persist deep research artifacts between runs (optional)
       - deep_research:/home/yaawc/storage/deep_research
+      # Uncomment below to enable sandboxed code execution.
+      # The app creates sibling containers on the host Docker daemon.
+      # See README.md "Code Execution (Sandbox)" for permission setup.
+      # - /var/run/docker.sock:/var/run/docker.sock
+    # Uncomment and set DOCKER_GID to your host's docker group ID
+    # (find it with: stat -c '%g' /var/run/docker.sock)
+    # group_add:
+    #   - "${DOCKER_GID:-999}"
     restart: unless-stopped
 
 networks:

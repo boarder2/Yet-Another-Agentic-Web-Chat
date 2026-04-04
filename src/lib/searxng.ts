@@ -1,4 +1,3 @@
-import axios from 'axios';
 import { getSearxngApiEndpoint } from './config';
 
 interface SearxngSearchOptions {
@@ -41,10 +40,13 @@ export const searchSearxng = async (
     });
   }
 
-  const res = await axios.get(url.toString(), { signal });
+  const res = await fetch(url.toString(), { signal });
 
-  const results: SearxngSearchResult[] = res.data.results;
-  const suggestions: string[] = res.data.suggestions;
+  if (!res.ok) throw new Error(`SearXNG returned HTTP ${res.status}`);
+
+  const data = await res.json();
+  const results: SearxngSearchResult[] = data.results;
+  const suggestions: string[] = data.suggestions;
 
   // Create a URL for viewing the search results in the SearXNG web interface
   const searchUrl = new URL(searxngURL);

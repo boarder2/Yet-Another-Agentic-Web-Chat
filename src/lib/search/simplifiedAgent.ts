@@ -6,16 +6,18 @@ import { formattingAndCitationsWeb } from '@/lib/prompts/templates';
 import { SimplifiedAgentState } from '@/lib/state/chatAgentState';
 import {
   allAgentTools,
-  coreTools,
   fileSearchTools,
-  webSearchTools,
   memoryTools,
+  getAllAgentTools,
+  getWebSearchTools,
+  getCoreTools,
 } from '@/lib/tools/agents';
 // import {
 //   getLangfuseCallbacks,
 //   getLangfuseHandler,
 // } from '@/lib/tracing/langfuse';
-import { encodeHtmlAttribute } from '@/lib/utils/html';
+import { encodeHtmlAttribute, encodeBase64 } from '@/lib/utils/html';
+import { pushCallbackRunId } from '@/lib/sandbox/codeExecutionCorrelation';
 import { isSoftStop } from '@/lib/utils/runControl';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { BaseMessage, HumanMessage } from '@langchain/core/messages';
@@ -25,7 +27,7 @@ import { RunnableConfig, RunnableSequence } from '@langchain/core/runnables';
 import { createAgent } from 'langchain';
 import { EventEmitter } from 'events';
 import { Document } from '@langchain/core/documents';
-import { webSearchResponsePrompt } from '../prompts/webSearch';
+import { webSearchResponsePrompt } from '../prompts/templates';
 import { formatDateForLLM } from '../utils';
 import { removeThinkingBlocksFromMessages } from '../utils/contentUtils';
 import { getModelName } from '../utils/modelUtils';
@@ -139,6 +141,7 @@ export class SimplifiedAgent {
   private memoryEnabled: boolean;
   private memorySection: string;
   private chatId?: string;
+  private interactiveSession: boolean;
 
   constructor(
     chatLlm: BaseChatModel,
@@ -154,6 +157,7 @@ export class SimplifiedAgent {
     memoryEnabled: boolean = false,
     memorySection: string = '',
     chatId?: string,
+    interactiveSession: boolean = false,
   ) {
     this.chatLlm = chatLlm;
     this.systemLlm = systemLlm;
@@ -168,6 +172,7 @@ export class SimplifiedAgent {
     this.memoryEnabled = memoryEnabled;
     this.memorySection = memorySection;
     this.chatId = chatId;
+    this.interactiveSession = interactiveSession;
   }
 
   private emitResponse(text: string) {
@@ -284,20 +289,20 @@ export class SimplifiedAgent {
     switch (focusMode) {
       case 'chat':
         // Chat mode: Only core tools for conversational interaction
-        tools = [...coreTools];
+        tools = [...getCoreTools()];
         break;
       case 'webSearch':
         // Web search mode: ALL available tools for comprehensive research
         // Include file search tools if files are available
         if (fileIds.length > 0) {
-          tools = [...webSearchTools, ...fileSearchTools];
+          tools = [...getWebSearchTools(), ...fileSearchTools];
         } else {
-          tools = [...allAgentTools];
+          tools = [...getAllAgentTools()];
         }
         break;
       case 'localResearch':
         // Local research mode: File search tools + core tools
-        tools = [...coreTools, ...fileSearchTools];
+        tools = [...getCoreTools(), ...fileSearchTools];
         break;
       default:
         // Default to web search mode for unknown focus modes
@@ -305,9 +310,9 @@ export class SimplifiedAgent {
           `SimplifiedAgent: Unknown focus mode "${focusMode}", defaulting to webSearch tools`,
         );
         if (fileIds.length > 0) {
-          tools = [...webSearchTools, ...fileSearchTools];
+          tools = [...getWebSearchTools(), ...fileSearchTools];
         } else {
-          tools = [...allAgentTools];
+          tools = [...getAllAgentTools()];
         }
         break;
     }
@@ -498,6 +503,7 @@ export class SimplifiedAgent {
           userLocation: this.userLocation,
           userProfile: this.userProfile,
           chatId: this.chatId,
+          interactiveSession: this.interactiveSession,
         },
         recursionLimit: 150, // Increased to handle complex multi-task research with todo_list
         signal: this.retrievalSignal,
@@ -596,6 +602,26 @@ export class SimplifiedAgent {
                         inputObj.content.slice(0, TOOL_ARG_MAX_LENGTH),
                       );
                       extraAttr += ` query="${c}"`;
+                    }
+                  }
+                  // For code_execution, include the code as a base64-encoded attribute
+                  // to avoid breaking the markdown parser with long/complex content
+                  if (
+                    type === 'code_execution' &&
+                    input &&
+                    typeof input === 'object'
+                  ) {
+                    const inputObj = input as Record<string, unknown>;
+                    if (typeof inputObj.code === 'string') {
+                      const c = encodeBase64(inputObj.code);
+                      extraAttr += ` code="${c}"`;
+                      // Store correlation: code content → callback runId
+                      // Used by codeExecutionTool to include the correct markup toolCallId
+                      // in its code_execution_pending event (fixes race with async Docker checks)
+                      pushCallbackRunId(inputObj.code, runId);
+                    }
+                    if (typeof inputObj.description === 'string') {
+                      extraAttr += ` description="${encodeHtmlAttribute(inputObj.description.slice(0, 100))}"`;
                     }
                   }
                 } catch (_attrErr) {

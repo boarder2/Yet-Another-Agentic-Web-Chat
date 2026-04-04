@@ -6,6 +6,7 @@ import MessageBox from './MessageBox';
 import MessageInput from './MessageInput';
 import TodoWidget, { TodoItemData } from './TodoWidget';
 import { Document } from '@langchain/core/documents';
+import { PendingExecution, CodeExecutionApproval } from './CodeExecution';
 
 const Chat = ({
   loading,
@@ -34,6 +35,8 @@ const Chat = ({
   personalizationAbout,
   refreshPersonalization,
   todoItems = [],
+  pendingExecutions = {},
+  onExecutionAction,
   pendingImages,
   setPendingImages,
   imageCapable = false,
@@ -103,6 +106,8 @@ const Chat = ({
   personalizationAbout?: string;
   refreshPersonalization?: () => void;
   todoItems?: TodoItemData[];
+  pendingExecutions?: Record<string, PendingExecution[]>;
+  onExecutionAction?: (executionId: string, approved: boolean) => void;
   pendingImages: ImageAttachment[];
   setPendingImages: (images: ImageAttachment[]) => void;
   imageCapable?: boolean;
@@ -343,6 +348,25 @@ const Chat = ({
         )}
 
         {todoItems && todoItems.length > 0 && <TodoWidget items={todoItems} />}
+        {/* Code execution approval queue */}
+        {(() => {
+          const allPending = Object.values(pendingExecutions)
+            .flat()
+            .filter((e) => e.status === 'pending');
+          if (allPending.length === 0) return null;
+          const current = allPending[0];
+          return (
+            <CodeExecutionApproval
+              key={current.executionId}
+              executionId={current.executionId}
+              code={current.code}
+              description={current.description}
+              onActionTaken={onExecutionAction}
+              queuePosition={1}
+              queueTotal={allPending.length}
+            />
+          );
+        })()}
         <MessageInput
           firstMessage={messages.length === 0}
           loading={loading}

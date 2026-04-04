@@ -45,29 +45,6 @@ description: API route specifications, payload formats, and endpoint implementat
 {"type":"end"}
 ```
 
-## Search Endpoint (`POST /api/search`)
-
-**Source**: `src/app/api/search/route.ts`
-
-**Request body** (note: `query` is a top-level string, NOT nested in `message`):
-
-```typescript
-{
-  query: string;
-  focusMode: string;
-  history: [string, string][];
-  stream: boolean;                // true for streaming, false for single response
-  chatModel: { provider: string; name: string };
-  systemModel?: { provider: string; name: string };
-  embeddingModel: { provider: string; name: string };
-  messageImageIds?: string[];
-}
-```
-
-**Streaming response**: Same JSON line format as chat endpoint.
-
-**Non-streaming response**: `{ message: string; sources: Source[] }`
-
 ## Other Endpoints
 
 | Endpoint                        | Method     | Purpose                                                                             |
@@ -89,10 +66,9 @@ description: API route specifications, payload formats, and endpoint implementat
 ## Data Flow
 
 ```
-User → POST /api/chat (or /api/search)
+User → POST /api/chat
   → Construct Chat LLM + System LLM from model specs
-  → MetaSearchAgent (creates EventEmitter, delegates to AgentSearch)
-  → AgentSearch → SimplifiedAgent.searchAndAnswer()
+  → new SimplifiedAgent(...) + handler.searchAndAnswer()
     → LangGraph React Agent with tools (Chat LLM for reasoning)
     → Tools use System LLM via config.configurable.systemLlm
     → agent.streamEvents() → emitter events → TransformStream → JSON lines

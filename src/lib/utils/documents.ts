@@ -7,7 +7,6 @@ import { CheerioWebBaseLoader } from '@langchain/community/document_loaders/web/
 import { YoutubeLoader } from '@langchain/community/document_loaders/web/youtube';
 import { Document } from '@langchain/core/documents';
 import { Readability } from '@mozilla/readability';
-import axios from 'axios';
 import { JSDOM } from 'jsdom';
 import { chromium, Page, Browser, BrowserContext } from 'playwright';
 import { WebPDFLoader } from '@langchain/community/document_loaders/web/pdf';
@@ -32,10 +31,10 @@ export const retrievePdfDoc = async (url: string): Promise<Document | null> => {
         },
       });
     }
-    const res = await axios.get(url, {
-      responseType: 'arraybuffer',
-    });
-    const pdfBlob = new Blob([res.data], { type: 'application/pdf' });
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const pdfBuffer = await res.arrayBuffer();
+    const pdfBlob = new Blob([pdfBuffer], { type: 'application/pdf' });
     const pdfLoader = new WebPDFLoader(pdfBlob, { splitPages: false });
     const docs = await pdfLoader.load();
     console.log('[retrievePdfDoc] PDF content retrieved successfully:', docs);

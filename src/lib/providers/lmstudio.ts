@@ -1,5 +1,4 @@
 import { getLMStudioApiEndpoint } from '../config';
-import axios from 'axios';
 import { ChatModel, EmbeddingModel } from '.';
 
 export const PROVIDER_INFO = {
@@ -21,10 +20,10 @@ const ensureV1Endpoint = (endpoint: string): string =>
 
 const checkServerAvailability = async (endpoint: string): Promise<boolean> => {
   try {
-    await axios.get(`${ensureV1Endpoint(endpoint)}/models`, {
+    const res = await fetch(`${ensureV1Endpoint(endpoint)}/models`, {
       headers: { 'Content-Type': 'application/json' },
     });
-    return true;
+    return res.ok;
   } catch {
     return false;
   }
@@ -37,13 +36,16 @@ export const loadLMStudioChatModels = async () => {
   if (!(await checkServerAvailability(endpoint))) return {};
 
   try {
-    const response = await axios.get(`${ensureV1Endpoint(endpoint)}/models`, {
+    const response = await fetch(`${ensureV1Endpoint(endpoint)}/models`, {
       headers: { 'Content-Type': 'application/json' },
     });
 
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+    const responseData = await response.json();
     const chatModels: Record<string, ChatModel> = {};
 
-    response.data.data.forEach((model: LMStudioModel) => {
+    responseData.data.forEach((model: LMStudioModel) => {
       chatModels[model.id] = {
         displayName: model.name || model.id,
         model: new ChatOpenAI({
@@ -73,13 +75,16 @@ export const loadLMStudioEmbeddingsModels = async () => {
   if (!(await checkServerAvailability(endpoint))) return {};
 
   try {
-    const response = await axios.get(`${ensureV1Endpoint(endpoint)}/models`, {
+    const response = await fetch(`${ensureV1Endpoint(endpoint)}/models`, {
       headers: { 'Content-Type': 'application/json' },
     });
 
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+    const responseData = await response.json();
     const embeddingsModels: Record<string, EmbeddingModel> = {};
 
-    response.data.data.forEach((model: LMStudioModel) => {
+    responseData.data.forEach((model: LMStudioModel) => {
       embeddingsModels[model.id] = {
         displayName: model.name || model.id,
         model: new OpenAIEmbeddings({

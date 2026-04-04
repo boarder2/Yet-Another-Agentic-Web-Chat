@@ -4,15 +4,14 @@ Curious about how YAAWC works? Don't worry, we'll cover it here. Before we begin
 
 We'll understand how YAAWC works by taking an example of a scenario where a user asks: "How does an A.C. work?". We'll break down the process into steps to make it easier to understand. The steps are as follows:
 
-1. The message is sent to the `/api/chat` route (or `/api/search` for the stateless API). The route resolves the selected chat model, system model, and embedding model from the request body and configured providers.
-2. Based on the `focusMode` (e.g., `webSearch`, `localResearch`, `chat`), a `MetaSearchAgent` handler is selected. This handler configures tool availability and prompt behavior for the focus mode.
-3. The `MetaSearchAgent` creates an `AgentSearch` instance, which in turn creates a `SimplifiedAgent` — a LangGraph React Agent. The agent is given a set of tools based on the focus mode:
+1. The message is sent to the `/api/chat` route. The route resolves the selected chat model, system model, and embedding model from the request body and configured providers.
+2. The route creates a `SimplifiedAgent` — a LangGraph React Agent — and passes the `focusMode` (e.g., `webSearch`, `localResearch`, `chat`). The agent selects tools and prompts based on the focus mode:
    - **Web Search mode**: `web_search`, `url_summarization`, `image_search`, `image_analysis`, `youtube_transcript`, `pdf_loader`, `deep_research`, `todo_list`
    - **Local Research mode**: `file_search`
    - **Chat mode**: No tools (the agent responds from its training data)
-4. The agent autonomously reasons about the query and decides which tools to invoke. For a factual question like "How does an A.C. work?", it would typically call the `web_search` tool, which queries SearXNG for results.
-5. Search results are returned to the agent, which may then call `url_summarization` to fetch and read specific web pages for deeper content, or invoke additional tools as needed.
-6. The agent synthesizes all gathered information and streams a response with cited sources back to the user.
+3. The agent autonomously reasons about the query and decides which tools to invoke. For a factual question like "How does an A.C. work?", it would typically call the `web_search` tool, which queries SearXNG for results.
+4. Search results are returned to the agent, which may then call `url_summarization` to fetch and read specific web pages for deeper content, or invoke additional tools as needed.
+5. The agent synthesizes all gathered information and streams a response with cited sources back to the user.
 
 ## How are the answers cited?
 

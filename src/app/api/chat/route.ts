@@ -32,6 +32,7 @@ import { retrieveRelevantMemories } from '@/lib/utils/memoryRetrieval';
 import { buildMemorySection } from '@/lib/prompts/memory/memoryContext';
 import { processExtraction } from '@/lib/utils/memoryExtraction';
 import { denyApprovalsForMessage } from '@/lib/sandbox/pendingApprovals';
+import { cancelQuestionsForMessage } from '@/lib/userQuestion/pendingQuestions';
 import { SimplifiedAgent } from '@/lib/search/simplifiedAgent';
 
 export const runtime = 'nodejs';
@@ -114,6 +115,8 @@ const handleEmitterEvents = async (
   let recievedMessage = '';
   // Map executionId → runId for correlating code_execution_result with the correct ToolCall markup
   const codeExecutionRunIdMap = new Map<string, string>();
+  // Map questionId → runId for correlating user_question_answered with the correct ToolCall markup
+  const userQuestionRunIdMap = new Map<string, string>();
   let sources: Record<string, unknown>[] = [];
   let searchQuery: string | undefined;
   let searchUrl: string | undefined;
@@ -160,6 +163,8 @@ const handleEmitterEvents = async (
     clearInterval(pingInterval);
     // Auto-deny any pending code execution approvals for this message
     denyApprovalsForMessage(userMessageId);
+    // Auto-cancel any pending user questions for this message
+    cancelQuestionsForMessage(userMessageId);
   });
 
   stream.on('data', (data) => {
@@ -380,6 +385,45 @@ const handleEmitterEvents = async (
         if (d.timedOut) extra.timedOut = 'true';
         if (d.oomKilled) extra.oomKilled = 'true';
         if (d.denied) extra.denied = 'true';
+        recievedMessage = updateToolCallMarkup(recievedMessage, tcId, {
+          extra,
+        });
+      }
+    } else if (parsedData.type === 'user_question_pending') {
+      // Correlate this question with the ToolCall markup's toolCallId
+      const runId = parsedData.data?.markupToolCallId;
+      if (runId && parsedData.data?.questionId) {
+        userQuestionRunIdMap.set(parsedData.data.questionId, runId);
+      }
+      // Forward to client
+      safeWrite(
+        JSON.stringify({
+          type: parsedData.type,
+          data: parsedData.data,
+          messageId: aiMessageId,
+        }) + '\n',
+      );
+    } else if (parsedData.type === 'user_question_answered') {
+      // Forward to client
+      safeWrite(
+        JSON.stringify({
+          type: parsedData.type,
+          data: parsedData.data,
+          messageId: aiMessageId,
+        }) + '\n',
+      );
+      // Persist response in ToolCall markup
+      const tcId =
+        userQuestionRunIdMap.get(parsedData.data?.questionId) ||
+        parsedData.data?.toolCallId;
+      if (tcId) {
+        const d = parsedData.data;
+        const extra: Record<string, string> = {};
+        if (d.selectedOptions?.length)
+          extra.selectedOptions = d.selectedOptions.join(', ');
+        if (d.freeformText) extra.freeformText = d.freeformText.slice(0, 500);
+        if (d.skipped) extra.skipped = 'true';
+        if (d.timedOut) extra.timedOut = 'true';
         recievedMessage = updateToolCallMarkup(recievedMessage, tcId, {
           extra,
         });

@@ -13,23 +13,40 @@ YAAWC (**Pronounced: "yawck"** — as in the sound you make when yet another AI 
 - [Focus Modes](#focus-modes)
 - [Agent Tools](#agent-tools)
 - [Code Execution (Sandbox)](#code-execution-sandbox)
+  - [Enabling Code Execution](#enabling-code-execution)
+  - [Docker Deployment](#docker-deployment)
+  - [Docker Socket Proxy (More Secure)](#docker-socket-proxy-more-secure)
+  - [Manual (Non-Docker) Setup](#manual-non-docker-setup)
+  - [Security Notes](#security-notes)
 - [Deep Research (Sub-Agents)](#deep-research-sub-agents)
 - [Dashboard Widgets](#dashboard-widgets)
 - [LLM Providers](#llm-providers)
+  - [Chat Models](#chat-models)
+  - [Embedding Models](#embedding-models)
 - [Memory](#memory)
+  - [How It Works](#how-it-works)
+  - [Memory Categories](#memory-categories)
+  - [Managing Memories](#managing-memories)
+  - [Agent Memory Tools](#agent-memory-tools)
+  - [Settings](#settings)
 - [Private Sessions](#private-sessions)
+  - [Starting a Private Session](#starting-a-private-session)
+  - [What's Different](#whats-different)
+  - [Configuration](#configuration)
 - [Personalization \& Personas](#personalization--personas)
+  - [Personalization](#personalization)
+  - [Persona Prompts](#persona-prompts)
 - [Installation](#installation)
   - [Docker (Recommended)](#docker-recommended)
   - [Manual Setup](#manual-setup)
   - [Ollama Connection Errors](#ollama-connection-errors)
-- [Updating](#updating)
 - [Using as a Browser Search Engine](#using-as-a-browser-search-engine)
 - [API](#api)
 - [Network \& Reverse Proxy](#network--reverse-proxy)
 - [Observability](#observability)
 - [Contributing](#contributing)
 - [Acknowledgements](#acknowledgements)
+- [A Note on AI Assistance](#a-note-on-ai-assistance)
 
 ## Why Does This Exist?
 
@@ -76,21 +93,22 @@ Firefox AI prompts are auto-detected and handled conversationally.
 
 The LangGraph agent has access to the following tools (individually toggleable per conversation):
 
-| Tool                   | What It Does                                                                                        |
-| ---------------------- | --------------------------------------------------------------------------------------------------- |
-| **Web Search**         | Queries SearXNG, retrieves top results, re-ranks by embedding similarity. Supports `site:` filters. |
-| **URL Summarization**  | Fetches a URL's content (via Readability/Cheerio/Playwright) and summarizes it or uses it directly. |
-| **Image Search**       | Searches for images via SearXNG (Bing Images, Google Images).                                       |
-| **Image Analysis**     | Fetches an image and analyzes it using a vision-capable LLM (PNG, JPEG, GIF, WebP up to 10 MB).     |
-| **YouTube Transcript** | Retrieves the full transcript from a YouTube video.                                                 |
-| **PDF Loader**         | Extracts and returns content from a PDF URL.                                                        |
-| **File Search**        | Semantic similarity search across uploaded documents with configurable threshold.                   |
-| **Deep Research**      | Spawns a focused sub-agent for comprehensive multi-source investigation (see below).                |
-| **Code Execution**     | Runs user-approved JavaScript in a sandboxed Docker container (see below).                          |
-| **Todo List**          | Manages a visible research plan (up to 10 tasks) with live progress in the UI.                      |
-| **Save Memory**        | Stores a fact or preference to long-term memory with automatic categorization.                      |
-| **Delete Memory**      | Removes a memory by ID or fuzzy content match.                                                      |
-| **List Memories**      | Lists all stored memories grouped by category.                                                      |
+| Tool                   | What It Does                                                                                                                                                                 |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Web Search**         | Queries SearXNG, retrieves top results, re-ranks by embedding similarity. Supports `site:` filters.                                                                          |
+| **URL Summarization**  | Fetches a URL's content (via Readability/Cheerio/Playwright) and summarizes it or uses it directly.                                                                          |
+| **Image Search**       | Searches for images via SearXNG (Bing Images, Google Images).                                                                                                                |
+| **Image Analysis**     | Fetches an image and analyzes it using a vision-capable LLM (PNG, JPEG, GIF, WebP up to 10 MB).                                                                              |
+| **YouTube Transcript** | Retrieves the full transcript from a YouTube video.                                                                                                                          |
+| **PDF Loader**         | Extracts and returns content from a PDF URL.                                                                                                                                 |
+| **File Search**        | Semantic similarity search across uploaded documents with configurable threshold.                                                                                            |
+| **Deep Research**      | Spawns a focused sub-agent for comprehensive multi-source investigation (see below).                                                                                         |
+| **Code Execution**     | Runs user-approved JavaScript in a sandboxed Docker container (see below).                                                                                                   |
+| **Ask User**           | Pauses the agent to ask the user a clarifying question — supports single/multi-select options and optional freeform input; shows queue position and has a 15-minute timeout. |
+| **Todo List**          | Manages a visible research plan (up to 10 tasks) with live progress in the UI.                                                                                               |
+| **Save Memory**        | Stores a fact or preference to long-term memory with automatic categorization.                                                                                               |
+| **Delete Memory**      | Removes a memory by ID or fuzzy content match.                                                                                                                               |
+| **List Memories**      | Lists all stored memories grouped by category.                                                                                                                               |
 
 ## Code Execution (Sandbox)
 

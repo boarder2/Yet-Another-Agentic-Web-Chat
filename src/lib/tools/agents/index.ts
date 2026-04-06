@@ -19,6 +19,7 @@ import { imageAnalysisTool } from './imageAnalysisTool';
 import { memoryTools } from './memoryTools';
 import { getCodeExecutionConfig } from '@/lib/config';
 import { codeExecutionTool } from './codeExecutionTool';
+import { askUserTool } from './askUserTool';
 
 export { simpleWebSearchTool };
 export { fileSearchTool };
@@ -30,6 +31,7 @@ export { deepResearchTool };
 export { todoListTool };
 export { memoryTools };
 export { codeExecutionTool };
+export { askUserTool };
 
 // Base tool arrays (non-interactive, used by subagents)
 export const allAgentTools = [
@@ -59,16 +61,20 @@ export const fileSearchTools = [fileSearchTool];
 
 export const coreTools: typeof allAgentTools = [];
 
-// Helper to conditionally append code execution tool for top-level interactive use
-function withCodeExecution<T>(tools: T[]): T[] {
+// Helper to append interactive-only tools (code execution + ask_user) for top-level use
+function withInteractiveTools<T>(tools: T[]): T[] {
+  const result = [...tools];
   const config = getCodeExecutionConfig();
   if (config.enabled && !('validationError' in config)) {
-    return [...tools, codeExecutionTool as unknown as T];
+    result.push(codeExecutionTool as unknown as T);
   }
-  return tools;
+  // ask_user is always available; it checks interactiveSession at call time
+  result.push(askUserTool as unknown as T);
+  return result;
 }
 
-// Dynamic getters that include code execution when enabled
-export const getAllAgentTools = () => withCodeExecution([...allAgentTools]);
-export const getWebSearchTools = () => withCodeExecution([...webSearchTools]);
-export const getCoreTools = () => withCodeExecution([...coreTools]);
+// Dynamic getters that include interactive tools when applicable
+export const getAllAgentTools = () => withInteractiveTools([...allAgentTools]);
+export const getWebSearchTools = () =>
+  withInteractiveTools([...webSearchTools]);
+export const getCoreTools = () => withInteractiveTools([...coreTools]);

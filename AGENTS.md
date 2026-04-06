@@ -28,7 +28,8 @@ User submits a query → API route → `SimplifiedAgent` (LangGraph React Agent)
 - `/src/lib/search` — `SimplifiedAgent` agent, focus-mode tool/prompt selection
 - `/src/lib/providers` — LLM and embedding model integrations (see **adding-features** skill)
 - `/src/lib/prompts` — Prompt templates including `prompts/simplifiedAgent/*` (see **prompt-system** skill)
-- `/src/lib/tools/agents` — Agent tools (`web_search`, `file_search`, `url_summarization`, `image_search`, `image_analysis`, `deep_research`, `todo_list`, etc.)
+- `/src/lib/tools/agents` — Agent tools (`web_search`, `file_search`, `url_summarization`, `image_search`, `image_analysis`, `deep_research`, `todo_list`, `ask_user`, etc.)
+- `/src/lib/userQuestion` — User question state management (pending questions, correlation)
 - `/src/lib/db` — Database schema and operations
 - `/src/lib/chains` — Specialized chains (image/video search helpers)
 - `/src/lib/state` — LangGraph agent state annotations

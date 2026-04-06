@@ -18,6 +18,7 @@ import {
 // } from '@/lib/tracing/langfuse';
 import { encodeHtmlAttribute, encodeBase64 } from '@/lib/utils/html';
 import { pushCallbackRunId } from '@/lib/sandbox/codeExecutionCorrelation';
+import { pushCallbackRunId as pushQuestionCallbackRunId } from '@/lib/userQuestion/questionCorrelation';
 import { isSoftStop } from '@/lib/utils/runControl';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { BaseMessage, HumanMessage } from '@langchain/core/messages';
@@ -622,6 +623,22 @@ export class SimplifiedAgent {
                     }
                     if (typeof inputObj.description === 'string') {
                       extraAttr += ` description="${encodeHtmlAttribute(inputObj.description.slice(0, 100))}"`;
+                    }
+                  }
+                  // For ask_user, store correlation and include question as attribute
+                  if (
+                    type === 'ask_user' &&
+                    input &&
+                    typeof input === 'object'
+                  ) {
+                    const inputObj = input as Record<string, unknown>;
+                    if (typeof inputObj.question === 'string') {
+                      extraAttr += ` query="${encodeHtmlAttribute(inputObj.question.slice(0, 200))}"`;
+                      // Store correlation: question text → callback runId
+                      pushQuestionCallbackRunId(inputObj.question, runId);
+                    }
+                    if (typeof inputObj.context === 'string') {
+                      extraAttr += ` context="${encodeHtmlAttribute(inputObj.context.slice(0, 200))}"`;
                     }
                   }
                 } catch (_attrErr) {

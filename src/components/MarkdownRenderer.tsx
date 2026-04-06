@@ -17,6 +17,7 @@ import {
   Trash2,
   List,
   Terminal,
+  HelpCircle,
 } from 'lucide-react';
 import { useState } from 'react';
 import Markdown, { MarkdownToJSX } from 'markdown-to-jsx';
@@ -180,6 +181,9 @@ const ToolCall = ({
   timedOut,
   oomKilled,
   denied,
+  selectedOptions,
+  freeformText,
+  skipped,
   children,
 }: {
   type?: string;
@@ -199,6 +203,9 @@ const ToolCall = ({
   oomKilled?: string;
   denied?: string;
   executionId?: string;
+  selectedOptions?: string;
+  freeformText?: string;
+  skipped?: string;
   children?: React.ReactNode;
 }) => {
   const [expanded, setExpanded] = useState(false);
@@ -232,6 +239,8 @@ const ToolCall = ({
         return <List size={16} className="text-accent" />;
       case 'code_execution':
         return <Terminal size={16} className="text-accent" />;
+      case 'ask_user':
+        return <HelpCircle size={16} className="text-accent" />;
       default:
         return <Settings size={16} className="text-fg/70" />;
     }
@@ -422,6 +431,43 @@ const ToolCall = ({
                 Exit code: {exitCode}
               </span>
             )}
+        </>
+      );
+    }
+
+    if (type === 'ask_user') {
+      const decodedQuery = decodeHtmlEntities(query ?? '');
+      const decodedSelectedOptions = decodeHtmlEntities(selectedOptions ?? '');
+      const decodedFreeformText = decodeHtmlEntities(freeformText ?? '');
+      return (
+        <>
+          <span className="mr-2">{getIcon(type)}</span>
+          <span>Asked user{decodedQuery ? ':' : ''}</span>
+          {decodedQuery && (
+            <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded text-sm truncate max-w-md">
+              {decodedQuery}
+            </span>
+          )}
+          {skipped === 'true' && (
+            <span className="ml-2 px-2 py-0.5 bg-yellow-500/10 text-yellow-400 rounded text-xs">
+              Skipped
+            </span>
+          )}
+          {timedOut === 'true' && (
+            <span className="ml-2 px-2 py-0.5 bg-red-500/10 text-red-400 rounded text-xs">
+              Timed out
+            </span>
+          )}
+          {decodedSelectedOptions && (
+            <span className="ml-2 px-2 py-0.5 bg-green-500/10 text-green-500 rounded text-xs">
+              {decodedSelectedOptions}
+            </span>
+          )}
+          {decodedFreeformText && (
+            <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded text-sm truncate max-w-md">
+              {decodedFreeformText}
+            </span>
+          )}
         </>
       );
     }

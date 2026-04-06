@@ -7,6 +7,7 @@ import { Document } from '@langchain/core/documents';
 import Navbar from './Navbar';
 import Chat from './Chat';
 import { PendingExecution } from './CodeExecution';
+import { PendingQuestion } from './UserQuestionPrompt';
 import EmptyChat from './EmptyChat';
 import crypto from 'crypto';
 import { toast } from 'sonner';
@@ -411,6 +412,10 @@ const ChatWindow = ({ id }: { id?: string }) => {
     Record<string, PendingExecution[]>
   >({});
 
+  const [pendingQuestions, setPendingQuestions] = useState<
+    Record<string, PendingQuestion[]>
+  >({});
+
   const [files, setFiles] = useState<File[]>([]);
   const [fileIds, setFileIds] = useState<string[]>([]);
 
@@ -584,6 +589,7 @@ const ChatWindow = ({ id }: { id?: string }) => {
     setGatheringSources([]);
     setTodoItems([]);
     setPendingExecutions({});
+    setPendingQuestions({});
     setAnalysisProgress(null);
     setLiveModelStats(null);
     setNotFound(false);
@@ -611,6 +617,7 @@ const ChatWindow = ({ id }: { id?: string }) => {
       setGatheringSources([]);
       setTodoItems([]);
       setPendingExecutions({});
+      setPendingQuestions({});
       setAnalysisProgress(null);
       setLiveModelStats(null);
       setNotFound(false);
@@ -673,6 +680,8 @@ const ChatWindow = ({ id }: { id?: string }) => {
     let recievedMessage = '';
     // Map executionId → runId for correlating code_execution_result with the correct ToolCall markup
     const codeExecutionRunIdMap = new Map<string, string>();
+    // Map questionId → runId for correlating user_question_answered with the correct ToolCall markup
+    const userQuestionRunIdMap = new Map<string, string>();
     let messageBuffer = '';
     let tokenCount = 0;
     const bufferThreshold = 5;
@@ -1276,6 +1285,81 @@ const ChatWindow = ({ id }: { id?: string }) => {
         return;
       }
 
+      if (data.type === 'user_question_pending') {
+        const runId = data.data?.markupToolCallId;
+        if (runId && data.data?.questionId) {
+          userQuestionRunIdMap.set(data.data.questionId, runId);
+        }
+        setPendingQuestions((prev) => ({
+          ...prev,
+          [data.messageId]: [
+            ...(prev[data.messageId] ?? []),
+            {
+              questionId: data.data.questionId,
+              question: data.data.question,
+              options: data.data.options,
+              multiSelect: data.data.multiSelect,
+              allowFreeformInput: data.data.allowFreeformInput,
+              context: data.data.context,
+              toolCallId: data.data.toolCallId,
+              createdAt: data.data.createdAt,
+              status: 'pending' as const,
+            },
+          ],
+        }));
+        setScrollTrigger((prev) => prev + 1);
+        return;
+      }
+
+      if (data.type === 'user_question_answered') {
+        setPendingQuestions((prev) => ({
+          ...prev,
+          [data.messageId]: (prev[data.messageId] ?? []).map((q) =>
+            q.questionId === data.data.questionId
+              ? {
+                  ...q,
+                  status: (data.data.timedOut
+                    ? 'timed_out'
+                    : data.data.skipped
+                      ? 'skipped'
+                      : 'answered') as 'answered' | 'skipped' | 'timed_out',
+                  response: data.data,
+                }
+              : q,
+          ),
+        }));
+        const tcId =
+          userQuestionRunIdMap.get(data.data.questionId) ||
+          data.data.toolCallId;
+        if (tcId) {
+          const d = data.data;
+          const extra: Record<string, string> = {};
+          if (d.selectedOptions?.length)
+            extra.selectedOptions = d.selectedOptions.join(', ');
+          if (d.freeformText) extra.freeformText = d.freeformText.slice(0, 500);
+          if (d.timedOut) extra.timedOut = 'true';
+          if (d.skipped) extra.skipped = 'true';
+          setMessages((prev) =>
+            prev.map((message) => {
+              if (message.messageId === data.messageId) {
+                const updatedContent = updateToolCallMarkup(
+                  message.content,
+                  tcId,
+                  { extra },
+                );
+                return { ...message, content: updatedContent };
+              }
+              return message;
+            }),
+          );
+          recievedMessage = updateToolCallMarkup(recievedMessage, tcId, {
+            extra,
+          });
+        }
+        setScrollTrigger((prev) => prev + 1);
+        return;
+      }
+
       // Handle todo list updates
       if (data.type === 'todo_update') {
         setTodoItems(data.data.todos || []);
@@ -1686,6 +1770,60 @@ const ChatWindow = ({ id }: { id?: string }) => {
                   }
                   return updated;
                 });
+              }}
+              pendingQuestions={pendingQuestions}
+              onQuestionAnswer={async (
+                questionId: string,
+                response: { selectedOptions?: string[]; freeformText?: string },
+              ) => {
+                setPendingQuestions((prev) => {
+                  const updated: Record<string, PendingQuestion[]> = {};
+                  for (const [msgId, questions] of Object.entries(prev)) {
+                    updated[msgId] = questions.map((q) =>
+                      q.questionId === questionId
+                        ? { ...q, status: 'answered' as const, response }
+                        : q,
+                    );
+                  }
+                  return updated;
+                });
+                try {
+                  const res = await fetch('/api/chat/answer', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ questionId, ...response }),
+                  });
+                  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                } catch {
+                  toast.error(
+                    'Failed to send answer. The agent will continue on its own.',
+                  );
+                }
+              }}
+              onQuestionSkip={async (questionId: string) => {
+                setPendingQuestions((prev) => {
+                  const updated: Record<string, PendingQuestion[]> = {};
+                  for (const [msgId, questions] of Object.entries(prev)) {
+                    updated[msgId] = questions.map((q) =>
+                      q.questionId === questionId
+                        ? { ...q, status: 'skipped' as const }
+                        : q,
+                    );
+                  }
+                  return updated;
+                });
+                try {
+                  const res = await fetch('/api/chat/answer', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ questionId, skipped: true }),
+                  });
+                  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                } catch {
+                  toast.error(
+                    'Failed to skip question. The agent will continue on its own.',
+                  );
+                }
               }}
               pendingImages={pendingImages}
               setPendingImages={setPendingImages}

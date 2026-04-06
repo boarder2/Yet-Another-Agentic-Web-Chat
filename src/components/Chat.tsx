@@ -7,6 +7,7 @@ import MessageInput from './MessageInput';
 import TodoWidget, { TodoItemData } from './TodoWidget';
 import { Document } from '@langchain/core/documents';
 import { PendingExecution, CodeExecutionApproval } from './CodeExecution';
+import { PendingQuestion, UserQuestionPrompt } from './UserQuestionPrompt';
 
 const Chat = ({
   loading,
@@ -37,6 +38,9 @@ const Chat = ({
   todoItems = [],
   pendingExecutions = {},
   onExecutionAction,
+  pendingQuestions = {},
+  onQuestionAnswer,
+  onQuestionSkip,
   pendingImages,
   setPendingImages,
   imageCapable = false,
@@ -108,6 +112,12 @@ const Chat = ({
   todoItems?: TodoItemData[];
   pendingExecutions?: Record<string, PendingExecution[]>;
   onExecutionAction?: (executionId: string, approved: boolean) => void;
+  pendingQuestions?: Record<string, PendingQuestion[]>;
+  onQuestionAnswer?: (
+    questionId: string,
+    response: { selectedOptions?: string[]; freeformText?: string },
+  ) => void;
+  onQuestionSkip?: (questionId: string) => void;
   pendingImages: ImageAttachment[];
   setPendingImages: (images: ImageAttachment[]) => void;
   imageCapable?: boolean;
@@ -362,6 +372,37 @@ const Chat = ({
               code={current.code}
               description={current.description}
               onActionTaken={onExecutionAction}
+              queuePosition={1}
+              queueTotal={allPending.length}
+            />
+          );
+        })()}
+        {/* User question prompt queue */}
+        {(() => {
+          const allPending = Object.values(pendingQuestions)
+            .flat()
+            .filter((q) => q.status === 'pending');
+          if (allPending.length === 0 || !onQuestionAnswer || !onQuestionSkip)
+            return null;
+          const current = allPending[0];
+          return (
+            <UserQuestionPrompt
+              key={current.questionId}
+              questionId={current.questionId}
+              question={current.question}
+              options={current.options}
+              multiSelect={current.multiSelect}
+              allowFreeformInput={current.allowFreeformInput}
+              context={current.context}
+              createdAt={current.createdAt}
+              onSubmit={onQuestionAnswer}
+              onSkip={onQuestionSkip}
+              onDismiss={() => {
+                // Return focus to the message input after question is dismissed
+                setTimeout(() => {
+                  document.getElementById('message-input')?.focus();
+                }, 0);
+              }}
               queuePosition={1}
               queueTotal={allPending.length}
             />

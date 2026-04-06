@@ -218,6 +218,7 @@ const MessageInput = ({
         )}
         <div className="flex flex-row space-x-2 mb-2">
           <TextareaAutosize
+            id="message-input"
             ref={inputRef}
             value={message}
             onChange={(e) => setMessage(e.target.value)}

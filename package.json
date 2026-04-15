@@ -43,6 +43,7 @@
     "clsx": "^2.1.1",
     "compute-cosine-similarity": "^1.1.0",
     "compute-dot": "^1.1.0",
+    "cron": "^4.4.0",
     "dockerode": "^4.0.10",
     "drizzle-orm": "^0.45.1",
     "html-to-text": "^9.0.5",

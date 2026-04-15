@@ -1,17 +1,9 @@
 import { updateToolCallMarkup } from '@/lib/utils/toolCallMarkup';
 import { encodeHtmlAttribute } from '@/lib/utils/html';
 import { cleanupCancelToken, registerCancelToken } from '@/lib/cancel-tokens';
-import {
-  getCustomOpenaiApiKey,
-  getCustomOpenaiApiUrl,
-  getCustomOpenaiModelName,
-} from '@/lib/config';
 import db from '@/lib/db';
 import { chats, messages as messagesSchema } from '@/lib/db/schema';
-import {
-  getAvailableChatModelProviders,
-  getAvailableEmbeddingModelProviders,
-} from '@/lib/providers';
+import { resolveChatAndEmbedding } from '@/lib/providers/resolveModels';
 import { getFileDetails } from '@/lib/utils/files';
 import {
   getPersonaInstructionsOnly,
@@ -19,8 +11,6 @@ import {
 } from '@/lib/utils/prompts';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { AIMessage, BaseMessage, HumanMessage } from '@langchain/core/messages';
-import { ChatOllama } from '@langchain/ollama';
-import { ChatOpenAI } from '@langchain/openai';
 import crypto from 'crypto';
 import { and, eq, gt } from 'drizzle-orm';
 import { EventEmitter } from 'stream';
@@ -630,95 +620,22 @@ export const POST = async (req: Request) => {
       );
     }
 
-    const [chatModelProviders, embeddingModelProviders] = await Promise.all([
-      getAvailableChatModelProviders(),
-      getAvailableEmbeddingModelProviders(),
-    ]);
-
-    const chatModelProvider =
-      chatModelProviders[
-        body.chatModel?.provider || Object.keys(chatModelProviders)[0]
-      ];
-    const chatModel =
-      chatModelProvider[
-        body.chatModel?.name || Object.keys(chatModelProvider)[0]
-      ];
-
-    const embeddingProvider =
-      embeddingModelProviders[
-        body.embeddingModel?.provider || Object.keys(embeddingModelProviders)[0]
-      ];
-    const embeddingModel =
-      embeddingProvider[
-        body.embeddingModel?.name || Object.keys(embeddingProvider)[0]
-      ];
-
     let chatLlm: BaseChatModel | undefined;
     let systemLlm: BaseChatModel | undefined;
-    const embedding = new CachedEmbeddings(
-      embeddingModel.model,
-      body.embeddingModel?.provider || Object.keys(embeddingModelProviders)[0],
-      body.embeddingModel?.name || Object.keys(embeddingProvider)[0],
-    );
+    let embedding: CachedEmbeddings;
 
-    if (body.chatModel?.provider === 'custom_openai') {
-      chatLlm = new ChatOpenAI({
-        apiKey: getCustomOpenaiApiKey(),
-        modelName: getCustomOpenaiModelName(),
-        // temperature: 0.7,
-        configuration: {
-          baseURL: getCustomOpenaiApiUrl(),
-        },
-      }) as unknown as BaseChatModel;
-    } else if (chatModelProvider && chatModel) {
-      chatLlm = chatModel.model;
-
-      // Set context window size for Ollama models
-      if (
-        chatLlm instanceof ChatOllama &&
-        body.chatModel?.provider === 'ollama'
-      ) {
-        chatLlm.numCtx = body.chatModel.ollamaContextWindow || 2048;
-      }
-    }
-
-    // Build System LLM (defaults to Chat LLM if not provided by client)
-    if (body.systemModel) {
-      const sysProvider = body.systemModel.provider;
-      const sysName = body.systemModel.name;
-      if (sysProvider === 'custom_openai') {
-        systemLlm = new ChatOpenAI({
-          apiKey: getCustomOpenaiApiKey(),
-          modelName: getCustomOpenaiModelName(),
-          configuration: {
-            baseURL: getCustomOpenaiApiUrl(),
-          },
-        }) as unknown as BaseChatModel;
-      } else if (
-        chatModelProviders[sysProvider] &&
-        chatModelProviders[sysProvider][sysName]
-      ) {
-        systemLlm = chatModelProviders[sysProvider][sysName]
-          .model as unknown as BaseChatModel | undefined;
-      }
-      if (
-        systemLlm instanceof ChatOllama &&
-        body.systemModel?.provider === 'ollama'
-      ) {
-        systemLlm.numCtx = body.systemModel.ollamaContextWindow || 2048;
-      }
-    }
-    if (!systemLlm) systemLlm = chatLlm;
-
-    if (!chatLlm) {
-      return Response.json({ error: 'Invalid chat model' }, { status: 400 });
-    }
-
-    if (!embedding) {
-      return Response.json(
-        { error: 'Invalid embedding model' },
-        { status: 400 },
-      );
+    try {
+      const resolved = await resolveChatAndEmbedding({
+        chatModel: body.chatModel,
+        systemModel: body.systemModel,
+        embeddingModel: body.embeddingModel,
+      });
+      chatLlm = resolved.chatLlm;
+      systemLlm = resolved.systemLlm;
+      embedding = resolved.embedding;
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Invalid model';
+      return Response.json({ error: msg }, { status: 400 });
     }
 
     const humanMessageId =

@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 import {
   BookOpenText,
   Brain,
+  CalendarClock,
   Home,
   SquarePen,
   Settings,
@@ -13,7 +14,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useSelectedLayoutSegments } from 'next/navigation';
-import React, { type ReactNode } from 'react';
+import React, { useEffect, useState, type ReactNode } from 'react';
 import Layout, { setWideWidth, useWideWidth } from './Layout';
 
 const VerticalIconContainer = ({ children }: { children: ReactNode }) => {
@@ -59,6 +60,37 @@ const WidthToggle = () => {
 
 const Sidebar = ({ children }: { children: React.ReactNode }) => {
   const segments = useSelectedLayoutSegments();
+  const [scheduledUnread, setScheduledUnread] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchCount = async () => {
+      try {
+        const r = await fetch('/api/scheduled-tasks/runs/unread');
+        if (!r.ok) return;
+        const { count } = await r.json();
+        if (!cancelled) setScheduledUnread(count);
+      } catch {
+        // Ignore
+      }
+    };
+    fetchCount();
+    const interval = setInterval(fetchCount, 30_000);
+    const onFocus = () => fetchCount();
+    const onCustom = (e: Event) => {
+      const c = (e as CustomEvent).detail?.count;
+      if (typeof c === 'number') setScheduledUnread(c);
+      else fetchCount();
+    };
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('scheduled-runs-unread-changed', onCustom);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('scheduled-runs-unread-changed', onCustom);
+    };
+  }, []);
 
   const navLinks = [
     {
@@ -66,24 +98,35 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
       href: '/',
       active: segments.length === 0 || segments.includes('c'),
       label: 'Home',
+      badgeCount: 0,
     },
     {
       icon: LayoutDashboard,
       href: '/dashboard',
       active: segments.includes('dashboard'),
       label: 'Dashboard',
+      badgeCount: 0,
     },
     {
       icon: BookOpenText,
       href: '/library',
       active: segments.includes('library'),
       label: 'Library',
+      badgeCount: 0,
+    },
+    {
+      icon: CalendarClock,
+      href: '/scheduled-tasks',
+      active: segments.includes('scheduled-tasks'),
+      label: 'Scheduled',
+      badgeCount: scheduledUnread,
     },
     {
       icon: Brain,
       href: '/memory',
       active: segments.includes('memory'),
       label: 'Memory',
+      badgeCount: 0,
     },
   ];
 
@@ -106,6 +149,11 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
                   )}
                 >
                   <link.icon />
+                  {link.badgeCount > 0 && (
+                    <span className="absolute top-0.5 right-2 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-accent text-white text-[10px] font-bold leading-none px-1">
+                      {link.badgeCount > 99 ? '99+' : link.badgeCount}
+                    </span>
+                  )}
                   {link.active && (
                     <div className="absolute right-0 -mr-2 h-full w-1 rounded-l-lg bg-accent" />
                   )}
@@ -141,7 +189,14 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
             {link.active && (
               <div className="absolute top-0 -mt-4 h-1 w-full rounded-b-lg bg-accent" />
             )}
-            <link.icon />
+            <div className="relative">
+              <link.icon />
+              {link.badgeCount > 0 && (
+                <span className="absolute -top-1.5 -right-2.5 min-w-[16px] h-[16px] flex items-center justify-center rounded-full bg-accent text-white text-[9px] font-bold leading-none px-0.5">
+                  {link.badgeCount > 99 ? '99+' : link.badgeCount}
+                </span>
+              )}
+            </div>
             <p className="text-xs">{link.label}</p>
           </Link>
         ))}

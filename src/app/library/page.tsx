@@ -4,6 +4,7 @@ import DeleteChat from '@/components/DeleteChat';
 import { cn, formatTimeDifference } from '@/lib/utils';
 import {
   BookOpenText,
+  CalendarClock,
   ClockIcon,
   EyeOff,
   Search,
@@ -19,6 +20,7 @@ export interface Chat {
   createdAt: string;
   focusMode: string;
   isPrivate?: number;
+  scheduledTaskId?: string | null;
   matchExcerpt?: string | null;
 }
 
@@ -402,6 +404,12 @@ const Page = () => {
                   <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-xs font-medium whitespace-nowrap">
                     <EyeOff size={11} />
                     Private
+                  </span>
+                )}
+                {chat.scheduledTaskId && (
+                  <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 text-xs font-medium whitespace-nowrap">
+                    <CalendarClock size={11} />
+                    Scheduled
                   </span>
                 )}
               </div>

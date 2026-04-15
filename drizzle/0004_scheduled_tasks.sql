@@ -24,6 +24,4 @@ ALTER TABLE `chats` ADD `scheduled_task_id` text;
 --> statement-breakpoint
 ALTER TABLE `chats` ADD `scheduled_run_viewed` integer;
 --> statement-breakpoint
-CREATE INDEX IF NOT EXISTS chats_scheduled_run_viewed_idx ON chats(scheduled_run_viewed);
---> statement-breakpoint
 CREATE INDEX IF NOT EXISTS `chats_scheduled_run_viewed_idx` ON `chats`(`scheduled_run_viewed`);

@@ -4,11 +4,14 @@ const TOKEN_BUDGET = 800;
 const CHARS_PER_TOKEN = 4;
 const MAX_CHARS = TOKEN_BUDGET * CHARS_PER_TOKEN;
 
-const PREAMBLE = `## Remembered Context
+const PREAMBLE = `## Memories from Your Past Interactions
+- These are relevant facts from your past interactions, retrieved to help you answer the user's current query.
 - Use this context only when it clearly improves answer quality.
 - Do not repeat these facts back unless the user explicitly asks.
 - If the user's latest message contradicts a memory, follow the user's latest statement.
-- If persona instructions conflict with a memory, follow the persona instructions.`;
+- If persona instructions conflict with a memory, follow the persona instructions.
+
+### Relevant Memories:`;
 
 export function buildMemorySection(scoredMemories: ScoredMemory[]): string {
   if (!scoredMemories || scoredMemories.length === 0) {

@@ -104,10 +104,10 @@ const SystemPromptSelector = ({
                 <div className="overflow-hidden rounded-lg shadow-lg ring-1 ring-surface-2 bg-surface">
                   <div className="px-4 py-3 border-b border-surface-2">
                     <h3 className="text-sm font-medium text-fg/90">
-                      Select Prompts
+                      Persona Prompts
                     </h3>
                     <p className="text-xs text-fg/60 mt-0.5">
-                      Choose instructions to guide the AI.
+                      Control response tone, style, and formatting.
                     </p>
                   </div>
                   {isLoading ? (
@@ -151,14 +151,11 @@ const SystemPromptSelector = ({
                                   leaveTo="opacity-0 translate-y-1"
                                 >
                                   <PopoverPanel className="absolute z-30 w-64 p-3 bg-surface border border-surface-2 rounded-lg shadow-lg text-xs text-fg/80">
-                                    The prompts in this section are system
-                                    provided prompts. The system will choose one
-                                    of these formatting prompts itself based on
-                                    focus mode, if no persona prompts are
-                                    selected. Choose one if you want to override
-                                    the default behavior or if you want to
-                                    combine default prompts with your own
-                                    persona prompts.
+                                    Built-in formatting and citation presets.
+                                    The system auto-selects one based on focus
+                                    mode when no persona prompt is active.
+                                    Select one here to override the default, or
+                                    combine with your own persona prompts.
                                   </PopoverPanel>
                                 </Transition>
                               </Popover>

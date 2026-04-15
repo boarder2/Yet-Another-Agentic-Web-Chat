@@ -6,6 +6,7 @@ import Attach from './MessageInputActions/Attach';
 import Focus from './MessageInputActions/Focus';
 import ModelConfigurator from './MessageInputActions/ModelConfigurator';
 import SystemPromptSelector from './MessageInputActions/SystemPromptSelector'; // Import new component
+import MethodologySelector from './MessageInputActions/MethodologySelector';
 import PersonalizationPicker from './PersonalizationPicker';
 
 const MessageInput = ({
@@ -34,6 +35,8 @@ const MessageInput = ({
   initialMessage,
   onCancelEdit,
   isPrivateSession = false,
+  selectedMethodologyId,
+  setSelectedMethodologyId,
 }: {
   sendMessage: (
     message: string,
@@ -66,6 +69,8 @@ const MessageInput = ({
   initialMessage?: string;
   onCancelEdit?: () => void;
   isPrivateSession?: boolean;
+  selectedMethodologyId?: string | null;
+  setSelectedMethodologyId?: (id: string | null) => void;
 }) => {
   const [message, setMessage] = useState(initialMessage || '');
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -136,6 +141,23 @@ const MessageInput = ({
       localStorage.removeItem('selectedSystemPromptIds');
     }
   }, [systemPromptIds]);
+
+  useEffect(() => {
+    if (setSelectedMethodologyId) {
+      const stored = localStorage.getItem('selectedMethodologyId');
+      if (stored) {
+        setSelectedMethodologyId(stored);
+      }
+    }
+  }, [setSelectedMethodologyId]);
+
+  useEffect(() => {
+    if (selectedMethodologyId) {
+      localStorage.setItem('selectedMethodologyId', selectedMethodologyId);
+    } else {
+      localStorage.removeItem('selectedMethodologyId');
+    }
+  }, [selectedMethodologyId]);
 
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -224,7 +246,7 @@ const MessageInput = ({
             onChange={(e) => setMessage(e.target.value)}
             onPaste={handlePaste}
             minRows={1}
-            className="px-3 py-2 overflow-hidden flex rounded-lg bg-transparent text-sm resize-none w-full max-h-24 lg:max-h-36 xl:max-h-48"
+            className="px-3 py-2 overflow-y-auto flex rounded-lg bg-transparent text-sm resize-none w-full max-h-24 lg:max-h-36 xl:max-h-48"
             placeholder={
               firstMessage
                 ? 'What would you like to learn today?'
@@ -252,6 +274,12 @@ const MessageInput = ({
               selectedPromptIds={systemPromptIds}
               onSelectedPromptIdsChange={setSystemPromptIds}
             />
+            {focusMode !== 'chat' && setSelectedMethodologyId && (
+              <MethodologySelector
+                selectedMethodologyId={selectedMethodologyId ?? null}
+                onSelectedMethodologyIdChange={setSelectedMethodologyId}
+              />
+            )}
             {!isPrivateSession && (
               <PersonalizationPicker
                 hasLocation={personalizationLocation?.trim() !== ''}

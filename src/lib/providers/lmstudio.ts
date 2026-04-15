@@ -56,7 +56,7 @@ export const loadLMStudioChatModels = async () => {
           modelName: model.id,
           // temperature: 0.7,
           streaming: true,
-          maxRetries: 3,
+          maxRetries: 10,
         }) as unknown as BaseChatModel,
       };
     });

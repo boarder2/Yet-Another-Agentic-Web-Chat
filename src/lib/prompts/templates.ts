@@ -14,7 +14,7 @@ export const formattingAndCitationsWeb: Prompt = {
 - The citation number refers to the index of the source in the relevantDocuments state array
 - Cite every single fact, statement, or sentence using [number] notation
 - Integrate citations naturally at the end of sentences or clauses as appropriate. For example, "The Eiffel Tower is one of the most visited landmarks in the world[1]."
-- Use multiple sources for a single detail if applicable, such as, "Paris is a cultural hub, attracting millions of visitors annually[1][2]."
+- Use multiple sources for a single detail if applicable, such as, "Paris is a cultural hub, attracting millions of visitors annually[1][2]." Each source must be in its own set of brackets with its corresponding number.
 - Statements based on AI model inference or training data must be marked [AI] — reserve inline [number] citations exclusively for context-sourced facts
 - Statements based on conversation history must be marked [Hist] — reserve inline [number] citations exclusively for context-sourced facts
 - If a statement is based on the user's input or context, no citation is required

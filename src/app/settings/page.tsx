@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { Prompt } from '@/lib/types/prompt';
+import { writeLocalStorage } from '@/lib/hooks/useLocalStorage';
 
 import { SettingsType, SectionKey } from './types';
 import {
@@ -18,6 +19,7 @@ import PersonalizationSection from './sections/PersonalizationSection';
 import MemorySection from './sections/MemorySection';
 import PrivateSessionsSection from './sections/PrivateSessionsSection';
 import PersonaPromptsSection from './sections/PersonaPromptsSection';
+import ResearchMethodologiesSection from './sections/ResearchMethodologiesSection';
 import DefaultSearchSection from './sections/DefaultSearchSection';
 import ModelSettingsSection from './sections/ModelSettingsSection';
 import ModelVisibilitySection from './sections/ModelVisibilitySection';
@@ -74,6 +76,14 @@ export default function SettingsPage() {
   const [newPromptContent, setNewPromptContent] = useState('');
   const [newPromptType, setNewPromptType] = useState<'persona'>('persona');
   const [isAddingNewPrompt, setIsAddingNewPrompt] = useState(false);
+
+  const [userMethodologies, setUserMethodologies] = useState<Prompt[]>([]);
+  const [editingMethodology, setEditingMethodology] = useState<Prompt | null>(
+    null,
+  );
+  const [newMethodologyName, setNewMethodologyName] = useState('');
+  const [newMethodologyContent, setNewMethodologyContent] = useState('');
+  const [isAddingNewMethodology, setIsAddingNewMethodology] = useState(false);
 
   const [allModels, setAllModels] = useState<{
     chat: Record<string, Record<string, { displayName: string }>>;
@@ -296,6 +306,22 @@ export default function SettingsPage() {
     };
 
     fetchSystemPrompts();
+
+    const fetchMethodologies = async () => {
+      try {
+        const response = await fetch('/api/system-prompts?type=methodology');
+        if (response.ok) {
+          const methodologies = await response.json();
+          setUserMethodologies(
+            methodologies.filter((p: Prompt) => !p.readOnly),
+          );
+        }
+      } catch (_error) {
+        console.error('Error loading methodologies.');
+      }
+    };
+
+    fetchMethodologies();
   }, []);
 
   const saveConfig = async (
@@ -555,12 +581,6 @@ export default function SettingsPage() {
     localStorage.setItem(key, value);
   };
 
-  const dispatchPersonalizationEvent = () => {
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('personalization-update'));
-    }
-  };
-
   const handlePersonalizationChange = (
     field: 'location' | 'about',
     rawValue: string,
@@ -575,12 +595,7 @@ export default function SettingsPage() {
         : setPersonalizationAbout;
 
     setter(rawValue);
-    if (rawValue.trim()) {
-      localStorage.setItem(key, rawValue);
-    } else {
-      localStorage.removeItem(key);
-    }
-    dispatchPersonalizationEvent();
+    writeLocalStorage(key, rawValue.trim() ? rawValue : null);
   };
 
   const handleModelVisibilityToggle = async (
@@ -722,6 +737,79 @@ export default function SettingsPage() {
     }
   };
 
+  const handleAddOrUpdateMethodology = async () => {
+    const currentMethodology = editingMethodology || {
+      name: newMethodologyName,
+      content: newMethodologyContent,
+    };
+    if (!currentMethodology.name.trim() || !currentMethodology.content.trim()) {
+      console.error('Methodology name and content cannot be empty.');
+      return;
+    }
+
+    const url = editingMethodology
+      ? `/api/system-prompts/${editingMethodology.id}`
+      : '/api/system-prompts';
+    const method = editingMethodology ? 'PUT' : 'POST';
+    const body = JSON.stringify({
+      name: currentMethodology.name,
+      content: currentMethodology.content,
+      type: 'methodology',
+    });
+
+    try {
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body,
+      });
+
+      if (response.ok) {
+        const saved = await response.json();
+        if (editingMethodology) {
+          setUserMethodologies(
+            userMethodologies.map((m) => (m.id === saved.id ? saved : m)),
+          );
+          setEditingMethodology(null);
+        } else {
+          setUserMethodologies([...userMethodologies, saved]);
+          setNewMethodologyName('');
+          setNewMethodologyContent('');
+          setIsAddingNewMethodology(false);
+        }
+      } else {
+        const errorData = await response.json();
+        console.error(
+          errorData.error ||
+            `Failed to ${editingMethodology ? 'update' : 'add'} methodology.`,
+        );
+      }
+    } catch (_error) {
+      console.error(
+        `Error ${editingMethodology ? 'updating' : 'adding'} methodology.`,
+      );
+    }
+  };
+
+  const handleDeleteMethodology = async (methodologyId: string) => {
+    if (!confirm('Are you sure you want to delete this methodology?')) return;
+    try {
+      const response = await fetch(`/api/system-prompts/${methodologyId}`, {
+        method: 'DELETE',
+      });
+      if (response.ok) {
+        setUserMethodologies(
+          userMethodologies.filter((m) => m.id !== methodologyId),
+        );
+      } else {
+        const errorData = await response.json();
+        console.error(errorData.error || 'Failed to delete methodology.');
+      }
+    } catch (_error) {
+      console.error('Error deleting methodology.');
+    }
+  };
+
   return (
     <div>
       <div className="flex flex-col pt-4">
@@ -836,6 +924,22 @@ export default function SettingsPage() {
                     setIsAddingNewPrompt={setIsAddingNewPrompt}
                     onAddOrUpdate={handleAddOrUpdateSystemPrompt}
                     onDelete={handleDeleteSystemPrompt}
+                  />
+                )}
+
+                {activeSection === 'research-methodologies' && (
+                  <ResearchMethodologiesSection
+                    userMethodologies={userMethodologies}
+                    editingMethodology={editingMethodology}
+                    newMethodologyName={newMethodologyName}
+                    newMethodologyContent={newMethodologyContent}
+                    isAddingNewMethodology={isAddingNewMethodology}
+                    setEditingMethodology={setEditingMethodology}
+                    setNewMethodologyName={setNewMethodologyName}
+                    setNewMethodologyContent={setNewMethodologyContent}
+                    setIsAddingNewMethodology={setIsAddingNewMethodology}
+                    onAddOrUpdate={handleAddOrUpdateMethodology}
+                    onDelete={handleDeleteMethodology}
                   />
                 )}
 

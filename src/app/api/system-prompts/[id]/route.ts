@@ -9,7 +9,7 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
-    const { name, content } = await req.json();
+    const { name, content, type } = await req.json();
     if (!name || !content) {
       return NextResponse.json(
         { error: 'Name and content are required' },
@@ -17,17 +17,17 @@ export async function PUT(
       );
     }
 
-    const updateData: {
-      name: string;
-      content: string;
-      updatedAt: Date;
-      type: 'system' | 'persona';
-    } = {
+    const validTypes = ['persona', 'methodology'] as const;
+
+    const updateData: Record<string, unknown> = {
       name,
       content,
       updatedAt: new Date(),
-      type: 'persona',
     };
+
+    if (validTypes.includes(type)) {
+      updateData.type = type;
+    }
 
     const updatedPrompt = await db
       .update(systemPrompts)

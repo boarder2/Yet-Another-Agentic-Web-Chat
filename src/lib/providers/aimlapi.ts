@@ -41,6 +41,7 @@ export const loadAimlApiChatModels = async () => {
           model: new ChatOpenAI({
             apiKey: apiKey,
             modelName: model.id,
+            maxRetries: 10,
             configuration: {
               baseURL: API_URL,
             },

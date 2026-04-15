@@ -71,6 +71,7 @@ export const loadOpenAIChatModels = async () => {
         model: new ChatOpenAI({
           apiKey: openaiApiKey,
           modelName: model,
+          maxRetries: 10,
           //temperature: model.includes('gpt-5') ? 1 : 0.7,
         }) as unknown as BaseChatModel,
       };

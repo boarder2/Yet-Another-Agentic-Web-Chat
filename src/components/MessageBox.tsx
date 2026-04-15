@@ -82,6 +82,8 @@ const MessageBox = ({
     setFocusMode: (mode: string) => void;
     systemPromptIds: string[];
     setSystemPromptIds: (ids: string[]) => void;
+    selectedMethodologyId?: string | null;
+    setSelectedMethodologyId?: (id: string | null) => void;
     sendLocation: boolean;
     setSendLocation: (value: boolean) => void;
     sendPersonalization: boolean;

@@ -11,7 +11,7 @@ export function buildChatPrompt(
 ): string {
   const personaBlock = personaInstructions
     ? personaInstructions
-    : formattingChat;
+    : formattingChat.content;
   const personalizationBlock = personalizationSection
     ? `\n${personalizationSection}`
     : '';

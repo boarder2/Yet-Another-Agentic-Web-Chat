@@ -25,10 +25,7 @@ export async function POST(request: Request) {
       selectedOptions.every((o: unknown) => typeof o === 'string')
         ? selectedOptions
         : undefined,
-    freeformText:
-      typeof freeformText === 'string'
-        ? freeformText.slice(0, 2000)
-        : undefined,
+    freeformText: typeof freeformText === 'string' ? freeformText : undefined,
     skipped: skipped === true,
   });
 

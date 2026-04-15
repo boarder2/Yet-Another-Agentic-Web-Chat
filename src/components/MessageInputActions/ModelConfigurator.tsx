@@ -9,6 +9,7 @@ import {
 import { Fragment } from 'react';
 import ModelSelector from './ModelSelector';
 import { cn } from '@/lib/utils';
+import { useLocalStorageBoolean } from '@/lib/hooks/useLocalStorage';
 
 type SelectedModel = { provider: string; model: string } | null;
 
@@ -39,14 +40,10 @@ export default function ModelConfigurator({
       return true;
     }
   });
-  const [imageCapable, setImageCapable] = useState<boolean>(() => {
-    try {
-      if (typeof window === 'undefined') return false;
-      return localStorage.getItem(STORAGE_KEYS.imageCapable) === 'true';
-    } catch {
-      return false;
-    }
-  });
+  const [imageCapable, setImageCapable] = useLocalStorageBoolean(
+    STORAGE_KEYS.imageCapable,
+    false,
+  );
 
   // Prevent post-mount effects from using pre-hydration default values
   const [hydrated, setHydrated] = useState(false);
@@ -115,8 +112,6 @@ export default function ModelConfigurator({
 
   const handleImageCapableChange = (value: boolean) => {
     setImageCapable(value);
-    localStorage.setItem(STORAGE_KEYS.imageCapable, value ? 'true' : 'false');
-    window.dispatchEvent(new Event('storage'));
   };
 
   const handleSelectChat = (m: { provider: string; model: string }) => {
@@ -211,6 +206,7 @@ export default function ModelConfigurator({
                     <label className="inline-flex items-center cursor-pointer">
                       <input
                         type="checkbox"
+                        aria-label="Link System model to Chat model"
                         className="sr-only peer"
                         checked={linkSystemToChat}
                         onChange={(e) => setLinkSystemToChat(e.target.checked)}
@@ -238,6 +234,7 @@ export default function ModelConfigurator({
                     <label className="inline-flex items-center cursor-pointer">
                       <input
                         type="checkbox"
+                        aria-label="Vision capable"
                         className="sr-only peer"
                         checked={imageCapable}
                         onChange={(e) =>

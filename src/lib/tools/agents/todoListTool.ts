@@ -69,12 +69,17 @@ export const todoListTool = tool(
       console.warn('TodoListTool: Failed to emit todo_update event', err);
     }
 
-    // Build confirmation message for the agent
+    // Build confirmation message for the agent with full list state
     const pending = todos.filter((t) => t.status === 'pending').length;
     const inProgress = todos.filter((t) => t.status === 'in_progress').length;
     const completed = todos.filter((t) => t.status === 'completed').length;
 
-    return `Todo list updated: ${todos.length} items (${completed} completed, ${inProgress} in progress, ${pending} pending).`;
+    const statusIcon = { pending: '[ ]', in_progress: '[~]', completed: '[x]' };
+    const itemLines = todos
+      .map((t, i) => `${i + 1}. ${statusIcon[t.status]} ${t.content}`)
+      .join('\n');
+
+    return `Todo list updated: ${todos.length} items (${completed} completed, ${inProgress} in progress, ${pending} pending).\n\nCurrent list:\n${itemLines}`;
   },
   {
     name: 'todo_list',

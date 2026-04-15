@@ -8,30 +8,50 @@ import {
   formattingAndCitationsWeb,
   formattingChat,
 } from '@/lib/prompts/templates';
+import { builtinMethodologyTemplates } from '@/lib/prompts/methodologyTemplates';
 import { Prompt } from '@/lib/types/prompt';
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const _type = searchParams.get('type');
-    // Include base prompts from /lib/prompts/templates
-    const prompts: Prompt[] = [
-      formattingAndCitationsLocal,
-      formattingAndCitationsScholarly,
-      formattingAndCitationsWeb,
-      formattingChat,
-    ];
+    const type = searchParams.get('type');
 
-    // System prompts are deprecated; only return persona prompts
-    prompts.push(
-      ...(
-        await db
-          .select()
-          .from(systemPrompts)
-          .where(eq(systemPrompts.type, 'persona'))
-          .orderBy(asc(systemPrompts.name))
-      ).map((prompt) => ({ ...prompt, readOnly: false })),
-    );
+    const prompts: Prompt[] = [];
+
+    // Include persona-related prompts when no filter or type=persona
+    if (!type || type === 'persona') {
+      prompts.push(
+        formattingAndCitationsLocal,
+        formattingAndCitationsScholarly,
+        formattingAndCitationsWeb,
+        formattingChat,
+      );
+
+      prompts.push(
+        ...(
+          await db
+            .select()
+            .from(systemPrompts)
+            .where(eq(systemPrompts.type, 'persona'))
+            .orderBy(asc(systemPrompts.name))
+        ).map((prompt) => ({ ...prompt, readOnly: false })),
+      );
+    }
+
+    // Include methodology-related prompts when no filter or type=methodology
+    if (!type || type === 'methodology') {
+      prompts.push(...builtinMethodologyTemplates);
+
+      prompts.push(
+        ...(
+          await db
+            .select()
+            .from(systemPrompts)
+            .where(eq(systemPrompts.type, 'methodology'))
+            .orderBy(asc(systemPrompts.name))
+        ).map((prompt) => ({ ...prompt, readOnly: false })),
+      );
+    }
 
     return NextResponse.json(prompts);
   } catch (error) {
@@ -45,19 +65,21 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const { name, content } = await req.json();
+    const { name, content, type } = await req.json();
     if (!name || !content) {
       return NextResponse.json(
         { error: 'Name and content are required' },
         { status: 400 },
       );
     }
+    const validTypes = ['persona', 'methodology'] as const;
+    const promptType = validTypes.includes(type) ? type : 'persona';
     const newPrompt = await db
       .insert(systemPrompts)
       .values({
         name,
         content,
-        type: 'persona',
+        type: promptType,
         createdAt: new Date(),
         updatedAt: new Date(),
       })

@@ -35,8 +35,10 @@ export default function PersonaPromptsSection({
   return (
     <SettingsSection title="Persona Prompts">
       <p className="text-xs text-fg/60">
-        Persona prompts define the tone, style, or structure of responses. When
-        active, they override default formatting and citation instructions.
+        Persona prompts control <strong>what </strong> the response looks like -
+        tone, style, formatting, and citation rules. When active, they override
+        the default formatting instructions. Persona prompts do not affect the
+        research process itself; use a Research Methodology for that.
       </p>
       <div className="flex flex-col space-y-4">
         <div className="flex items-center justify-between p-3 bg-surface rounded-lg border border-surface-2 gap-3">

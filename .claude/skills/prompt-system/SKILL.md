@@ -25,12 +25,12 @@ Final system prompt → SimplifiedAgent
 
 Located in `src/lib/prompts/simplifiedAgent/`:
 
-| File               | Mode            | Has Tools         | Key Behavior                                                                                                                     |
-| ------------------ | --------------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `webSearch.ts`     | `webSearch`     | Yes (all tools)   | Research assistant with search limits (max 4 web searches, max 4 deep_research calls), iterative strategy, citation instructions |
-| `chat.ts`          | `chat`          | No                | Conversational AI, no tool access, direct response                                                                               |
-| `localResearch.ts` | `localResearch` | Yes (file_search) | Document analysis with file citation style                                                                                       |
-| `firefoxAI.ts`     | Firefox AI      | No                | Tools disabled, conversational response                                                                                          |
+| File               | Mode            | Has Tools         | Key Behavior                                                  |
+| ------------------ | --------------- | ----------------- | ------------------------------------------------------------- |
+| `webSearch.ts`     | `webSearch`     | Yes (all tools)   | Research assistant, iterative strategy, citation instructions |
+| `chat.ts`          | `chat`          | No                | Conversational AI, no tool access, direct response            |
+| `localResearch.ts` | `localResearch` | Yes (file_search) | Document analysis with file citation style                    |
+| `firefoxAI.ts`     | Firefox AI      | No                | Tools disabled, conversational response                       |
 
 Each prompt imports and includes a formatting template for citation style.
 

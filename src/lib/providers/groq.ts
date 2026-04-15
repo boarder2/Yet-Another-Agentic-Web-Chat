@@ -107,6 +107,7 @@ export const loadGroqChatModels = async () => {
         model: new ChatGroq({
           apiKey: groqApiKey,
           model: model.id,
+          maxRetries: 10,
         }) as unknown as BaseChatModel,
       };
     });

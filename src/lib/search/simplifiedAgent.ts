@@ -30,7 +30,7 @@ import { EventEmitter } from 'events';
 import { Document } from '@langchain/core/documents';
 import { webSearchResponsePrompt } from '../prompts/templates';
 import { formatDateForLLM } from '../utils';
-import { removeThinkingBlocksFromMessages } from '../utils/contentUtils';
+import { prepHistoryMessages } from '../utils/contentUtils';
 import { getModelName } from '../utils/modelUtils';
 import { CachedEmbeddings } from '../utils/cachedEmbeddings';
 import { buildPersonalizationSection } from '../utils/personalization';
@@ -133,6 +133,7 @@ export class SimplifiedAgent {
   private embeddings: CachedEmbeddings;
   private emitter: EventEmitter;
   private personaInstructions: string;
+  private methodologyInstructions: string;
   private signal: AbortSignal;
   private currentToolNames: string[] = [];
   private messageId?: string;
@@ -159,12 +160,14 @@ export class SimplifiedAgent {
     memorySection: string = '',
     chatId?: string,
     interactiveSession: boolean = false,
+    methodologyInstructions: string = '',
   ) {
     this.chatLlm = chatLlm;
     this.systemLlm = systemLlm;
     this.embeddings = embeddings;
     this.emitter = emitter;
     this.personaInstructions = personaInstructions;
+    this.methodologyInstructions = methodologyInstructions;
     this.signal = signal;
     this.messageId = messageId;
     this.retrievalSignal = retrievalSignal;
@@ -365,6 +368,7 @@ export class SimplifiedAgent {
             messagesCount ?? 0,
             query,
             new Date(),
+            this.methodologyInstructions,
           );
           break;
         case 'localResearch':
@@ -372,6 +376,7 @@ export class SimplifiedAgent {
             personaInstructions,
             personalizationSection,
             new Date(),
+            this.methodologyInstructions,
           );
           break;
         default:
@@ -385,6 +390,7 @@ export class SimplifiedAgent {
             messagesCount ?? 0,
             query,
             new Date(),
+            this.methodologyInstructions,
           );
           break;
       }
@@ -438,10 +444,6 @@ export class SimplifiedAgent {
           ? buildMultimodalHumanMessage(query, messageImageIds)
           : new HumanMessage(query);
 
-      const messagesHistory = [
-        ...removeThinkingBlocksFromMessages(history),
-        humanMsg,
-      ];
       // Detect Firefox AI prompt pattern
       const trimmed = query.trim();
       const startsWithAscii = trimmed.startsWith("I'm on page");
@@ -450,6 +452,20 @@ export class SimplifiedAgent {
       const firefoxAIDetected =
         (startsWithAscii || startsWithCurly) && containsSelection;
       const toolCalls: Record<string, string> = {};
+
+      const messagesHistory = [
+        // new SystemMessage(
+        //   this.createEnhancedSystemPrompt(
+        //     focusMode,
+        //     fileIds,
+        //     history.length,
+        //     query,
+        //     firefoxAIDetected,
+        //   ),
+        // ),
+        ...prepHistoryMessages(history),
+        humanMsg,
+      ];
 
       // Run-ID attribution sets (see AGENTS.md — Run-ID Attribution section)
       // LangChain's AsyncLocalStorage propagates the parent's callback context into child

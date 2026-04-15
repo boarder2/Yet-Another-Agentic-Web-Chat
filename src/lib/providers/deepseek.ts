@@ -33,6 +33,7 @@ export const loadDeepseekChatModels = async () => {
         model: new ChatOpenAI({
           apiKey: deepseekApiKey,
           modelName: model.key,
+          maxRetries: 10,
           // temperature: 0.7,
           configuration: {
             baseURL: 'https://api.deepseek.com',

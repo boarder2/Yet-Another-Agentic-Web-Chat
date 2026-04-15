@@ -23,7 +23,7 @@ export const systemPrompts = sqliteTable('system_prompts', {
     .$defaultFn(() => crypto.randomUUID()),
   name: text('name').notNull(),
   content: text('content').notNull(),
-  type: text('type', { enum: ['system', 'persona'] })
+  type: text('type', { enum: ['system', 'persona', 'methodology'] })
     .notNull()
     .default('system'),
   createdAt: integer('created_at', { mode: 'timestamp' })

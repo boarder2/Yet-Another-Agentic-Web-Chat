@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { updateToolCallMarkup } from '@/lib/utils/toolCallMarkup';
 import { encodeHtmlAttribute } from '@/lib/utils/html';
 import { Document } from '@langchain/core/documents';
@@ -16,6 +16,10 @@ import { getSuggestions } from '@/lib/actions';
 import { Settings } from 'lucide-react';
 import Link from 'next/link';
 import NextError from 'next/error';
+import {
+  useLocalStorageBoolean,
+  useLocalStorageString,
+} from '@/lib/hooks/useLocalStorage';
 
 export type TokenUsage = {
   input_tokens: number;
@@ -421,13 +425,13 @@ const ChatWindow = ({ id }: { id?: string }) => {
 
   const [pendingImages, setPendingImages] = useState<ImageAttachment[]>([]);
 
-  const [imageCapable, setImageCapable] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    return localStorage.getItem('imageCapable') === 'true';
-  });
+  const [imageCapable] = useLocalStorageBoolean('imageCapable', false);
 
   const [focusMode, setFocusMode] = useState('webSearch');
   const [systemPromptIds, setSystemPromptIds] = useState<string[]>([]);
+  const [selectedMethodologyId, setSelectedMethodologyId] = useState<
+    string | null
+  >(null);
 
   const [isMessagesLoaded, setIsMessagesLoaded] = useState(false);
 
@@ -445,82 +449,22 @@ const ChatWindow = ({ id }: { id?: string }) => {
     }>
   >([]);
 
-  const [sendLocation, setSendLocationState] = useState(false);
-  const [sendPersonalization, setSendPersonalizationState] = useState(false);
-  const [personalizationLocation, setPersonalizationLocation] = useState('');
-  const [personalizationAbout, setPersonalizationAbout] = useState('');
-
-  const setSendLocation = useCallback(
-    (value: boolean) => {
-      setSendLocationState(value);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(SEND_LOCATION_KEY, value.toString());
-      }
-    },
-    [setSendLocationState],
+  const [sendLocation, setSendLocation] = useLocalStorageBoolean(
+    SEND_LOCATION_KEY,
+    false,
   );
-
-  const setSendPersonalization = useCallback(
-    (value: boolean) => {
-      setSendPersonalizationState(value);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(SEND_PROFILE_KEY, value.toString());
-      }
-    },
-    [setSendPersonalizationState],
+  const [sendPersonalization, setSendPersonalization] = useLocalStorageBoolean(
+    SEND_PROFILE_KEY,
+    false,
   );
-
-  const refreshPersonalization = useCallback(() => {
-    if (typeof window === 'undefined') return;
-    const savedLocation =
-      localStorage.getItem('personalization.location') || '';
-    const savedAbout = localStorage.getItem('personalization.about') || '';
-    setPersonalizationLocation(savedLocation);
-    setPersonalizationAbout(savedAbout);
-  }, []);
-
-  useEffect(() => {
-    refreshPersonalization();
-    if (typeof window === 'undefined') return;
-
-    const handleStorage = () => refreshPersonalization();
-    const handleFocus = () => refreshPersonalization();
-    const handleCustom: EventListener = () => refreshPersonalization();
-
-    window.addEventListener('storage', handleStorage);
-    window.addEventListener('focus', handleFocus);
-    window.addEventListener('personalization-update', handleCustom);
-
-    return () => {
-      window.removeEventListener('storage', handleStorage);
-      window.removeEventListener('focus', handleFocus);
-      window.removeEventListener('personalization-update', handleCustom);
-    };
-  }, [refreshPersonalization]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const handleImageCapableStorage = () => {
-      setImageCapable(localStorage.getItem('imageCapable') === 'true');
-    };
-    window.addEventListener('storage', handleImageCapableStorage);
-    return () => {
-      window.removeEventListener('storage', handleImageCapableStorage);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const storedSendLocation = localStorage.getItem(SEND_LOCATION_KEY);
-    const storedSendProfile = localStorage.getItem(SEND_PROFILE_KEY);
-
-    if (storedSendLocation !== null) {
-      setSendLocation(storedSendLocation === 'true');
-    }
-    if (storedSendProfile !== null) {
-      setSendPersonalization(storedSendProfile === 'true');
-    }
-  }, [setSendLocation, setSendPersonalization]);
+  const [personalizationLocation] = useLocalStorageString(
+    'personalization.location',
+    '',
+  );
+  const [personalizationAbout] = useLocalStorageString(
+    'personalization.about',
+    '',
+  );
 
   useEffect(() => {
     if (personalizationLocation.trim() === '' && sendLocation) {
@@ -1550,6 +1494,7 @@ const ChatWindow = ({ id }: { id?: string }) => {
         provider: embeddingModelProvider.provider,
       },
       selectedSystemPromptIds: systemPromptIds || [],
+      selectedMethodologyId: selectedMethodologyId || undefined,
     };
 
     if (messageImageIds?.length) {
@@ -1742,6 +1687,8 @@ const ChatWindow = ({ id }: { id?: string }) => {
               modelStats={liveModelStats}
               systemPromptIds={systemPromptIds}
               setSystemPromptIds={setSystemPromptIds}
+              selectedMethodologyId={selectedMethodologyId}
+              setSelectedMethodologyId={setSelectedMethodologyId}
               onThinkBoxToggle={handleThinkBoxToggle}
               gatheringSources={gatheringSources}
               sendLocation={sendLocation}
@@ -1750,7 +1697,6 @@ const ChatWindow = ({ id }: { id?: string }) => {
               setSendPersonalization={setSendPersonalization}
               personalizationLocation={personalizationLocation}
               personalizationAbout={personalizationAbout}
-              refreshPersonalization={refreshPersonalization}
               todoItems={todoItems}
               pendingExecutions={pendingExecutions}
               onExecutionAction={(executionId: string, approved: boolean) => {
@@ -1838,6 +1784,8 @@ const ChatWindow = ({ id }: { id?: string }) => {
             setFocusMode={setFocusMode}
             systemPromptIds={systemPromptIds}
             setSystemPromptIds={setSystemPromptIds}
+            selectedMethodologyId={selectedMethodologyId}
+            setSelectedMethodologyId={setSelectedMethodologyId}
             fileIds={fileIds}
             setFileIds={setFileIds}
             files={files}
@@ -1848,7 +1796,6 @@ const ChatWindow = ({ id }: { id?: string }) => {
             setSendPersonalization={setSendPersonalization}
             personalizationLocation={personalizationLocation}
             personalizationAbout={personalizationAbout}
-            refreshPersonalization={refreshPersonalization}
             pendingImages={pendingImages}
             setPendingImages={setPendingImages}
             imageCapable={imageCapable}

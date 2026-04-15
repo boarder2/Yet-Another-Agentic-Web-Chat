@@ -29,20 +29,32 @@ export const removeThinkingBlocks = (text: string): string => {
 };
 
 /**
- * Removes thinking blocks from the content of an array of BaseMessage objects
- * @param messages Array of BaseMessage objects
- * @returns New array with thinking blocks removed from each message's content
+ * Removes <ToolCall ...></ToolCall> UI markup tags (both paired and self-closing).
+ * These are emitted for the frontend renderer and persisted alongside response text,
+ * but are pure UI overhead — and potentially misleading — when replayed to the LLM.
  */
-export const removeThinkingBlocksFromMessages = (
-  messages: BaseMessage[],
-): BaseMessage[] => {
+export const removeToolCallMarkup = (text: string): string => {
+  return text
+    .replace(/<ToolCall\b[^>]*\/>/g, '')
+    .replace(/<ToolCall\b[^>]*>[\s\S]*?<\/ToolCall>/g, '');
+};
+
+/**
+ * Prepares an array of BaseMessage history entries for replay to the LLM by
+ * stripping UI-only artifacts: <think> blocks and <ToolCall> markup tags.
+ * @param messages Array of BaseMessage objects
+ * @returns New array with UI artifacts removed from each message's content
+ */
+export const prepHistoryMessages = (messages: BaseMessage[]): BaseMessage[] => {
   return messages.map((message) => {
     // Only process string content, leave complex content as-is
     if (typeof message.content !== 'string') {
       return message;
     }
 
-    const cleanedContent = removeThinkingBlocks(message.content);
+    const cleanedContent = removeToolCallMarkup(
+      removeThinkingBlocks(message.content),
+    );
 
     // Create new instance of the same message type with cleaned content
     if (message instanceof AIMessage) {

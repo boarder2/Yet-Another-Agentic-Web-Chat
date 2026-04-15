@@ -26,6 +26,8 @@ const Chat = ({
   modelStats,
   systemPromptIds,
   setSystemPromptIds,
+  selectedMethodologyId,
+  setSelectedMethodologyId,
   onThinkBoxToggle,
   gatheringSources = [],
   sendLocation,
@@ -93,6 +95,8 @@ const Chat = ({
   } | null;
   systemPromptIds: string[];
   setSystemPromptIds: (ids: string[]) => void;
+  selectedMethodologyId: string | null;
+  setSelectedMethodologyId: (id: string | null) => void;
   onThinkBoxToggle: (
     messageId: string,
     thinkBoxId: string,
@@ -310,6 +314,8 @@ const Chat = ({
                 setFocusMode,
                 systemPromptIds,
                 setSystemPromptIds,
+                selectedMethodologyId,
+                setSelectedMethodologyId,
                 sendLocation,
                 setSendLocation,
                 sendPersonalization,
@@ -421,6 +427,8 @@ const Chat = ({
           onCancel={handleCancel}
           systemPromptIds={systemPromptIds}
           setSystemPromptIds={setSystemPromptIds}
+          selectedMethodologyId={selectedMethodologyId}
+          setSelectedMethodologyId={setSelectedMethodologyId}
           sendLocation={sendLocation}
           setSendLocation={setSendLocation}
           sendPersonalization={sendPersonalization}

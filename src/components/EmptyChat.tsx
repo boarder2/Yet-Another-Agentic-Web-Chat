@@ -10,6 +10,8 @@ const EmptyChat = ({
   setFocusMode,
   systemPromptIds,
   setSystemPromptIds,
+  selectedMethodologyId,
+  setSelectedMethodologyId,
   fileIds,
   setFileIds,
   files,
@@ -31,6 +33,8 @@ const EmptyChat = ({
   setFocusMode: (mode: string) => void;
   systemPromptIds: string[];
   setSystemPromptIds: (ids: string[]) => void;
+  selectedMethodologyId: string | null;
+  setSelectedMethodologyId: (id: string | null) => void;
   fileIds: string[];
   setFileIds: (fileIds: string[]) => void;
   files: File[];
@@ -83,6 +87,8 @@ const EmptyChat = ({
             files={files}
             systemPromptIds={systemPromptIds}
             setSystemPromptIds={setSystemPromptIds}
+            selectedMethodologyId={selectedMethodologyId}
+            setSelectedMethodologyId={setSelectedMethodologyId}
             setFiles={setFiles}
             sendLocation={sendLocation}
             setSendLocation={setSendLocation}

@@ -8,11 +8,13 @@ import {
   SquarePen,
   Settings,
   LayoutDashboard,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useSelectedLayoutSegments } from 'next/navigation';
 import React, { type ReactNode } from 'react';
-import Layout from './Layout';
+import Layout, { setWideWidth, useWideWidth } from './Layout';
 
 const VerticalIconContainer = ({ children }: { children: ReactNode }) => {
   return (
@@ -34,6 +36,26 @@ const NewChatButtonMobile = () => (
     <p className="text-xs">New</p>
   </div>
 );
+
+const WidthToggle = () => {
+  const segments = useSelectedLayoutSegments();
+  const isChat = segments[0] === 'c';
+  const wide = useWideWidth();
+
+  if (!isChat) return null;
+
+  return (
+    <button
+      type="button"
+      onClick={() => setWideWidth(!wide)}
+      aria-label={wide ? 'Switch to narrow width' : 'Switch to full width'}
+      title={wide ? 'Narrow width' : 'Full width'}
+      className="flex items-center justify-center w-full py-2 rounded-lg text-fg/70 hover:text-fg hover:bg-surface-2 duration-150 transition"
+    >
+      {wide ? <Minimize2 /> : <Maximize2 />}
+    </button>
+  );
+};
 
 const Sidebar = ({ children }: { children: React.ReactNode }) => {
   const segments = useSelectedLayoutSegments();
@@ -68,29 +90,40 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
   return (
     <div>
       <div className="hidden lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-20 lg:flex-col">
-        <div className="flex grow flex-col items-center justify-between gap-y-5 overflow-y-auto bg-surface px-2 py-8">
-          <NewChatButton />
-          <VerticalIconContainer>
-            {navLinks.map((link, i) => (
+        <div className="relative flex grow flex-col items-center overflow-y-auto bg-surface px-2 py-8">
+          <div className="flex-1 flex items-start justify-center w-full">
+            <NewChatButton />
+          </div>
+          <div className="flex-1 flex items-center justify-center w-full">
+            <VerticalIconContainer>
+              {navLinks.map((link, i) => (
+                <Link
+                  key={i}
+                  href={link.href}
+                  className={cn(
+                    'relative flex flex-row items-center justify-center cursor-pointer hover:bg-surface-2 duration-150 transition w-full py-2 rounded-lg',
+                    link.active ? 'text-fg' : 'text-fg/70',
+                  )}
+                >
+                  <link.icon />
+                  {link.active && (
+                    <div className="absolute right-0 -mr-2 h-full w-1 rounded-l-lg bg-accent" />
+                  )}
+                </Link>
+              ))}
+            </VerticalIconContainer>
+          </div>
+          <div className="flex-1 flex items-end justify-center w-full">
+            <div className="flex flex-col items-center gap-y-3 w-full -mb-2">
+              <WidthToggle />
               <Link
-                key={i}
-                href={link.href}
-                className={cn(
-                  'relative flex flex-row items-center justify-center cursor-pointer hover:bg-surface-2 duration-150 transition w-full py-2 rounded-lg',
-                  link.active ? 'text-fg' : 'text-fg/70',
-                )}
+                href="/settings"
+                className="flex items-center justify-center w-full py-2 rounded-lg text-fg/70 hover:text-fg hover:bg-surface-2 duration-150 transition"
               >
-                <link.icon />
-                {link.active && (
-                  <div className="absolute right-0 -mr-2 h-full w-1 rounded-l-lg bg-accent" />
-                )}
+                <Settings />
               </Link>
-            ))}
-          </VerticalIconContainer>
-
-          <Link href="/settings">
-            <Settings className="cursor-pointer" />
-          </Link>
+            </div>
+          </div>
         </div>
       </div>
 

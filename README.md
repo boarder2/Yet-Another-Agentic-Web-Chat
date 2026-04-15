@@ -36,6 +36,7 @@ YAAWC (**Pronounced: "yawck"** — as in the sound you make when yet another AI 
 - [Personalization \& Personas](#personalization--personas)
   - [Personalization](#personalization)
   - [Persona Prompts](#persona-prompts)
+  - [Research Methodologies](#research-methodologies)
 - [Installation](#installation)
   - [Docker (Recommended)](#docker-recommended)
   - [Manual Setup](#manual-setup)
@@ -65,6 +66,7 @@ Want to know more about the architecture? See [docs/architecture/README.md](docs
 | **6 Embedding Providers**   | OpenAI, Ollama, Gemini, Xenova Transformers (local), AI/ML API, LM Studio                                                                                                             |
 | **Dashboard Widgets**       | AI-powered info widgets with auto-refresh, drag-and-drop layout, export/import                                                                                                        |
 | **Personas**                | Custom system prompts with built-in templates (scholarly, conversational, etc.)                                                                                                       |
+| **Research Methodologies**  | Per-message selectable research playbooks (Comparative Analysis, Literature Review, Fact-Check) with custom methodology authoring                                                     |
 | **Personalization**         | Per-message location and profile context injection                                                                                                                                    |
 | **Memory**                  | Long-term memory with semantic retrieval, automatic extraction, deduplication, and a full management UI                                                                               |
 | **Private Sessions**        | Temporary conversations with auto-expiry — no personalization, no memory, no trace left behind                                                                                        |
@@ -74,6 +76,7 @@ Want to know more about the architecture? See [docs/architecture/README.md](docs
 | **Image & Video Search**    | Dedicated search with gallery views and video embeds                                                                                                                                  |
 | **File Research**           | Upload documents and research them with cited excerpts                                                                                                                                |
 | **Respond Now**             | Interrupt ongoing retrieval and get an immediate answer from what's been gathered so far                                                                                              |
+| **Interactive Questions**   | The agent can pause mid-research to ask clarifying questions with single/multi-select options or freeform input                                                                       |
 | **Model Visibility**        | Admins can hide models from the UI to prevent accidental usage                                                                                                                        |
 | **Dual Model Architecture** | Separate Chat and System models, linkable or independent                                                                                                                              |
 
@@ -309,6 +312,13 @@ Create and manage custom system prompts that shape how the agent responds:
 - **One-click copy** of templates as starting points for custom personas
 - **Multiple personas** can be active simultaneously
 - Stored in the local SQLite database
+
+### Research Methodologies
+
+Selectable research playbooks that tell the agent _how_ to approach a query, separate from the persona that controls _how it writes_. Pick one per message from the flask icon in the message input.
+
+- **Built-in**: Comparative Analysis, Deep Dive / Literature Review, Fact-Check / Verification
+- **Custom methodologies** can be authored from the Settings page
 
 ## Installation
 

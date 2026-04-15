@@ -34,6 +34,7 @@ export type SectionKey =
   | 'memory'
   | 'private-sessions'
   | 'persona-prompts'
+  | 'research-methodologies'
   | 'default-search'
   | 'model-settings'
   | 'model-visibility'
@@ -50,6 +51,11 @@ export const SETTINGS_SECTIONS: {
   { key: 'memory', label: 'Memory', group: 'General' },
   { key: 'private-sessions', label: 'Private Sessions', group: 'General' },
   { key: 'persona-prompts', label: 'Persona Prompts', group: 'General' },
+  {
+    key: 'research-methodologies',
+    label: 'Research Methodologies',
+    group: 'General',
+  },
   { key: 'default-search', label: 'Default Search', group: 'AI Models' },
   { key: 'model-settings', label: 'Model Settings', group: 'AI Models' },
   { key: 'model-visibility', label: 'Model Visibility', group: 'AI Models' },

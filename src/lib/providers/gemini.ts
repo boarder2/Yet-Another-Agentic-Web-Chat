@@ -82,6 +82,7 @@ export const loadGeminiChatModels = async () => {
         model: new ChatGoogleGenerativeAI({
           apiKey: geminiApiKey,
           model: model.key,
+          maxRetries: 10,
           // temperature: 0.7,
         }) as unknown as BaseChatModel,
       };

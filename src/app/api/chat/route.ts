@@ -13,7 +13,10 @@ import {
   getAvailableEmbeddingModelProviders,
 } from '@/lib/providers';
 import { getFileDetails } from '@/lib/utils/files';
-import { getPersonaInstructionsOnly } from '@/lib/utils/prompts';
+import {
+  getPersonaInstructionsOnly,
+  getMethodologyInstructions,
+} from '@/lib/utils/prompts';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { AIMessage, BaseMessage, HumanMessage } from '@langchain/core/messages';
 import { ChatOllama } from '@langchain/ollama';
@@ -69,6 +72,7 @@ type Body = {
   systemModel?: SystemModel; // optional; defaults to chatModel
   embeddingModel: EmbeddingModel;
   selectedSystemPromptIds: string[]; // legacy name; treated as persona prompt IDs
+  selectedMethodologyId?: string;
   userLocation?: string;
   userProfile?: string;
   messageImageIds?: string[];
@@ -741,6 +745,9 @@ export const POST = async (req: Request) => {
     const personaInstructionsContent = await getPersonaInstructionsOnly(
       selectedSystemPromptIds || [],
     );
+    const methodologyInstructions = await getMethodologyInstructions(
+      body.selectedMethodologyId ?? null,
+    );
     const responseStream = new TransformStream();
     const writer = responseStream.writable.getWriter();
     const encoder = new TextEncoder();
@@ -834,6 +841,7 @@ export const POST = async (req: Request) => {
       memorySection,
       message.chatId,
       true, // interactiveSession enabled for streaming responses with source updates
+      methodologyInstructions,
     );
 
     // Pass the abort signal to the search handler

@@ -49,6 +49,7 @@ export const loadOpenrouterChatModels = async () => {
         model: new ChatOpenAI({
           apiKey: openrouterApikey,
           modelName: model.key,
+          maxRetries: 10,
           configuration: {
             baseURL: 'https://openrouter.ai/api/v1',
           },

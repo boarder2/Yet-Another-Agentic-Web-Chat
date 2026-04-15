@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { useLocalStorageString } from '@/lib/hooks/useLocalStorage';
 
 export type AppTheme = 'light' | 'dark' | 'custom';
 
@@ -9,6 +10,9 @@ type Props = {
 
 export default function ThemeController({ children }: Props) {
   const [mounted, setMounted] = useState(false);
+  const [savedTheme] = useLocalStorageString('appTheme', 'dark');
+  const [userBg] = useLocalStorageString('userBg', '');
+  const [userAccent] = useLocalStorageString('userAccent', '');
 
   const applyTheme = (mode: AppTheme, bg?: string, accent?: string) => {
     const root = document.documentElement;
@@ -71,27 +75,11 @@ export default function ThemeController({ children }: Props) {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
-    const savedTheme = (localStorage.getItem('appTheme') as AppTheme) || 'dark';
-    const userBg = localStorage.getItem('userBg') || '';
-    const userAccent = localStorage.getItem('userAccent') || '';
-    applyTheme(savedTheme, userBg, userAccent);
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (window as any).__setAppTheme = (
-      mode: AppTheme,
-      bg?: string,
-      accent?: string,
-    ) => {
-      localStorage.setItem('appTheme', mode);
-      if (mode === 'custom') {
-        if (bg) localStorage.setItem('userBg', bg);
-        if (accent) localStorage.setItem('userAccent', accent);
-      }
-      applyTheme(mode, bg, accent);
-    };
-  }, []);
+    applyTheme(savedTheme as AppTheme, userBg, userAccent);
+  }, [savedTheme, userBg, userAccent]);
 
   if (!mounted) return null;
   return <>{children}</>;

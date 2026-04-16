@@ -21,7 +21,7 @@ export async function GET(
     .select()
     .from(chats)
     .where(eq(chats.scheduledTaskId, id))
-    .orderBy(desc(chats.id))
+    .orderBy(desc(chats.createdAt))
     .limit(limit)
     .offset(offset);
 

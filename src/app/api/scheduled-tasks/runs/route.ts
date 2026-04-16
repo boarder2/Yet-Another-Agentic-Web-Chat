@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
     .from(chats)
     .innerJoin(scheduledTasks, eq(chats.scheduledTaskId, scheduledTasks.id))
     .where(isNotNull(chats.scheduledTaskId))
-    .orderBy(desc(chats.id))
+    .orderBy(desc(chats.createdAt))
     .limit(limit)
     .offset(offset);
 

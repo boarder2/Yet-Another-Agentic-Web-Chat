@@ -10,6 +10,59 @@ import { Readability } from '@mozilla/readability';
 import { JSDOM } from 'jsdom';
 import { chromium, Page, Browser, BrowserContext } from 'playwright';
 import { WebPDFLoader } from '@langchain/community/document_loaders/web/pdf';
+import TurndownService from 'turndown';
+
+function htmlToMarkdown(html: string): string {
+  const turndown = new TurndownService({
+    headingStyle: 'atx',
+    bulletListMarker: '-',
+    codeBlockStyle: 'fenced',
+  });
+
+  // Remove inline SVGs (noisy markup, not useful content)
+  turndown.addRule('removeSvg', {
+    filter: (node) => node.nodeName.toLowerCase() === 'svg',
+    replacement: () => '',
+  });
+
+  // Convert video/audio/iframe to links so the URLs are preserved as context
+  turndown.addRule('mediaToLink', {
+    filter: ['video', 'audio', 'iframe'],
+    replacement: (_content, node) => {
+      const el = node as HTMLElement;
+      const src =
+        el.getAttribute('src') ||
+        el.querySelector('source')?.getAttribute('src') ||
+        '';
+      if (!src || src.startsWith('data:')) return '';
+      const tag = el.nodeName.toLowerCase();
+      const title =
+        el.getAttribute('title') || el.getAttribute('alt') || `${tag} content`;
+      return `[${title}](${src})`;
+    },
+  });
+
+  // Flatten block-level elements (headings, divs, paragraphs) inside links
+  // so we get clean `[Title](url)` instead of `[\n\n### Title\n\n](url)`
+  turndown.addRule('flattenLinksWithBlocks', {
+    filter: (node) => {
+      if (node.nodeName.toLowerCase() !== 'a') return false;
+      const href = node.getAttribute('href');
+      if (!href) return false;
+      // Only apply when the link contains block-level children
+      return !!node.querySelector('h1, h2, h3, h4, h5, h6, p, div, section');
+    },
+    replacement: (_content, node) => {
+      const el = node as HTMLElement;
+      const href = el.getAttribute('href') || '';
+      const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!text) return '';
+      return `[${text}](${href})`;
+    },
+  });
+
+  return turndown.turndown(html);
+}
 
 export const retrievePdfDoc = async (url: string): Promise<Document | null> => {
   try {
@@ -26,7 +79,6 @@ export const retrievePdfDoc = async (url: string): Promise<Document | null> => {
         metadata: {
           title: cached.title || '',
           url: cached.url,
-          html: cached.html || undefined,
           ...cached.metadata,
         },
       });
@@ -70,7 +122,6 @@ export const retrieveYoutubeTranscript = async (
         metadata: {
           title: cached.title || '',
           url: cached.url,
-          html: cached.html || undefined,
           ...cached.metadata,
         },
       });
@@ -113,14 +164,13 @@ export const retrieveTypedContentFunc = async (
 };
 
 /**
- * Fetches web content from a given URL using LangChain's PlaywrightWebBaseLoader.
- * Parses it using Readability for better content extraction.
- * Returns a Document object containing the parsed text and metadata.
+ * Fetches web content from a given URL using Playwright.
+ * Sanitizes the DOM, parses with Readability, then converts to markdown via Turndown.
+ * Returns a Document with clean markdown (including inline links) as pageContent.
  *
  * @param url - The URL to fetch content from.
- * @param getHtml - Whether to include the HTML content in the metadata.
- * @param signal - Optional AbortSignal to cancel the operation.
  * @param truncateToLength - Maximum length of the returned text content.
+ * @param signal - Optional AbortSignal to cancel the operation.
  * @param performAggressiveValidation - If true, performs additional validation on the fetched content. Like ensuring the parsed article has a title and sufficient length.
  * @param retrieveTypedContent - If true, attempts to retrieve typed content (e.g., youtube transcripts) when applicable.
  * @returns A Promise that resolves to a Document object or null if parsing fails.
@@ -128,7 +178,6 @@ export const retrieveTypedContentFunc = async (
 export const getWebContent = async (
   url: string,
   truncateToLength: number = 30000,
-  getHtml: boolean = false,
   signal?: AbortSignal,
   performAggressiveValidation: boolean = false,
   retrieveTypedContent: boolean = false,
@@ -153,7 +202,6 @@ export const getWebContent = async (
         metadata: {
           title: cached.title || '',
           url: cached.url,
-          html: getHtml ? cached.html : undefined,
         },
       });
       return docFromCache;
@@ -200,6 +248,66 @@ export const getWebContent = async (
     // Best-effort: Playwright loader doesn't expose signal; emulate via early return hooks
     if (signal?.aborted) return null;
 
+    // Sanitize the live DOM before extracting HTML — remove non-content
+    // elements and noisy attributes to produce cleaner Readability output
+    await page.evaluate(() => {
+      const removeSelectors = [
+        'script',
+        'style',
+        'noscript',
+        'svg',
+        'link[rel="stylesheet"]',
+        'nav',
+        'header',
+        'footer',
+        'iframe',
+        'video',
+        'audio',
+        'picture',
+        '[role="navigation"]',
+        '[role="banner"]',
+        '[role="contentinfo"]',
+        '[aria-hidden="true"]',
+      ];
+      for (const sel of removeSelectors) {
+        document.querySelectorAll(sel).forEach((el) => el.remove());
+      }
+
+      const noisyAttrs =
+        /^(js|data-|aria-|class|style|id|onclick|onload|srcset|loading|tabindex|role|ve-|jslog|jsname|jsdata|jsaction|jscontroller|jsrenderer|jsmodel|jsshadow)/i;
+      document.querySelectorAll('*').forEach((el) => {
+        for (const attr of [...el.attributes]) {
+          if (noisyAttrs.test(attr.name)) {
+            el.removeAttribute(attr.name);
+          }
+        }
+      });
+
+      // Resolve relative URLs to absolute so links and images are usable outside the page
+      document.querySelectorAll('a[href]').forEach((a) => {
+        (a as HTMLAnchorElement).setAttribute(
+          'href',
+          (a as HTMLAnchorElement).href,
+        );
+      });
+      document.querySelectorAll('img[src]').forEach((img) => {
+        (img as HTMLImageElement).setAttribute(
+          'src',
+          (img as HTMLImageElement).src,
+        );
+      });
+      document
+        .querySelectorAll('video[src], audio[src], source[src]')
+        .forEach((el) => {
+          const src = el.getAttribute('src');
+          if (src) {
+            try {
+              el.setAttribute('src', new URL(src, document.baseURI).href);
+            } catch {}
+          }
+        });
+    });
+
     const html = await page.content();
 
     const dom = new JSDOM(html, { url });
@@ -219,35 +327,41 @@ export const getWebContent = async (
       );
     }
 
-    // Normalize the text content
-    const normalizedText =
-      article?.textContent
-        ?.split('\n')
-        .map((line: string) => line.trim())
-        .filter((line: string) => line.length > 0)
-        .join('\n') || '';
+    // Convert Readability's article HTML to clean markdown with inline links.
+    // When Readability returns too little content (common on homepages/SPAs),
+    // fall back to converting the sanitized <body> directly to preserve links.
+    const articleTextLength = article?.textContent?.length || 0;
+    let markdown: string;
 
-    // Write to cache (store html regardless of getHtml flag)
+    if (articleTextLength < 2000) {
+      console.log(
+        `Readability returned insufficient content (${articleTextLength} chars), falling back to direct body conversion for URL: ${url}`,
+      );
+      const bodyHtml = html.match(/<body[^>]*>([\s\S]*)<\/body>/i)?.[1] || html;
+      markdown = htmlToMarkdown(bodyHtml);
+    } else {
+      markdown = htmlToMarkdown(article?.content || '');
+    }
+
+    // Write to cache
     await writeCachedRecord(url, {
-      pageContent: normalizedText,
+      pageContent: markdown,
       title: article?.title || (await page.title()) || '',
-      html: article?.content ?? undefined,
     });
 
     const returnDoc = new Document({
       pageContent:
-        normalizedText.length > truncateToLength
-          ? normalizedText.slice(0, truncateToLength)
-          : normalizedText,
+        markdown.length > truncateToLength
+          ? markdown.slice(0, truncateToLength)
+          : markdown,
       metadata: {
         title: article?.title || (await page.title()) || '',
         url: url,
-        html: getHtml ? article?.content : undefined,
       },
     });
 
     console.log(
-      `Got content with LangChain Playwright, URL: ${url}, Text Length: ${returnDoc.pageContent.length}, Truncated: ${normalizedText.length > truncateToLength}`,
+      `Got content with Playwright, URL: ${url}, Text Length: ${returnDoc.pageContent.length}, Truncated: ${markdown.length > truncateToLength}`,
     );
 
     return returnDoc;
@@ -266,6 +380,29 @@ export const getWebContent = async (
 
         // Apply Readability to extract meaningful content from Cheerio HTML
         const dom = new JSDOM(doc.pageContent, { url });
+
+        // Resolve relative URLs to absolute in the Cheerio-loaded DOM
+        dom.window.document
+          .querySelectorAll('a[href]')
+          .forEach((a: Element) => {
+            const href = a.getAttribute('href');
+            if (href) {
+              try {
+                a.setAttribute('href', new URL(href, url).href);
+              } catch {}
+            }
+          });
+        dom.window.document
+          .querySelectorAll('img[src], video[src], audio[src], source[src]')
+          .forEach((el: Element) => {
+            const src = el.getAttribute('src');
+            if (src) {
+              try {
+                el.setAttribute('src', new URL(src, url).href);
+              } catch {}
+            }
+          });
+
         const reader = new Readability(dom.window.document);
         const article = reader.parse();
         if (
@@ -282,35 +419,43 @@ export const getWebContent = async (
           return null;
         }
 
-        // Normalize the text content
-        const normalizedText =
-          article?.textContent
-            ?.split('\n')
-            .map((line: string) => line.trim())
-            .filter((line: string) => line.length > 0)
-            .join('\n') || '';
+        // Convert Readability's article HTML to clean markdown with inline links.
+        // When Readability returns too little content (common on homepages/SPAs),
+        // fall back to converting the raw HTML body directly to preserve links.
+        const cheerioArticleTextLength = article?.textContent?.length || 0;
+        let markdown: string;
+
+        if (cheerioArticleTextLength < 2000) {
+          console.log(
+            `Readability returned insufficient content (${cheerioArticleTextLength} chars) in Cheerio path, falling back to direct body conversion for URL: ${url}`,
+          );
+          const bodyHtml =
+            doc.pageContent.match(/<body[^>]*>([\s\S]*)<\/body>/i)?.[1] ||
+            doc.pageContent;
+          markdown = htmlToMarkdown(bodyHtml);
+        } else {
+          markdown = htmlToMarkdown(article?.content || '');
+        }
 
         // Write to cache
         await writeCachedRecord(url, {
-          pageContent: normalizedText,
+          pageContent: markdown,
           title: article?.title || doc.metadata.title || '',
-          html: article?.content ?? undefined,
         });
 
         const returnDoc = new Document({
           pageContent:
-            normalizedText.length > truncateToLength
-              ? normalizedText.slice(0, truncateToLength)
-              : normalizedText,
+            markdown.length > truncateToLength
+              ? markdown.slice(0, truncateToLength)
+              : markdown,
           metadata: {
             title: article?.title || doc.metadata.title || '',
             url: url,
-            html: getHtml ? article?.content : undefined,
           },
         });
 
         console.log(
-          `Got content with Cheerio fallback + Readability, URL: ${url}, Text Length: ${returnDoc.pageContent.length} Truncated: ${normalizedText.length > truncateToLength}`,
+          `Got content with Cheerio fallback + Readability, URL: ${url}, Text Length: ${returnDoc.pageContent.length} Truncated: ${markdown.length > truncateToLength}`,
         );
 
         return returnDoc;

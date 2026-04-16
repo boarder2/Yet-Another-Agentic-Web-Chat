@@ -19,6 +19,13 @@ export const formattingAndCitationsWeb: Prompt = {
 - Statements based on conversation history must be marked [Hist] — reserve inline [number] citations exclusively for context-sourced facts
 - If a statement is based on the user's input or context, no citation is required
 
+### Deep Links
+- Source documents often contain markdown links to specific articles or pages (e.g., \`[article title](https://example.com/full-article)\`)
+- When referencing a specific story, fact, or topic from a source, include the original deep link to the specific article inline — do NOT replace it with only a [number] citation
+- Combine both: use the deep link for the specific article AND the [number] citation for the source. For example: "A walrus was found in [Alaska](https://example.com/alaska-walrus)[1]."
+- Deep links give readers direct access to full articles; [number] citations attribute the source — both serve different purposes
+- If a source document contains no deep links, use only [number] citations as usual
+
 ### Formatting
 - Structure:
   - Use a well-organized format with proper headings (e.g., "## Example heading 1" or "## Example heading 2")

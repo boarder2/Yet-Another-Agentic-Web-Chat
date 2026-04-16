@@ -16,11 +16,6 @@ const URLSummarizationToolSchema = z.object({
   query: z
     .string()
     .describe('The user query to guide content extraction and summarization'),
-  retrieveHtml: z
-    .boolean()
-    .optional()
-    .default(false)
-    .describe('Whether to retrieve the full HTML content of the pages'),
   intent: z
     .string()
     .optional()
@@ -43,18 +38,13 @@ export const urlSummarizationTool = tool(
     config?: RunnableConfig,
   ) => {
     try {
-      const {
-        urls,
-        query,
-        retrieveHtml = false,
-        intent = 'extract relevant content',
-      } = input;
+      const { urls, query, intent = 'extract relevant content' } = input;
 
       const currentState = getCurrentTaskInput() as SimplifiedAgentStateType;
       let currentDocCount = currentState.relevantDocuments?.length ?? 0;
 
       console.log(
-        `URLSummarizationTool: Processing ${urls.length} \n  URLs for query: "${query}"\n  retrieveHtml: ${retrieveHtml}\n  intent: ${intent}`,
+        `URLSummarizationTool: Processing ${urls.length} \n  URLs for query: "${query}"\n  intent: ${intent}`,
       );
 
       if (!urls || urls.length === 0) {
@@ -103,13 +93,9 @@ export const urlSummarizationTool = tool(
         try {
           console.log(`URLSummarizationTool: Processing ${url}`);
 
-          // Fetch full content using the enhanced web content retrieval
-          const webContent = await getWebContent(
-            url,
-            50000,
-            retrieveHtml,
-            retrievalSignal,
-          );
+          // Fetch full content using the enhanced web content retrieval.
+          // Content is returned as clean markdown with inline links.
+          const webContent = await getWebContent(url, 50000, retrievalSignal);
 
           if (!webContent || !webContent.pageContent) {
             console.warn(
@@ -148,6 +134,9 @@ export const urlSummarizationTool = tool(
 - Present the information in a clear, well-structured format with key facts and details
 - Include all relevant details that could help answer the user's question
 
+# IMPORTANT — Link Preservation
+The input content contains markdown links in the format [text](url). You MUST preserve these links in your summary output. When you mention a topic, story, or fact from the page, include the original markdown link inline. For example, if the input contains "[Example Link](https://example.com/some/deep/link)", your summary must include that same link when discussing that topic. Do NOT strip links. Do NOT convert links to plain text. Every major item in your summary should have its source link from the input content.
+
 # User's Query: ${query}
 # Processing Intent: ${intent}
 
@@ -155,9 +144,9 @@ export const urlSummarizationTool = tool(
 # Content URL: ${url}
 
 # Web Page Content to Summarize:
-${retrieveHtml && webContent.metadata?.html ? webContent.metadata.html : webContent.pageContent}
+${webContent.pageContent}
 
-Provide a comprehensive summary of the above web page content, focusing on information relevant to the user's query:`;
+Provide a comprehensive summary of the above web page content, focusing on information relevant to the user's query. Remember: preserve all markdown links from the input.`;
 
             const result = await llm.invoke(summarizationPrompt, {
               signal: retrievalSignal || config?.signal,

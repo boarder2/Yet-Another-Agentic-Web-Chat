@@ -1,6 +1,6 @@
 ---
 name: subagent-architecture
-description: Deep research subagent system including SubagentExecutor, tool restrictions, event flow, definitions, and UI integration. Use when working on deep_research tool, subagents, SubagentExecutor, subagent UI components, or the SubagentExecution component.
+description: Use when working on the deep_research tool, subagents, SubagentExecutor, SubagentExecution UI, subagent tool restrictions, or subagent event flow.
 ---
 
 # Subagent Architecture

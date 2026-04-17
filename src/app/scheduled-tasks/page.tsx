@@ -131,7 +131,7 @@ const Page = () => {
             >
               <div className="flex items-center gap-2">
                 <span className="lg:text-xl font-medium truncate">
-                  {run.title}
+                  {run.taskName}
                 </span>
                 {run.scheduledRunViewed === 0 && (
                   <span className="w-2.5 h-2.5 rounded-full bg-accent shrink-0" />
@@ -144,13 +144,16 @@ const Page = () => {
                 <p className="text-sm text-fg/60 line-clamp-2">{run.preview}</p>
               )}
               <div className="flex flex-row items-center gap-3 text-xs opacity-70">
-                <span className="flex items-center gap-1">
+                <span className="flex items-center gap-1.5">
                   {focusModeIcons[run.focusMode] || <Globe size={14} />}
-                  {run.taskName}
-                </span>
-                <span className="flex items-center gap-1">
                   <ClockIcon size={13} />
-                  {formatTimeDifference(new Date(), run.createdAt)} ago
+                  {new Date(run.createdAt).toLocaleString(undefined, {
+                    dateStyle: 'short',
+                    timeStyle: 'short',
+                  })}
+                  <span className="opacity-70">
+                    ({formatTimeDifference(new Date(), run.createdAt)} ago)
+                  </span>
                 </span>
                 {run.sourcesCount > 0 && (
                   <span>{run.sourcesCount} sources</span>

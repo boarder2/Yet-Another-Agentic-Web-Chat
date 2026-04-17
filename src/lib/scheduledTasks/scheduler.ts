@@ -3,9 +3,11 @@ import db from '@/lib/db';
 import { scheduledTasks } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { runScheduledTask } from './runner';
+import { cleanupExpiredPrivateSessions } from '@/lib/privateSessionCleanup';
 
 type Registry = {
   jobs: Map<string, CronJob>;
+  privateCleanupJob?: CronJob;
 };
 
 declare global {
@@ -26,6 +28,8 @@ export async function initScheduler() {
   // On HMR re-run, stop & clear any previously registered jobs.
   for (const job of reg.jobs.values()) job.stop();
   reg.jobs.clear();
+  reg.privateCleanupJob?.stop();
+  reg.privateCleanupJob = undefined;
 
   const rows = await db
     .select()
@@ -33,6 +37,24 @@ export async function initScheduler() {
     .where(eq(scheduledTasks.enabled, 1));
   for (const task of rows) registerTask(task);
   console.log(`[scheduledTasks] registered ${rows.length} tasks`);
+
+  reg.privateCleanupJob = CronJob.from({
+    cronTime: '*/5 * * * *',
+    onTick: async () => {
+      try {
+        const removed = await cleanupExpiredPrivateSessions();
+        if (removed > 0) {
+          console.log(
+            `[privateCleanup] removed ${removed} expired private chat(s)`,
+          );
+        }
+      } catch (err) {
+        console.error('[privateCleanup] failed:', err);
+      }
+    },
+    start: true,
+    waitForCompletion: true,
+  });
 }
 
 export function registerTask(task: typeof scheduledTasks.$inferSelect) {

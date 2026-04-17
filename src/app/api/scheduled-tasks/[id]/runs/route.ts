@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import db from '@/lib/db';
-import { chats } from '@/lib/db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { chats, messages as messagesSchema } from '@/lib/db/schema';
+import { eq, desc, sql } from 'drizzle-orm';
 
 export const runtime = 'nodejs';
 
@@ -21,7 +21,11 @@ export async function GET(
     .select()
     .from(chats)
     .where(eq(chats.scheduledTaskId, id))
-    .orderBy(desc(chats.createdAt))
+    .orderBy(
+      desc(
+        sql`(SELECT MIN(${messagesSchema.id}) FROM ${messagesSchema} WHERE ${messagesSchema.chatId} = ${chats.id})`,
+      ),
+    )
     .limit(limit)
     .offset(offset);
 

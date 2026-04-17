@@ -176,9 +176,8 @@ const ModelSelector = ({
   };
 
   const getDisplayText = () => {
-    // While models are loading or selection hasn't been determined yet, show Loading to avoid flicker
-    if (loading || !selectedModel) return 'Loading...';
-    if (!selectedModelDisplay) return 'Select model';
+    if (loading) return 'Loading...';
+    if (!selectedModel || !selectedModelDisplay) return 'Select Model';
 
     return `${selectedModelDisplay} (${selectedProviderDisplay})`;
   };

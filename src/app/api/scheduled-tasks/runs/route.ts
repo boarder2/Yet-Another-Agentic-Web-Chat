@@ -5,7 +5,7 @@ import {
   scheduledTasks,
   messages as messagesSchema,
 } from '@/lib/db/schema';
-import { and, desc, eq, isNotNull, inArray } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, inArray, sql } from 'drizzle-orm';
 
 export const runtime = 'nodejs';
 
@@ -32,7 +32,11 @@ export async function GET(req: NextRequest) {
     .from(chats)
     .innerJoin(scheduledTasks, eq(chats.scheduledTaskId, scheduledTasks.id))
     .where(isNotNull(chats.scheduledTaskId))
-    .orderBy(desc(chats.createdAt))
+    .orderBy(
+      desc(
+        sql`(SELECT MIN(${messagesSchema.id}) FROM ${messagesSchema} WHERE ${messagesSchema.chatId} = ${chats.id})`,
+      ),
+    )
     .limit(limit)
     .offset(offset);
 

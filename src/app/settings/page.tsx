@@ -893,23 +893,7 @@ export default function SettingsPage() {
                 )}
 
                 {activeSection === 'private-sessions' && (
-                  <PrivateSessionsSection
-                    privateSessionDurationMinutes={
-                      privateSessionDurationMinutes
-                    }
-                    isCustomPrivateDuration={isCustomPrivateDuration}
-                    customPrivateDurationInput={customPrivateDurationInput}
-                    savingStates={savingStates}
-                    setPrivateSessionDurationMinutes={
-                      setPrivateSessionDurationMinutes
-                    }
-                    setIsCustomPrivateDuration={setIsCustomPrivateDuration}
-                    setCustomPrivateDurationInput={
-                      setCustomPrivateDurationInput
-                    }
-                    setConfig={setConfig}
-                    saveConfig={saveConfig}
-                  />
+                  <PrivateSessionsSection />
                 )}
 
                 {activeSection === 'retention' && (
@@ -918,6 +902,18 @@ export default function SettingsPage() {
                     savingStates={savingStates}
                     setConfig={setConfig}
                     saveConfig={saveConfig}
+                    privateSessionDurationMinutes={
+                      privateSessionDurationMinutes
+                    }
+                    isCustomPrivateDuration={isCustomPrivateDuration}
+                    customPrivateDurationInput={customPrivateDurationInput}
+                    setPrivateSessionDurationMinutes={
+                      setPrivateSessionDurationMinutes
+                    }
+                    setIsCustomPrivateDuration={setIsCustomPrivateDuration}
+                    setCustomPrivateDurationInput={
+                      setCustomPrivateDurationInput
+                    }
                   />
                 )}
 

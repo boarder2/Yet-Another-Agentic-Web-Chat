@@ -36,6 +36,13 @@
       "when": 1774500000000,
       "tag": "0004_scheduled_tasks",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1776541781151,
+      "tag": "0005_retention_and_pinned",
+      "breakpoints": true
     }
   ]
 }

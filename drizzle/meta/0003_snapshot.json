@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "33f1a579-b342-4474-bce0-54aa2812d2c6",
-  "prevId": "92ab35e3-541f-48ba-9a8d-ecb12c5c8a06",
+  "id": "87c7415b-ff82-4acd-bfdc-4f303183dc2f",
+  "prevId": "33f1a579-b342-4474-bce0-54aa2812d2c6",
   "tables": {
     "chats": {
       "name": "chats",
@@ -42,6 +42,14 @@
           "notNull": false,
           "autoincrement": false,
           "default": "'[]'"
+        },
+        "is_private": {
+          "name": "is_private",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
         }
       },
       "indexes": {},

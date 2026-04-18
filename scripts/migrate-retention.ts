@@ -13,8 +13,8 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import { applyRetentionMigration } from '../src/lib/db/retentionMigration';
 
-const dbPath =
-  process.env.DB_PATH || path.join(process.cwd(), 'data', 'db.sqlite');
+const DATA_DIR = process.env.DATA_DIR || process.cwd();
+const dbPath = process.env.DB_PATH || path.join(DATA_DIR, 'data', 'db.sqlite');
 console.log(`[migrate-retention] opening ${dbPath}`);
 const db = new Database(dbPath);
 

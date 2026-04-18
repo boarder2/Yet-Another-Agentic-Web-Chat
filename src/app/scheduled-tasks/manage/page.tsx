@@ -76,7 +76,7 @@ const Page = () => {
       if (res.ok) {
         const data = await res.json();
         if (data.chatId) {
-          router.push(`/scheduled-tasks/runs/${data.chatId}`);
+          router.push(`/c/${data.chatId}`);
         }
       }
     } catch {

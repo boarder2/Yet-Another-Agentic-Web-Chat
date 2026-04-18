@@ -127,7 +127,7 @@ const Page = () => {
                 i !== runs.length - 1 ? 'border-b border-surface-2' : '',
               )}
               key={run.id}
-              onClick={() => router.push(`/scheduled-tasks/runs/${run.id}`)}
+              onClick={() => router.push(`/c/${run.id}`)}
             >
               <div className="flex items-center gap-2">
                 <span className="lg:text-xl font-medium truncate">

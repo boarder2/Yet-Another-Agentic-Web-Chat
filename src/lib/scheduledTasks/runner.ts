@@ -121,6 +121,7 @@ export async function runScheduledTask(
     let searchQuery = '';
     let searchUrl = '';
     let modelStats: Record<string, unknown> | undefined;
+    const startTime = Date.now();
 
     await new Promise<void>((resolve, reject) => {
       emitter.on('data', (data: string) => {
@@ -161,7 +162,10 @@ export async function runScheduledTask(
 
       emitter.on('stats', (data: string) => {
         try {
-          modelStats = JSON.parse(data);
+          const parsed = JSON.parse(data);
+          if (parsed.type === 'modelStats') {
+            modelStats = parsed.data;
+          }
         } catch {
           // Ignore
         }
@@ -182,6 +186,10 @@ export async function runScheduledTask(
       );
     });
 
+    if (modelStats) {
+      modelStats = { ...modelStats, responseTime: Date.now() - startTime };
+    }
+
     // 11. Insert assistant message
     await db
       .insert(messagesSchema)
@@ -195,7 +203,7 @@ export async function runScheduledTask(
           ...(sources.length > 0 && { sources }),
           ...(searchQuery && { searchQuery }),
           ...(searchUrl && { searchUrl }),
-          modelStats,
+          ...(modelStats && { modelStats }),
         }),
       })
       .execute();

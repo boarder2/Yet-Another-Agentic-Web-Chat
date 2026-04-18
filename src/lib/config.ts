@@ -15,6 +15,12 @@ interface Config {
     BASE_URL?: string;
     HIDDEN_MODELS: string[];
     PRIVATE_SESSION_DURATION_MINUTES?: number;
+    RETENTION?: {
+      CHATS_MODE?: 'days' | 'count' | 'disabled';
+      CHATS_VALUE?: number;
+      SCHEDULED_RUNS_MODE?: 'days' | 'count' | 'disabled';
+      SCHEDULED_RUNS_VALUE?: number;
+    };
   };
   MODELS: {
     OPENAI: {
@@ -134,6 +140,27 @@ export const getHiddenModels = () => loadConfig().GENERAL.HIDDEN_MODELS;
 
 export const getPrivateSessionDurationMinutes = () =>
   loadConfig().GENERAL.PRIVATE_SESSION_DURATION_MINUTES ?? 1440;
+
+export type RetentionPolicy = {
+  mode: 'days' | 'count' | 'disabled';
+  value: number;
+};
+
+export const getChatRetentionPolicy = (): RetentionPolicy => {
+  const r = loadConfig().GENERAL.RETENTION;
+  return {
+    mode: r?.CHATS_MODE ?? 'days',
+    value: r?.CHATS_VALUE ?? 365,
+  };
+};
+
+export const getScheduledRunRetentionPolicy = (): RetentionPolicy => {
+  const r = loadConfig().GENERAL.RETENTION;
+  return {
+    mode: r?.SCHEDULED_RUNS_MODE ?? 'count',
+    value: r?.SCHEDULED_RUNS_VALUE ?? 10,
+  };
+};
 
 export const getOpenaiApiKey = () => loadConfig().MODELS.OPENAI.API_KEY;
 

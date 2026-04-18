@@ -50,7 +50,7 @@ interface LlmSearchBody {
 interface ChatRow {
   id: string;
   title: string;
-  createdAt: string;
+  createdAt: number;
   focusMode: string;
   files: unknown;
   matchExcerpt: string | null;
@@ -192,8 +192,8 @@ export const POST = async (req: Request) => {
       }
     }
 
-    const combinedChats = Array.from(seen.values()).sort((a, b) =>
-      b.createdAt.localeCompare(a.createdAt),
+    const combinedChats = Array.from(seen.values()).sort(
+      (a, b) => b.createdAt - a.createdAt,
     );
 
     return Response.json(

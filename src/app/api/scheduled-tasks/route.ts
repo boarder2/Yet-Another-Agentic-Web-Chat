@@ -53,6 +53,8 @@ export async function POST(req: NextRequest) {
     cronExpression: body.cronExpression,
     timezone: body.timezone || null,
     enabled: body.enabled !== undefined ? (body.enabled ? 1 : 0) : 1,
+    retentionMode: body.retentionMode || null,
+    retentionValue: body.retentionMode ? (body.retentionValue ?? null) : null,
     createdAt: now,
     updatedAt: now,
   };

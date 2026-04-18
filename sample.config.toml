@@ -5,6 +5,12 @@ BASE_URL = ""
 HIDDEN_MODELS = [ ]
 PRIVATE_SESSION_DURATION_MINUTES = 1440
 
+[GENERAL.RETENTION]
+CHATS_MODE = "days"            # "days" | "count" | "disabled"
+CHATS_VALUE = 365
+SCHEDULED_RUNS_MODE = "count"  # "days" | "count" | "disabled"
+SCHEDULED_RUNS_VALUE = 10
+
 [MODELS.OPENAI]
 API_KEY = ""
 

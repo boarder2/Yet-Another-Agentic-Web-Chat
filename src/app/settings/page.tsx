@@ -18,6 +18,7 @@ import AutomaticSearchSection from './sections/AutomaticSearchSection';
 import PersonalizationSection from './sections/PersonalizationSection';
 import MemorySection from './sections/MemorySection';
 import PrivateSessionsSection from './sections/PrivateSessionsSection';
+import RetentionSection from './sections/RetentionSection';
 import PersonaPromptsSection from './sections/PersonaPromptsSection';
 import ResearchMethodologiesSection from './sections/ResearchMethodologiesSection';
 import DefaultSearchSection from './sections/DefaultSearchSection';
@@ -906,6 +907,15 @@ export default function SettingsPage() {
                     setCustomPrivateDurationInput={
                       setCustomPrivateDurationInput
                     }
+                    setConfig={setConfig}
+                    saveConfig={saveConfig}
+                  />
+                )}
+
+                {activeSection === 'retention' && (
+                  <RetentionSection
+                    config={config}
+                    savingStates={savingStates}
                     setConfig={setConfig}
                     saveConfig={saveConfig}
                   />

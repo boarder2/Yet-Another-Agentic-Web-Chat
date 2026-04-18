@@ -177,6 +177,18 @@ const Page = () => {
                       ago
                     </span>
                   )}
+                  {task.lastRunChatId ? (
+                    <Link
+                      href={`/c/${task.lastRunChatId}`}
+                      className="text-xs text-accent hover:underline"
+                    >
+                      Open last run
+                    </Link>
+                  ) : task.lastRunAt ? (
+                    <span className="text-xs text-fg/40 italic">
+                      Chat no longer available
+                    </span>
+                  ) : null}
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">

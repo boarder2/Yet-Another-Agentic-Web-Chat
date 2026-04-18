@@ -73,7 +73,7 @@ export async function runScheduledTask(
       .values({
         id: chatId,
         title: `${task.name} — ${new Date().toISOString().slice(0, 16).replace('T', ' ')}`,
-        createdAt: new Date().toString(),
+        createdAt: Date.now(),
         focusMode: task.focusMode,
         files: [],
         isPrivate: 0,

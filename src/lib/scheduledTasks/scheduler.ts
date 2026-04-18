@@ -3,7 +3,7 @@ import db from '@/lib/db';
 import { scheduledTasks } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { runScheduledTask } from './runner';
-import { cleanupExpiredPrivateSessions } from '@/lib/privateSessionCleanup';
+import { runRetentionCleanup } from '@/lib/retention/cleanup';
 
 type Registry = {
   jobs: Map<string, CronJob>;
@@ -42,14 +42,9 @@ export async function initScheduler() {
     cronTime: '*/5 * * * *',
     onTick: async () => {
       try {
-        const removed = await cleanupExpiredPrivateSessions();
-        if (removed > 0) {
-          console.log(
-            `[privateCleanup] removed ${removed} expired private chat(s)`,
-          );
-        }
+        await runRetentionCleanup();
       } catch (err) {
-        console.error('[privateCleanup] failed:', err);
+        console.error('[retention] cron failed:', err);
       }
     },
     start: true,

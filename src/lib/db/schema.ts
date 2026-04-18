@@ -37,7 +37,7 @@ export const systemPrompts = sqliteTable('system_prompts', {
 export const chats = sqliteTable('chats', {
   id: text('id').primaryKey(),
   title: text('title').notNull(),
-  createdAt: text('createdAt').notNull(),
+  createdAt: integer('createdAt').notNull(),
   focusMode: text('focusMode').notNull(),
   files: text('files', { mode: 'json' })
     .$type<File[]>()
@@ -47,6 +47,9 @@ export const chats = sqliteTable('chats', {
     .default(sql`0`),
   scheduledTaskId: text('scheduled_task_id'),
   scheduledRunViewed: integer('scheduled_run_viewed'),
+  pinned: integer('pinned')
+    .notNull()
+    .default(sql`0`),
 });
 
 export const memories = sqliteTable('memories', {
@@ -108,6 +111,10 @@ export const scheduledTasks = sqliteTable('scheduled_tasks', {
   }),
   lastRunError: text('last_run_error'),
   lastRunChatId: text('last_run_chat_id'),
+  retentionMode: text('retention_mode', {
+    enum: ['days', 'count', 'disabled'],
+  }),
+  retentionValue: integer('retention_value'),
   createdAt: integer('created_at', { mode: 'timestamp' })
     .notNull()
     .$defaultFn(() => new Date()),

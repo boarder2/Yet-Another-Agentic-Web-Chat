@@ -78,6 +78,8 @@ export default function EditTaskPage() {
         cronExpression: (task.cronExpression as string) || '0 8 * * *',
         timezone: (task.timezone as string) || '',
         enabled: !!task.enabled,
+        retentionMode: (task.retentionMode as string) || null,
+        retentionValue: (task.retentionValue as number) ?? null,
       }}
     />
   );

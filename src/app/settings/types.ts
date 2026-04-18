@@ -25,6 +25,10 @@ export interface SettingsType {
   selectedEmbeddingModel: string;
   linkSystemToChat: boolean;
   privateSessionDurationMinutes: number;
+  retentionChatsMode: 'days' | 'count' | 'disabled';
+  retentionChatsValue: number;
+  retentionScheduledRunsMode: 'days' | 'count' | 'disabled';
+  retentionScheduledRunsValue: number;
 }
 
 export type SectionKey =
@@ -33,6 +37,7 @@ export type SectionKey =
   | 'personalization'
   | 'memory'
   | 'private-sessions'
+  | 'retention'
   | 'persona-prompts'
   | 'research-methodologies'
   | 'default-search'
@@ -50,6 +55,7 @@ export const SETTINGS_SECTIONS: {
   { key: 'personalization', label: 'Personalization', group: 'General' },
   { key: 'memory', label: 'Memory', group: 'General' },
   { key: 'private-sessions', label: 'Private Sessions', group: 'General' },
+  { key: 'retention', label: 'Retention', group: 'General' },
   { key: 'persona-prompts', label: 'Persona Prompts', group: 'General' },
   {
     key: 'research-methodologies',

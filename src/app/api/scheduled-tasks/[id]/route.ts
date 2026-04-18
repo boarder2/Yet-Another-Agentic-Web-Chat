@@ -60,6 +60,8 @@ export async function PATCH(
     'cronExpression',
     'timezone',
     'enabled',
+    'retentionMode',
+    'retentionValue',
   ];
 
   for (const field of allowedFields) {
@@ -70,6 +72,12 @@ export async function PATCH(
         updates[field] = body[field];
       }
     }
+  }
+
+  // If retentionMode is explicitly null, reset both fields to global default
+  if ('retentionMode' in body && body.retentionMode === null) {
+    updates['retentionMode'] = null;
+    updates['retentionValue'] = null;
   }
 
   await db

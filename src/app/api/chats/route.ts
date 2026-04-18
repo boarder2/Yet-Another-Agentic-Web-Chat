@@ -3,11 +3,7 @@ import {
   chats as chatsTable,
   messages as messagesTable,
 } from '@/lib/db/schema';
-import { desc, sql, like, or, inArray } from 'drizzle-orm';
-import { cleanupExpiredPrivateSessions } from '@/lib/privateSessionCleanup';
-
-let lastCleanup = 0;
-const CLEANUP_INTERVAL_MS = 60 * 1000; // throttle to once per minute
+import { desc, eq, sql, like, or, inArray } from 'drizzle-orm';
 
 function extractExcerpt(
   content: string,
@@ -37,19 +33,11 @@ function extractExcerpt(
 
 export const GET = async (req: Request) => {
   try {
-    // Lazily clean up expired private sessions (throttled)
-    const now = Date.now();
-    if (now - lastCleanup > CLEANUP_INTERVAL_MS) {
-      lastCleanup = now;
-      cleanupExpiredPrivateSessions().catch((err) =>
-        console.warn('Private session cleanup failed:', err),
-      );
-    }
-
     const { searchParams } = new URL(req.url);
     const limitParam = searchParams.get('limit');
     const offsetParam = searchParams.get('offset');
     const q = searchParams.get('q')?.trim() || '';
+    const pinnedParam = searchParams.get('pinned');
 
     const parsedLimit = parseInt(limitParam ?? '50', 10);
     const parsedOffset = parseInt(offsetParam ?? '0', 10);
@@ -115,14 +103,19 @@ export const GET = async (req: Request) => {
       );
     }
 
+    const pinnedCondition =
+      pinnedParam === '1' ? eq(chatsTable.pinned, 1) : undefined;
+
     const totalRows = await db
       .select({ count: sql`count(*)` })
-      .from(chatsTable);
+      .from(chatsTable)
+      .where(pinnedCondition);
     const total = Number(totalRows?.[0]?.count ?? 0);
 
     const rows = await db
       .select()
       .from(chatsTable)
+      .where(pinnedCondition)
       .orderBy(desc(sql`rowid`))
       .limit(limit)
       .offset(offset);

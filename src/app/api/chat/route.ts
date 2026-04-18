@@ -550,7 +550,7 @@ const handleHistorySave = async (
       .values({
         id: message.chatId,
         title: message.content,
-        createdAt: new Date().toString(),
+        createdAt: Date.now(),
         focusMode: focusMode,
         files: files.map(getFileDetails),
         isPrivate: isPrivate ? 1 : 0,

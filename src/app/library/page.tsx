@@ -7,6 +7,7 @@ import {
   CalendarClock,
   ClockIcon,
   EyeOff,
+  Pin,
   Search,
   Sparkles,
   X,
@@ -17,18 +18,19 @@ import { useEffect, useRef, useState } from 'react';
 export interface Chat {
   id: string;
   title: string;
-  createdAt: string;
+  createdAt: number;
   focusMode: string;
   isPrivate?: number;
+  pinned?: number;
   scheduledTaskId?: string | null;
   matchExcerpt?: string | null;
 }
 
 function getPrivateExpiresIn(
-  createdAt: string,
+  createdAt: number,
   durationMs: number = 24 * 60 * 60 * 1000,
 ): string {
-  const expiresAt = new Date(createdAt).getTime() + durationMs;
+  const expiresAt = createdAt + durationMs;
   const remaining = expiresAt - Date.now();
   if (remaining <= 0) return 'expiring soon';
   return formatTimeDifference(new Date(), new Date(expiresAt));
@@ -82,23 +84,31 @@ const Page = () => {
   const [searchTerms, setSearchTerms] = useState<string[]>([]);
   const [searchMode, setSearchMode] = useState<'text' | 'llm'>('text');
 
+  // Pinned filter
+  const [pinnedOnly, setPinnedOnly] = useState(false);
+
   const isSearchMode = debouncedQuery.trim().length > 0;
   const displayedChats = isSearchMode ? searchResults : chats;
   const isSearching = isTextSearching || isLlmSearching;
 
-  const fetchPage = async (nextOffset: number) => {
+  const fetchPage = async (nextOffset: number, pinFilter?: boolean) => {
     if (nextOffset === 0) {
       setLoading(true);
     } else {
       setLoadingMore(true);
     }
 
-    const res = await fetch(`/api/chats?limit=${limit}&offset=${nextOffset}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
+    const usePinFilter = pinFilter ?? pinnedOnly;
+    const pinnedQuery = usePinFilter ? '&pinned=1' : '';
+    const res = await fetch(
+      `/api/chats?limit=${limit}&offset=${nextOffset}${pinnedQuery}`,
+      {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
       },
-    });
+    );
 
     const data = await res.json();
 
@@ -336,6 +346,29 @@ const Page = () => {
           </button>
         </div>
 
+        {/* Filter chips */}
+        <div className="flex items-center gap-2 mb-3">
+          <button
+            onClick={() => {
+              const next = !pinnedOnly;
+              setPinnedOnly(next);
+              setChats([]);
+              setOffset(0);
+              setHasMore(true);
+              fetchPage(0, next);
+            }}
+            className={cn(
+              'flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors',
+              pinnedOnly
+                ? 'bg-accent/10 border-accent/30 text-accent'
+                : 'bg-surface border-surface-2 text-fg/60 hover:text-fg hover:border-fg/30',
+            )}
+          >
+            <Pin size={11} className={pinnedOnly ? 'fill-current' : ''} />
+            Pinned
+          </button>
+        </div>
+
         {/* Search status */}
         {isSearchMode && (
           <div className="mb-3 text-xs text-fg/50">
@@ -400,6 +433,9 @@ const Page = () => {
                 >
                   {chat.title}
                 </Link>
+                {chat.pinned === 1 && (
+                  <Pin size={12} className="fill-current text-fg/50 shrink-0" />
+                )}
                 {chat.isPrivate === 1 && (
                   <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-xs font-medium whitespace-nowrap">
                     <EyeOff size={11} />
@@ -440,7 +476,11 @@ const Page = () => {
                     <>
                       <ClockIcon size={15} />
                       <p className="text-xs">
-                        {formatTimeDifference(new Date(), chat.createdAt)} Ago
+                        {formatTimeDifference(
+                          new Date(),
+                          new Date(chat.createdAt),
+                        )}{' '}
+                        Ago
                       </p>
                     </>
                   )}

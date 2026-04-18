@@ -18,7 +18,7 @@ import { useEffect, useState } from 'react';
 interface Run {
   id: string;
   title: string;
-  createdAt: string;
+  createdAt: number;
   focusMode: string;
   scheduledTaskId: string | null;
   scheduledRunViewed: number | null;
@@ -152,7 +152,8 @@ const Page = () => {
                     timeStyle: 'short',
                   })}
                   <span className="opacity-70">
-                    ({formatTimeDifference(new Date(), run.createdAt)} ago)
+                    ({formatTimeDifference(new Date(), new Date(run.createdAt))}{' '}
+                    ago)
                   </span>
                 </span>
                 {run.sourcesCount > 0 && (

@@ -301,6 +301,7 @@ const loadMessages = async (
   setFiles: (files: File[]) => void,
   setFileIds: (fileIds: string[]) => void,
   setIsPrivateSession?: (isPrivate: boolean) => void,
+  setPinned?: (pinned: boolean) => void,
 ) => {
   const res = await fetch(`/api/chats/${chatId}`, {
     method: 'GET',
@@ -354,6 +355,9 @@ const loadMessages = async (
   setFocusMode(data.chat.focusMode);
   if (setIsPrivateSession) {
     setIsPrivateSession(data.chat.isPrivate === 1);
+  }
+  if (setPinned) {
+    setPinned(data.chat.pinned === 1);
   }
   setIsMessagesLoaded(true);
 };
@@ -441,6 +445,8 @@ const ChatWindow = ({ id }: { id?: string }) => {
     () => searchParams.get('private') === '1',
   );
 
+  const [pinned, setPinned] = useState(false);
+
   // State for tracking sources during gathering phase
   const [gatheringSources, setGatheringSources] = useState<
     Array<{
@@ -495,6 +501,7 @@ const ChatWindow = ({ id }: { id?: string }) => {
         setFiles,
         setFileIds,
         setIsPrivateSession,
+        setPinned,
       );
     } else if (!chatId) {
       setNewChatCreated(true);
@@ -1669,6 +1676,8 @@ const ChatWindow = ({ id }: { id?: string }) => {
               chatId={chatId!}
               messages={messages}
               isPrivateSession={isPrivateSession}
+              pinned={pinned}
+              setPinned={setPinned}
             />
             <Chat
               loading={loading}

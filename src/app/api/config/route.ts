@@ -17,6 +17,8 @@ import {
   getSelectedEmbeddingModel,
   getLinkSystemToChat,
   getPrivateSessionDurationMinutes,
+  getChatRetentionPolicy,
+  getScheduledRunRetentionPolicy,
   updateConfig,
 } from '@/lib/config';
 import {
@@ -93,6 +95,13 @@ export const GET = async (_req: Request) => {
     config['privateSessionDurationMinutes'] =
       getPrivateSessionDurationMinutes();
 
+    const chatRetention = getChatRetentionPolicy();
+    const schedRetention = getScheduledRunRetentionPolicy();
+    config['retentionChatsMode'] = chatRetention.mode;
+    config['retentionChatsValue'] = chatRetention.value;
+    config['retentionScheduledRunsMode'] = schedRetention.mode;
+    config['retentionScheduledRunsValue'] = schedRetention.value;
+
     return Response.json({ ...config }, { status: 200 });
   } catch (err) {
     console.error('An error occurred while getting config:', err);
@@ -124,6 +133,27 @@ export const POST = async (req: Request) => {
           PRIVATE_SESSION_DURATION_MINUTES:
             config.privateSessionDurationMinutes,
         }),
+        ...(config.retentionChatsMode !== undefined ||
+        config.retentionChatsValue !== undefined ||
+        config.retentionScheduledRunsMode !== undefined ||
+        config.retentionScheduledRunsValue !== undefined
+          ? {
+              RETENTION: {
+                ...(config.retentionChatsMode !== undefined && {
+                  CHATS_MODE: config.retentionChatsMode,
+                }),
+                ...(config.retentionChatsValue !== undefined && {
+                  CHATS_VALUE: config.retentionChatsValue,
+                }),
+                ...(config.retentionScheduledRunsMode !== undefined && {
+                  SCHEDULED_RUNS_MODE: config.retentionScheduledRunsMode,
+                }),
+                ...(config.retentionScheduledRunsValue !== undefined && {
+                  SCHEDULED_RUNS_VALUE: config.retentionScheduledRunsValue,
+                }),
+              },
+            }
+          : {}),
       },
       MODELS: {
         OPENAI: {

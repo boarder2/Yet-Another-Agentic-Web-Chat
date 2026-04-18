@@ -26,6 +26,8 @@ interface TaskFormData {
   cronExpression: string;
   timezone: string;
   enabled: boolean;
+  retentionMode: string | null;
+  retentionValue: number | null;
 }
 
 interface SystemPrompt {
@@ -60,6 +62,8 @@ export default function TaskForm({
       cronExpression: '0 8 * * *',
       timezone: '',
       enabled: true,
+      retentionMode: null,
+      retentionValue: null,
     },
   );
 
@@ -193,6 +197,8 @@ export default function TaskForm({
         : undefined,
       enabled: form.enabled ? 1 : 0,
       timezone: form.timezone || undefined,
+      retentionMode: form.retentionMode,
+      retentionValue: form.retentionValue,
     };
 
     try {
@@ -618,6 +624,53 @@ export default function TaskForm({
             </select>
           </div>
         )}
+
+        {/* Retention Override */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium text-fg/70">
+            Retention (optional)
+          </label>
+          <select
+            value={form.retentionMode === null ? 'global' : 'override'}
+            onChange={(e) => {
+              if (e.target.value === 'global') {
+                updateField('retentionMode', null);
+                updateField('retentionValue', null);
+              } else {
+                updateField('retentionMode', 'count');
+                updateField('retentionValue', 10);
+              }
+            }}
+            className="px-3 py-2 rounded-lg bg-surface border border-surface-2 text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+          >
+            <option value="global">Use global default</option>
+            <option value="override">Override</option>
+          </select>
+          {form.retentionMode !== null && (
+            <div className="flex items-center gap-2">
+              <select
+                value={form.retentionMode}
+                onChange={(e) => updateField('retentionMode', e.target.value)}
+                className="px-3 py-2 rounded-lg bg-surface border border-surface-2 text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+              >
+                <option value="days">Keep for N days</option>
+                <option value="count">Keep N most recent</option>
+                <option value="disabled">Disabled</option>
+              </select>
+              {form.retentionMode !== 'disabled' && (
+                <input
+                  type="number"
+                  min={1}
+                  value={form.retentionValue ?? 10}
+                  onChange={(e) =>
+                    updateField('retentionValue', parseInt(e.target.value) || 1)
+                  }
+                  className="w-24 px-3 py-2 rounded-lg bg-surface border border-surface-2 text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+                />
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Enabled */}
         <div className="flex items-center gap-3">

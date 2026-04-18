@@ -149,7 +149,7 @@ export type RetentionPolicy = {
 export const getChatRetentionPolicy = (): RetentionPolicy => {
   const r = loadConfig().GENERAL.RETENTION;
   return {
-    mode: r?.CHATS_MODE ?? 'days',
+    mode: r?.CHATS_MODE ?? 'disabled',
     value: r?.CHATS_VALUE ?? 365,
   };
 };
@@ -157,7 +157,7 @@ export const getChatRetentionPolicy = (): RetentionPolicy => {
 export const getScheduledRunRetentionPolicy = (): RetentionPolicy => {
   const r = loadConfig().GENERAL.RETENTION;
   return {
-    mode: r?.SCHEDULED_RUNS_MODE ?? 'count',
+    mode: r?.SCHEDULED_RUNS_MODE ?? 'disabled',
     value: r?.SCHEDULED_RUNS_VALUE ?? 10,
   };
 };

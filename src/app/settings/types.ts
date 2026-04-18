@@ -36,7 +36,6 @@ export type SectionKey =
   | 'automatic-search'
   | 'personalization'
   | 'memory'
-  | 'private-sessions'
   | 'retention'
   | 'persona-prompts'
   | 'research-methodologies'
@@ -54,7 +53,6 @@ export const SETTINGS_SECTIONS: {
   { key: 'automatic-search', label: 'Automatic Search', group: 'General' },
   { key: 'personalization', label: 'Personalization', group: 'General' },
   { key: 'memory', label: 'Memory', group: 'General' },
-  { key: 'private-sessions', label: 'Private Sessions', group: 'General' },
   { key: 'retention', label: 'Retention', group: 'General' },
   { key: 'persona-prompts', label: 'Persona Prompts', group: 'General' },
   {

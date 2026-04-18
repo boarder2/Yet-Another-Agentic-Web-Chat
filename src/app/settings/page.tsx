@@ -17,7 +17,6 @@ import PreferencesSection from './sections/PreferencesSection';
 import AutomaticSearchSection from './sections/AutomaticSearchSection';
 import PersonalizationSection from './sections/PersonalizationSection';
 import MemorySection from './sections/MemorySection';
-import PrivateSessionsSection from './sections/PrivateSessionsSection';
 import RetentionSection from './sections/RetentionSection';
 import PersonaPromptsSection from './sections/PersonaPromptsSection';
 import ResearchMethodologiesSection from './sections/ResearchMethodologiesSection';
@@ -890,10 +889,6 @@ export default function SettingsPage() {
                       setMemoryAutoDetectionEnabled
                     }
                   />
-                )}
-
-                {activeSection === 'private-sessions' && (
-                  <PrivateSessionsSection />
                 )}
 
                 {activeSection === 'retention' && (

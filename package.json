@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "eslint .",
     "format:write": "prettier . --write",
-    "db:push": "npx tsx scripts/migrate-retention.ts && drizzle-kit push",
+    "db:push": "drizzle-kit migrate && drizzle-kit push",
     "db:generate": "drizzle-kit generate",
     "prepare": "husky"
   },

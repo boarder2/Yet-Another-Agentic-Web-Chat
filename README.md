@@ -37,6 +37,9 @@ YAAWC (**Pronounced: "yawck"** — as in the sound you make when yet another AI 
   - [Personalization](#personalization)
   - [Persona Prompts](#persona-prompts)
   - [Research Methodologies](#research-methodologies)
+- [Scheduled Tasks](#scheduled-tasks)
+- [Chat Retention](#chat-retention)
+- [Search Providers](#search-providers)
 - [Installation](#installation)
   - [Docker (Recommended)](#docker-recommended)
   - [Manual Setup](#manual-setup)
@@ -67,6 +70,9 @@ Want to know more about the architecture? See [docs/architecture/README.md](docs
 | **Dashboard Widgets**       | AI-powered info widgets with auto-refresh, drag-and-drop layout, export/import                                                                                                        |
 | **Personas**                | Custom system prompts with built-in templates (scholarly, conversational, etc.)                                                                                                       |
 | **Research Methodologies**  | Per-message selectable research playbooks (Comparative Analysis, Literature Review, Fact-Check) with custom methodology authoring                                                     |
+| **Scheduled Tasks**         | Cron-scheduled recurring agent runs with presets, per-task models/tools, run history, and unread-result badges                                                                        |
+| **Chat Retention**          | Configurable auto-delete policies for old chats and scheduled-task run history, with pinning to exempt individual chats                                                               |
+| **Search Providers**        | Pluggable backends — SearXNG, Brave Search, and Mojeek                                                                                                                                |
 | **Personalization**         | Per-message location and profile context injection                                                                                                                                    |
 | **Memory**                  | Long-term memory with semantic retrieval, automatic extraction, deduplication, and a full management UI                                                                               |
 | **Private Sessions**        | Temporary conversations with auto-expiry — no personalization, no memory, no trace left behind                                                                                        |
@@ -320,6 +326,43 @@ Selectable research playbooks that tell the agent _how_ to approach a query, sep
 - **Built-in**: Comparative Analysis, Deep Dive / Literature Review, Fact-Check / Verification
 - **Custom methodologies** can be authored from the Settings page
 
+## Scheduled Tasks
+
+Run agent queries automatically on a recurring schedule — useful for daily briefings, market watches, monitoring feeds, or any query you'd otherwise re-type regularly.
+
+- **Cron-based scheduling** with friendly presets (hourly, daily, weekly, weekdays at 9am, etc.) or custom expressions
+- **Per-task configuration**: chat model, system model, focus mode, persona, research methodology, and tool toggles
+- **Run history** with per-run chat views — every execution produces a normal chat you can read, continue, or share
+- **Unread badges** in the sidebar highlight new results since you last checked
+
+Tasks run in-process via a scheduler started at app boot. Run results obey the same retention policy as regular chats (see below).
+
+## Chat Retention
+
+Configurable policies automatically clean up old data to keep the database lean. Each policy has two modes (plus `disabled`):
+
+- **`days`** — delete chats older than N days (by creation date)
+- **`count`** — keep the N most recently created chats, delete the rest
+
+Policies are applied independently to two groups:
+
+- **Regular chats** — global policy under `[GENERAL.RETENTION] CHATS_MODE` / `CHATS_VALUE` (disabled by default)
+- **Scheduled-task runs** — global policy under `[GENERAL.RETENTION] SCHEDULED_RUNS_MODE` / `SCHEDULED_RUNS_VALUE` (disabled by default); individual scheduled tasks may override the global policy with their own mode/value
+- **Private sessions** — deleted on their own expiry schedule (see [Private Sessions](#private-sessions))
+- **Pinning** — individual chats can be pinned from the library to exempt them from all retention policies
+
+Configure from the Settings page under "Retention", or via `[GENERAL.RETENTION]` in `config.toml`. Cleanup runs on a background cron alongside the private-session cleanup job.
+
+## Search Providers
+
+YAAWC supports multiple search backends and lets you choose from the Settings page:
+
+| Provider    | Capabilities                      | Config                         |
+| ----------- | --------------------------------- | ------------------------------ |
+| **SearXNG** | Web, images, videos, autocomplete | Self-hosted URL (default)      |
+| **Brave**   | Web, images, videos, autocomplete | API key (+ optional Brave LLM) |
+| **Mojeek**  | Web                               | API key                        |
+
 ## Installation
 
 ### Docker (Recommended)
@@ -392,27 +435,34 @@ URL queries via `?q=` automatically apply your saved model preferences for a sea
 
 YAAWC exposes a full API for programmatic access:
 
-| Endpoint                | Method              | Description                                                    |
-| ----------------------- | ------------------- | -------------------------------------------------------------- |
-| `/api/chat`             | POST                | Streaming chat with tool calls, sources, and live events (SSE) |
-| `/api/models`           | GET                 | List available models (`?include_hidden=true` for admin view)  |
-| `/api/config`           | GET/POST            | Read/write server configuration                                |
-| `/api/chats`            | GET                 | List all chats                                                 |
-| `/api/chats/[id]`       | GET/DELETE          | Get or delete a specific chat                                  |
-| `/api/suggestions`      | POST                | Generate follow-up suggestions                                 |
-| `/api/system-prompts`   | GET/POST/PUT/DELETE | CRUD for persona prompts                                       |
-| `/api/images`           | POST                | Image search                                                   |
-| `/api/videos`           | POST                | Video search                                                   |
-| `/api/uploads`          | POST                | File upload                                                    |
-| `/api/uploads/images`   | POST/GET            | Image upload and serving                                       |
-| `/api/memories`         | GET/POST/DELETE     | List, add, or delete all memories                              |
-| `/api/memories/[id]`    | PUT/DELETE          | Update or delete a specific memory                             |
-| `/api/memories/reindex` | POST                | Regenerate all memory embeddings                               |
-| `/api/tools`            | GET                 | List available agent tools                                     |
-| `/api/dashboard`        | GET/POST            | Dashboard widget CRUD                                          |
-| `/api/respond-now`      | POST                | Interrupt retrieval for immediate response                     |
-| `/api/opensearch`       | GET                 | OpenSearch description XML                                     |
-| `/api/autocomplete`     | GET                 | Search autocomplete (proxied to SearXNG)                       |
+| Endpoint                           | Method              | Description                                                    |
+| ---------------------------------- | ------------------- | -------------------------------------------------------------- |
+| `/api/chat`                        | POST                | Streaming chat with tool calls, sources, and live events (SSE) |
+| `/api/models`                      | GET                 | List available models (`?include_hidden=true` for admin view)  |
+| `/api/config`                      | GET/POST            | Read/write server configuration                                |
+| `/api/chats`                       | GET                 | List all chats (paginated)                                     |
+| `/api/chats/[id]`                  | GET/DELETE/PATCH    | Get, delete, or update (e.g. pin) a specific chat              |
+| `/api/chats/search`                | GET                 | Full-text search across chat history                           |
+| `/api/suggestions`                 | POST                | Generate follow-up suggestions                                 |
+| `/api/system-prompts`              | GET/POST/PUT/DELETE | CRUD for persona prompts                                       |
+| `/api/images`                      | POST                | Image search                                                   |
+| `/api/videos`                      | POST                | Video search                                                   |
+| `/api/uploads`                     | POST                | File upload                                                    |
+| `/api/uploads/images`              | POST/GET            | Image upload and serving                                       |
+| `/api/memories`                    | GET/POST/DELETE     | List, add, or delete all memories                              |
+| `/api/memories/[id]`               | PUT/DELETE          | Update or delete a specific memory                             |
+| `/api/memories/reindex`            | POST                | Regenerate all memory embeddings                               |
+| `/api/tools`                       | GET                 | List available agent tools                                     |
+| `/api/dashboard`                   | GET/POST            | Dashboard widget CRUD                                          |
+| `/api/respond-now`                 | POST                | Interrupt retrieval for immediate response                     |
+| `/api/opensearch`                  | GET                 | OpenSearch description XML                                     |
+| `/api/autocomplete`                | GET                 | Search autocomplete (via configured search provider)           |
+| `/api/scheduled-tasks`             | GET/POST            | List or create scheduled tasks                                 |
+| `/api/scheduled-tasks/[id]`        | GET/PUT/DELETE      | Get, update, or delete a scheduled task                        |
+| `/api/scheduled-tasks/[id]/run`    | POST                | Trigger an immediate run of a scheduled task                   |
+| `/api/scheduled-tasks/[id]/runs`   | GET                 | List run history for a scheduled task                          |
+| `/api/scheduled-tasks/runs`        | GET                 | List recent runs across all scheduled tasks                    |
+| `/api/scheduled-tasks/runs/unread` | GET                 | Count of unread scheduled-task run results                     |
 
 For detailed payload schemas, see the [API documentation](docs/API/).
 

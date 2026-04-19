@@ -144,7 +144,7 @@ const MessageBox = ({
             </div>
           ) : (
             <div className="ml-[15%]">
-              <div className="relative bg-surface-2 rounded-xl px-4 py-3">
+              <div className="relative bg-surface-2 rounded-xl px-4 py-3 border-b-2 border-accent">
                 <button
                   onClick={startEditMessage}
                   disabled={loading}

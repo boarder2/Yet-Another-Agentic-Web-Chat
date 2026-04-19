@@ -15,11 +15,13 @@ const SearchImages = ({
   chatHistory,
   messageId,
   onImagesLoaded,
+  isPrivate,
 }: {
   query: string;
   chatHistory: Message[];
   messageId: string;
   onImagesLoaded?: (count: number) => void;
+  isPrivate?: boolean;
 }) => {
   const [images, setImages] = useState<Image[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -92,6 +94,7 @@ const SearchImages = ({
               }),
             },
             selectedSystemPromptIds: selectedSystemPromptIds,
+            isPrivate,
           }),
         });
 

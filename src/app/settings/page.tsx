@@ -21,6 +21,7 @@ import RetentionSection from './sections/RetentionSection';
 import PersonaPromptsSection from './sections/PersonaPromptsSection';
 import ResearchMethodologiesSection from './sections/ResearchMethodologiesSection';
 import DefaultSearchSection from './sections/DefaultSearchSection';
+import SearchProvidersSection from './sections/SearchProvidersSection';
 import ModelSettingsSection from './sections/ModelSettingsSection';
 import ModelVisibilitySection from './sections/ModelVisibilitySection';
 import ApiKeysSection from './sections/ApiKeysSection';
@@ -941,6 +942,15 @@ export default function SettingsPage() {
                     setIsAddingNewMethodology={setIsAddingNewMethodology}
                     onAddOrUpdate={handleAddOrUpdateMethodology}
                     onDelete={handleDeleteMethodology}
+                  />
+                )}
+
+                {activeSection === 'search-providers' && (
+                  <SearchProvidersSection
+                    config={config}
+                    savingStates={savingStates}
+                    setConfig={setConfig}
+                    saveConfig={saveConfig}
                   />
                 )}
 

@@ -21,6 +21,8 @@ const MessageBox = ({
   gatheringSources,
   actionMessageId,
   editInputProps,
+  isPrivateSession,
+  searchCapabilities,
 }: {
   message: Message;
   messageIndex: number;
@@ -93,6 +95,13 @@ const MessageBox = ({
     personalizationAbout?: string;
     refreshPersonalization?: () => void;
     imageCapable?: boolean;
+  };
+  isPrivateSession?: boolean;
+  searchCapabilities?: {
+    web: boolean;
+    images: boolean;
+    videos: boolean;
+    autocomplete: boolean;
   };
 }) => {
   // Local state for editing functionality
@@ -195,6 +204,8 @@ const MessageBox = ({
           modelStats={modelStats}
           gatheringSources={gatheringSources}
           actionMessageId={actionMessageId}
+          isPrivateSession={isPrivateSession}
+          searchCapabilities={searchCapabilities}
         />
       )}
     </div>

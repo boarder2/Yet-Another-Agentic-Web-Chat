@@ -2,12 +2,11 @@ import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { RunnableConfig } from '@langchain/core/runnables';
 import { Document } from '@langchain/core/documents';
-import { searchSearxng } from '@/lib/searxng';
+import { getImageSearchProvider } from '@/lib/search/providers';
 import { Command, getCurrentTaskInput } from '@langchain/langgraph';
 import { SimplifiedAgentStateType } from '@/lib/state/chatAgentState';
 import { ToolMessage } from '@langchain/core/messages';
 
-// Schema for image search tool input
 const ImageSearchToolSchema = z.object({
   query: z
     .string()
@@ -21,14 +20,6 @@ const ImageSearchToolSchema = z.object({
     .describe('Maximum number of image results to return.'),
 });
 
-/**
- * ImageSearchTool - Performs image search via SearXNG and returns image results
- *
- * Responsibilities:
- * 1. Execute image-specific search using image engines
- * 2. Normalize results to a consistent structure
- * 3. Return results as Documents in state (metadata contains image fields)
- */
 export const imageSearchTool = tool(
   async (
     input: z.infer<typeof ImageSearchToolSchema>,
@@ -36,21 +27,41 @@ export const imageSearchTool = tool(
   ) => {
     try {
       const { query, maxResults = 12 } = input;
-
       const currentState = getCurrentTaskInput() as SimplifiedAgentStateType;
       let currentDocCount = currentState.relevantDocuments?.length ?? 0;
 
-      console.log(`ImageSearchTool: Searching images for query: "${query}"`);
       const retrievalSignal: AbortSignal | undefined = (
         config as unknown as Record<string, Record<string, unknown>>
       )?.configurable?.retrievalSignal as AbortSignal | undefined;
+      const isPrivate: boolean = Boolean(
+        (config as unknown as Record<string, Record<string, unknown>>)
+          ?.configurable?.isPrivate,
+      );
 
-      const searchResults = await searchSearxng(
+      const provider = getImageSearchProvider({ isPrivate });
+      if (!provider || !provider.imageSearch) {
+        return new Command({
+          update: {
+            messages: [
+              new ToolMessage({
+                content:
+                  'Image search is not available with the currently configured search provider.',
+                tool_call_id: (
+                  config as unknown as { toolCall: { id: string } }
+                )?.toolCall?.id,
+              }),
+            ],
+          },
+        });
+      }
+
+      console.log(
+        `ImageSearchTool: Searching images for "${query}" via ${provider.id}`,
+      );
+
+      const searchResults = await provider.imageSearch(
         query,
-        {
-          language: 'en',
-          engines: ['bing images', 'google images'],
-        },
+        {},
         retrievalSignal,
       );
 
@@ -123,7 +134,7 @@ export const imageSearchTool = tool(
   {
     name: 'image_search',
     description:
-      'Searches the web for images related to a query using SearXNG and returns image URLs, titles, and sources. Use when the user asks for pictures, photos, charts, or visual examples.',
+      'Searches the web for images related to a query and returns image URLs, titles, and sources. Use when the user asks for pictures, photos, charts, or visual examples.',
     schema: ImageSearchToolSchema,
   },
 );

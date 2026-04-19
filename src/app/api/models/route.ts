@@ -7,30 +7,44 @@ export const GET = async (req: Request) => {
   try {
     const url = new URL(req.url);
     const includeHidden = url.searchParams.get('include_hidden') === 'true';
+    const forceRefresh = url.searchParams.get('refresh') === 'true';
 
     const [chatModelProviders, embeddingModelProviders] = await Promise.all([
-      getAvailableChatModelProviders({ includeHidden }),
-      getAvailableEmbeddingModelProviders({ includeHidden }),
+      getAvailableChatModelProviders({ includeHidden, forceRefresh }),
+      getAvailableEmbeddingModelProviders({ includeHidden, forceRefresh }),
     ]);
 
+    // Build serializable copies without mutating the cached model objects
+    const chatResult: Record<
+      string,
+      Record<string, { displayName: string }>
+    > = {};
     Object.keys(chatModelProviders).forEach((provider) => {
+      chatResult[provider] = {};
       Object.keys(chatModelProviders[provider]).forEach((model) => {
-        delete (chatModelProviders[provider][model] as { model?: unknown })
-          .model;
+        chatResult[provider][model] = {
+          displayName: chatModelProviders[provider][model].displayName,
+        };
       });
     });
 
+    const embeddingResult: Record<
+      string,
+      Record<string, { displayName: string }>
+    > = {};
     Object.keys(embeddingModelProviders).forEach((provider) => {
+      embeddingResult[provider] = {};
       Object.keys(embeddingModelProviders[provider]).forEach((model) => {
-        delete (embeddingModelProviders[provider][model] as { model?: unknown })
-          .model;
+        embeddingResult[provider][model] = {
+          displayName: embeddingModelProviders[provider][model].displayName,
+        };
       });
     });
 
     return Response.json(
       {
-        chatModelProviders,
-        embeddingModelProviders,
+        chatModelProviders: chatResult,
+        embeddingModelProviders: embeddingResult,
       },
       {
         status: 200,

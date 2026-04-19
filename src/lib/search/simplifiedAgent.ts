@@ -144,6 +144,7 @@ export class SimplifiedAgent {
   private memorySection: string;
   private chatId?: string;
   private interactiveSession: boolean;
+  private isPrivate: boolean;
 
   constructor(
     chatLlm: BaseChatModel,
@@ -161,6 +162,7 @@ export class SimplifiedAgent {
     chatId?: string,
     interactiveSession: boolean = false,
     methodologyInstructions: string = '',
+    isPrivate: boolean = false,
   ) {
     this.chatLlm = chatLlm;
     this.systemLlm = systemLlm;
@@ -177,6 +179,7 @@ export class SimplifiedAgent {
     this.memorySection = memorySection;
     this.chatId = chatId;
     this.interactiveSession = interactiveSession;
+    this.isPrivate = isPrivate;
   }
 
   private emitResponse(text: string) {
@@ -521,6 +524,7 @@ export class SimplifiedAgent {
           userProfile: this.userProfile,
           chatId: this.chatId,
           interactiveSession: this.interactiveSession,
+          isPrivate: this.isPrivate,
         },
         recursionLimit: 150, // Increased to handle complex multi-task research with todo_list
         signal: this.retrievalSignal,

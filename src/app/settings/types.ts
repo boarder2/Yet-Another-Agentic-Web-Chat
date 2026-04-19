@@ -29,6 +29,27 @@ export interface SettingsType {
   retentionChatsValue: number;
   retentionScheduledRunsMode: 'days' | 'count' | 'disabled';
   retentionScheduledRunsValue: number;
+  searchProvider: string;
+  searchPrivateProvider: string;
+  searchFallbackProvider: string;
+  searchLanguage: string;
+  searchRegion: string;
+  searxngApiUrl: string;
+  braveSearchApiKey: string;
+  braveLLMApiKey: string;
+  mojeekApiKey: string;
+  searchCapabilitiesRegular: {
+    web: boolean;
+    images: boolean;
+    videos: boolean;
+    autocomplete: boolean;
+  };
+  searchCapabilitiesPrivate: {
+    web: boolean;
+    images: boolean;
+    videos: boolean;
+    autocomplete: boolean;
+  };
 }
 
 export type SectionKey =
@@ -40,6 +61,7 @@ export type SectionKey =
   | 'persona-prompts'
   | 'research-methodologies'
   | 'default-search'
+  | 'search-providers'
   | 'model-settings'
   | 'model-visibility'
   | 'api-keys';
@@ -61,6 +83,7 @@ export const SETTINGS_SECTIONS: {
     group: 'General',
   },
   { key: 'default-search', label: 'Default Search', group: 'AI Models' },
+  { key: 'search-providers', label: 'Search Providers', group: 'Search' },
   { key: 'model-settings', label: 'Model Settings', group: 'AI Models' },
   { key: 'model-visibility', label: 'Model Visibility', group: 'AI Models' },
   { key: 'api-keys', label: 'API Keys', group: 'Security' },

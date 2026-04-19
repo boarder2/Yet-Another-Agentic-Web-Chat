@@ -1,5 +1,9 @@
 'use client';
 
+import { RefreshCw } from 'lucide-react';
+import { useState } from 'react';
+import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 import SettingsSection from '../components/SettingsSection';
 import InputComponent from '../components/InputComponent';
 import { SettingsType } from '../types';
@@ -18,8 +22,38 @@ export default function ApiKeysSection({
     value: string | string[] | number | boolean,
   ) => void;
 }) {
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefreshModels = async () => {
+    try {
+      setRefreshing(true);
+      const res = await fetch('/api/models?refresh=true&include_hidden=true');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      toast.success('Model list refreshed.');
+    } catch (err) {
+      console.error('Failed to refresh models:', err);
+      toast.error('Failed to refresh models');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   return (
-    <SettingsSection title="API Keys">
+    <SettingsSection
+      title="API Keys"
+      headerAction={
+        <button
+          type="button"
+          className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border border-surface-2 hover:bg-surface-2 transition disabled:opacity-60"
+          onClick={handleRefreshModels}
+          disabled={refreshing}
+          title="Refresh models from providers"
+        >
+          <RefreshCw size={12} className={cn(refreshing && 'animate-spin')} />
+          {refreshing ? 'Refreshing…' : 'Refresh models'}
+        </button>
+      }
+    >
       <p className="text-xs text-fg/60">
         Values are also editable directly in{' '}
         <code className="font-mono">config.toml</code>.

@@ -29,11 +29,13 @@ const Searchvideos = ({
   chatHistory,
   messageId,
   onVideosLoaded,
+  isPrivate,
 }: {
   query: string;
   chatHistory: Message[];
   messageId: string;
   onVideosLoaded?: (count: number) => void;
+  isPrivate?: boolean;
 }) => {
   const [videos, setVideos] = useState<Video[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -106,6 +108,7 @@ const Searchvideos = ({
               }),
             },
             selectedSystemPromptIds: selectedSystemPromptIds,
+            isPrivate,
           }),
         });
 

@@ -59,6 +59,19 @@ interface Config {
   API_ENDPOINTS: {
     SEARXNG: string;
   };
+  SEARCH?: {
+    PROVIDER?: string;
+    PRIVATE_PROVIDER?: string;
+    FALLBACK_PROVIDER?: string;
+    LANGUAGE?: string;
+    REGION?: string;
+    PROVIDERS?: {
+      SEARXNG?: { API_URL?: string };
+      BRAVE_SEARCH?: { API_KEY?: string };
+      BRAVE_LLM?: { API_KEY?: string };
+      MOJEEK?: { API_KEY?: string };
+    };
+  };
   TOOLS?: {
     CODE_EXECUTION?: {
       ENABLED?: boolean;
@@ -172,8 +185,48 @@ export const getAnthropicApiKey = () => loadConfig().MODELS.ANTHROPIC.API_KEY;
 
 export const getGeminiApiKey = () => loadConfig().MODELS.GEMINI.API_KEY;
 
-export const getSearxngApiEndpoint = () =>
-  process.env.SEARXNG_API_URL || loadConfig().API_ENDPOINTS.SEARXNG;
+export const getSearxngApiEndpoint = () => {
+  const cfg = loadConfig();
+  return (
+    process.env.SEARXNG_API_URL ||
+    cfg.SEARCH?.PROVIDERS?.SEARXNG?.API_URL ||
+    cfg.API_ENDPOINTS?.SEARXNG ||
+    ''
+  );
+};
+
+export type SearchProviderIdType =
+  | 'searxng'
+  | 'brave_search'
+  | 'brave_llm'
+  | 'mojeek';
+
+export const getSearchProviderSelection = () => {
+  const s = loadConfig().SEARCH;
+  return {
+    provider: (s?.PROVIDER as SearchProviderIdType) || 'searxng',
+    privateProvider: (s?.PRIVATE_PROVIDER as SearchProviderIdType) || undefined,
+    fallbackProvider:
+      (s?.FALLBACK_PROVIDER as SearchProviderIdType) || 'searxng',
+  };
+};
+
+export const getSearchLocale = () => {
+  const s = loadConfig().SEARCH;
+  return {
+    language: s?.LANGUAGE || 'en',
+    region: s?.REGION ?? 'US',
+  };
+};
+
+export const getBraveSearchApiKey = () =>
+  loadConfig().SEARCH?.PROVIDERS?.BRAVE_SEARCH?.API_KEY || '';
+
+export const getBraveLLMApiKey = () =>
+  loadConfig().SEARCH?.PROVIDERS?.BRAVE_LLM?.API_KEY || '';
+
+export const getMojeekApiKey = () =>
+  loadConfig().SEARCH?.PROVIDERS?.MOJEEK?.API_KEY || '';
 
 export const getOllamaApiEndpoint = () => loadConfig().MODELS.OLLAMA.API_URL;
 

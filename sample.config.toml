@@ -46,6 +46,32 @@ API_URL = ""
 [API_ENDPOINTS]
 SEARXNG = ""
 
+[SEARCH]
+# Primary search provider for regular chats.
+# Options: "searxng" | "brave_search" | "brave_llm" | "mojeek"
+PROVIDER = "searxng"
+# Optional: override provider for private chats. Leave empty to use PROVIDER.
+PRIVATE_PROVIDER = ""
+# Fallback provider used when the primary doesn't support a capability
+# (e.g. Mojeek has no image search — fallback covers it).
+FALLBACK_PROVIDER = "searxng"
+# Preferred result language (ISO 639-1, e.g. "en", "fr", "de").
+LANGUAGE = "en"
+# Preferred region (ISO 3166-1 alpha-2 country code, e.g. "US", "GB"). Leave empty for none.
+REGION = "US"
+
+[SEARCH.PROVIDERS.SEARXNG]
+API_URL = ""
+
+[SEARCH.PROVIDERS.BRAVE_SEARCH]
+API_KEY = ""
+
+[SEARCH.PROVIDERS.BRAVE_LLM]
+API_KEY = ""
+
+[SEARCH.PROVIDERS.MOJEEK]
+API_KEY = ""
+
 [TOOLS.CODE_EXECUTION]
 ENABLED = false
 DOCKER_IMAGE = "node:slim"

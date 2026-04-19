@@ -47,6 +47,7 @@ const Chat = ({
   setPendingImages,
   imageCapable = false,
   isPrivateSession = false,
+  searchCapabilities,
 }: {
   messages: Message[];
   sendMessage: (
@@ -126,6 +127,12 @@ const Chat = ({
   setPendingImages: (images: ImageAttachment[]) => void;
   imageCapable?: boolean;
   isPrivateSession?: boolean;
+  searchCapabilities?: {
+    web: boolean;
+    images: boolean;
+    videos: boolean;
+    autocomplete: boolean;
+  };
 }) => {
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [manuallyScrolledUp, setManuallyScrolledUp] = useState(false);
@@ -305,6 +312,8 @@ const Chat = ({
               modelStats={modelStats}
               gatheringSources={gatheringSources}
               actionMessageId={currentMessageId}
+              isPrivateSession={isPrivateSession}
+              searchCapabilities={searchCapabilities}
               editInputProps={{
                 fileIds,
                 setFileIds,

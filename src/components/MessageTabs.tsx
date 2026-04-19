@@ -76,6 +76,13 @@ interface SearchTabsProps {
     sources: Document[];
   }>;
   actionMessageId?: string;
+  isPrivateSession?: boolean;
+  searchCapabilities?: {
+    web: boolean;
+    images: boolean;
+    videos: boolean;
+    autocomplete: boolean;
+  };
 }
 
 const MessageTabs = ({
@@ -92,7 +99,11 @@ const MessageTabs = ({
   modelStats,
   gatheringSources,
   actionMessageId,
+  isPrivateSession,
+  searchCapabilities,
 }: SearchTabsProps) => {
+  const imagesAvailable = searchCapabilities?.images ?? false;
+  const videosAvailable = searchCapabilities?.videos ?? false;
   const [openPanel, setOpenPanel] = useState<PanelType | null>(null);
   const [imageCount, setImageCount] = useState(0);
   const [videoCount, setVideoCount] = useState(0);
@@ -255,28 +266,32 @@ const MessageTabs = ({
                     <span className="text-xs">{message.sources!.length}</span>
                   </button>
                 )}
-                <button
-                  onClick={() => togglePanel('images')}
-                  className={panelIconBtnClass(openPanel === 'images')}
-                  title="Images"
-                  aria-pressed={openPanel === 'images'}
-                >
-                  <ImagesIcon size={18} />
-                  {imageCount > 0 && (
-                    <span className="text-xs">{imageCount}</span>
-                  )}
-                </button>
-                <button
-                  onClick={() => togglePanel('videos')}
-                  className={panelIconBtnClass(openPanel === 'videos')}
-                  title="Videos"
-                  aria-pressed={openPanel === 'videos'}
-                >
-                  <VideoIcon size={18} />
-                  {videoCount > 0 && (
-                    <span className="text-xs">{videoCount}</span>
-                  )}
-                </button>
+                {imagesAvailable && (
+                  <button
+                    onClick={() => togglePanel('images')}
+                    className={panelIconBtnClass(openPanel === 'images')}
+                    title="Images"
+                    aria-pressed={openPanel === 'images'}
+                  >
+                    <ImagesIcon size={18} />
+                    {imageCount > 0 && (
+                      <span className="text-xs">{imageCount}</span>
+                    )}
+                  </button>
+                )}
+                {videosAvailable && (
+                  <button
+                    onClick={() => togglePanel('videos')}
+                    className={panelIconBtnClass(openPanel === 'videos')}
+                    title="Videos"
+                    aria-pressed={openPanel === 'videos'}
+                  >
+                    <VideoIcon size={18} />
+                    {videoCount > 0 && (
+                      <span className="text-xs">{videoCount}</span>
+                    )}
+                  </button>
+                )}
               </div>
               <div className="flex flex-row items-center space-x-1">
                 <Copy initialMessage={message.content} message={message} />
@@ -344,6 +359,7 @@ const MessageTabs = ({
                 chatHistory={chatHistory}
                 messageId={messageId}
                 onImagesLoaded={updateImageCount}
+                isPrivate={isPrivateSession}
               />
             </div>
           )}
@@ -360,6 +376,7 @@ const MessageTabs = ({
                 chatHistory={chatHistory}
                 messageId={messageId}
                 onVideosLoaded={updateVideoCount}
+                isPrivate={isPrivateSession}
               />
             </div>
           )}

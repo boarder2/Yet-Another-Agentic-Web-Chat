@@ -759,6 +759,7 @@ export const POST = async (req: Request) => {
       message.chatId,
       true, // interactiveSession enabled for streaming responses with source updates
       methodologyInstructions,
+      body.isPrivate,
     );
 
     // Pass the abort signal to the search handler

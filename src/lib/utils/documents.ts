@@ -11,6 +11,7 @@ import { JSDOM } from 'jsdom';
 import { chromium, Page, Browser, BrowserContext } from 'playwright';
 import { WebPDFLoader } from '@langchain/community/document_loaders/web/pdf';
 import TurndownService from 'turndown';
+import { getSearchLocale } from '@/lib/config';
 
 function htmlToMarkdown(html: string): string {
   const turndown = new TurndownService({
@@ -128,7 +129,7 @@ export const retrieveYoutubeTranscript = async (
     }
 
     const transcriptLoader = YoutubeLoader.createFromUrl(url, {
-      language: 'en',
+      language: getSearchLocale().language,
       addVideoInfo: true,
     });
     const transcript = await transcriptLoader.load();

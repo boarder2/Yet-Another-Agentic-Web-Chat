@@ -326,9 +326,6 @@ const Chat = ({
                 imageCapable,
               }}
             />
-            {!isLast && msg.role === 'assistant' && (
-              <div className="h-px w-full bg-surface-2" />
-            )}
           </Fragment>
         );
       })}

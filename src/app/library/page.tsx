@@ -7,6 +7,7 @@ import {
   CalendarClock,
   ClockIcon,
   EyeOff,
+  MessageSquare,
   Pin,
   Search,
   Sparkles,
@@ -24,6 +25,7 @@ export interface Chat {
   pinned?: number;
   scheduledTaskId?: string | null;
   matchExcerpt?: string | null;
+  messageCount?: number;
 }
 
 function getPrivateExpiresIn(
@@ -72,6 +74,9 @@ const Page = () => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
+  const [browseTotal, setBrowseTotal] = useState(0);
+  const [browseTotalMessages, setBrowseTotalMessages] = useState(0);
+  const [searchTotalMessages, setSearchTotalMessages] = useState(0);
   const limit = 50;
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
@@ -84,14 +89,25 @@ const Page = () => {
   const [searchTerms, setSearchTerms] = useState<string[]>([]);
   const [searchMode, setSearchMode] = useState<'text' | 'llm'>('text');
 
-  // Pinned filter
+  // Filters
   const [pinnedOnly, setPinnedOnly] = useState(false);
+  const [scheduledFilter, setScheduledFilter] = useState<
+    'all' | 'scheduled' | 'unscheduled'
+  >('all');
 
   const isSearchMode = debouncedQuery.trim().length > 0;
   const displayedChats = isSearchMode ? searchResults : chats;
   const isSearching = isTextSearching || isLlmSearching;
+  const totalConversations = isSearchMode ? searchResults.length : browseTotal;
+  const totalMessages = isSearchMode
+    ? searchTotalMessages
+    : browseTotalMessages;
 
-  const fetchPage = async (nextOffset: number, pinFilter?: boolean) => {
+  const fetchPage = async (
+    nextOffset: number,
+    pinFilter?: boolean,
+    schedFilter?: 'all' | 'scheduled' | 'unscheduled',
+  ) => {
     if (nextOffset === 0) {
       setLoading(true);
     } else {
@@ -99,9 +115,16 @@ const Page = () => {
     }
 
     const usePinFilter = pinFilter ?? pinnedOnly;
+    const useSchedFilter = schedFilter ?? scheduledFilter;
     const pinnedQuery = usePinFilter ? '&pinned=1' : '';
+    const scheduledQuery =
+      useSchedFilter === 'scheduled'
+        ? '&scheduled=1'
+        : useSchedFilter === 'unscheduled'
+          ? '&scheduled=0'
+          : '';
     const res = await fetch(
-      `/api/chats?limit=${limit}&offset=${nextOffset}${pinnedQuery}`,
+      `/api/chats?limit=${limit}&offset=${nextOffset}${pinnedQuery}${scheduledQuery}`,
       {
         method: 'GET',
         headers: {
@@ -117,6 +140,9 @@ const Page = () => {
     );
     setHasMore(data.hasMore);
     setOffset(nextOffset + data.chats.length);
+    if (typeof data.total === 'number') setBrowseTotal(data.total);
+    if (typeof data.totalMessages === 'number')
+      setBrowseTotalMessages(data.totalMessages);
 
     setLoading(false);
     setLoadingMore(false);
@@ -196,6 +222,7 @@ const Page = () => {
     if (!debouncedQuery.trim()) {
       setSearchResults([]);
       setSearchTerms([]);
+      setSearchTotalMessages(0);
       return;
     }
 
@@ -205,7 +232,7 @@ const Page = () => {
       setSearchTerms([]);
       try {
         const res = await fetch(
-          `/api/chats?q=${encodeURIComponent(debouncedQuery)}&limit=200`,
+          `/api/chats?q=${encodeURIComponent(debouncedQuery)}`,
           {
             method: 'GET',
             headers: { 'Content-Type': 'application/json' },
@@ -213,9 +240,13 @@ const Page = () => {
         );
         const data = await res.json();
         setSearchResults(data.chats || []);
+        setSearchTotalMessages(
+          typeof data.totalMessages === 'number' ? data.totalMessages : 0,
+        );
       } catch (err) {
         console.error('Text search error:', err);
         setSearchResults([]);
+        setSearchTotalMessages(0);
       } finally {
         setIsTextSearching(false);
       }
@@ -252,9 +283,13 @@ const Page = () => {
       const data = await res.json();
       setSearchResults(data.chats || []);
       setSearchTerms(data.terms || []);
+      setSearchTotalMessages(
+        typeof data.totalMessages === 'number' ? data.totalMessages : 0,
+      );
     } catch (err) {
       console.error('LLM search error:', err);
       setSearchResults([]);
+      setSearchTotalMessages(0);
     } finally {
       setIsLlmSearching(false);
     }
@@ -265,6 +300,7 @@ const Page = () => {
     setDebouncedQuery('');
     setSearchResults([]);
     setSearchTerms([]);
+    setSearchTotalMessages(0);
     setSearchMode('text');
   };
 
@@ -367,6 +403,44 @@ const Page = () => {
             <Pin size={11} className={pinnedOnly ? 'fill-current' : ''} />
             Pinned
           </button>
+          <button
+            onClick={() => {
+              const next: 'all' | 'scheduled' | 'unscheduled' =
+                scheduledFilter === 'all'
+                  ? 'scheduled'
+                  : scheduledFilter === 'scheduled'
+                    ? 'unscheduled'
+                    : 'all';
+              setScheduledFilter(next);
+              setChats([]);
+              setOffset(0);
+              setHasMore(true);
+              fetchPage(0, undefined, next);
+            }}
+            title={
+              scheduledFilter === 'all'
+                ? 'Show only scheduled'
+                : scheduledFilter === 'scheduled'
+                  ? 'Show only unscheduled'
+                  : 'Show all'
+            }
+            className={cn(
+              'flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors',
+              scheduledFilter !== 'all'
+                ? 'bg-accent/10 border-accent/30 text-accent'
+                : 'bg-surface border-surface-2 text-fg/60 hover:text-fg hover:border-fg/30',
+            )}
+          >
+            <CalendarClock size={11} />
+            {scheduledFilter === 'unscheduled' ? 'Unscheduled' : 'Scheduled'}
+          </button>
+          {!isSearchMode && totalConversations > 0 && (
+            <span className="text-xs text-fg/50">
+              {totalMessages} message{totalMessages === 1 ? '' : 's'} in{' '}
+              {totalConversations} conversation
+              {totalConversations === 1 ? '' : 's'}
+            </span>
+          )}
         </div>
 
         {/* Search status */}
@@ -382,7 +456,7 @@ const Page = () => {
                 <span>
                   {searchResults.length === 0
                     ? 'No matching conversations'
-                    : `${searchResults.length} conversation${searchResults.length === 1 ? '' : 's'} found`}
+                    : `${totalConversations} conversation${totalConversations === 1 ? '' : 's'} found (${totalMessages} message${totalMessages === 1 ? '' : 's'})`}
                   {searchMode === 'llm' ? ' (AI search)' : ''}
                 </span>
                 {searchTerms.length > 0 && (
@@ -481,6 +555,16 @@ const Page = () => {
                           new Date(chat.createdAt),
                         )}{' '}
                         Ago
+                      </p>
+                    </>
+                  )}
+                  {typeof chat.messageCount === 'number' && (
+                    <>
+                      <span className="mx-1.5 text-fg/30">·</span>
+                      <MessageSquare size={13} />
+                      <p className="text-xs">
+                        {chat.messageCount} message
+                        {chat.messageCount === 1 ? '' : 's'}
                       </p>
                     </>
                   )}

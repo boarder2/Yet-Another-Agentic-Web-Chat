@@ -17,9 +17,10 @@ import { deepResearchTool } from './deepResearchTool';
 import { todoListTool } from './todoListTool';
 import { imageAnalysisTool } from './imageAnalysisTool';
 import { memoryTools } from './memoryTools';
-import { getCodeExecutionConfig } from '@/lib/config';
+import { getCodeExecutionConfig, getExaApiKey } from '@/lib/config';
 import { codeExecutionTool } from './codeExecutionTool';
 import { askUserTool } from './askUserTool';
+import { exaWebSearchTool } from './exaWebSearchTool';
 
 export { simpleWebSearchTool };
 export { fileSearchTool };
@@ -32,6 +33,7 @@ export { todoListTool };
 export { memoryTools };
 export { codeExecutionTool };
 export { askUserTool };
+export { exaWebSearchTool };
 
 // Base tool arrays (non-interactive, used by subagents)
 export const allAgentTools = [
@@ -67,6 +69,11 @@ function withInteractiveTools<T>(tools: T[]): T[] {
   const config = getCodeExecutionConfig();
   if (config.enabled && !('validationError' in config)) {
     result.push(codeExecutionTool as unknown as T);
+  }
+  // exa_web_search is registered only when an API key is configured, so the
+  // agent doesn't see a tool it can't actually use.
+  if (getExaApiKey()) {
+    result.push(exaWebSearchTool as unknown as T);
   }
   // ask_user is always available; it checks interactiveSession at call time
   result.push(askUserTool as unknown as T);

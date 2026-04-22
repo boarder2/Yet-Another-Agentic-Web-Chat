@@ -14,7 +14,7 @@ User submits a query → API route → `SimplifiedAgent` (LangGraph React Agent)
 - **Frontend**: React 19, Next.js (App Router), Tailwind CSS 4, Headless UI
 - **Backend**: Node.js, LangChain + LangGraph
 - **Database**: SQLite with Drizzle ORM (`src/lib/db/schema.ts`, tables: `messages`, `chats`, `systemPrompts`)
-- **Search**: SearXNG integration (`src/lib/searxng.ts`)
+- **Search**: SearXNG integration (`src/lib/searxng.ts`), optional Exa integration (`src/lib/exa.ts`) gated on `EXA_API_KEY`
 - **Content Processing**: Mozilla Readability, Cheerio, Playwright
 - **LLM Providers**: OpenAI, Anthropic, Groq, Ollama, Gemini, DeepSeek, LM Studio
 - **Embeddings**: Xenova Transformers (cosine/dot product similarity)
@@ -28,7 +28,7 @@ User submits a query → API route → `SimplifiedAgent` (LangGraph React Agent)
 - `/src/lib/search` — `SimplifiedAgent` agent, focus-mode tool/prompt selection
 - `/src/lib/providers` — LLM and embedding model integrations (see **adding-features** skill)
 - `/src/lib/prompts` — Prompt templates including `prompts/simplifiedAgent/*` (see **prompt-system** skill)
-- `/src/lib/tools/agents` — Agent tools (`web_search`, `file_search`, `url_summarization`, `image_search`, `image_analysis`, `deep_research`, `todo_list`, `ask_user`, etc.)
+- `/src/lib/tools/agents` — Agent tools (`web_search`, `exa_web_search`, `file_search`, `url_summarization`, `image_search`, `image_analysis`, `deep_research`, `todo_list`, `ask_user`, etc.)
 - `/src/lib/userQuestion` — User question state management (pending questions, correlation)
 - `/src/lib/db` — Database schema and operations
 - `/src/lib/chains` — Specialized chains (image/video search helpers)

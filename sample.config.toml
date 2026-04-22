@@ -40,6 +40,12 @@ API_URL = ""
 [API_ENDPOINTS]
 SEARXNG = ""
 
+# Optional third-party search provider. When API_KEYS.EXA.API_KEY is set
+# (or EXA_API_KEY is set in the environment), the agent gains an
+# `exa_web_search` tool powered by https://exa.ai alongside SearXNG.
+[API_KEYS.EXA]
+API_KEY = ""
+
 [TOOLS.CODE_EXECUTION]
 ENABLED = false
 DOCKER_IMAGE = "node:slim"

@@ -53,6 +53,11 @@ interface Config {
   API_ENDPOINTS: {
     SEARXNG: string;
   };
+  API_KEYS?: {
+    EXA?: {
+      API_KEY?: string;
+    };
+  };
   TOOLS?: {
     CODE_EXECUTION?: {
       ENABLED?: boolean;
@@ -147,6 +152,9 @@ export const getGeminiApiKey = () => loadConfig().MODELS.GEMINI.API_KEY;
 
 export const getSearxngApiEndpoint = () =>
   process.env.SEARXNG_API_URL || loadConfig().API_ENDPOINTS.SEARXNG;
+
+export const getExaApiKey = () =>
+  process.env.EXA_API_KEY || loadConfig().API_KEYS?.EXA?.API_KEY || '';
 
 export const getOllamaApiEndpoint = () => loadConfig().MODELS.OLLAMA.API_URL;
 

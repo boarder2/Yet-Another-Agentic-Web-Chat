@@ -45,6 +45,7 @@
     "compute-dot": "^1.1.0",
     "dockerode": "^4.0.10",
     "drizzle-orm": "^0.45.1",
+    "exa-js": "^2.11.0",
     "html-to-text": "^9.0.5",
     "jsdom": "^28.1.0",
     "jspdf": "^4.1.0",

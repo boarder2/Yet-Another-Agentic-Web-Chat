@@ -101,6 +101,15 @@ External service endpoints.
 - **Example**: `"http://localhost:32768"`
 - **Note**: Can also be set via the `SEARXNG_API_URL` environment variable, which takes precedence over the config file value.
 
+### [API_KEYS]
+
+Optional third-party API keys.
+
+#### [API_KEYS.EXA]
+
+- **API_KEY**: Your [Exa](https://exa.ai) API key. When set, the agent gains an `exa_web_search` tool that performs neural/semantic web search alongside SearxNG. Leave empty to disable.
+- **Note**: Can also be set via the `EXA_API_KEY` environment variable, which takes precedence over the config file value.
+
 ## Model Visibility Management
 
 The `HIDDEN_MODELS` setting allows server administrators to control which models are visible to users:
@@ -181,4 +190,7 @@ MODEL_NAME = ""
 
 [API_ENDPOINTS]
 SEARXNG = "http://localhost:32768"
+
+[API_KEYS.EXA]
+API_KEY = ""
 ```

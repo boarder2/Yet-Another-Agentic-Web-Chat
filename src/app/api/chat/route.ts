@@ -24,6 +24,7 @@ import { buildMultimodalHumanMessage } from '@/lib/utils/images';
 import { retrieveRelevantMemories } from '@/lib/utils/memoryRetrieval';
 import { buildMemorySection } from '@/lib/prompts/memory/memoryContext';
 import { processExtraction } from '@/lib/utils/memoryExtraction';
+import { distillQueryForEmbedding } from '@/lib/utils/queryDistillation';
 import { denyApprovalsForMessage } from '@/lib/sandbox/pendingApprovals';
 import { cancelQuestionsForMessage } from '@/lib/userQuestion/pendingQuestions';
 import { SimplifiedAgent } from '@/lib/search/simplifiedAgent';
@@ -719,11 +720,34 @@ export const POST = async (req: Request) => {
     // --- Memory retrieval ---
     let memorySection = '';
     let memoriesUsed: Array<{ id: string; content: string }> = [];
+    let distillationUsage: TokenUsage = {
+      input_tokens: 0,
+      output_tokens: 0,
+      total_tokens: 0,
+    };
 
     if (body.memoryEnabled) {
       try {
+        // Distill long queries before embedding to avoid exceeding model token limits.
+        // Short queries are returned unchanged with zero usage.
+        let queryForEmbedding = message.content;
+        if (systemLlm) {
+          const distillResult = await distillQueryForEmbedding(
+            message.content,
+            systemLlm,
+            abortController.signal,
+          );
+          queryForEmbedding = distillResult.query;
+          distillationUsage = distillResult.usage;
+          if (distillResult.usage.total_tokens > 0) {
+            console.log(
+              `[memoryRetrieval] Query distilled (${message.content.length} → ${queryForEmbedding.length} chars), tokens input: ${distillResult.usage.input_tokens}, tokens output: ${distillResult.usage.output_tokens}, total tokens: ${distillResult.usage.total_tokens}\nDistilled query: "${queryForEmbedding}"`,
+            );
+          }
+        }
+
         const relevantMemories = await retrieveRelevantMemories(
-          message.content,
+          queryForEmbedding,
           embedding,
         );
         if (relevantMemories.length > 0) {
@@ -760,6 +784,7 @@ export const POST = async (req: Request) => {
       true, // interactiveSession enabled for streaming responses with source updates
       methodologyInstructions,
       body.isPrivate,
+      distillationUsage,
     );
 
     // Pass the abort signal to the search handler

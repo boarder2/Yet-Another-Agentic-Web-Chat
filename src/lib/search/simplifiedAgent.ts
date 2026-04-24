@@ -34,6 +34,7 @@ import { prepHistoryMessages } from '../utils/contentUtils';
 import { getModelName } from '../utils/modelUtils';
 import { CachedEmbeddings } from '../utils/cachedEmbeddings';
 import { buildPersonalizationSection } from '../utils/personalization';
+import { TokenUsage } from '../utils/queryDistillation';
 
 /**
  * Normalize usage metadata from different LLM providers
@@ -145,6 +146,7 @@ export class SimplifiedAgent {
   private chatId?: string;
   private interactiveSession: boolean;
   private isPrivate: boolean;
+  private initialSystemUsage: TokenUsage;
 
   constructor(
     chatLlm: BaseChatModel,
@@ -163,6 +165,7 @@ export class SimplifiedAgent {
     interactiveSession: boolean = false,
     methodologyInstructions: string = '',
     isPrivate: boolean = false,
+    initialSystemUsage?: TokenUsage,
   ) {
     this.chatLlm = chatLlm;
     this.systemLlm = systemLlm;
@@ -180,6 +183,11 @@ export class SimplifiedAgent {
     this.chatId = chatId;
     this.interactiveSession = interactiveSession;
     this.isPrivate = isPrivate;
+    this.initialSystemUsage = initialSystemUsage ?? {
+      input_tokens: 0,
+      output_tokens: 0,
+      total_tokens: 0,
+    };
   }
 
   private emitResponse(text: string) {
@@ -778,12 +786,13 @@ export class SimplifiedAgent {
       } | null = null;
       const collectedDocuments: Document[] = [];
       let currentResponseBuffer = '';
-      // Separate usage trackers for chat (final answer) and system (tools/internal chains)
+      // Separate usage trackers for chat (final answer) and system (tools/internal chains).
+      // Pre-seed usageSystem with any pre-agent LLM usage (e.g., query distillation).
       const usageChat = { input_tokens: 0, output_tokens: 0, total_tokens: 0 };
       const usageSystem = {
-        input_tokens: 0,
-        output_tokens: 0,
-        total_tokens: 0,
+        input_tokens: this.initialSystemUsage.input_tokens,
+        output_tokens: this.initialSystemUsage.output_tokens,
+        total_tokens: this.initialSystemUsage.total_tokens,
       };
 
       let initialMessageSent = false;

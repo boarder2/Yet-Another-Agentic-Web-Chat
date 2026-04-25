@@ -627,12 +627,15 @@ const MarkdownRenderer = ({
       },
       code: {
         component: ({ className, children }) => {
-          // Check if it's an inline code block or a fenced code block
           if (className) {
-            // This is a fenced code block (```code```)
+            // Fenced code block with language specifier
             return <CodeBlock className={className}>{children}</CodeBlock>;
           }
-          // This is an inline code block (`code`)
+          // Fenced code block without language specifier — content contains newlines
+          if (typeof children === 'string' && children.includes('\n')) {
+            return <CodeBlock className="text">{children}</CodeBlock>;
+          }
+          // Inline code block (`code`)
           return (
             <code className="px-1.5 py-0.5 rounded bg-surface-2 font-mono text-sm">
               {children}

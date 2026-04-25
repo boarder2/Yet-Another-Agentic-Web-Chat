@@ -106,6 +106,9 @@ const MessageBox = ({
 }) => {
   // Local state for editing functionality
   const [isEditing, setIsEditing] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(true);
+  const isLongMessage =
+    message.role === 'user' && message.content.split('\n').length > 5;
   const [editPendingImages, setEditPendingImages] = useState<ImageAttachment[]>(
     [],
   );
@@ -153,7 +156,7 @@ const MessageBox = ({
             </div>
           ) : (
             <div className="ml-[15%]">
-              <div className="relative bg-surface-2 rounded-xl px-4 py-3 border-b-2 border-accent">
+              <div className="relative bg-surface-2 rounded-xl px-4 py-3 border-b-2 border-accent overflow-hidden">
                 <button
                   onClick={startEditMessage}
                   disabled={loading}
@@ -168,8 +171,16 @@ const MessageBox = ({
                 >
                   <Pencil size={16} />
                 </button>
-                <div className="pr-8">
+                <div
+                  className={cn(
+                    'relative pr-8',
+                    isLongMessage && isCollapsed && 'max-h-32 overflow-hidden',
+                  )}
+                >
                   <MarkdownRenderer content={message.content} />
+                  {isLongMessage && isCollapsed && (
+                    <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-linear-to-t from-surface-2 to-transparent" />
+                  )}
                 </div>
                 {message.images && message.images.length > 0 && (
                   <div className="flex flex-row gap-2 mt-3 flex-wrap">
@@ -182,6 +193,24 @@ const MessageBox = ({
                       />
                     ))}
                   </div>
+                )}
+                {isLongMessage && isCollapsed && (
+                  <button
+                    onClick={() => setIsCollapsed(false)}
+                    className="-mx-4 -mb-3 mt-1 w-[calc(100%+2rem)] py-2 bg-surface-2 text-center text-xs font-medium text-accent hover:bg-surface transition-colors"
+                    aria-label="Show full message"
+                  >
+                    Show full
+                  </button>
+                )}
+                {isLongMessage && !isCollapsed && (
+                  <button
+                    onClick={() => setIsCollapsed(true)}
+                    className="-mx-4 -mb-3 mt-2 w-[calc(100%+2rem)] py-2 bg-surface-2 text-center text-xs text-fg/50 hover:bg-surface hover:text-accent transition-colors"
+                    aria-label="Collapse message"
+                  >
+                    Collapse
+                  </button>
                 )}
               </div>
             </div>

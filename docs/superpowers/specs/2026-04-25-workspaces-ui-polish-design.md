@@ -196,8 +196,8 @@ workspace is bound through `chats.workspaceId`.
 `ChatBrowser` (unscoped mode) renders a horizontal, scrollable chip row
 above the search input:
 
-- Chips: "All" (default selected), one per active workspace (with color
-  - icon), and "No workspace" at the end.
+- Chips: "All" (default selected), one per active workspace (color tint
+  and icon), and "No workspace" at the end.
 - Multi-select. Selecting "All" clears the others. Selecting any
   workspace clears "All".
 - Selected workspace chips use the workspace's color tint via the

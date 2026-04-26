@@ -75,6 +75,7 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const q = searchParams.get('q');
     const category = searchParams.get('category');
+    const workspaceId = searchParams.get('workspaceId');
     const sort = searchParams.get('sort') || 'createdAt';
     const limit = Math.min(
       parseInt(searchParams.get('limit') || '50', 10),
@@ -90,6 +91,9 @@ export async function GET(req: Request) {
     }
     if (category && MEMORY_CATEGORIES.includes(category as MemoryCategory)) {
       conditions.push(eq(memories.category, category as MemoryCategory));
+    }
+    if (workspaceId) {
+      conditions.push(eq(memories.workspaceId, workspaceId));
     }
 
     if (conditions.length === 1) {
@@ -117,6 +121,9 @@ export async function GET(req: Request) {
     if (q) countConditions.push(like(memories.content, `%${q}%`));
     if (category && MEMORY_CATEGORIES.includes(category as MemoryCategory)) {
       countConditions.push(eq(memories.category, category as MemoryCategory));
+    }
+    if (workspaceId) {
+      countConditions.push(eq(memories.workspaceId, workspaceId));
     }
 
     let totalQuery = db.select({ count: count() }).from(memories).$dynamic();
@@ -149,7 +156,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const { content } = await req.json();
+    const { content, workspaceId } = await req.json();
     if (
       !content ||
       typeof content !== 'string' ||
@@ -189,6 +196,8 @@ export async function POST(req: Request) {
         embeddingModel: embeddingIdentifier,
         category,
         sourceType: 'manual',
+        workspaceId:
+          workspaceId && typeof workspaceId === 'string' ? workspaceId : null,
         createdAt: now,
         updatedAt: now,
       })

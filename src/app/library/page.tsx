@@ -1,6 +1,7 @@
 'use client';
 
 import DeleteChat from '@/components/DeleteChat';
+import WorkspaceChip from '@/components/Workspaces/WorkspaceChip';
 import { cn, formatTimeDifference } from '@/lib/utils';
 import {
   BookOpenText,
@@ -24,6 +25,7 @@ export interface Chat {
   isPrivate?: number;
   pinned?: number;
   scheduledTaskId?: string | null;
+  workspaceId?: string | null;
   matchExcerpt?: string | null;
   messageCount?: number;
 }
@@ -79,6 +81,29 @@ const Page = () => {
   const [searchTotalMessages, setSearchTotalMessages] = useState(0);
   const limit = 50;
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  const [workspaceMap, setWorkspaceMap] = useState<
+    Record<string, { name: string; icon: string | null; archived: boolean }>
+  >({});
+
+  useEffect(() => {
+    Promise.all([
+      fetch('/api/workspaces').then((r) => r.json()),
+      fetch('/api/workspaces?archived=true').then((r) => r.json()),
+    ])
+      .then(([active, archived]) => {
+        const map: Record<
+          string,
+          { name: string; icon: string | null; archived: boolean }
+        > = {};
+        for (const ws of active.workspaces ?? [])
+          map[ws.id] = { ...ws, archived: false };
+        for (const ws of archived.workspaces ?? [])
+          map[ws.id] = { ...ws, archived: true };
+        setWorkspaceMap(map);
+      })
+      .catch(() => {});
+  }, []);
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -521,6 +546,14 @@ const Page = () => {
                     <CalendarClock size={11} />
                     Scheduled
                   </span>
+                )}
+                {chat.workspaceId && workspaceMap[chat.workspaceId] && (
+                  <WorkspaceChip
+                    id={chat.workspaceId}
+                    name={workspaceMap[chat.workspaceId].name}
+                    icon={workspaceMap[chat.workspaceId].icon}
+                    muted={workspaceMap[chat.workspaceId].archived}
+                  />
                 )}
               </div>
               {isSearchMode && chat.matchExcerpt && (

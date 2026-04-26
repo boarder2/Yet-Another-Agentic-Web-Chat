@@ -2,7 +2,7 @@ import { updateToolCallMarkup } from '@/lib/utils/toolCallMarkup';
 import { encodeHtmlAttribute } from '@/lib/utils/html';
 import { cleanupCancelToken, registerCancelToken } from '@/lib/cancel-tokens';
 import db from '@/lib/db';
-import { chats, messages as messagesSchema } from '@/lib/db/schema';
+import { chats, messages as messagesSchema, workspaces } from '@/lib/db/schema';
 import { resolveChatAndEmbedding } from '@/lib/providers/resolveModels';
 import { getFileDetails } from '@/lib/utils/files';
 import {
@@ -28,6 +28,10 @@ import { distillQueryForEmbedding } from '@/lib/utils/queryDistillation';
 import { denyApprovalsForMessage } from '@/lib/sandbox/pendingApprovals';
 import { cancelQuestionsForMessage } from '@/lib/userQuestion/pendingQuestions';
 import { SimplifiedAgent } from '@/lib/search/simplifiedAgent';
+import { buildWorkspaceSystemPromptSuffix } from '@/lib/workspaces/composeSystemPrompt';
+import { workspaceLsTool } from '@/lib/tools/workspace/ls';
+import { workspaceGrepTool } from '@/lib/tools/workspace/grep';
+import { workspaceReadTool } from '@/lib/tools/workspace/read';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -75,6 +79,7 @@ type Body = {
   memoryEnabled?: boolean;
   memoryAutoDetection?: boolean;
   isPrivate?: boolean;
+  workspaceId?: string | null;
 };
 
 type TokenUsage = {
@@ -540,6 +545,7 @@ const handleHistorySave = async (
     mimeType: string;
   }>,
   isPrivate?: boolean,
+  workspaceId?: string | null,
 ) => {
   const chat = await db.query.chats.findFirst({
     where: eq(chats.id, message.chatId),
@@ -555,6 +561,7 @@ const handleHistorySave = async (
         focusMode: focusMode,
         files: files.map(getFileDetails),
         isPrivate: isPrivate ? 1 : 0,
+        workspaceId: workspaceId ?? null,
       })
       .execute();
   }
@@ -717,6 +724,26 @@ export const POST = async (req: Request) => {
       body.memoryAutoDetection = false;
     }
 
+    // --- Workspace context (load early so workspaceId is available for memory scoping) ---
+    // Load workspaceId from the CHAT RECORD (authoritative), not the request body.
+    // For a new chat the row is created in handleHistorySave (fire-and-forget below),
+    // so fall back to body.workspaceId only for the very first message.
+    let resolvedWorkspaceId: string | null = null;
+    let resolvedWorkspace: typeof workspaces.$inferSelect | null = null;
+    {
+      const existingChat = await db.query.chats.findFirst({
+        where: eq(chats.id, message.chatId),
+      });
+      resolvedWorkspaceId =
+        existingChat?.workspaceId ?? body.workspaceId ?? null;
+      if (resolvedWorkspaceId) {
+        resolvedWorkspace =
+          (await db.query.workspaces.findFirst({
+            where: eq(workspaces.id, resolvedWorkspaceId),
+          })) ?? null;
+      }
+    }
+
     // --- Memory retrieval ---
     let memorySection = '';
     let memoriesUsed: Array<{ id: string; content: string }> = [];
@@ -749,6 +776,7 @@ export const POST = async (req: Request) => {
         const relevantMemories = await retrieveRelevantMemories(
           queryForEmbedding,
           embedding,
+          { workspaceId: resolvedWorkspaceId },
         );
         if (relevantMemories.length > 0) {
           memorySection = buildMemorySection(relevantMemories);
@@ -767,6 +795,30 @@ export const POST = async (req: Request) => {
 
     const stream = new EventEmitter();
 
+    let workspaceSuffix = '';
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const workspaceExtraTools: any[] = [];
+    if (resolvedWorkspaceId) {
+      try {
+        workspaceSuffix = await buildWorkspaceSystemPromptSuffix({
+          workspaceId: resolvedWorkspaceId,
+          focusMode: body.focusMode,
+        });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const visionCapable = !!(chatLlm as any).visionCapable;
+        workspaceExtraTools.push(
+          workspaceLsTool(resolvedWorkspaceId),
+          workspaceGrepTool(resolvedWorkspaceId),
+          workspaceReadTool({
+            workspaceId: resolvedWorkspaceId,
+            visionCapable,
+          }),
+        );
+      } catch (err) {
+        console.warn('Failed to build workspace context:', err);
+      }
+    }
+
     const handler = new SimplifiedAgent(
       chatLlm,
       systemLlm!,
@@ -781,10 +833,12 @@ export const POST = async (req: Request) => {
       body.memoryEnabled,
       memorySection,
       message.chatId,
-      true, // interactiveSession enabled for streaming responses with source updates
+      true,
       methodologyInstructions,
       body.isPrivate,
       distillationUsage,
+      workspaceSuffix,
+      resolvedWorkspaceId,
     );
 
     // Pass the abort signal to the search handler
@@ -794,9 +848,10 @@ export const POST = async (req: Request) => {
       history,
       body.files,
       body.focusMode,
-      undefined, // customTools
-      undefined, // customSystemPrompt
+      undefined,
+      undefined,
       body.messageImageIds,
+      workspaceExtraTools.length > 0 ? workspaceExtraTools : undefined,
     );
 
     handleEmitterEvents(
@@ -814,15 +869,29 @@ export const POST = async (req: Request) => {
     );
 
     // Post-response automatic memory extraction (fire-and-forget)
-    if (body.memoryAutoDetection && systemLlm) {
+    // If a workspace is active, only run if autoMemoryEnabled is explicitly ON (=1).
+    const autoMemoryAllowed =
+      body.memoryAutoDetection &&
+      (!resolvedWorkspace || resolvedWorkspace.autoMemoryEnabled === 1);
+    if (autoMemoryAllowed && systemLlm) {
+      const capturedChatId = message.chatId;
+      const capturedWorkspaceId = resolvedWorkspaceId;
       stream.on('end', () => {
-        processExtraction(
-          message.content,
-          '', // assistant response text is captured in handleEmitterEvents
-          systemLlm!,
-          embedding,
-          message.chatId,
-        )
+        // Re-query the chat to get the authoritative workspaceId — handleHistorySave
+        // runs fire-and-forget, so by stream end the row should exist.
+        db.query.chats
+          .findFirst({ where: eq(chats.id, capturedChatId) })
+          .then((chat) => {
+            const wsId = chat?.workspaceId ?? capturedWorkspaceId;
+            return processExtraction(
+              message.content,
+              '', // assistant response text is captured in handleEmitterEvents
+              systemLlm!,
+              embedding,
+              capturedChatId,
+              wsId,
+            );
+          })
           .then((result) => {
             if (result.saved > 0 || result.updated > 0) {
               // Emit memory_updated event if the writer is hopefully still accessible
@@ -863,6 +932,7 @@ export const POST = async (req: Request) => {
       body.files,
       body.messageImages,
       body.isPrivate,
+      body.workspaceId,
     );
 
     return new Response(responseStream.readable, {

@@ -436,6 +436,9 @@ const ChatWindow = ({ id }: { id?: string }) => {
   const [selectedMethodologyId, setSelectedMethodologyId] = useState<
     string | null
   >(null);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(
+    null,
+  );
 
   const [isMessagesLoaded, setIsMessagesLoaded] = useState(false);
 
@@ -1569,6 +1572,10 @@ const ChatWindow = ({ id }: { id?: string }) => {
       payload.isPrivate = true;
     }
 
+    if (selectedWorkspaceId) {
+      payload.workspaceId = selectedWorkspaceId;
+    }
+
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: {
@@ -1848,6 +1855,8 @@ const ChatWindow = ({ id }: { id?: string }) => {
             setPendingImages={setPendingImages}
             imageCapable={imageCapable}
             isPrivateSession={isPrivateSession}
+            selectedWorkspaceId={selectedWorkspaceId}
+            setSelectedWorkspaceId={setSelectedWorkspaceId}
           />
         )}
       </div>

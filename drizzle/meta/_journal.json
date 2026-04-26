@@ -43,6 +43,13 @@
       "when": 1776541781151,
       "tag": "0005_retention_and_pinned",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1777141149268,
+      "tag": "0006_perfect_wallflower",
+      "breakpoints": true
     }
   ]
 }

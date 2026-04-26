@@ -25,6 +25,7 @@ interface Memory {
   lastAccessedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  workspaceId: string | null;
 }
 
 const CATEGORIES = [
@@ -462,6 +463,14 @@ const Page = () => {
                         <span className="text-xs text-fg/40">
                           Used {memory.accessCount}×
                         </span>
+                      )}
+                      {memory.workspaceId && (
+                        <Link
+                          href={`/workspaces/${memory.workspaceId}`}
+                          className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-accent/20 text-accent hover:bg-accent/30 transition"
+                        >
+                          workspace
+                        </Link>
                       )}
                     </div>
                   </div>

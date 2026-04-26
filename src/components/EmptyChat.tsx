@@ -3,6 +3,47 @@ import { File, ImageAttachment } from './ChatWindow';
 import Link from 'next/link';
 import MessageInput from './MessageInput';
 import { cn } from '@/lib/utils';
+import { useEffect, useState } from 'react';
+
+interface WorkspaceOption {
+  id: string;
+  name: string;
+  icon: string | null;
+}
+
+const WorkspacePicker = ({
+  value,
+  onChange,
+}: {
+  value: string | null;
+  onChange: (id: string | null) => void;
+}) => {
+  const [workspaces, setWorkspaces] = useState<WorkspaceOption[]>([]);
+
+  useEffect(() => {
+    fetch('/api/workspaces')
+      .then((r) => r.json())
+      .then((d) => setWorkspaces(d.workspaces ?? []))
+      .catch(() => {});
+  }, []);
+
+  if (workspaces.length === 0) return null;
+
+  return (
+    <select
+      value={value ?? ''}
+      onChange={(e) => onChange(e.target.value || null)}
+      className="px-3 py-1.5 text-sm rounded-lg border border-surface-2 bg-surface focus:outline-none focus:border-accent"
+    >
+      <option value="">No workspace</option>
+      {workspaces.map((ws) => (
+        <option key={ws.id} value={ws.id}>
+          {ws.icon ?? '📁'} {ws.name}
+        </option>
+      ))}
+    </select>
+  );
+};
 
 const EmptyChat = ({
   sendMessage,
@@ -27,6 +68,8 @@ const EmptyChat = ({
   setPendingImages,
   imageCapable = false,
   isPrivateSession = false,
+  selectedWorkspaceId,
+  setSelectedWorkspaceId,
 }: {
   sendMessage: (message: string) => void;
   focusMode: string;
@@ -50,6 +93,8 @@ const EmptyChat = ({
   setPendingImages: (images: ImageAttachment[]) => void;
   imageCapable?: boolean;
   isPrivateSession?: boolean;
+  selectedWorkspaceId?: string | null;
+  setSelectedWorkspaceId?: (id: string | null) => void;
 }) => {
   return (
     <div className="relative">
@@ -76,6 +121,12 @@ const EmptyChat = ({
                 : 'Start private session'}
             </span>
           </Link>
+          {!isPrivateSession && setSelectedWorkspaceId && (
+            <WorkspacePicker
+              value={selectedWorkspaceId ?? null}
+              onChange={setSelectedWorkspaceId}
+            />
+          )}
           <MessageInput
             firstMessage={true}
             loading={false}

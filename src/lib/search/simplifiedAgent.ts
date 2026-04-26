@@ -144,9 +144,11 @@ export class SimplifiedAgent {
   private memoryEnabled: boolean;
   private memorySection: string;
   private chatId?: string;
+  private workspaceId?: string | null;
   private interactiveSession: boolean;
   private isPrivate: boolean;
   private initialSystemUsage: TokenUsage;
+  private workspaceSuffix: string;
 
   constructor(
     chatLlm: BaseChatModel,
@@ -166,6 +168,8 @@ export class SimplifiedAgent {
     methodologyInstructions: string = '',
     isPrivate: boolean = false,
     initialSystemUsage?: TokenUsage,
+    workspaceSuffix: string = '',
+    workspaceId?: string | null,
   ) {
     this.chatLlm = chatLlm;
     this.systemLlm = systemLlm;
@@ -188,6 +192,8 @@ export class SimplifiedAgent {
       output_tokens: 0,
       total_tokens: 0,
     };
+    this.workspaceSuffix = workspaceSuffix;
+    this.workspaceId = workspaceId;
   }
 
   private emitResponse(text: string) {
@@ -240,18 +246,19 @@ export class SimplifiedAgent {
     firefoxAIDetected?: boolean,
     customTools?: typeof allAgentTools,
     customSystemPrompt?: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    extraTools?: any[],
   ) {
-    // Select appropriate tools based on focus mode and available files
-    // Special case: Firefox AI detection disables tools for this turn
-    // Special case: custom tools override (for subagents)
     const tools = customTools
       ? customTools
       : firefoxAIDetected
         ? []
         : this.getToolsForFocusMode(focusMode, fileIds);
 
+    const allTools = extraTools ? [...tools, ...extraTools] : tools;
+
     // Cache tool names for usage attribution heuristics
-    this.currentToolNames = tools.map((t) => t.name.toLowerCase());
+    this.currentToolNames = allTools.map((t) => t.name.toLowerCase());
 
     const enhancedSystemPrompt = customSystemPrompt
       ? customSystemPrompt
@@ -267,13 +274,13 @@ export class SimplifiedAgent {
       // Create the React agent with custom state
       const agent = createAgent({
         model: this.chatLlm,
-        tools,
+        tools: allTools,
         stateSchema: SimplifiedAgentState,
         systemPrompt: enhancedSystemPrompt,
       });
 
       console.log(
-        `SimplifiedAgent: Initialized with ${tools.length} tools for focus mode: ${focusMode}`,
+        `SimplifiedAgent: Initialized with ${allTools.length} tools for focus mode: ${focusMode}`,
       );
       if (firefoxAIDetected) {
         console.log(
@@ -281,7 +288,7 @@ export class SimplifiedAgent {
         );
       }
       console.log(
-        `SimplifiedAgent: Tools available: ${tools.map((tool) => tool.name).join(', ')}`,
+        `SimplifiedAgent: Tools available: ${allTools.map((t) => t.name).join(', ')}`,
       );
       if (fileIds.length > 0) {
         console.log(
@@ -422,6 +429,11 @@ export class SimplifiedAgent {
 - Always confirm success or failure after memory operations.`;
     }
 
+    // Append workspace context if present
+    if (this.workspaceSuffix) {
+      basePrompt += this.workspaceSuffix;
+    }
+
     return basePrompt;
   }
 
@@ -436,6 +448,8 @@ export class SimplifiedAgent {
     customTools?: typeof allAgentTools,
     customSystemPrompt?: string,
     messageImageIds?: string[],
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    extraTools?: any[],
   ): Promise<void> {
     // Declared outside try so the catch block can clean it up
     let toolLlmUsageHandler: ((data: string) => void) | null = null;
@@ -501,6 +515,7 @@ export class SimplifiedAgent {
         firefoxAIDetected,
         customTools,
         customSystemPrompt,
+        extraTools,
       );
 
       // Prepare initial state
@@ -531,6 +546,7 @@ export class SimplifiedAgent {
           userLocation: this.userLocation,
           userProfile: this.userProfile,
           chatId: this.chatId,
+          workspaceId: this.workspaceId,
           interactiveSession: this.interactiveSession,
           isPrivate: this.isPrivate,
         },

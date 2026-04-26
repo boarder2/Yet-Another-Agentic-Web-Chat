@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   Maximize2,
   Minimize2,
+  FolderOpen,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useSelectedLayoutSegments } from 'next/navigation';
@@ -126,6 +127,13 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
       href: '/memory',
       active: segments.includes('memory'),
       label: 'Memory',
+      badgeCount: 0,
+    },
+    {
+      icon: FolderOpen,
+      href: '/workspaces',
+      active: segments.includes('workspaces'),
+      label: 'Workspaces',
       badgeCount: 0,
     },
   ];

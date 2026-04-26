@@ -66,6 +66,7 @@ export const GET = async (req: Request) => {
     const q = searchParams.get('q')?.trim() || '';
     const pinnedParam = searchParams.get('pinned');
     const scheduledParam = searchParams.get('scheduled');
+    const workspaceIdParam = searchParams.get('workspaceId');
 
     const parsedLimit = parseInt(limitParam ?? '50', 10);
     const parsedOffset = parseInt(offsetParam ?? '0', 10);
@@ -136,6 +137,10 @@ export const GET = async (req: Request) => {
       conditions.push(isNotNull(chatsTable.scheduledTaskId));
     else if (scheduledParam === '0')
       conditions.push(isNull(chatsTable.scheduledTaskId));
+    if (workspaceIdParam === 'null')
+      conditions.push(isNull(chatsTable.workspaceId));
+    else if (workspaceIdParam)
+      conditions.push(eq(chatsTable.workspaceId, workspaceIdParam));
     const whereCondition =
       conditions.length === 0
         ? undefined

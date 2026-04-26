@@ -42,7 +42,7 @@ interface ChatModel {
   ollamaContextWindow?: number;
 }
 
-interface LlmSearchBody {
+interface _LlmSearchBody {
   query: string;
   chatModel?: ChatModel;
 }

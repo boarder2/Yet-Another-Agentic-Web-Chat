@@ -3,7 +3,6 @@ import { File, ImageAttachment } from './ChatWindow';
 import Link from 'next/link';
 import MessageInput from './MessageInput';
 import { cn } from '@/lib/utils';
-import { useEffect, useState } from 'react';
 
 import WorkspacePicker from './Workspaces/WorkspacePicker';
 

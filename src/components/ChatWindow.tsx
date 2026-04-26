@@ -614,6 +614,7 @@ const ChatWindow = ({ id }: { id?: string }) => {
       document.title = 'Chat - YAAWC';
     }
     prevPathnameRef.current = pathname;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname, id]);
 
   useEffect(() => {

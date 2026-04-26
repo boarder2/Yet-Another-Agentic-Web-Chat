@@ -67,6 +67,7 @@ export const GET = async (req: Request) => {
     const pinnedParam = searchParams.get('pinned');
     const scheduledParam = searchParams.get('scheduled');
     const workspaceIdParam = searchParams.get('workspaceId');
+    const workspaceIdsParam = searchParams.get('workspaceIds');
 
     const parsedLimit = parseInt(limitParam ?? '50', 10);
     const parsedOffset = parseInt(offsetParam ?? '0', 10);
@@ -97,13 +98,45 @@ export const GET = async (req: Request) => {
 
       const matchingChatIds = Array.from(chatIdToExcerpt.keys());
 
-      const whereCondition =
+      // Workspace filter for search branch
+      const wsConditions = [];
+      if (workspaceIdsParam) {
+        const ids = workspaceIdsParam
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+        const realIds = ids.filter((id) => id !== 'none');
+        const includeNone = ids.includes('none');
+        if (realIds.length > 0 && includeNone) {
+          wsConditions.push(
+            or(
+              inArray(chatsTable.workspaceId, realIds),
+              isNull(chatsTable.workspaceId),
+            )!,
+          );
+        } else if (realIds.length > 0) {
+          wsConditions.push(inArray(chatsTable.workspaceId, realIds));
+        } else if (includeNone) {
+          wsConditions.push(isNull(chatsTable.workspaceId));
+        }
+      } else if (workspaceIdParam === 'none' || workspaceIdParam === 'null') {
+        wsConditions.push(isNull(chatsTable.workspaceId));
+      } else if (workspaceIdParam) {
+        wsConditions.push(eq(chatsTable.workspaceId, workspaceIdParam));
+      }
+
+      const baseTitleOrContent =
         matchingChatIds.length > 0
           ? or(
               like(chatsTable.title, searchPattern),
               inArray(chatsTable.id, matchingChatIds),
             )
           : like(chatsTable.title, searchPattern);
+
+      const whereCondition =
+        wsConditions.length > 0
+          ? and(baseTitleOrContent, ...wsConditions)
+          : baseTitleOrContent;
 
       const rows = await db
         .select()
@@ -137,10 +170,30 @@ export const GET = async (req: Request) => {
       conditions.push(isNotNull(chatsTable.scheduledTaskId));
     else if (scheduledParam === '0')
       conditions.push(isNull(chatsTable.scheduledTaskId));
-    if (workspaceIdParam === 'null')
+    if (workspaceIdsParam) {
+      const ids = workspaceIdsParam
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const realIds = ids.filter((id) => id !== 'none');
+      const includeNone = ids.includes('none');
+      if (realIds.length > 0 && includeNone) {
+        conditions.push(
+          or(
+            inArray(chatsTable.workspaceId, realIds),
+            isNull(chatsTable.workspaceId),
+          )!,
+        );
+      } else if (realIds.length > 0) {
+        conditions.push(inArray(chatsTable.workspaceId, realIds));
+      } else if (includeNone) {
+        conditions.push(isNull(chatsTable.workspaceId));
+      }
+    } else if (workspaceIdParam === 'none' || workspaceIdParam === 'null') {
       conditions.push(isNull(chatsTable.workspaceId));
-    else if (workspaceIdParam)
+    } else if (workspaceIdParam) {
       conditions.push(eq(chatsTable.workspaceId, workspaceIdParam));
+    }
     const whereCondition =
       conditions.length === 0
         ? undefined

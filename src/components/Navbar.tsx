@@ -19,6 +19,7 @@ import {
 } from '@headlessui/react';
 import jsPDF from 'jspdf';
 import Link from 'next/link';
+import WorkspaceHeaderChip from '@/components/Workspaces/WorkspaceHeaderChip';
 
 const downloadFile = (filename: string, content: string, type: string) => {
   const blob = new Blob([content], { type });
@@ -133,12 +134,14 @@ const Navbar = ({
   isPrivateSession = false,
   pinned = false,
   setPinned,
+  workspaceId,
 }: {
   messages: Message[];
   chatId: string;
   isPrivateSession?: boolean;
   pinned?: boolean;
   setPinned?: (pinned: boolean) => void;
+  workspaceId?: string | null;
 }) => {
   const [title, setTitle] = useState<string>('');
   const [timeAgo, setTimeAgo] = useState<string>('');
@@ -235,7 +238,10 @@ const Navbar = ({
           <span>Private</span>
         </div>
       ) : (
-        <p className="hidden lg:flex">{title}</p>
+        <div className="hidden lg:flex items-center gap-2">
+          <p>{title}</p>
+          {workspaceId && <WorkspaceHeaderChip workspaceId={workspaceId} />}
+        </div>
       )}
 
       <div className="flex flex-row items-center space-x-4">

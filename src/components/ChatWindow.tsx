@@ -437,7 +437,7 @@ const ChatWindow = ({ id }: { id?: string }) => {
     string | null
   >(null);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(
-    null,
+    () => searchParams.get('workspace'),
   );
 
   const [isMessagesLoaded, setIsMessagesLoaded] = useState(false);
@@ -1719,6 +1719,7 @@ const ChatWindow = ({ id }: { id?: string }) => {
               isPrivateSession={isPrivateSession}
               pinned={pinned}
               setPinned={setPinned}
+              workspaceId={selectedWorkspaceId}
             />
             <Chat
               loading={loading}

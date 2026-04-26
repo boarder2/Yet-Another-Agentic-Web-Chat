@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import AppearancePicker from './AppearancePicker';
 import { useState } from 'react';
 
 interface Workspace {
@@ -21,6 +22,8 @@ export default function SettingsTab({ workspace }: { workspace: Workspace }) {
   const [autoMemory, setAutoMemory] = useState<boolean>(
     workspace.autoMemoryEnabled === 1,
   );
+  const [color, setColor] = useState<string | null>(workspace.color ?? null);
+  const [icon, setIcon] = useState<string | null>(workspace.icon ?? null);
   const [isArchived, setIsArchived] = useState(!!workspace.archivedAt);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -36,6 +39,8 @@ export default function SettingsTab({ workspace }: { workspace: Workspace }) {
       body: JSON.stringify({
         name,
         description,
+        color,
+        icon,
         autoMemoryEnabled: autoMemory ? 1 : 0,
       }),
     });
@@ -87,6 +92,17 @@ export default function SettingsTab({ workspace }: { workspace: Workspace }) {
             onChange={(e) => setDescription(e.target.value)}
             rows={3}
             className="w-full rounded-lg border border-surface-2 bg-surface px-3 py-2 text-sm focus:outline-none focus:border-accent resize-none"
+          />
+        </div>
+        <div className="space-y-2">
+          <label className="text-xs text-fg/60">Appearance</label>
+          <AppearancePicker
+            color={color}
+            icon={icon}
+            onChange={(next) => {
+              setColor(next.color);
+              setIcon(next.icon);
+            }}
           />
         </div>
         <div className="flex items-center justify-between">

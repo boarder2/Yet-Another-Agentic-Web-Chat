@@ -15,6 +15,8 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
+import WorkspaceIcon from '@/components/Workspaces/WorkspaceIcon';
+import { workspaceColorClasses } from '@/lib/workspaces/appearance';
 import FilesTab from '@/components/Workspaces/FilesTab';
 import UrlsTab from '@/components/Workspaces/UrlsTab';
 import ChatsTab from '@/components/Workspaces/ChatsTab';
@@ -116,7 +118,18 @@ const WorkspaceDetailPage = () => {
             >
               <ArrowLeft size={16} />
             </Link>
-            <span className="text-lg">{workspace.icon ?? '📁'}</span>
+            <span
+              className={cn(
+                'p-1.5 rounded-md',
+                workspaceColorClasses(workspace.color).bgTint,
+              )}
+            >
+              <WorkspaceIcon
+                name={workspace.icon}
+                color={workspace.color}
+                size={18}
+              />
+            </span>
             <h1 className="text-xl font-medium">{workspace.name}</h1>
             {workspace.archivedAt && (
               <span className="px-2 py-0.5 rounded-full text-xs bg-surface-2 text-fg/50">

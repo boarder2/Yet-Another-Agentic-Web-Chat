@@ -10,7 +10,7 @@ import {
 } from '@headlessui/react';
 import { Fragment, useState } from 'react';
 import { toast } from 'sonner';
-import { Chat } from '@/app/library/page';
+import { Chat } from '@/components/Chats/ChatRow';
 
 const DeleteChat = ({
   chatId,

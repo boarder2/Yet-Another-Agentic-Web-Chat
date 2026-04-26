@@ -83,7 +83,15 @@ const Page = () => {
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   const [workspaceMap, setWorkspaceMap] = useState<
-    Record<string, { name: string; icon: string | null; archived: boolean }>
+    Record<
+      string,
+      {
+        name: string;
+        icon: string | null;
+        color: string | null;
+        archived: boolean;
+      }
+    >
   >({});
 
   useEffect(() => {
@@ -94,12 +102,27 @@ const Page = () => {
       .then(([active, archived]) => {
         const map: Record<
           string,
-          { name: string; icon: string | null; archived: boolean }
+          {
+            name: string;
+            icon: string | null;
+            color: string | null;
+            archived: boolean;
+          }
         > = {};
         for (const ws of active.workspaces ?? [])
-          map[ws.id] = { ...ws, archived: false };
+          map[ws.id] = {
+            name: ws.name,
+            icon: ws.icon,
+            color: ws.color ?? null,
+            archived: false,
+          };
         for (const ws of archived.workspaces ?? [])
-          map[ws.id] = { ...ws, archived: true };
+          map[ws.id] = {
+            name: ws.name,
+            icon: ws.icon,
+            color: ws.color ?? null,
+            archived: true,
+          };
         setWorkspaceMap(map);
       })
       .catch(() => {});
@@ -552,6 +575,7 @@ const Page = () => {
                     id={chat.workspaceId}
                     name={workspaceMap[chat.workspaceId].name}
                     icon={workspaceMap[chat.workspaceId].icon}
+                    color={workspaceMap[chat.workspaceId].color}
                     muted={workspaceMap[chat.workspaceId].archived}
                   />
                 )}

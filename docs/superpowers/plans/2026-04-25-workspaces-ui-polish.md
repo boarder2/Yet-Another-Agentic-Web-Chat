@@ -6,7 +6,21 @@
 
 **Architecture:** Centralize workspace appearance (color tokens + Lucide icons) in a small util + `WorkspaceIcon` component. Extract the entire Library chat-browsing experience into a shared `ChatBrowser` component, then mount it both in `/library` and inside the workspace `ChatsTab`. Replace the native `<select>` workspace picker with a chip + popover. Render a workspace chip in the chat thread header. Extend `/api/chats` and `/api/chats/search` to accept multi-workspace filters.
 
-**Tech Stack:** Next.js 16 (app router), React, TypeScript, Tailwind CSS, Drizzle ORM (better-sqlite3), Lucide icons. Package manager: **yarn**. No test runner — verification is manual via dev server per the project's test-automation skill.
+**Tech Stack:** Next.js 16 (app router), React, TypeScript, Tailwind CSS, Drizzle ORM (better-sqlite3), Lucide icons. Package manager: **yarn**. No unit test runner — verification is automated through the dev server using `playwright-cli` per the project's test-automation skill.
+
+## Verification approach
+
+Each task that touches UI ends with a verification block the agent runs **automatically** (not by asking the user). Use `playwright-cli` headed mode against `http://localhost:3000`. Conventions:
+
+- Start the dev server once before Task 5 with `yarn dev` in the background and leave it running across tasks. Stop after Task 17.
+- Use one named session for the whole plan: `playwright-cli -s=ws open --headed http://localhost:3000` (only once, at the start of Task 5; reuse it after).
+- Drive every interaction through `playwright-cli` commands. After each significant action, run `playwright-cli -s=ws snapshot` and read the resulting `.playwright-cli/*.yml` file to confirm the expected state (presence/absence of elements, text, URL).
+- For assertions about non-DOM state (e.g. that a workspace was persisted), use `playwright-cli -s=ws eval "..."` or call the JSON API with `curl`.
+- After a feature is verified, take a final named snapshot per task: `playwright-cli -s=ws snapshot --filename=task-N-final.yml` so the next task starts from a known state.
+- If a verification fails, **do not** mark the task complete — diagnose using `playwright-cli -s=ws console` and `playwright-cli -s=ws network`, fix, re-verify.
+- At the end of Task 17, close the session: `playwright-cli -s=ws close`. Stop the dev server.
+
+The `e<n>` element refs in commands below are placeholders — they come from the latest snapshot. Always run `snapshot` first and substitute the actual refs before clicking/filling.
 
 **Spec:** `docs/superpowers/specs/2026-04-25-workspaces-ui-polish-design.md`
 
@@ -601,20 +615,55 @@ Expected: either the handler accepts the full body (passes through) OR you add `
 Run: `yarn tsc --noEmit`
 Expected: no errors.
 
-- [ ] **Step 5: Manual verification**
+- [ ] **Step 5: Automated verification (playwright-cli)**
 
-Run the dev server in the background: `yarn dev`
-Wait for "Ready in" message.
-Open `http://localhost:3000/workspaces` in a browser.
-Click "New Workspace". Verify:
+Start the dev server in the background and wait for "Ready":
 
-- Color swatches render in 10 colors and clicking selects one (ring appears).
-- Icon grid renders 20 Lucide icons.
-- Selecting an icon highlights it with the color tint.
-- Manual icon input accepts a name (e.g. `Bookmark`) and the grid selection clears visually.
-- Submitting creates the workspace; on the workspaces list the card shows the selected icon and color tint.
+```bash
+yarn dev   # run_in_background=true; wait for "Ready in" in the output
+```
 
-Stop the dev server when done.
+Open the browser session (used for the rest of the plan):
+
+```bash
+playwright-cli -s=ws open --headed http://localhost:3000/workspaces
+playwright-cli -s=ws snapshot
+```
+
+Read the snapshot YAML; locate the "New Workspace" button ref. Then:
+
+```bash
+playwright-cli -s=ws click <ref-of-new-workspace-button>
+playwright-cli -s=ws snapshot
+# Confirm modal contains: text input "Workspace name", color swatch buttons aria-label "Color slate"... "Color lime", icon buttons aria-label "Icon FolderOpen"... and the "Or enter a Lucide icon name…" input.
+
+playwright-cli -s=ws fill <ref-of-name-input> "Plan Test WS"
+playwright-cli -s=ws click <ref-of-color-emerald-button>
+playwright-cli -s=ws click <ref-of-icon-Rocket-button>
+playwright-cli -s=ws snapshot
+# Confirm: emerald swatch shows ring, Rocket button shows tinted background.
+
+# Try the manual icon override
+playwright-cli -s=ws fill <ref-of-custom-icon-input> "Bookmark"
+playwright-cli -s=ws snapshot
+# Confirm Rocket no longer shows the tinted "selected" state.
+
+# Submit
+playwright-cli -s=ws click <ref-of-Create-button>
+playwright-cli -s=ws snapshot
+# Confirm URL navigated to /workspaces/<id> AND the header shows the icon (Bookmark) tinted with the chosen color.
+
+# Go back to list and confirm card render
+playwright-cli -s=ws goto http://localhost:3000/workspaces
+playwright-cli -s=ws snapshot
+# Confirm a card "Plan Test WS" is visible. Confirm via eval that it persisted:
+playwright-cli -s=ws eval "() => fetch('/api/workspaces').then(r => r.json()).then(d => d.workspaces.find(w => w.name === 'Plan Test WS'))"
+# Expect: object with color='emerald', icon='Bookmark'.
+
+playwright-cli -s=ws snapshot --filename=task-5-final.yml
+```
+
+If any check fails, run `playwright-cli -s=ws console` to inspect errors before re-attempting.
 
 - [ ] **Step 6: Commit**
 
@@ -693,9 +742,36 @@ Expected: PATCH should accept arbitrary fields. If it whitelists, add `color, ic
 Run: `yarn tsc --noEmit`
 Expected: no errors.
 
-- [ ] **Step 4: Manual verification**
+- [ ] **Step 4: Automated verification (playwright-cli)**
 
-`yarn dev`. Open an existing workspace's Settings tab. Change color and icon, click Save. Refresh the page; values persist.
+Reuse the existing session. Use the workspace created in Task 5:
+
+```bash
+playwright-cli -s=ws goto http://localhost:3000/workspaces
+playwright-cli -s=ws snapshot
+playwright-cli -s=ws click <ref-of-Plan-Test-WS-card>
+playwright-cli -s=ws snapshot
+# Click the Settings tab
+playwright-cli -s=ws click <ref-of-Settings-tab>
+playwright-cli -s=ws snapshot
+# Confirm AppearancePicker is rendered under "Appearance" with current selection (emerald + Bookmark)
+
+# Change to violet + Compass
+playwright-cli -s=ws click <ref-of-color-violet-button>
+playwright-cli -s=ws click <ref-of-icon-Compass-button>
+playwright-cli -s=ws click <ref-of-Save-button>
+playwright-cli -s=ws snapshot
+
+# Reload and confirm persistence
+playwright-cli -s=ws reload
+playwright-cli -s=ws snapshot
+# Confirm: Settings tab still shows violet selected and Compass icon highlighted; header chip uses violet tint.
+
+playwright-cli -s=ws eval "() => fetch('/api/workspaces').then(r => r.json()).then(d => d.workspaces.find(w => w.name === 'Plan Test WS'))"
+# Expect: color='violet', icon='Compass'.
+
+playwright-cli -s=ws snapshot --filename=task-6-final.yml
+```
 
 - [ ] **Step 5: Commit**
 
@@ -745,9 +821,16 @@ with:
 Run: `yarn tsc --noEmit`
 Expected: no errors.
 
-- [ ] **Step 4: Manual verification**
+- [ ] **Step 4: Automated verification (playwright-cli)**
 
-`yarn dev`. Visit a workspace detail page. The header shows the colored icon + color-tinted background pill.
+```bash
+playwright-cli -s=ws goto http://localhost:3000/workspaces
+playwright-cli -s=ws snapshot
+playwright-cli -s=ws click <ref-of-Plan-Test-WS-card>
+playwright-cli -s=ws snapshot
+# Confirm header has a tinted pill containing the WorkspaceIcon (Compass), not the previous emoji span.
+playwright-cli -s=ws snapshot --filename=task-7-final.yml
+```
 
 - [ ] **Step 5: Commit**
 
@@ -861,17 +944,43 @@ const rows = await db
 Run: `yarn tsc --noEmit`
 Expected: no errors. (`Parameters<typeof and>[0]` resolves to a `SQLWrapper | undefined` union — fine for our use.)
 
-- [ ] **Step 4: Manual verification (curl)**
+- [ ] **Step 4: Automated verification (curl + playwright-cli)**
 
-`yarn dev`. With at least one workspace created and one chat assigned to it (use the existing workspace picker on `/`), test:
+First ensure at least one chat is assigned to the test workspace. Use the existing native picker on `/` (the new picker arrives in Task 15):
 
 ```bash
-curl -s 'http://localhost:3000/api/chats?workspaceId=none&limit=5' | head
-curl -s 'http://localhost:3000/api/chats?workspaceIds=<id1>,<id2>&limit=5' | head
-curl -s 'http://localhost:3000/api/chats?workspaceIds=<id1>,none&limit=5' | head
+playwright-cli -s=ws goto http://localhost:3000/
+playwright-cli -s=ws snapshot
+# Select "Plan Test WS" from the native <select> (still present pre-Task-15)
+playwright-cli -s=ws select <ref-of-native-select> "<plan-test-ws-id>"
+playwright-cli -s=ws fill <ref-of-message-input> "hello workspace"
+playwright-cli -s=ws press Enter
+playwright-cli -s=ws snapshot
+# Wait for the URL to become /c/<chatId>; confirm via snapshot.
 ```
 
-Expected: each returns a JSON object with a `chats` array filtered as requested.
+Get the workspace id once and reuse:
+
+```bash
+WS_ID=$(curl -s 'http://localhost:3000/api/workspaces' | jq -r '.workspaces[] | select(.name=="Plan Test WS") | .id')
+echo "$WS_ID"
+```
+
+Then test the API:
+
+```bash
+curl -s "http://localhost:3000/api/chats?workspaceId=none&limit=5" | jq '.chats | length, (.chats[0] // null)'
+curl -s "http://localhost:3000/api/chats?workspaceIds=$WS_ID&limit=5" | jq '.chats | length, .chats[0].workspaceId'
+curl -s "http://localhost:3000/api/chats?workspaceIds=$WS_ID,none&limit=5" | jq '.chats | length'
+```
+
+Expected:
+
+- `workspaceId=none` returns only chats with `workspaceId: null`.
+- `workspaceIds=$WS_ID` returns only chats whose `workspaceId` matches.
+- `workspaceIds=$WS_ID,none` returns the union.
+
+If `jq` is unavailable, substitute `python -m json.tool` or just inspect the raw output.
 
 - [ ] **Step 5: Commit**
 
@@ -939,17 +1048,16 @@ Make sure to add any missing imports from `drizzle-orm` (`inArray`, `isNull`, `o
 Run: `yarn tsc --noEmit`
 Expected: no errors.
 
-- [ ] **Step 4: Manual verification**
-
-`yarn dev`. With chats in different workspaces:
+- [ ] **Step 4: Automated verification (curl)**
 
 ```bash
+WS_ID=$(curl -s 'http://localhost:3000/api/workspaces' | jq -r '.workspaces[] | select(.name=="Plan Test WS") | .id')
 curl -s -X POST http://localhost:3000/api/chats/search \
   -H 'Content-Type: application/json' \
-  -d '{"query":"hello","workspaceIds":["<id1>"]}' | head
+  -d "{\"query\":\"hello\",\"workspaceIds\":[\"$WS_ID\"]}" | jq '.chats | map(.workspaceId) | unique'
 ```
 
-Expected: results are constrained to that workspace.
+Expected: the unique workspaceId list contains only `$WS_ID` (or is empty if the LLM returned no matches — that is acceptable; rerun with a broader query if needed).
 
 - [ ] **Step 5: Commit**
 
@@ -1794,18 +1902,44 @@ export default Page;
 Run: `yarn tsc --noEmit`
 Expected: no errors.
 
-- [ ] **Step 3: Manual verification**
+- [ ] **Step 3: Automated verification (playwright-cli)**
 
-`yarn dev`. Visit `/library`. Verify each behavior preserved:
+```bash
+playwright-cli -s=ws goto http://localhost:3000/library
+playwright-cli -s=ws snapshot
+# Confirm: page renders the workspace filter chip row (with "All", "Plan Test WS", "No workspace"),
+# the search bar, the Pinned/Scheduled chips, and at least one chat row.
 
-- Chats list renders with workspace chips on assigned chats.
-- Pinned filter toggles correctly.
-- Scheduled filter cycles all → scheduled → unscheduled → all.
-- Typing in the search box debounces and shows text-search results with highlighted excerpts.
-- Clicking the AI button runs LLM search.
-- Delete button removes a chat.
-- Infinite scroll loads more on scroll.
-- New: workspace filter chip row appears above search; selecting one or more chips filters the list. Selecting "No workspace" filters to chats without a workspace. Multi-select works.
+# Pinned toggle
+playwright-cli -s=ws click <ref-of-Pinned-chip>
+playwright-cli -s=ws snapshot
+playwright-cli -s=ws click <ref-of-Pinned-chip>
+playwright-cli -s=ws snapshot
+
+# Text search
+playwright-cli -s=ws fill <ref-of-search-input> "hello"
+# Wait for debounce (~600ms) before snapshotting
+sleep 1
+playwright-cli -s=ws snapshot
+# Confirm: results show with highlighted excerpts where applicable.
+
+# Clear search
+playwright-cli -s=ws click <ref-of-clear-X-button>
+playwright-cli -s=ws snapshot
+
+# Workspace filter chip multi-select
+playwright-cli -s=ws click <ref-of-Plan-Test-WS-chip>
+playwright-cli -s=ws snapshot
+# Confirm: list filters to that workspace's chats; selected chip uses the workspace color tint.
+playwright-cli -s=ws click <ref-of-No-workspace-chip>
+playwright-cli -s=ws snapshot
+# Confirm: list now includes both the workspace chats and the unassigned chats.
+playwright-cli -s=ws click <ref-of-All-chip>
+playwright-cli -s=ws snapshot
+# Confirm: returns to all-chats state.
+
+playwright-cli -s=ws snapshot --filename=task-12-final.yml
+```
 
 - [ ] **Step 4: Commit**
 
@@ -1842,16 +1976,33 @@ export default ChatsTab;
 Run: `yarn tsc --noEmit`
 Expected: no errors.
 
-- [ ] **Step 3: Manual verification**
+- [ ] **Step 3: Automated verification (playwright-cli)**
 
-`yarn dev`. Visit a workspace and click the Chats tab. Verify:
+```bash
+playwright-cli -s=ws goto http://localhost:3000/workspaces
+playwright-cli -s=ws snapshot
+playwright-cli -s=ws click <ref-of-Plan-Test-WS-card>
+playwright-cli -s=ws snapshot
+# Default tab is Chats — confirm the ChatBrowser UI renders WITHOUT the workspace filter chip row,
+# WITHOUT per-row workspace chips, WITH a "+ New chat" button visible in the header.
 
-- Only chats from this workspace are shown.
-- Workspace filter chip row is hidden.
-- Per-row workspace chips are hidden.
-- Search and filters work and remain scoped.
-- "+ New chat" button appears in the header.
-- Clicking "+ New chat" navigates to `/?workspace=<id>`.
+# Search still works in scoped mode
+playwright-cli -s=ws fill <ref-of-search-input> "hello"
+sleep 1
+playwright-cli -s=ws snapshot
+playwright-cli -s=ws click <ref-of-clear-X-button>
+playwright-cli -s=ws snapshot
+
+# "+ New chat" navigation
+playwright-cli -s=ws click <ref-of-New-chat-button>
+playwright-cli -s=ws snapshot
+# Confirm URL is /?workspace=<WS_ID>. The workspace picker on EmptyChat shows "Plan Test WS" pre-selected
+# (still using the native <select> until Task 15 — confirm the select's value attribute via eval).
+playwright-cli -s=ws eval "document.querySelector('select')?.value"
+# Expect: the workspace id of Plan Test WS.
+
+playwright-cli -s=ws snapshot --filename=task-13-final.yml
+```
 
 - [ ] **Step 4: Commit**
 
@@ -2098,15 +2249,47 @@ import WorkspacePicker from './Workspaces/WorkspacePicker';
 Run: `yarn tsc --noEmit`
 Expected: no errors.
 
-- [ ] **Step 3: Manual verification**
+- [ ] **Step 3: Automated verification (playwright-cli)**
 
-`yarn dev`. Open `/`. Verify:
+```bash
+playwright-cli -s=ws goto http://localhost:3000/
+playwright-cli -s=ws snapshot
+# Confirm: a chip-style workspace picker (button with FolderOpen icon) is present — NO native <select>.
+playwright-cli -s=ws eval "document.querySelectorAll('select').length"
+# Expect: 0 (or only unrelated selects).
 
-- The workspace picker now appears as a rounded chip with a folder icon when none selected.
-- Clicking opens a popover with a search box.
-- Selecting a workspace updates the chip; selecting "No workspace" clears it.
-- Keyboard nav (↑/↓/Enter/Esc) works.
-- Clicking outside closes the popover.
+# Open the popover
+playwright-cli -s=ws click <ref-of-workspace-picker-chip>
+playwright-cli -s=ws snapshot
+# Confirm: a popover appears with a search input and entries including "No workspace" + "Plan Test WS".
+
+# Filter by typing
+playwright-cli -s=ws fill <ref-of-popover-search-input> "Plan"
+playwright-cli -s=ws snapshot
+# Confirm only matching entries shown.
+
+# Keyboard navigation: ArrowDown then Enter selects "Plan Test WS"
+playwright-cli -s=ws press ArrowDown
+playwright-cli -s=ws press Enter
+playwright-cli -s=ws snapshot
+# Confirm chip now displays "Plan Test WS" with violet tint.
+
+# Re-open and select "No workspace"
+playwright-cli -s=ws click <ref-of-workspace-picker-chip>
+playwright-cli -s=ws snapshot
+playwright-cli -s=ws click <ref-of-No-workspace-entry>
+playwright-cli -s=ws snapshot
+# Confirm chip reverts to "Workspace" placeholder.
+
+# Outside-click closes the popover
+playwright-cli -s=ws click <ref-of-workspace-picker-chip>
+playwright-cli -s=ws snapshot
+playwright-cli -s=ws click <ref-of-page-body-or-far-element>
+playwright-cli -s=ws snapshot
+# Confirm popover is gone.
+
+playwright-cli -s=ws snapshot --filename=task-15-final.yml
+```
 
 - [ ] **Step 4: Commit**
 
@@ -2242,18 +2425,45 @@ If no Navbar component exists, render the chip directly inside `ChatWindow.tsx` 
 Run: `yarn tsc --noEmit`
 Expected: no errors.
 
-- [ ] **Step 6: Manual verification**
+- [ ] **Step 6: Automated verification (playwright-cli)**
 
-`yarn dev`. Test the full flow:
+```bash
+WS_ID=$(curl -s 'http://localhost:3000/api/workspaces' | jq -r '.workspaces[] | select(.name=="Plan Test WS") | .id')
 
-1. Visit `/workspaces/<id>`, click the Chats tab, click "+ New chat".
-2. URL is `/?workspace=<id>`. The workspace picker chip on the empty state shows the workspace pre-selected.
-3. Send a message. URL changes to `/c/<chatId>`.
-4. The header above the conversation shows a workspace chip with the workspace's color and icon.
-5. Clicking the chip navigates to `/workspaces/<id>`.
-6. Open an old chat that has a workspace assigned — the chip appears.
-7. Open a chat without a workspace — no chip.
-8. Open `/?private=1` — no workspace UI; existing chats still show their chip when not in private session.
+# Full flow from workspace ChatsTab → new chat → header chip
+playwright-cli -s=ws goto "http://localhost:3000/workspaces/$WS_ID"
+playwright-cli -s=ws snapshot
+playwright-cli -s=ws click <ref-of-New-chat-button>
+playwright-cli -s=ws snapshot
+# Confirm URL is /?workspace=<WS_ID> AND the new chip-popover picker shows "Plan Test WS" pre-selected.
+
+# Send a message
+playwright-cli -s=ws fill <ref-of-message-input> "verify header chip"
+playwright-cli -s=ws press Enter
+sleep 2
+playwright-cli -s=ws snapshot
+# Confirm URL is /c/<chatId>; confirm the chat thread header contains a WorkspaceChip linking to /workspaces/<WS_ID>.
+
+# Confirm chip click navigates to workspace
+playwright-cli -s=ws click <ref-of-header-workspace-chip>
+playwright-cli -s=ws snapshot
+# Confirm URL is /workspaces/<WS_ID>.
+
+# Find a chat WITHOUT a workspace and confirm no chip
+playwright-cli -s=ws goto http://localhost:3000/library
+playwright-cli -s=ws snapshot
+# Click any chat row that has no workspace chip in the row
+playwright-cli -s=ws click <ref-of-unassigned-chat-row>
+playwright-cli -s=ws snapshot
+# Confirm: header has NO workspace chip.
+
+# Private session shouldn't show workspace UI
+playwright-cli -s=ws goto http://localhost:3000/?private=1
+playwright-cli -s=ws snapshot
+# Confirm: no workspace picker chip rendered (because EmptyChat hides it in private mode).
+
+playwright-cli -s=ws snapshot --filename=task-16-final.yml
+```
 
 - [ ] **Step 7: Commit**
 
@@ -2287,16 +2497,50 @@ yarn build
 
 Expected: build succeeds. (Note: `build` runs db:push first; that's fine since schema is unchanged.)
 
-- [ ] **Step 3: End-to-end smoke test**
+- [ ] **Step 3: End-to-end smoke (playwright-cli)**
 
-`yarn dev`. Walk through each issue from the original report:
+Walk through each original issue using the existing `ws` session:
 
-1. **Color/icon settable + visible:** Create a workspace; pick color + icon. Verify visible on workspaces list card, detail header, library chip, library filter chip, ChatsTab, new-chat picker, and chat header chip.
-2. **Start workspace-scoped chat from ChatsTab:** Visit a workspace's Chats tab, click "+ New chat", verify pre-selected workspace.
-3. **New-chat picker aesthetic:** Picker is a chip with popover, not a native select.
-4. **Library filter chips:** Multi-select workspace filter chips above the library search.
-5. **Chat thread workspace indicator:** Color-tinted chip in the chat header, links to workspace.
-6. **ChatsTab parity with Library:** Search, pinned/scheduled filters, infinite scroll, delete all work inside ChatsTab and stay scoped.
+```bash
+WS_ID=$(curl -s 'http://localhost:3000/api/workspaces' | jq -r '.workspaces[] | select(.name=="Plan Test WS") | .id')
+
+# Issue #1 — color/icon visible everywhere
+playwright-cli -s=ws goto http://localhost:3000/workspaces
+playwright-cli -s=ws snapshot --filename=smoke-1-list.yml
+playwright-cli -s=ws goto "http://localhost:3000/workspaces/$WS_ID"
+playwright-cli -s=ws snapshot --filename=smoke-1-detail.yml
+playwright-cli -s=ws goto http://localhost:3000/library
+playwright-cli -s=ws snapshot --filename=smoke-1-library.yml
+playwright-cli -s=ws goto http://localhost:3000/
+playwright-cli -s=ws snapshot --filename=smoke-1-empty.yml
+
+# Issue #2 — workspace-scoped chat start
+playwright-cli -s=ws goto "http://localhost:3000/workspaces/$WS_ID"
+playwright-cli -s=ws click <ref-of-New-chat-button>
+playwright-cli -s=ws snapshot --filename=smoke-2-new-chat.yml
+
+# Issue #3 — new-chat picker aesthetic
+playwright-cli -s=ws goto http://localhost:3000/
+playwright-cli -s=ws eval "document.querySelectorAll('select').length"
+# Expect: 0
+
+# Issue #4 — library filter chips
+playwright-cli -s=ws goto http://localhost:3000/library
+playwright-cli -s=ws click <ref-of-Plan-Test-WS-chip>
+playwright-cli -s=ws snapshot --filename=smoke-4-filtered.yml
+
+# Issue #5 — chat thread indicator
+# (covered by Task 16 final snapshot; re-verify by opening any chat with a workspace)
+playwright-cli -s=ws click <ref-of-chat-row-with-workspace>
+playwright-cli -s=ws snapshot --filename=smoke-5-thread.yml
+
+# Issue #6 — ChatsTab parity
+playwright-cli -s=ws goto "http://localhost:3000/workspaces/$WS_ID"
+playwright-cli -s=ws snapshot --filename=smoke-6-chatstab.yml
+# Confirm search input, Pinned/Scheduled chips, "+ New chat" button all present.
+```
+
+Inspect each `smoke-*.yml` snapshot to confirm the relevant UI elements are present.
 
 - [ ] **Step 4: Commit any cleanup if needed**
 
@@ -2305,6 +2549,13 @@ If lint surfaced warnings (e.g. unused imports), fix and commit:
 ```bash
 git add -p
 git commit -m "chore(workspaces): cleanup after polish refactor"
+```
+
+- [ ] **Step 5: Tear down**
+
+```bash
+playwright-cli -s=ws close
+# Stop the backgrounded `yarn dev` (use the session's BashKill if available, or Ctrl+C in terminal)
 ```
 
 ---

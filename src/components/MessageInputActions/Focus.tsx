@@ -1,27 +1,19 @@
 import { Globe, MessageCircle, Pencil } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
+import { focusModes as focusModeDefinitions } from '@/lib/focusModes';
 
-const focusModes = [
-  {
-    key: 'webSearch',
-    title: 'All',
-    description: 'Searches across all of the internet',
-    icon: <Globe size={20} className="text-accent" />,
-  },
-  {
-    key: 'chat',
-    title: 'Chat',
-    description: 'Have a creative conversation',
-    icon: <MessageCircle size={16} className="text-[#10B981]" />,
-  },
-  {
-    key: 'localResearch',
-    title: 'Local Research',
-    description: 'Research and interact with local files with citations',
-    icon: <Pencil size={16} className="text-[#8B5CF6]" />,
-  },
-];
+const focusModes = focusModeDefinitions.map((mode) => ({
+  ...mode,
+  icon:
+    mode.key === 'webSearch' ? (
+      <Globe size={20} className="text-accent" />
+    ) : mode.key === 'chat' ? (
+      <MessageCircle size={16} className="text-[#10B981]" />
+    ) : (
+      <Pencil size={16} className="text-[#8B5CF6]" />
+    ),
+}));
 
 const Focus = ({
   focusMode,

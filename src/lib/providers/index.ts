@@ -49,6 +49,13 @@ import {
   loadOpenrouterChatModels,
   PROVIDER_INFO as OpenRouterInfo,
 } from './openrouter';
+import {
+  getCachedChatModels,
+  getCachedEmbeddingModels,
+  setCachedChatModels,
+  setCachedEmbeddingModels,
+  NEGATIVE_CACHE_TTL_MS,
+} from './modelCache';
 
 export const PROVIDER_METADATA = {
   openai: OpenAIInfo,
@@ -105,20 +112,43 @@ export const embeddingModelProviders: Record<
 };
 
 export const getAvailableChatModelProviders = async (
-  options: { includeHidden?: boolean } = {},
+  options: { includeHidden?: boolean; forceRefresh?: boolean } = {},
 ) => {
-  const { includeHidden = false } = options;
+  const { includeHidden = false, forceRefresh = false } = options;
   const models: Record<string, Record<string, ChatModel>> = {};
 
-  for (const provider in chatModelProviders) {
-    const providerModels = await chatModelProviders[provider]();
-    if (Object.keys(providerModels).length > 0) {
-      // Sort models alphabetically by their keys
+  const providerNames = Object.keys(chatModelProviders);
+
+  const loaded = await Promise.all(
+    providerNames.map(async (provider) => {
+      if (!forceRefresh) {
+        const cached = getCachedChatModels<Record<string, ChatModel>>(provider);
+        if (cached) return { provider, result: cached };
+      }
+      try {
+        const result = await chatModelProviders[provider]();
+        if (Object.keys(result).length > 0) {
+          setCachedChatModels(provider, result);
+        } else {
+          // Cache empty results with a short TTL to avoid repeated
+          // slow fetches when a provider is unreachable.
+          setCachedChatModels(provider, result, NEGATIVE_CACHE_TTL_MS);
+        }
+        return { provider, result };
+      } catch (err) {
+        console.error(`Error loading chat models for ${provider}:`, err);
+        return { provider, result: {} as Record<string, ChatModel> };
+      }
+    }),
+  );
+
+  for (const { provider, result } of loaded) {
+    if (Object.keys(result).length > 0) {
       const sortedModels: Record<string, ChatModel> = {};
-      Object.keys(providerModels)
+      Object.keys(result)
         .sort()
         .forEach((key) => {
-          sortedModels[key] = providerModels[key];
+          sortedModels[key] = result[key];
         });
       models[provider] = sortedModels;
     }
@@ -167,20 +197,42 @@ export const getAvailableChatModelProviders = async (
 };
 
 export const getAvailableEmbeddingModelProviders = async (
-  options: { includeHidden?: boolean } = {},
+  options: { includeHidden?: boolean; forceRefresh?: boolean } = {},
 ) => {
-  const { includeHidden = false } = options;
+  const { includeHidden = false, forceRefresh = false } = options;
   const models: Record<string, Record<string, EmbeddingModel>> = {};
 
-  for (const provider in embeddingModelProviders) {
-    const providerModels = await embeddingModelProviders[provider]();
-    if (Object.keys(providerModels).length > 0) {
-      // Sort embedding models alphabetically by their keys
+  const providerNames = Object.keys(embeddingModelProviders);
+
+  const loaded = await Promise.all(
+    providerNames.map(async (provider) => {
+      if (!forceRefresh) {
+        const cached =
+          getCachedEmbeddingModels<Record<string, EmbeddingModel>>(provider);
+        if (cached) return { provider, result: cached };
+      }
+      try {
+        const result = await embeddingModelProviders[provider]();
+        if (Object.keys(result).length > 0) {
+          setCachedEmbeddingModels(provider, result);
+        } else {
+          setCachedEmbeddingModels(provider, result, NEGATIVE_CACHE_TTL_MS);
+        }
+        return { provider, result };
+      } catch (err) {
+        console.error(`Error loading embedding models for ${provider}:`, err);
+        return { provider, result: {} as Record<string, EmbeddingModel> };
+      }
+    }),
+  );
+
+  for (const { provider, result } of loaded) {
+    if (Object.keys(result).length > 0) {
       const sortedModels: Record<string, EmbeddingModel> = {};
-      Object.keys(providerModels)
+      Object.keys(result)
         .sort()
         .forEach((key) => {
-          sortedModels[key] = providerModels[key];
+          sortedModels[key] = result[key];
         });
       models[provider] = sortedModels;
     }

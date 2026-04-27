@@ -1,6 +1,31 @@
 import db from '@/lib/db';
 import { chats, messages } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
+import { deleteChatWithOrphanCleanup } from '@/lib/retention/deleteChat';
+
+export const PATCH = async (
+  req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) => {
+  try {
+    const { id } = await params;
+    const body = await req.json();
+    if (typeof body.pinned !== 'boolean') {
+      return Response.json(
+        { message: 'pinned must be boolean' },
+        { status: 400 },
+      );
+    }
+    await db
+      .update(chats)
+      .set({ pinned: body.pinned ? 1 : 0 })
+      .where(eq(chats.id, id));
+    return Response.json({ ok: true });
+  } catch (err) {
+    console.error('Error updating chat pin:', err);
+    return Response.json({ message: 'error' }, { status: 500 });
+  }
+};
 
 export const GET = async (
   req: Request,
@@ -52,8 +77,7 @@ export const DELETE = async (
       return Response.json({ message: 'Chat not found' }, { status: 404 });
     }
 
-    await db.delete(chats).where(eq(chats.id, id)).execute();
-    await db.delete(messages).where(eq(messages.chatId, id)).execute();
+    deleteChatWithOrphanCleanup(id);
 
     return Response.json(
       { message: 'Chat deleted successfully' },

@@ -15,7 +15,6 @@ export type CachedRecord = {
   lastAccess: number;
   title?: string;
   pageContent: string;
-  html?: string;
   metadata?: Record<string, unknown>;
 };
 

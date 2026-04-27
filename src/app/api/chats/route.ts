@@ -3,11 +3,34 @@ import {
   chats as chatsTable,
   messages as messagesTable,
 } from '@/lib/db/schema';
-import { desc, sql, like, or, inArray } from 'drizzle-orm';
-import { cleanupExpiredPrivateSessions } from '@/lib/privateSessionCleanup';
+import {
+  desc,
+  eq,
+  sql,
+  like,
+  or,
+  and,
+  inArray,
+  isNull,
+  isNotNull,
+} from 'drizzle-orm';
 
-let lastCleanup = 0;
-const CLEANUP_INTERVAL_MS = 60 * 1000; // throttle to once per minute
+async function getMessageCounts(
+  chatIds: string[],
+): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  if (chatIds.length === 0) return counts;
+  const rows = await db
+    .select({
+      chatId: messagesTable.chatId,
+      count: sql<number>`count(*)`,
+    })
+    .from(messagesTable)
+    .where(inArray(messagesTable.chatId, chatIds))
+    .groupBy(messagesTable.chatId);
+  for (const r of rows) counts.set(r.chatId, Number(r.count));
+  return counts;
+}
 
 function extractExcerpt(
   content: string,
@@ -37,27 +60,18 @@ function extractExcerpt(
 
 export const GET = async (req: Request) => {
   try {
-    // Lazily clean up expired private sessions (throttled)
-    const now = Date.now();
-    if (now - lastCleanup > CLEANUP_INTERVAL_MS) {
-      lastCleanup = now;
-      cleanupExpiredPrivateSessions().catch((err) =>
-        console.warn('Private session cleanup failed:', err),
-      );
-    }
-
     const { searchParams } = new URL(req.url);
     const limitParam = searchParams.get('limit');
     const offsetParam = searchParams.get('offset');
     const q = searchParams.get('q')?.trim() || '';
+    const pinnedParam = searchParams.get('pinned');
+    const scheduledParam = searchParams.get('scheduled');
 
     const parsedLimit = parseInt(limitParam ?? '50', 10);
     const parsedOffset = parseInt(offsetParam ?? '0', 10);
-    const maxLimit = q ? 200 : 50;
-    const defaultLimit = q ? 200 : 50;
     const limit = isNaN(parsedLimit)
-      ? defaultLimit
-      : Math.min(Math.max(parsedLimit, 1), maxLimit);
+      ? 50
+      : Math.min(Math.max(parsedLimit, 1), 50);
     const offset = isNaN(parsedOffset) ? 0 : Math.max(parsedOffset, 0);
 
     if (q) {
@@ -90,47 +104,77 @@ export const GET = async (req: Request) => {
             )
           : like(chatsTable.title, searchPattern);
 
-      const totalRows = await db
-        .select({ count: sql`count(*)` })
-        .from(chatsTable)
-        .where(whereCondition);
-      const total = Number(totalRows?.[0]?.count ?? 0);
-
       const rows = await db
         .select()
         .from(chatsTable)
         .where(whereCondition)
-        .orderBy(desc(sql`rowid`))
-        .limit(limit)
-        .offset(offset);
+        .orderBy(desc(sql`rowid`));
 
+      const messageCounts = await getMessageCounts(rows.map((r) => r.id));
       const chats = rows.map((chat) => ({
         ...chat,
         matchExcerpt: chatIdToExcerpt.get(chat.id) ?? null,
+        messageCount: messageCounts.get(chat.id) ?? 0,
       }));
 
+      const totalMessages = chats.reduce((sum, c) => sum + c.messageCount, 0);
+
       return Response.json(
-        { chats, total, limit, offset, hasMore: offset + rows.length < total },
+        {
+          chats,
+          total: chats.length,
+          totalMessages,
+          hasMore: false,
+        },
         { status: 200 },
       );
     }
 
+    const conditions = [];
+    if (pinnedParam === '1') conditions.push(eq(chatsTable.pinned, 1));
+    if (scheduledParam === '1')
+      conditions.push(isNotNull(chatsTable.scheduledTaskId));
+    else if (scheduledParam === '0')
+      conditions.push(isNull(chatsTable.scheduledTaskId));
+    const whereCondition =
+      conditions.length === 0
+        ? undefined
+        : conditions.length === 1
+          ? conditions[0]
+          : and(...conditions);
+
     const totalRows = await db
-      .select({ count: sql`count(*)` })
-      .from(chatsTable);
+      .select({ count: sql<number>`count(*)` })
+      .from(chatsTable)
+      .where(whereCondition);
     const total = Number(totalRows?.[0]?.count ?? 0);
+
+    const totalMessagesRows = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(messagesTable)
+      .innerJoin(chatsTable, eq(messagesTable.chatId, chatsTable.id))
+      .where(whereCondition);
+    const totalMessages = Number(totalMessagesRows?.[0]?.count ?? 0);
 
     const rows = await db
       .select()
       .from(chatsTable)
+      .where(whereCondition)
       .orderBy(desc(sql`rowid`))
       .limit(limit)
       .offset(offset);
 
+    const messageCounts = await getMessageCounts(rows.map((r) => r.id));
+    const chatsWithCounts = rows.map((chat) => ({
+      ...chat,
+      messageCount: messageCounts.get(chat.id) ?? 0,
+    }));
+
     return Response.json(
       {
-        chats: rows,
+        chats: chatsWithCounts,
         total,
+        totalMessages,
         limit,
         offset,
         hasMore: offset + rows.length < total,

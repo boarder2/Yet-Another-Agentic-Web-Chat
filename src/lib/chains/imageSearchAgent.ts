@@ -7,7 +7,7 @@ import { PromptTemplate } from '@langchain/core/prompts';
 import formatChatHistoryAsString from '../utils/formatHistory';
 import { BaseMessage } from '@langchain/core/messages';
 import LineOutputParser from '../outputParsers/lineOutputParser';
-import { searchSearxng } from '../searxng';
+import { getImageSearchProvider } from '../search/providers';
 import { formatDateForLLM } from '../utils';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 // import { getLangfuseCallbacks } from '@/lib/tracing/langfuse';
@@ -80,6 +80,7 @@ const imageSearchChainPrompt = `
 type ImageSearchChainInput = {
   chat_history: BaseMessage[];
   query: string;
+  isPrivate?: boolean;
 };
 
 interface ImageSearchResult {
@@ -92,7 +93,7 @@ const outputParser = new LineOutputParser({
   key: 'answer',
 });
 
-const createImageSearchChain = (llm: BaseChatModel) => {
+const createImageSearchChain = (llm: BaseChatModel, isPrivate: boolean) => {
   const fullPrompt = imageSearchChainPrompt;
 
   return RunnableSequence.from([
@@ -109,9 +110,11 @@ const createImageSearchChain = (llm: BaseChatModel) => {
     llm,
     outputParser,
     RunnableLambda.from(async (searchQuery: string) => {
-      const res = await searchSearxng(searchQuery, {
-        engines: ['bing images', 'google images'],
-      });
+      const provider = getImageSearchProvider({ isPrivate });
+      if (!provider || !provider.imageSearch) {
+        return [] as ImageSearchResult[];
+      }
+      const res = await provider.imageSearch(searchQuery, {});
 
       const images: ImageSearchResult[] = [];
 
@@ -134,7 +137,7 @@ const handleImageSearch = (
   input: ImageSearchChainInput,
   llm: BaseChatModel,
 ) => {
-  const imageSearchChain = createImageSearchChain(llm);
+  const imageSearchChain = createImageSearchChain(llm, !!input.isPrivate);
   return imageSearchChain.invoke(input, {
     /* ...getLangfuseCallbacks() */
   });

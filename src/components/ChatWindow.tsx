@@ -301,6 +301,7 @@ const loadMessages = async (
   setFiles: (files: File[]) => void,
   setFileIds: (fileIds: string[]) => void,
   setIsPrivateSession?: (isPrivate: boolean) => void,
+  setPinned?: (pinned: boolean) => void,
 ) => {
   const res = await fetch(`/api/chats/${chatId}`, {
     method: 'GET',
@@ -354,6 +355,9 @@ const loadMessages = async (
   setFocusMode(data.chat.focusMode);
   if (setIsPrivateSession) {
     setIsPrivateSession(data.chat.isPrivate === 1);
+  }
+  if (setPinned) {
+    setPinned(data.chat.pinned === 1);
   }
   setIsMessagesLoaded(true);
 };
@@ -441,6 +445,42 @@ const ChatWindow = ({ id }: { id?: string }) => {
     () => searchParams.get('private') === '1',
   );
 
+  const [pinned, setPinned] = useState(false);
+
+  // Default to all-false so capability-gated UI stays hidden until the
+  // config response arrives. Showing and then hiding would flash.
+  const [searchCapabilitiesRegular, setSearchCapabilitiesRegular] = useState<{
+    web: boolean;
+    images: boolean;
+    videos: boolean;
+    autocomplete: boolean;
+  }>({ web: false, images: false, videos: false, autocomplete: false });
+  const [searchCapabilitiesPrivate, setSearchCapabilitiesPrivate] = useState<{
+    web: boolean;
+    images: boolean;
+    videos: boolean;
+    autocomplete: boolean;
+  }>({ web: false, images: false, videos: false, autocomplete: false });
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/config')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled || !data) return;
+        if (data.searchCapabilitiesRegular) {
+          setSearchCapabilitiesRegular(data.searchCapabilitiesRegular);
+        }
+        if (data.searchCapabilitiesPrivate) {
+          setSearchCapabilitiesPrivate(data.searchCapabilitiesPrivate);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // State for tracking sources during gathering phase
   const [gatheringSources, setGatheringSources] = useState<
     Array<{
@@ -495,6 +535,7 @@ const ChatWindow = ({ id }: { id?: string }) => {
         setFiles,
         setFileIds,
         setIsPrivateSession,
+        setPinned,
       );
     } else if (!chatId) {
       setNewChatCreated(true);
@@ -1669,6 +1710,8 @@ const ChatWindow = ({ id }: { id?: string }) => {
               chatId={chatId!}
               messages={messages}
               isPrivateSession={isPrivateSession}
+              pinned={pinned}
+              setPinned={setPinned}
             />
             <Chat
               loading={loading}
@@ -1775,6 +1818,11 @@ const ChatWindow = ({ id }: { id?: string }) => {
               setPendingImages={setPendingImages}
               imageCapable={imageCapable}
               isPrivateSession={isPrivateSession}
+              searchCapabilities={
+                isPrivateSession
+                  ? searchCapabilitiesPrivate
+                  : searchCapabilitiesRegular
+              }
             />
           </>
         ) : (

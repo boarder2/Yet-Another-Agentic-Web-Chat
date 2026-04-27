@@ -1,6 +1,6 @@
 ---
 name: api-endpoints
-description: API route specifications, payload formats, and endpoint implementation details. Use when adding or modifying API endpoints, debugging API responses, understanding request/response schemas, or working on the chat or search route handlers.
+description: Use when adding, modifying, or debugging API endpoints, request/response schemas, payload formats, or the chat and search route handlers.
 ---
 
 # API Endpoints & Data Flow

@@ -17,8 +17,18 @@ import {
   getSelectedEmbeddingModel,
   getLinkSystemToChat,
   getPrivateSessionDurationMinutes,
+  getChatRetentionPolicy,
+  getScheduledRunRetentionPolicy,
+  getSearchLocale,
+  getSearchProviderSelection,
+  getSearxngApiEndpoint,
+  getBraveSearchApiKey,
+  getBraveLLMApiKey,
+  getMojeekApiKey,
   updateConfig,
 } from '@/lib/config';
+import { getResolvedSearchCapabilities } from '@/lib/search/providers';
+import { invalidateModelCache } from '@/lib/providers/modelCache';
 import {
   getAvailableChatModelProviders,
   getAvailableEmbeddingModelProviders,
@@ -93,6 +103,28 @@ export const GET = async (_req: Request) => {
     config['privateSessionDurationMinutes'] =
       getPrivateSessionDurationMinutes();
 
+    const chatRetention = getChatRetentionPolicy();
+    const schedRetention = getScheduledRunRetentionPolicy();
+    config['retentionChatsMode'] = chatRetention.mode;
+    config['retentionChatsValue'] = chatRetention.value;
+    config['retentionScheduledRunsMode'] = schedRetention.mode;
+    config['retentionScheduledRunsValue'] = schedRetention.value;
+
+    // Search provider configuration
+    const searchSel = getSearchProviderSelection();
+    config['searchProvider'] = searchSel.provider;
+    config['searchPrivateProvider'] = searchSel.privateProvider ?? '';
+    config['searchFallbackProvider'] = searchSel.fallbackProvider;
+    const searchLocale = getSearchLocale();
+    config['searchLanguage'] = searchLocale.language;
+    config['searchRegion'] = searchLocale.region;
+    config['searxngApiUrl'] = getSearxngApiEndpoint();
+    config['braveSearchApiKey'] = protectApiKey(getBraveSearchApiKey());
+    config['braveLLMApiKey'] = protectApiKey(getBraveLLMApiKey());
+    config['mojeekApiKey'] = protectApiKey(getMojeekApiKey());
+    config['searchCapabilitiesRegular'] = getResolvedSearchCapabilities(false);
+    config['searchCapabilitiesPrivate'] = getResolvedSearchCapabilities(true);
+
     return Response.json({ ...config }, { status: 200 });
   } catch (err) {
     console.error('An error occurred while getting config:', err);
@@ -111,9 +143,11 @@ export const POST = async (req: Request) => {
       newValue: string,
       currentConfig: string,
     ) => {
+      // "protected" is the masked placeholder from GET — keep existing.
       if (newValue === 'protected') {
         return currentConfig;
       }
+
       return newValue;
     };
 
@@ -124,6 +158,27 @@ export const POST = async (req: Request) => {
           PRIVATE_SESSION_DURATION_MINUTES:
             config.privateSessionDurationMinutes,
         }),
+        ...(config.retentionChatsMode !== undefined ||
+        config.retentionChatsValue !== undefined ||
+        config.retentionScheduledRunsMode !== undefined ||
+        config.retentionScheduledRunsValue !== undefined
+          ? {
+              RETENTION: {
+                ...(config.retentionChatsMode !== undefined && {
+                  CHATS_MODE: config.retentionChatsMode,
+                }),
+                ...(config.retentionChatsValue !== undefined && {
+                  CHATS_VALUE: config.retentionChatsValue,
+                }),
+                ...(config.retentionScheduledRunsMode !== undefined && {
+                  SCHEDULED_RUNS_MODE: config.retentionScheduledRunsMode,
+                }),
+                ...(config.retentionScheduledRunsValue !== undefined && {
+                  SCHEDULED_RUNS_VALUE: config.retentionScheduledRunsValue,
+                }),
+              },
+            }
+          : {}),
       },
       MODELS: {
         OPENAI: {
@@ -180,6 +235,107 @@ export const POST = async (req: Request) => {
     };
 
     updateConfig(updatedConfig);
+
+    // If any model-provider credential or URL changed, invalidate the
+    // cached model lists so the next /api/models call refetches from source.
+    const providerCredentialFields = [
+      'openaiApiKey',
+      'groqApiKey',
+      'anthropicApiKey',
+      'geminiApiKey',
+      'ollamaApiUrl',
+      'deepseekApiKey',
+      'aimlApiKey',
+      'lmStudioApiUrl',
+      'openrouterApiKey',
+      'customOpenaiApiKey',
+      'customOpenaiApiUrl',
+      'customOpenaiModelName',
+    ];
+    const providerChanged = providerCredentialFields.some(
+      (field) => config[field] !== undefined && config[field] !== 'protected',
+    );
+    if (providerChanged) {
+      invalidateModelCache();
+    }
+
+    // Save search provider configuration if present
+    const hasSearchFields =
+      config.searchProvider !== undefined ||
+      config.searchPrivateProvider !== undefined ||
+      config.searchFallbackProvider !== undefined ||
+      config.searchLanguage !== undefined ||
+      config.searchRegion !== undefined ||
+      config.searxngApiUrl !== undefined ||
+      config.braveSearchApiKey !== undefined ||
+      config.braveLLMApiKey !== undefined ||
+      config.mojeekApiKey !== undefined;
+
+    if (hasSearchFields) {
+      const searchUpdate: {
+        PROVIDER?: string;
+        PRIVATE_PROVIDER?: string;
+        FALLBACK_PROVIDER?: string;
+        LANGUAGE?: string;
+        REGION?: string;
+        PROVIDERS?: {
+          SEARXNG?: { API_URL?: string };
+          BRAVE_SEARCH?: { API_KEY?: string };
+          BRAVE_LLM?: { API_KEY?: string };
+          MOJEEK?: { API_KEY?: string };
+        };
+      } = {};
+
+      if (config.searchProvider !== undefined) {
+        searchUpdate.PROVIDER = config.searchProvider;
+      }
+      if (config.searchPrivateProvider !== undefined) {
+        searchUpdate.PRIVATE_PROVIDER = config.searchPrivateProvider || '';
+      }
+      if (config.searchFallbackProvider !== undefined) {
+        searchUpdate.FALLBACK_PROVIDER = config.searchFallbackProvider;
+      }
+      if (config.searchLanguage !== undefined) {
+        searchUpdate.LANGUAGE = config.searchLanguage || 'en';
+      }
+      if (config.searchRegion !== undefined) {
+        searchUpdate.REGION = config.searchRegion ?? 'US';
+      }
+
+      const providers: NonNullable<typeof searchUpdate.PROVIDERS> = {};
+      if (config.searxngApiUrl !== undefined) {
+        providers.SEARXNG = { API_URL: config.searxngApiUrl };
+      }
+      if (config.braveSearchApiKey !== undefined) {
+        providers.BRAVE_SEARCH = {
+          API_KEY: getUpdatedProtectedValue(
+            config.braveSearchApiKey,
+            getBraveSearchApiKey(),
+          ),
+        };
+      }
+      if (config.braveLLMApiKey !== undefined) {
+        providers.BRAVE_LLM = {
+          API_KEY: getUpdatedProtectedValue(
+            config.braveLLMApiKey,
+            getBraveLLMApiKey(),
+          ),
+        };
+      }
+      if (config.mojeekApiKey !== undefined) {
+        providers.MOJEEK = {
+          API_KEY: getUpdatedProtectedValue(
+            config.mojeekApiKey,
+            getMojeekApiKey(),
+          ),
+        };
+      }
+      if (Object.keys(providers).length > 0) {
+        searchUpdate.PROVIDERS = providers;
+      }
+
+      updateConfig({ SEARCH: searchUpdate });
+    }
 
     // Save selected model preferences if provided
     const modelSelections: Partial<

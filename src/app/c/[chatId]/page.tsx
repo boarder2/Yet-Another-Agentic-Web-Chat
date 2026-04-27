@@ -1,9 +1,23 @@
+'use client';
+
 import ChatWindow from '@/components/ChatWindow';
-import React from 'react';
+import { useEffect } from 'react';
+import { useParams } from 'next/navigation';
 
-const Page = ({ params }: { params: Promise<{ chatId: string }> }) => {
-  const { chatId } = React.use(params);
+export default function Page() {
+  const params = useParams<{ chatId: string }>();
+  const chatId = params.chatId;
+
+  useEffect(() => {
+    fetch(`/api/scheduled-tasks/runs/${chatId}/view`, { method: 'POST' })
+      .then((r) => r.json())
+      .then((d) => {
+        window.dispatchEvent(
+          new CustomEvent('scheduled-runs-unread-changed', { detail: d }),
+        );
+      })
+      .catch(() => {});
+  }, [chatId]);
+
   return <ChatWindow key={chatId} id={chatId} />;
-};
-
-export default Page;
+}

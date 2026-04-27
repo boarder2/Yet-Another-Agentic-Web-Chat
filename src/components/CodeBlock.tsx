@@ -17,13 +17,18 @@ export const CodeBlock = ({
   children: React.ReactNode;
   hideChrome?: boolean;
 }) => {
-  // Extract language from className (format could be "language-javascript" or "lang-javascript")
+  // Extract language from className. Some models emit fence info strings with
+  // duplicate/extra tokens (e.g. ```yaml lang-yaml```), which markdown-to-jsx
+  // turns into classNames like "lang-yaml lang-yaml" or "lang-yaml lang-yaml".
+  // Scan all whitespace-separated tokens and take the first language identifier.
   let language = '';
   if (className) {
-    if (className.startsWith('language-')) {
-      language = className.replace('language-', '');
-    } else if (className.startsWith('lang-')) {
-      language = className.replace('lang-', '');
+    for (const token of className.split(/\s+/)) {
+      const match = token.match(/^(?:language-|lang-)(.+)$/);
+      if (match) {
+        language = match[1];
+        break;
+      }
     }
   }
 

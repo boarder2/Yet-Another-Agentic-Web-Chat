@@ -1,4 +1,12 @@
-import { Clock, Edit, EyeOff, Share, FileText, FileDown } from 'lucide-react';
+import {
+  Clock,
+  Edit,
+  EyeOff,
+  Pin,
+  Share,
+  FileText,
+  FileDown,
+} from 'lucide-react';
 import { Message } from './ChatWindow';
 import { useEffect, useState, Fragment } from 'react';
 import { formatTimeDifference } from '@/lib/utils';
@@ -123,10 +131,14 @@ const Navbar = ({
   chatId,
   messages,
   isPrivateSession = false,
+  pinned = false,
+  setPinned,
 }: {
   messages: Message[];
   chatId: string;
   isPrivateSession?: boolean;
+  pinned?: boolean;
+  setPinned?: (pinned: boolean) => void;
 }) => {
   const [title, setTitle] = useState<string>('');
   const [timeAgo, setTimeAgo] = useState<string>('');
@@ -227,6 +239,26 @@ const Navbar = ({
       )}
 
       <div className="flex flex-row items-center space-x-4">
+        <button
+          aria-label={pinned ? 'Unpin chat' : 'Pin chat'}
+          onClick={async () => {
+            const next = !pinned;
+            if (setPinned) setPinned(next);
+            try {
+              const res = await fetch(`/api/chats/${chatId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pinned: next }),
+              });
+              if (!res.ok && setPinned) setPinned(!next);
+            } catch {
+              if (setPinned) setPinned(!next);
+            }
+          }}
+          className="active:scale-95 transition duration-100 cursor-pointer p-2 rounded-full hover:bg-surface-2"
+        >
+          <Pin size={17} className={pinned ? 'fill-current' : ''} />
+        </button>
         <Popover className="relative">
           <PopoverButton className="active:scale-95 transition duration-100 cursor-pointer p-2 rounded-full hover:bg-surface-2">
             <Share size={17} />

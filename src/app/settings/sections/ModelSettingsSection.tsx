@@ -3,6 +3,9 @@
 import { cn } from '@/lib/utils';
 import { Switch } from '@headlessui/react';
 import { PROVIDER_METADATA } from '@/lib/providers';
+import { RefreshCw } from 'lucide-react';
+import { useState } from 'react';
+import { toast } from 'sonner';
 import SettingsSection from '../components/SettingsSection';
 import Select from '../components/Select';
 import InputComponent from '../components/InputComponent';
@@ -62,8 +65,39 @@ export default function ModelSettingsSection({
     value: string | string[] | number | boolean,
   ) => void;
 }) {
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefreshModels = async () => {
+    try {
+      setRefreshing(true);
+      const res = await fetch('/api/models?refresh=true&include_hidden=true');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      toast.success('Model list refreshed. Reloading…');
+      setTimeout(() => window.location.reload(), 500);
+    } catch (err) {
+      console.error('Failed to refresh models:', err);
+      toast.error('Failed to refresh models');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   return (
-    <SettingsSection title="Model Settings">
+    <SettingsSection
+      title="Model Settings"
+      headerAction={
+        <button
+          type="button"
+          className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border border-surface-2 hover:bg-surface-2 transition disabled:opacity-60"
+          onClick={handleRefreshModels}
+          disabled={refreshing}
+          title="Refresh models from providers"
+        >
+          <RefreshCw size={12} className={cn(refreshing && 'animate-spin')} />
+          {refreshing ? 'Refreshing…' : 'Refresh models'}
+        </button>
+      }
+    >
       {config.chatModelProviders && (
         <div className="flex flex-col space-y-4">
           <div className="flex flex-col space-y-1">

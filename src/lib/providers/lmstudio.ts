@@ -15,29 +15,20 @@ interface LMStudioModel {
   name?: string;
 }
 
+const FETCH_TIMEOUT_MS = 20000;
+
 const ensureV1Endpoint = (endpoint: string): string =>
   endpoint.endsWith('/v1') ? endpoint : `${endpoint}/v1`;
-
-const checkServerAvailability = async (endpoint: string): Promise<boolean> => {
-  try {
-    const res = await fetch(`${ensureV1Endpoint(endpoint)}/models`, {
-      headers: { 'Content-Type': 'application/json' },
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
-};
 
 export const loadLMStudioChatModels = async () => {
   const endpoint = getLMStudioApiEndpoint();
 
   if (!endpoint) return {};
-  if (!(await checkServerAvailability(endpoint))) return {};
 
   try {
     const response = await fetch(`${ensureV1Endpoint(endpoint)}/models`, {
       headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
 
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -72,11 +63,11 @@ export const loadLMStudioEmbeddingsModels = async () => {
   const endpoint = getLMStudioApiEndpoint();
 
   if (!endpoint) return {};
-  if (!(await checkServerAvailability(endpoint))) return {};
 
   try {
     const response = await fetch(`${ensureV1Endpoint(endpoint)}/models`, {
       headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
 
     if (!response.ok) throw new Error(`HTTP ${response.status}`);

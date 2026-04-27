@@ -1,6 +1,6 @@
 ---
 name: prompt-system
-description: Prompt template architecture, focus mode prompts, citation formatting templates, personalization context injection, and system prompt management. Use when modifying agent prompts, adding citation styles, working on personalization, changing how the agent responds, or debugging prompt-related behavior.
+description: Use when modifying agent prompts, focus-mode prompts, citation formatting, personalization context injection, system prompts, or debugging how the agent responds.
 ---
 
 # Prompt System

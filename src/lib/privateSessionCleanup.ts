@@ -7,16 +7,15 @@ export async function cleanupExpiredPrivateSessions(): Promise<number> {
   const durationMs = getPrivateSessionDurationMinutes() * 60 * 1000;
   const cutoffMs = Date.now() - durationMs;
 
-  // Fetch all private chats and filter by parsed createdAt in JS
-  // (createdAt is stored as new Date().toString(), a locale string)
+  // Fetch all private chats and filter by createdAt (ms integer) in JS
   const privateChats = await db
     .select({ id: chats.id, createdAt: chats.createdAt })
     .from(chats)
     .where(eq(chats.isPrivate, 1));
 
   const expired = privateChats.filter((chat) => {
-    const ts = new Date(chat.createdAt).getTime();
-    return !isNaN(ts) && ts < cutoffMs;
+    const ts = chat.createdAt;
+    return ts < cutoffMs;
   });
 
   for (const chat of expired) {

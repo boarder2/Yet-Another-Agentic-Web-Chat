@@ -25,6 +25,31 @@ export interface SettingsType {
   selectedEmbeddingModel: string;
   linkSystemToChat: boolean;
   privateSessionDurationMinutes: number;
+  retentionChatsMode: 'days' | 'count' | 'disabled';
+  retentionChatsValue: number;
+  retentionScheduledRunsMode: 'days' | 'count' | 'disabled';
+  retentionScheduledRunsValue: number;
+  searchProvider: string;
+  searchPrivateProvider: string;
+  searchFallbackProvider: string;
+  searchLanguage: string;
+  searchRegion: string;
+  searxngApiUrl: string;
+  braveSearchApiKey: string;
+  braveLLMApiKey: string;
+  mojeekApiKey: string;
+  searchCapabilitiesRegular: {
+    web: boolean;
+    images: boolean;
+    videos: boolean;
+    autocomplete: boolean;
+  };
+  searchCapabilitiesPrivate: {
+    web: boolean;
+    images: boolean;
+    videos: boolean;
+    autocomplete: boolean;
+  };
 }
 
 export type SectionKey =
@@ -32,10 +57,11 @@ export type SectionKey =
   | 'automatic-search'
   | 'personalization'
   | 'memory'
-  | 'private-sessions'
+  | 'retention'
   | 'persona-prompts'
   | 'research-methodologies'
   | 'default-search'
+  | 'search-providers'
   | 'model-settings'
   | 'model-visibility'
   | 'api-keys';
@@ -49,7 +75,7 @@ export const SETTINGS_SECTIONS: {
   { key: 'automatic-search', label: 'Automatic Search', group: 'General' },
   { key: 'personalization', label: 'Personalization', group: 'General' },
   { key: 'memory', label: 'Memory', group: 'General' },
-  { key: 'private-sessions', label: 'Private Sessions', group: 'General' },
+  { key: 'retention', label: 'Retention', group: 'General' },
   { key: 'persona-prompts', label: 'Persona Prompts', group: 'General' },
   {
     key: 'research-methodologies',
@@ -57,6 +83,7 @@ export const SETTINGS_SECTIONS: {
     group: 'General',
   },
   { key: 'default-search', label: 'Default Search', group: 'AI Models' },
+  { key: 'search-providers', label: 'Search Providers', group: 'Search' },
   { key: 'model-settings', label: 'Model Settings', group: 'AI Models' },
   { key: 'model-visibility', label: 'Model Visibility', group: 'AI Models' },
   { key: 'api-keys', label: 'API Keys', group: 'Security' },

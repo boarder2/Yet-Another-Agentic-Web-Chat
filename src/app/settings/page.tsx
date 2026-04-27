@@ -17,10 +17,11 @@ import PreferencesSection from './sections/PreferencesSection';
 import AutomaticSearchSection from './sections/AutomaticSearchSection';
 import PersonalizationSection from './sections/PersonalizationSection';
 import MemorySection from './sections/MemorySection';
-import PrivateSessionsSection from './sections/PrivateSessionsSection';
+import RetentionSection from './sections/RetentionSection';
 import PersonaPromptsSection from './sections/PersonaPromptsSection';
 import ResearchMethodologiesSection from './sections/ResearchMethodologiesSection';
 import DefaultSearchSection from './sections/DefaultSearchSection';
+import SearchProvidersSection from './sections/SearchProvidersSection';
 import ModelSettingsSection from './sections/ModelSettingsSection';
 import ModelVisibilitySection from './sections/ModelVisibilitySection';
 import ApiKeysSection from './sections/ApiKeysSection';
@@ -891,14 +892,17 @@ export default function SettingsPage() {
                   />
                 )}
 
-                {activeSection === 'private-sessions' && (
-                  <PrivateSessionsSection
+                {activeSection === 'retention' && (
+                  <RetentionSection
+                    config={config}
+                    savingStates={savingStates}
+                    setConfig={setConfig}
+                    saveConfig={saveConfig}
                     privateSessionDurationMinutes={
                       privateSessionDurationMinutes
                     }
                     isCustomPrivateDuration={isCustomPrivateDuration}
                     customPrivateDurationInput={customPrivateDurationInput}
-                    savingStates={savingStates}
                     setPrivateSessionDurationMinutes={
                       setPrivateSessionDurationMinutes
                     }
@@ -906,8 +910,6 @@ export default function SettingsPage() {
                     setCustomPrivateDurationInput={
                       setCustomPrivateDurationInput
                     }
-                    setConfig={setConfig}
-                    saveConfig={saveConfig}
                   />
                 )}
 
@@ -940,6 +942,15 @@ export default function SettingsPage() {
                     setIsAddingNewMethodology={setIsAddingNewMethodology}
                     onAddOrUpdate={handleAddOrUpdateMethodology}
                     onDelete={handleDeleteMethodology}
+                  />
+                )}
+
+                {activeSection === 'search-providers' && (
+                  <SearchProvidersSection
+                    config={config}
+                    savingStates={savingStates}
+                    setConfig={setConfig}
+                    saveConfig={saveConfig}
                   />
                 )}
 

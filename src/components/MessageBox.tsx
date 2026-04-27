@@ -1,7 +1,8 @@
 import { cn } from '@/lib/utils';
 import { Pencil } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { File, ImageAttachment, Message } from './ChatWindow';
+import MarkdownRenderer from './MarkdownRenderer';
 import MessageInput from './MessageInput';
 import MessageTabs from './MessageTabs';
 import { Document } from '@langchain/core/documents';
@@ -20,6 +21,8 @@ const MessageBox = ({
   gatheringSources,
   actionMessageId,
   editInputProps,
+  isPrivateSession,
+  searchCapabilities,
 }: {
   message: Message;
   messageIndex: number;
@@ -93,36 +96,22 @@ const MessageBox = ({
     refreshPersonalization?: () => void;
     imageCapable?: boolean;
   };
+  isPrivateSession?: boolean;
+  searchCapabilities?: {
+    web: boolean;
+    images: boolean;
+    videos: boolean;
+    autocomplete: boolean;
+  };
 }) => {
   // Local state for editing functionality
   const [isEditing, setIsEditing] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(true);
+  const isLongMessage =
+    message.role === 'user' && message.content.split('\n').length > 5;
   const [editPendingImages, setEditPendingImages] = useState<ImageAttachment[]>(
     [],
   );
-  // State for truncation toggle of long user prompts
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [isOverflowing, setIsOverflowing] = useState(false);
-  const contentRef = useRef<HTMLHeadingElement | null>(null);
-
-  // Measure overflow compared to a 3-line clamped state
-  useEffect(() => {
-    const measureOverflow = () => {
-      const el = contentRef.current;
-      if (!el) return;
-      const hadClamp = el.classList.contains('line-clamp-3');
-      if (!hadClamp) el.classList.add('line-clamp-3');
-      const overflowing = el.scrollHeight > el.clientHeight + 1;
-      setIsOverflowing(overflowing);
-      if (!hadClamp) el.classList.remove('line-clamp-3');
-    };
-
-    measureOverflow();
-    window.addEventListener('resize', measureOverflow);
-    return () => {
-      window.removeEventListener('resize', measureOverflow);
-    };
-  }, [message.content]);
-
   // Initialize editing
   const startEditMessage = () => {
     if (loading) return;
@@ -166,72 +155,65 @@ const MessageBox = ({
               />
             </div>
           ) : (
-            <>
-              <div className="flex items-start">
-                <div className="flex-1 min-w-0">
-                  <h2
-                    className={cn(
-                      'font-medium text-3xl',
-                      !isExpanded && 'line-clamp-3',
-                    )}
-                    id={`user-msg-${message.messageId}`}
-                    ref={contentRef}
-                    onClick={startEditMessage}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        if (e.key === ' ') e.preventDefault();
-                        startEditMessage();
-                      }
-                    }}
-                  >
-                    {message.content}
-                  </h2>
-                  {isOverflowing && (
-                    <button
-                      type="button"
-                      className="mt-2 text-sm text-accent hover:underline"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setIsExpanded((v) => !v);
-                      }}
-                      aria-expanded={isExpanded}
-                      aria-controls={`user-msg-${message.messageId}`}
-                      title={isExpanded ? 'Show less' : 'Show more'}
-                    >
-                      {isExpanded ? 'Show less' : 'Show more'}
-                    </button>
-                  )}
-                  {message.images && message.images.length > 0 && (
-                    <div className="flex flex-row gap-2 mt-3 flex-wrap">
-                      {message.images.map((img) => (
-                        <img
-                          key={img.imageId}
-                          src={`/api/uploads/images/${img.imageId}`}
-                          alt={img.fileName}
-                          className="max-h-40 max-w-[200px] object-cover rounded-lg border border-surface-2"
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
+            <div className="ml-[15%]">
+              <div className="relative bg-surface-2 rounded-xl px-4 py-3 border-b-2 border-accent overflow-hidden">
                 <button
                   onClick={startEditMessage}
                   disabled={loading}
                   className={cn(
-                    'ml-3 p-2 rounded-xl border border-surface-2 flex-shrink-0',
+                    'absolute top-2 right-2 p-1.5 rounded-lg flex-shrink-0',
                     loading
-                      ? 'opacity-40 cursor-not-allowed bg-surface'
-                      : 'bg-surface hover:bg-surface-2',
+                      ? 'opacity-40 cursor-not-allowed'
+                      : 'hover:bg-surface',
                   )}
                   aria-label="Edit message"
                   title="Edit message"
                 >
-                  <Pencil size={18} />
+                  <Pencil size={16} />
                 </button>
+                <div
+                  className={cn(
+                    'relative pr-8',
+                    isLongMessage && isCollapsed && 'max-h-32 overflow-hidden',
+                  )}
+                >
+                  <MarkdownRenderer content={message.content} />
+                  {isLongMessage && isCollapsed && (
+                    <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-linear-to-t from-surface-2 to-transparent" />
+                  )}
+                </div>
+                {message.images && message.images.length > 0 && (
+                  <div className="flex flex-row gap-2 mt-3 flex-wrap">
+                    {message.images.map((img) => (
+                      <img
+                        key={img.imageId}
+                        src={`/api/uploads/images/${img.imageId}`}
+                        alt={img.fileName}
+                        className="max-h-40 max-w-[200px] object-cover rounded-lg border border-surface-2"
+                      />
+                    ))}
+                  </div>
+                )}
+                {isLongMessage && isCollapsed && (
+                  <button
+                    onClick={() => setIsCollapsed(false)}
+                    className="-mx-4 -mb-3 mt-1 w-[calc(100%+2rem)] py-2 bg-surface-2 text-center text-xs font-medium text-accent hover:bg-surface transition-colors"
+                    aria-label="Show full message"
+                  >
+                    Show full
+                  </button>
+                )}
+                {isLongMessage && !isCollapsed && (
+                  <button
+                    onClick={() => setIsCollapsed(true)}
+                    className="-mx-4 -mb-3 mt-2 w-[calc(100%+2rem)] py-2 bg-surface-2 text-center text-xs text-fg/50 hover:bg-surface hover:text-accent transition-colors"
+                    aria-label="Collapse message"
+                  >
+                    Collapse
+                  </button>
+                )}
               </div>
-            </>
+            </div>
           )}
         </div>
       )}
@@ -251,6 +233,8 @@ const MessageBox = ({
           modelStats={modelStats}
           gatheringSources={gatheringSources}
           actionMessageId={actionMessageId}
+          isPrivateSession={isPrivateSession}
+          searchCapabilities={searchCapabilities}
         />
       )}
     </div>

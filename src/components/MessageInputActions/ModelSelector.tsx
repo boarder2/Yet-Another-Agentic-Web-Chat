@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Cpu, ChevronDown, ChevronRight } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Cpu, ChevronDown, ChevronRight, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   Popover,
@@ -44,69 +44,75 @@ const ModelSelector = ({
   const [expandedProviders, setExpandedProviders] = useState<
     Record<string, boolean>
   >({});
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    const fetchModels = async () => {
-      try {
-        const response = await fetch('/api/models', {
+  const fetchModels = useCallback(async (forceRefresh = false) => {
+    try {
+      if (forceRefresh) setRefreshing(true);
+      else setLoading(true);
+      const response = await fetch(
+        forceRefresh ? '/api/models?refresh=true' : '/api/models',
+        {
           headers: {
             'Content-Type': 'application/json',
           },
-        });
+        },
+      );
 
-        if (!response.ok) {
-          throw new Error(`Failed to fetch models: ${response.status}`);
-        }
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const data: any = await response.json();
-        const providersData: ProviderModelMap = {};
-
-        // Organize models by provider
-        Object.entries(data.chatModelProviders).forEach(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          ([provider, models]: [string, any]) => {
-            const providerDisplayName =
-              provider.charAt(0).toUpperCase() + provider.slice(1);
-            providersData[provider] = {
-              displayName: providerDisplayName,
-              models: [],
-            };
-
-            Object.entries(models).forEach(
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              ([modelKey, modelData]: [string, any]) => {
-                providersData[provider].models.push({
-                  provider,
-                  model: modelKey,
-                  displayName: modelData.displayName || modelKey,
-                });
-              },
-            );
-          },
-        );
-
-        // Filter out providers with no models
-        Object.keys(providersData).forEach((provider) => {
-          if (providersData[provider].models.length === 0) {
-            delete providersData[provider];
-          }
-        });
-
-        // Sort providers by name (only those that have models)
-        const sortedProviders = Object.keys(providersData).sort();
-        setProvidersList(sortedProviders);
-        setProviderModels(providersData);
-        setLoading(false);
-      } catch (error) {
-        console.error('Error fetching models:', error);
-        setLoading(false);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch models: ${response.status}`);
       }
-    };
 
-    fetchModels();
-    // Fetch models once on mount; selection mapping handled in a separate effect
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data: any = await response.json();
+      const providersData: ProviderModelMap = {};
+
+      // Organize models by provider
+      Object.entries(data.chatModelProviders).forEach(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ([provider, models]: [string, any]) => {
+          const providerDisplayName =
+            provider.charAt(0).toUpperCase() + provider.slice(1);
+          providersData[provider] = {
+            displayName: providerDisplayName,
+            models: [],
+          };
+
+          Object.entries(models).forEach(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ([modelKey, modelData]: [string, any]) => {
+              providersData[provider].models.push({
+                provider,
+                model: modelKey,
+                displayName: modelData.displayName || modelKey,
+              });
+            },
+          );
+        },
+      );
+
+      // Filter out providers with no models
+      Object.keys(providersData).forEach((provider) => {
+        if (providersData[provider].models.length === 0) {
+          delete providersData[provider];
+        }
+      });
+
+      // Sort providers by name (only those that have models)
+      const sortedProviders = Object.keys(providersData).sort();
+      setProvidersList(sortedProviders);
+      setProviderModels(providersData);
+    } catch (error) {
+      console.error('Error fetching models:', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchModels();
+  }, [fetchModels]);
 
   // Derive display text from providerModels + selectedModel without clearing on null
   useEffect(() => {
@@ -176,9 +182,8 @@ const ModelSelector = ({
   };
 
   const getDisplayText = () => {
-    // While models are loading or selection hasn't been determined yet, show Loading to avoid flicker
-    if (loading || !selectedModel) return 'Loading...';
-    if (!selectedModelDisplay) return 'Select model';
+    if (loading) return 'Loading...';
+    if (!selectedModel || !selectedModelDisplay) return 'Select Model';
 
     return `${selectedModelDisplay} (${selectedProviderDisplay})`;
   };
@@ -226,17 +231,34 @@ const ModelSelector = ({
           >
             <PopoverPanel className="absolute z-10 w-72 transform bottom-full mb-2">
               <div className="overflow-hidden rounded-lg shadow-lg bg-surface border border-surface-2 divide-y divide-surface-2">
-                <div className="px-4 py-3">
-                  <h3 className="text-sm font-medium text-fg/90">
-                    {role === 'system'
-                      ? 'Select System Model'
-                      : 'Select Chat Model'}
-                  </h3>
-                  <p className="text-xs text-fg/60 mt-1">
-                    {role === 'system'
-                      ? 'Choose the model used for tools and internal summarization'
-                      : 'Choose the model used for agent decisions and final responses'}
-                  </p>
+                <div className="px-4 py-3 flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-medium text-fg/90">
+                      {role === 'system'
+                        ? 'Select System Model'
+                        : 'Select Chat Model'}
+                    </h3>
+                    <p className="text-xs text-fg/60 mt-1">
+                      {role === 'system'
+                        ? 'Choose the model used for tools and internal summarization'
+                        : 'Choose the model used for agent decisions and final responses'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="p-1.5 rounded-md hover:bg-surface-2 text-fg/60 hover:text-fg transition"
+                    title="Refresh models"
+                    disabled={refreshing || loading}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      fetchModels(true);
+                    }}
+                  >
+                    <RefreshCw
+                      size={14}
+                      className={cn(refreshing && 'animate-spin')}
+                    />
+                  </button>
                 </div>
                 <div className="max-h-72 overflow-y-auto">
                   {loading ? (
@@ -260,6 +282,7 @@ const ModelSelector = ({
                           >
                             {/* Provider header */}
                             <button
+                              type="button"
                               className={cn(
                                 'w-full flex items-center justify-between px-4 py-2 text-sm text-left',
                                 'hover:bg-surface-2',

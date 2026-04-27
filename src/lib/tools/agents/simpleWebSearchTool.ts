@@ -1,7 +1,5 @@
-import { searchSearxng } from '@/lib/searxng';
+import { getWebSearchProvider } from '@/lib/search/providers';
 import { SimplifiedAgentStateType } from '@/lib/state/chatAgentState';
-import { CachedEmbeddings } from '@/lib/utils/cachedEmbeddings';
-import computeSimilarity from '@/lib/utils/computeSimilarity';
 import { isSoftStop } from '@/lib/utils/runControl';
 import { ToolMessage } from '@langchain/core/messages';
 import { RunnableConfig } from '@langchain/core/runnables';
@@ -10,7 +8,8 @@ import { Command, getCurrentTaskInput } from '@langchain/langgraph';
 import { Document } from '@langchain/core/documents';
 import { z } from 'zod';
 
-// Schema for simple web search tool input
+const MAX_RESULTS = 20;
+
 const SimpleWebSearchToolSchema = z.object({
   query: z
     .string()
@@ -20,13 +19,10 @@ const SimpleWebSearchToolSchema = z.object({
 });
 
 /**
- * SimpleWebSearchTool - Simplified version of WebSearchTool
+ * SimpleWebSearchTool
  *
- * This tool handles:
- * 1. Query optimization for web search
- * 2. Web search execution using SearXNG
- * 3. Document ranking and filtering (top 15: top 3 + ranked top 12)
- * 4. Returns raw search results as documents without analysis or content extraction
+ * Runs web search through the configured search provider and returns the first
+ * 20 results as Documents, in provider order. No similarity ranking.
  */
 export const simpleWebSearchTool = tool(
   async (
@@ -38,29 +34,21 @@ export const simpleWebSearchTool = tool(
       const currentState = getCurrentTaskInput() as SimplifiedAgentStateType;
       let currentDocCount = currentState.relevantDocuments?.length ?? 0;
 
-      // Get LLM and embeddings from config
-      if (!config?.configurable?.systemLlm) {
-        throw new Error('System LLM not available in config');
-      }
-      if (!config?.configurable?.embeddings) {
-        throw new Error('Embeddings not available in config');
-      }
-
-      const _llm = config.configurable.systemLlm;
-      const embeddings: CachedEmbeddings = config.configurable.embeddings;
       const retrievalSignal: AbortSignal | undefined = (
         config as unknown as Record<string, Record<string, unknown>>
       )?.configurable?.retrievalSignal as AbortSignal | undefined;
       const messageId: string | undefined = (
         config as unknown as Record<string, Record<string, unknown>>
       )?.configurable?.messageId as string | undefined;
-
-      const searchQuery = query;
-      console.log(
-        `SimpleWebSearchTool: Performing web search for query: "${searchQuery}"`,
+      const isPrivate: boolean = Boolean(
+        (config as unknown as Record<string, Record<string, unknown>>)
+          ?.configurable?.isPrivate,
       );
 
-      // Step 2: Execute web search
+      console.log(
+        `SimpleWebSearchTool: Performing web search for query: "${query}" (private=${isPrivate})`,
+      );
+
       if (messageId && isSoftStop(messageId)) {
         return new Command({
           update: {
@@ -77,17 +65,15 @@ export const simpleWebSearchTool = tool(
         });
       }
 
-      const searchResults = await searchSearxng(
-        searchQuery,
-        {
-          language: 'en',
-          engines: [],
-        },
+      const provider = getWebSearchProvider({ isPrivate });
+      const searchResults = await provider.webSearch(
+        query,
+        {},
         retrievalSignal,
       );
 
       console.log(
-        `SimpleWebSearchTool: Found ${searchResults.results.length} search results`,
+        `SimpleWebSearchTool: Found ${searchResults.results.length} search results via ${provider.id}`,
       );
 
       if (!searchResults.results || searchResults.results.length === 0) {
@@ -106,25 +92,9 @@ export const simpleWebSearchTool = tool(
         });
       }
 
-      // Step 3: Calculate similarities and rank results
-      const queryVector = await embeddings.embedQuery(query);
-
-      // Calculate similarities for all results
-      const resultsWithSimilarity = await Promise.all(
-        searchResults.results.map(async (result) => {
-          const content = result.title + ' ' + (result.content || '');
-          const vector = await embeddings.embedQuery(content);
-          const similarity = computeSimilarity(vector, queryVector);
-          return { result, similarity };
-        }),
-      );
-
-      const documents: Document[] = [];
-
-      // Always take the top 3 results first
-      const top3Results = searchResults.results.slice(0, 3);
-      documents.push(
-        ...top3Results.map((result, _i) => {
+      const documents: Document[] = searchResults.results
+        .slice(0, MAX_RESULTS)
+        .map((result) => {
           return new Document({
             pageContent: `${result.title || 'Untitled'}\n\n${result.content || ''}`,
             metadata: {
@@ -133,50 +103,21 @@ export const simpleWebSearchTool = tool(
               url: result.url,
               source: result.url,
               processingType: 'preview-only',
-              searchQuery: searchQuery,
-              rank: 'top-3',
+              searchQuery: query,
             },
           });
-        }),
-      );
-
-      // Sort by relevance score and take top 5 from the remaining results
-      const remainingResults = resultsWithSimilarity
-        .slice(3)
-        .sort((a, b) => b.similarity - a.similarity)
-        .slice(0, 5);
-
-      documents.push(
-        ...remainingResults.map(({ result }) => {
-          return new Document({
-            pageContent: `${result.title || 'Untitled'}\n\n${result.content || ''}`,
-            metadata: {
-              sourceId: ++currentDocCount,
-              title: result.title || 'Untitled',
-              url: result.url,
-              source: result.url,
-              processingType: 'preview-only',
-              searchQuery: searchQuery,
-              rank: 'ranked',
-            },
-          });
-        }),
-      );
+        });
 
       console.log(
         `SimpleWebSearchTool: Created ${documents.length} documents from search results`,
-        documents,
       );
 
-      //return { documents };
       return new Command({
         update: {
           relevantDocuments: documents,
           messages: [
             new ToolMessage({
-              content: JSON.stringify({
-                document: documents,
-              }),
+              content: JSON.stringify({ document: documents }),
               tool_call_id: (config as unknown as { toolCall: { id: string } })
                 ?.toolCall.id,
             }),
@@ -188,7 +129,6 @@ export const simpleWebSearchTool = tool(
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
 
-      // Treat abort as non-fatal/no-op update
       if (
         error instanceof Error &&
         (error.name === 'CanceledError' || error.name === 'AbortError')
@@ -208,7 +148,6 @@ export const simpleWebSearchTool = tool(
         });
       }
 
-      //return { documents: [] };
       return new Command({
         update: {
           relevantDocuments: [],
@@ -226,7 +165,7 @@ export const simpleWebSearchTool = tool(
   {
     name: 'web_search',
     description:
-      'Performs web search using SearXNG and returns ranked search results as documents without content analysis or extraction',
+      'Performs web search using the configured search provider and returns up to 20 results as documents in provider order.',
     schema: SimpleWebSearchToolSchema,
   },
 );

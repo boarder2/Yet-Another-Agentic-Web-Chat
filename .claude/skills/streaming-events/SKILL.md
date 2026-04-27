@@ -1,6 +1,6 @@
 ---
 name: streaming-events
-description: Real-time streaming event system for tool calls, todo updates, and subagent execution. Use when working on tool call lifecycle events, streaming responses, event handling in SimplifiedAgent, ChatWindow event processing, MarkdownRenderer ToolCall component, TodoWidget, or debugging missing/broken streaming output.
+description: Use when working on tool-call lifecycle events, todo updates, subagent streaming, SimplifiedAgent/ChatWindow event handling, MarkdownRenderer ToolCall, TodoWidget, or debugging missing or broken streaming output.
 ---
 
 # Streaming Events System

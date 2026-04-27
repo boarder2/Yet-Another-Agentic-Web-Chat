@@ -7,7 +7,7 @@ import { PromptTemplate } from '@langchain/core/prompts';
 import formatChatHistoryAsString from '../utils/formatHistory';
 import { BaseMessage } from '@langchain/core/messages';
 import LineOutputParser from '../outputParsers/lineOutputParser';
-import { searchSearxng } from '../searxng';
+import { getVideoSearchProvider } from '../search/providers';
 import { formatDateForLLM } from '../utils';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 // import { getLangfuseCallbacks } from '@/lib/tracing/langfuse';
@@ -80,6 +80,7 @@ const VideoSearchChainPrompt = `
 type VideoSearchChainInput = {
   chat_history: BaseMessage[];
   query: string;
+  isPrivate?: boolean;
 };
 
 interface VideoSearchResult {
@@ -93,7 +94,7 @@ const answerParser = new LineOutputParser({
   key: 'answer',
 });
 
-const createVideoSearchChain = (llm: BaseChatModel) => {
+const createVideoSearchChain = (llm: BaseChatModel, isPrivate: boolean) => {
   const fullPrompt = VideoSearchChainPrompt;
 
   return RunnableSequence.from([
@@ -110,9 +111,11 @@ const createVideoSearchChain = (llm: BaseChatModel) => {
     llm,
     answerParser,
     RunnableLambda.from(async (searchQuery: string) => {
-      const res = await searchSearxng(searchQuery, {
-        engines: ['youtube'],
-      });
+      const provider = getVideoSearchProvider({ isPrivate });
+      if (!provider || !provider.videoSearch) {
+        return [] as VideoSearchResult[];
+      }
+      const res = await provider.videoSearch(searchQuery, {});
 
       const videos: VideoSearchResult[] = [];
 
@@ -141,7 +144,7 @@ const handleVideoSearch = (
   input: VideoSearchChainInput,
   llm: BaseChatModel,
 ) => {
-  const VideoSearchChain = createVideoSearchChain(llm);
+  const VideoSearchChain = createVideoSearchChain(llm, !!input.isPrivate);
   return VideoSearchChain.invoke(input, {
     /* ...getLangfuseCallbacks() */
   });

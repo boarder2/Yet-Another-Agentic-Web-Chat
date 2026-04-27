@@ -8,6 +8,8 @@ export const PROVIDER_INFO = {
 import { ChatOllama } from '@langchain/ollama';
 import { OllamaEmbeddings } from '@langchain/ollama';
 
+const FETCH_TIMEOUT_MS = 20000;
+
 export const loadOllamaChatModels = async () => {
   const ollamaApiEndpoint = getOllamaApiEndpoint();
 
@@ -18,6 +20,7 @@ export const loadOllamaChatModels = async () => {
       headers: {
         'Content-Type': 'application/json',
       },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
 
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -56,6 +59,7 @@ export const loadOllamaEmbeddingModels = async () => {
       headers: {
         'Content-Type': 'application/json',
       },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
 
     if (!res.ok) throw new Error(`HTTP ${res.status}`);

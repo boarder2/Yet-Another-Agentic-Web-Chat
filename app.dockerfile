@@ -7,6 +7,7 @@ RUN yarn install --frozen-lockfile --network-timeout 600000
 ENV NEXT_TELEMETRY_DISABLED=1
 
 COPY tsconfig.json next.config.mjs postcss.config.js drizzle.config.ts tailwind.config.ts ./
+COPY drizzle ./drizzle
 COPY src ./src
 COPY public ./public
 

@@ -1,6 +1,6 @@
 ---
 name: image-attachments
-description: Image attachment feature including upload/serving endpoints, multimodal LLM messages, clipboard paste handling, and UI components. Use when working on image upload, image display, multimodal chat messages, the uploads API, MessageInput image handling, or vision model integration.
+description: Use when working on image upload/display, the uploads API, MessageInput image/clipboard paste, multimodal chat messages, or vision model integration.
 ---
 
 # Image Attachments

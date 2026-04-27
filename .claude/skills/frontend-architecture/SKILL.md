@@ -1,6 +1,6 @@
 ---
 name: frontend-architecture
-description: React component architecture, state management, streaming event handling, styling patterns, and UI conventions. Use when modifying UI components, working on ChatWindow, MessageBox, MarkdownRenderer, handling streaming events in the frontend, or debugging UI rendering issues.
+description: Use when modifying React UI components, ChatWindow, MessageBox, MarkdownRenderer, frontend state/streaming event handling, styling, or debugging UI rendering.
 ---
 
 # Frontend Architecture

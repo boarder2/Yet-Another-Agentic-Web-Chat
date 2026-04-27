@@ -60,8 +60,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "userId": {
-          "name": "userId",
+        "user_id": {
+          "name": "user_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -82,8 +82,8 @@
           "notNull": false,
           "autoincrement": false
         },
-        "embeddingModel": {
-          "name": "embeddingModel",
+        "embedding_model": {
+          "name": "embedding_model",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -96,44 +96,44 @@
           "notNull": false,
           "autoincrement": false
         },
-        "sourceType": {
-          "name": "sourceType",
+        "source_type": {
+          "name": "source_type",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "sourceChatId": {
-          "name": "sourceChatId",
+        "source_chat_id": {
+          "name": "source_chat_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "accessCount": {
-          "name": "accessCount",
+        "access_count": {
+          "name": "access_count",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
           "default": 0
         },
-        "lastAccessedAt": {
-          "name": "lastAccessedAt",
+        "last_accessed_at": {
+          "name": "last_accessed_at",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "createdAt": {
-          "name": "createdAt",
+        "created_at": {
+          "name": "created_at",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "updatedAt": {
-          "name": "updatedAt",
+        "updated_at": {
+          "name": "updated_at",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,

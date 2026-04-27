@@ -50,10 +50,11 @@ interface LlmSearchBody {
 interface ChatRow {
   id: string;
   title: string;
-  createdAt: string;
+  createdAt: number;
   focusMode: string;
   files: unknown;
   matchExcerpt: string | null;
+  messageCount?: number;
 }
 
 function extractExcerpt(
@@ -192,15 +193,35 @@ export const POST = async (req: Request) => {
       }
     }
 
-    const combinedChats = Array.from(seen.values()).sort((a, b) =>
-      b.createdAt.localeCompare(a.createdAt),
+    const combinedChats = Array.from(seen.values()).sort(
+      (a, b) => b.createdAt - a.createdAt,
     );
+
+    const ids = combinedChats.map((c) => c.id);
+    const countRows = ids.length
+      ? await db
+          .select({
+            chatId: messages.chatId,
+            count: sql<number>`count(*)`,
+          })
+          .from(messages)
+          .where(inArray(messages.chatId, ids))
+          .groupBy(messages.chatId)
+      : [];
+    const countMap = new Map<string, number>();
+    for (const r of countRows) countMap.set(r.chatId, Number(r.count));
+    let totalMessages = 0;
+    for (const c of combinedChats) {
+      c.messageCount = countMap.get(c.id) ?? 0;
+      totalMessages += c.messageCount;
+    }
 
     return Response.json(
       {
         chats: combinedChats,
         terms: searchTerms,
         total: combinedChats.length,
+        totalMessages,
       },
       { status: 200 },
     );

@@ -21,6 +21,7 @@ interface VideoSearchBody {
   chatHistory: { role: string; content: string }[];
   chatModel?: ChatModel;
   selectedSystemPromptIds?: string[];
+  isPrivate?: boolean;
 }
 
 export const POST = async (req: Request) => {
@@ -74,6 +75,7 @@ export const POST = async (req: Request) => {
       {
         chat_history: chatHistory,
         query: body.query,
+        isPrivate: body.isPrivate,
       },
       llm,
     );

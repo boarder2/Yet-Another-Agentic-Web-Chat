@@ -440,7 +440,7 @@ const Page = () => {
                         ago
                       </span>
                       {memory.sourceType === 'automatic' &&
-                        memory.sourceChatId && (
+                        (memory.sourceChatId ? (
                           <Link
                             href={`/c/${memory.sourceChatId}`}
                             className="flex items-center gap-1 text-xs text-accent hover:underline"
@@ -448,7 +448,11 @@ const Page = () => {
                             <LinkIcon size={10} />
                             From conversation
                           </Link>
-                        )}
+                        ) : (
+                          <span className="text-xs text-fg/40 italic">
+                            Source chat no longer exists
+                          </span>
+                        ))}
                       {memory.sourceType === 'manual' && (
                         <span className="text-xs text-fg/40">
                           Manually added

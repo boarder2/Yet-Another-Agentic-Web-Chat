@@ -1,17 +1,9 @@
 import { updateToolCallMarkup } from '@/lib/utils/toolCallMarkup';
 import { encodeHtmlAttribute } from '@/lib/utils/html';
 import { cleanupCancelToken, registerCancelToken } from '@/lib/cancel-tokens';
-import {
-  getCustomOpenaiApiKey,
-  getCustomOpenaiApiUrl,
-  getCustomOpenaiModelName,
-} from '@/lib/config';
 import db from '@/lib/db';
 import { chats, messages as messagesSchema } from '@/lib/db/schema';
-import {
-  getAvailableChatModelProviders,
-  getAvailableEmbeddingModelProviders,
-} from '@/lib/providers';
+import { resolveChatAndEmbedding } from '@/lib/providers/resolveModels';
 import { getFileDetails } from '@/lib/utils/files';
 import {
   getPersonaInstructionsOnly,
@@ -19,8 +11,6 @@ import {
 } from '@/lib/utils/prompts';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { AIMessage, BaseMessage, HumanMessage } from '@langchain/core/messages';
-import { ChatOllama } from '@langchain/ollama';
-import { ChatOpenAI } from '@langchain/openai';
 import crypto from 'crypto';
 import { and, eq, gt } from 'drizzle-orm';
 import { EventEmitter } from 'stream';
@@ -34,6 +24,7 @@ import { buildMultimodalHumanMessage } from '@/lib/utils/images';
 import { retrieveRelevantMemories } from '@/lib/utils/memoryRetrieval';
 import { buildMemorySection } from '@/lib/prompts/memory/memoryContext';
 import { processExtraction } from '@/lib/utils/memoryExtraction';
+import { distillQueryForEmbedding } from '@/lib/utils/queryDistillation';
 import { denyApprovalsForMessage } from '@/lib/sandbox/pendingApprovals';
 import { cancelQuestionsForMessage } from '@/lib/userQuestion/pendingQuestions';
 import { SimplifiedAgent } from '@/lib/search/simplifiedAgent';
@@ -560,7 +551,7 @@ const handleHistorySave = async (
       .values({
         id: message.chatId,
         title: message.content,
-        createdAt: new Date().toString(),
+        createdAt: Date.now(),
         focusMode: focusMode,
         files: files.map(getFileDetails),
         isPrivate: isPrivate ? 1 : 0,
@@ -630,95 +621,22 @@ export const POST = async (req: Request) => {
       );
     }
 
-    const [chatModelProviders, embeddingModelProviders] = await Promise.all([
-      getAvailableChatModelProviders(),
-      getAvailableEmbeddingModelProviders(),
-    ]);
-
-    const chatModelProvider =
-      chatModelProviders[
-        body.chatModel?.provider || Object.keys(chatModelProviders)[0]
-      ];
-    const chatModel =
-      chatModelProvider[
-        body.chatModel?.name || Object.keys(chatModelProvider)[0]
-      ];
-
-    const embeddingProvider =
-      embeddingModelProviders[
-        body.embeddingModel?.provider || Object.keys(embeddingModelProviders)[0]
-      ];
-    const embeddingModel =
-      embeddingProvider[
-        body.embeddingModel?.name || Object.keys(embeddingProvider)[0]
-      ];
-
     let chatLlm: BaseChatModel | undefined;
     let systemLlm: BaseChatModel | undefined;
-    const embedding = new CachedEmbeddings(
-      embeddingModel.model,
-      body.embeddingModel?.provider || Object.keys(embeddingModelProviders)[0],
-      body.embeddingModel?.name || Object.keys(embeddingProvider)[0],
-    );
+    let embedding: CachedEmbeddings;
 
-    if (body.chatModel?.provider === 'custom_openai') {
-      chatLlm = new ChatOpenAI({
-        apiKey: getCustomOpenaiApiKey(),
-        modelName: getCustomOpenaiModelName(),
-        // temperature: 0.7,
-        configuration: {
-          baseURL: getCustomOpenaiApiUrl(),
-        },
-      }) as unknown as BaseChatModel;
-    } else if (chatModelProvider && chatModel) {
-      chatLlm = chatModel.model;
-
-      // Set context window size for Ollama models
-      if (
-        chatLlm instanceof ChatOllama &&
-        body.chatModel?.provider === 'ollama'
-      ) {
-        chatLlm.numCtx = body.chatModel.ollamaContextWindow || 2048;
-      }
-    }
-
-    // Build System LLM (defaults to Chat LLM if not provided by client)
-    if (body.systemModel) {
-      const sysProvider = body.systemModel.provider;
-      const sysName = body.systemModel.name;
-      if (sysProvider === 'custom_openai') {
-        systemLlm = new ChatOpenAI({
-          apiKey: getCustomOpenaiApiKey(),
-          modelName: getCustomOpenaiModelName(),
-          configuration: {
-            baseURL: getCustomOpenaiApiUrl(),
-          },
-        }) as unknown as BaseChatModel;
-      } else if (
-        chatModelProviders[sysProvider] &&
-        chatModelProviders[sysProvider][sysName]
-      ) {
-        systemLlm = chatModelProviders[sysProvider][sysName]
-          .model as unknown as BaseChatModel | undefined;
-      }
-      if (
-        systemLlm instanceof ChatOllama &&
-        body.systemModel?.provider === 'ollama'
-      ) {
-        systemLlm.numCtx = body.systemModel.ollamaContextWindow || 2048;
-      }
-    }
-    if (!systemLlm) systemLlm = chatLlm;
-
-    if (!chatLlm) {
-      return Response.json({ error: 'Invalid chat model' }, { status: 400 });
-    }
-
-    if (!embedding) {
-      return Response.json(
-        { error: 'Invalid embedding model' },
-        { status: 400 },
-      );
+    try {
+      const resolved = await resolveChatAndEmbedding({
+        chatModel: body.chatModel,
+        systemModel: body.systemModel,
+        embeddingModel: body.embeddingModel,
+      });
+      chatLlm = resolved.chatLlm;
+      systemLlm = resolved.systemLlm;
+      embedding = resolved.embedding;
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Invalid model';
+      return Response.json({ error: msg }, { status: 400 });
     }
 
     const humanMessageId =
@@ -802,11 +720,34 @@ export const POST = async (req: Request) => {
     // --- Memory retrieval ---
     let memorySection = '';
     let memoriesUsed: Array<{ id: string; content: string }> = [];
+    let distillationUsage: TokenUsage = {
+      input_tokens: 0,
+      output_tokens: 0,
+      total_tokens: 0,
+    };
 
     if (body.memoryEnabled) {
       try {
+        // Distill long queries before embedding to avoid exceeding model token limits.
+        // Short queries are returned unchanged with zero usage.
+        let queryForEmbedding = message.content;
+        if (systemLlm) {
+          const distillResult = await distillQueryForEmbedding(
+            message.content,
+            systemLlm,
+            abortController.signal,
+          );
+          queryForEmbedding = distillResult.query;
+          distillationUsage = distillResult.usage;
+          if (distillResult.usage.total_tokens > 0) {
+            console.log(
+              `[memoryRetrieval] Query distilled (${message.content.length} → ${queryForEmbedding.length} chars), tokens input: ${distillResult.usage.input_tokens}, tokens output: ${distillResult.usage.output_tokens}, total tokens: ${distillResult.usage.total_tokens}\nDistilled query: "${queryForEmbedding}"`,
+            );
+          }
+        }
+
         const relevantMemories = await retrieveRelevantMemories(
-          message.content,
+          queryForEmbedding,
           embedding,
         );
         if (relevantMemories.length > 0) {
@@ -842,6 +783,8 @@ export const POST = async (req: Request) => {
       message.chatId,
       true, // interactiveSession enabled for streaming responses with source updates
       methodologyInstructions,
+      body.isPrivate,
+      distillationUsage,
     );
 
     // Pass the abort signal to the search handler

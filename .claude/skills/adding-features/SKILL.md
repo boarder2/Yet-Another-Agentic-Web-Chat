@@ -1,6 +1,6 @@
 ---
 name: adding-features
-description: Step-by-step patterns for adding new agent tools, LLM providers, API routes, and focus modes to YAAWC. Use when creating new tools, integrating new LLM providers, adding API endpoints, extending focus modes, or when the user asks how to add or extend functionality.
+description: Use when adding or extending agent tools, LLM providers, API routes, or focus modes in YAAWC, or when asked how to add new functionality.
 ---
 
 # Adding Features to YAAWC

@@ -10,9 +10,9 @@ import { ToolMessage } from '@langchain/core/messages';
 // import { getLangfuseCallbacks } from '@/lib/tracing/langfuse';
 import { isSoftStop } from '@/lib/utils/runControl';
 
-// Schema for URL summarization tool input
-const URLSummarizationToolSchema = z.object({
-  urls: z.array(z.string()).describe('Array of URLs to process and summarize'),
+// Schema for URL fetch tool input
+const URLFetchToolSchema = z.object({
+  urls: z.array(z.string()).describe('Array of URLs to fetch and process'),
   query: z
     .string()
     .describe('The user query to guide content extraction and summarization'),
@@ -24,7 +24,7 @@ const URLSummarizationToolSchema = z.object({
 });
 
 /**
- * URLSummarizationTool - Reimplementation of URLSummarizationAgent as a tool
+ * URLFetchTool - Fetches full web content from URLs.
  *
  * This tool handles:
  * 1. Fetching content from provided URLs
@@ -32,9 +32,9 @@ const URLSummarizationToolSchema = z.object({
  * 3. Generating summaries using LLM when content is too long
  * 4. Returning processed documents with metadata
  */
-export const urlSummarizationTool = tool(
+export const urlFetchTool = tool(
   async (
-    input: z.infer<typeof URLSummarizationToolSchema>,
+    input: z.infer<typeof URLFetchToolSchema>,
     config?: RunnableConfig,
   ) => {
     try {
@@ -44,11 +44,11 @@ export const urlSummarizationTool = tool(
       let currentDocCount = currentState.relevantDocuments?.length ?? 0;
 
       console.log(
-        `URLSummarizationTool: Processing ${urls.length} \n  URLs for query: "${query}"\n  intent: ${intent}`,
+        `URLFetchTool: Processing ${urls.length} \n  URLs for query: "${query}"\n  intent: ${intent}`,
       );
 
       if (!urls || urls.length === 0) {
-        console.log('URLSummarizationTool: No URLs provided for processing');
+        console.log('URLFetchTool: No URLs provided for processing');
         return new Command({
           update: {
             messages: [
@@ -82,25 +82,23 @@ export const urlSummarizationTool = tool(
       // Process each URL
       for (const url of urls) {
         if (config?.signal?.aborted) {
-          console.warn('URLSummarizationTool: Operation aborted by signal');
+          console.warn('URLFetchTool: Operation aborted by signal');
           break;
         }
         if (messageId && isSoftStop(messageId)) {
-          console.warn('URLSummarizationTool: Soft-stop set; skipping URL');
+          console.warn('URLFetchTool: Soft-stop set; skipping URL');
           break;
         }
 
         try {
-          console.log(`URLSummarizationTool: Processing ${url}`);
+          console.log(`URLFetchTool: Processing ${url}`);
 
           // Fetch full content using the enhanced web content retrieval.
           // Content is returned as clean markdown with inline links.
           const webContent = await getWebContent(url, 50000, retrievalSignal);
 
           if (!webContent || !webContent.pageContent) {
-            console.warn(
-              `URLSummarizationTool: No content retrieved from URL: ${url}`,
-            );
+            console.warn(`URLFetchTool: No content retrieved from URL: ${url}`);
             continue;
           }
 
@@ -114,12 +112,12 @@ export const urlSummarizationTool = tool(
             processingType = 'url-direct-content';
 
             console.log(
-              `URLSummarizationTool: Content is short (${contentLength} chars), using directly without summarization`,
+              `URLFetchTool: Content is short (${contentLength} chars), using directly without summarization`,
             );
           } else {
             // Content is long, summarize using LLM
             console.log(
-              `URLSummarizationTool: Content is long (${contentLength} chars), generating summary`,
+              `URLFetchTool: Content is long (${contentLength} chars), generating summary`,
             );
 
             const summarizationPrompt = `You are a web content processor. Extract and summarize ONLY the information from the provided web page content that is relevant to the user's query.
@@ -212,18 +210,15 @@ Provide a comprehensive summary of the above web page content, focusing on infor
             documents.push(document);
 
             console.log(
-              `URLSummarizationTool: Successfully processed content from ${url} (${finalContent.length} characters, ${processingType})`,
+              `URLFetchTool: Successfully processed content from ${url} (${finalContent.length} characters, ${processingType})`,
             );
           } else {
             console.warn(
-              `URLSummarizationTool: No valid content generated for URL: ${url}`,
+              `URLFetchTool: No valid content generated for URL: ${url}`,
             );
           }
         } catch (error: unknown) {
-          console.error(
-            `URLSummarizationTool: Error processing URL ${url}:`,
-            error,
-          );
+          console.error(`URLFetchTool: Error processing URL ${url}:`, error);
           if (
             error instanceof Error &&
             (error.name === 'AbortError' || error.name === 'CanceledError')
@@ -235,7 +230,7 @@ Provide a comprehensive summary of the above web page content, focusing on infor
       }
 
       console.log(
-        `URLSummarizationTool: Successfully processed ${documents.length} out of ${urls.length} URLs`,
+        `URLFetchTool: Successfully processed ${documents.length} out of ${urls.length} URLs`,
       );
 
       return new Command({
@@ -253,10 +248,7 @@ Provide a comprehensive summary of the above web page content, focusing on infor
         },
       });
     } catch (error) {
-      console.error(
-        'URLSummarizationTool: Error during URL processing:',
-        error,
-      );
+      console.error('URLFetchTool: Error during URL processing:', error);
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
 
@@ -274,9 +266,9 @@ Provide a comprehensive summary of the above web page content, focusing on infor
     }
   },
   {
-    name: 'url_summarization',
+    name: 'url_fetch',
     description:
-      'Fetches content from URLs and either uses it directly or summarizes it based on length, focusing on information relevant to the user query. URLs must be real and should not be invented.',
-    schema: URLSummarizationToolSchema,
+      'Retrieves full web content from URLs. Returns the complete page content when it fits within limits, falling back to a focused summary for very long pages. Use this to read the actual contents of a URL. URLs must be real and should not be invented.',
+    schema: URLFetchToolSchema,
   },
 );

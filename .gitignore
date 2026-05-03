@@ -34,12 +34,14 @@ logs/
 .DS_Store
 Thumbs.db
 
-# Db
+# Db / user data
 db.sqlite
+data/
 /searxng
 
 # AI stuff for planning and implementation
 .ai/
+docs/superpowers/
 .claude/settings.local.json
 
 certificates
@@ -49,3 +51,4 @@ tsconfig.tsbuildinfo
 next-env.d.ts
 
 .playwright-cli/
+workspace-files/

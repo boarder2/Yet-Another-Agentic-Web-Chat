@@ -3,7 +3,7 @@ import {
   CheckSquare,
   Square,
   User,
-  Loader2,
+  LoaderCircle,
   Info,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -80,7 +80,7 @@ const SystemPromptSelector = ({
           <>
             <PopoverButton
               className={cn(
-                'flex items-center gap-1 rounded-lg text-sm transition-colors duration-150 ease-in-out focus:outline-none focus-visible:ring-2 p-1',
+                'flex items-center gap-1 rounded-surface text-sm transition-colors duration-150 ease-in-out focus:outline-none focus-visible:ring-2 p-1',
                 selectedCount > 0
                   ? 'text-accent hover:text-accent'
                   : 'text-fg/60 hover:text-fg/30',
@@ -101,7 +101,7 @@ const SystemPromptSelector = ({
               leaveTo="opacity-0 translate-y-1"
             >
               <PopoverPanel className="absolute right-0 z-20 w-72 transform bottom-full mb-2">
-                <div className="overflow-hidden rounded-lg shadow-lg ring-1 ring-surface-2 bg-surface">
+                <div className="overflow-hidden rounded-surface shadow-raised ring-1 ring-surface-2 bg-surface">
                   <div className="px-4 py-3 border-b border-surface-2">
                     <h3 className="text-sm font-medium text-fg/90">
                       Persona Prompts
@@ -112,7 +112,7 @@ const SystemPromptSelector = ({
                   </div>
                   {isLoading ? (
                     <div className="px-4 py-3">
-                      <Loader2 className="animate-spin text-fg/70" />
+                      <LoaderCircle className="animate-spin text-accent" />
                     </div>
                   ) : (
                     <div className="max-h-60 overflow-y-auto p-1.5 space-y-3">
@@ -150,7 +150,7 @@ const SystemPromptSelector = ({
                                   leaveFrom="opacity-100 translate-y-0"
                                   leaveTo="opacity-0 translate-y-1"
                                 >
-                                  <PopoverPanel className="absolute z-30 w-64 p-3 bg-surface border border-surface-2 rounded-lg shadow-lg text-xs text-fg/80">
+                                  <PopoverPanel className="absolute z-30 w-64 p-3 bg-surface border border-surface-2 rounded-surface shadow-raised text-xs text-fg/80">
                                     Built-in formatting and citation presets.
                                     The system auto-selects one based on focus
                                     mode when no persona prompt is active.
@@ -168,7 +168,7 @@ const SystemPromptSelector = ({
                                 <div
                                   key={prompt.id}
                                   onClick={() => handleTogglePrompt(prompt.id)}
-                                  className="flex items-center gap-2.5 p-2.5 rounded-md hover:bg-surface-2 cursor-pointer"
+                                  className="flex items-center gap-2.5 p-2.5 rounded-control hover:bg-surface-2 cursor-pointer"
                                 >
                                   {selectedPromptIds.includes(prompt.id) ? (
                                     <CheckSquare
@@ -210,7 +210,7 @@ const SystemPromptSelector = ({
                                 <div
                                   key={prompt.id}
                                   onClick={() => handleTogglePrompt(prompt.id)}
-                                  className="flex items-center gap-2.5 p-2.5 rounded-md hover:bg-surface-2 cursor-pointer"
+                                  className="flex items-center gap-2.5 p-2.5 rounded-control hover:bg-surface-2 cursor-pointer"
                                 >
                                   {selectedPromptIds.includes(prompt.id) ? (
                                     <CheckSquare

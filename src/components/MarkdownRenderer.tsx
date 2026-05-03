@@ -12,12 +12,17 @@ import {
   BotIcon,
   TvIcon,
   X,
-  Loader2,
+  LoaderCircle,
   Brain,
   Trash2,
   List,
   Terminal,
   HelpCircle,
+  FolderOpen,
+  FolderSearch,
+  FileCode,
+  FilePen,
+  FilePlus,
 } from 'lucide-react';
 import { useState } from 'react';
 import Markdown, { MarkdownToJSX } from 'markdown-to-jsx';
@@ -35,6 +40,20 @@ import { SubagentExecution } from './MessageActions/SubagentExecution';
  * thinking output (e.g. </parameter>, </tool>, </result>).
  */
 const KNOWN_CLOSING_TAG = '<\\/(?:ToolCall|SubagentExecution)\\s*>';
+
+/**
+ * Ensure custom block elements (ToolCall, SubagentExecution) are surrounded by
+ * blank lines so markdown-to-jsx treats them as block-level HTML rather than
+ * inline content. Without this, the parser wraps them in <p>, which causes an
+ * invalid <p><div> nesting hydration error.
+ */
+const ensureBlockElements = (text: string): string =>
+  text
+    .replace(/(<ToolCall\b[^>]*>[\s\S]*?<\/ToolCall>)/g, '\n\n$1\n\n')
+    .replace(
+      /(<SubagentExecution\b[^>]*>[\s\S]*?<\/SubagentExecution>)/g,
+      '\n\n$1\n\n',
+    );
 
 /**
  * Remove think-tag content, handling both properly paired <think>...</think>
@@ -218,6 +237,7 @@ const ToolCall = ({
       case 'file_search':
         return <FileText size={16} className="text-accent" />;
       case 'url':
+      case 'url_fetch':
       case 'url_summarization':
         return <Globe size={16} className="text-accent" />;
       case 'image':
@@ -228,19 +248,29 @@ const ToolCall = ({
       case 'firefoxAI':
         return <BotIcon size={16} className="text-accent" />;
       case 'youtube_transcript':
-        return <TvIcon size={16} className="text-red-600" />;
+        return <TvIcon size={16} className="text-danger" />;
       case 'pdf_loader':
-        return <FileText size={16} className="text-red-600" />;
+        return <FileText size={16} className="text-danger" />;
       case 'save_memory':
         return <Brain size={16} className="text-accent" />;
       case 'delete_memory':
-        return <Trash2 size={16} className="text-red-600" />;
+        return <Trash2 size={16} className="text-danger" />;
       case 'list_memories':
         return <List size={16} className="text-accent" />;
       case 'code_execution':
         return <Terminal size={16} className="text-accent" />;
       case 'ask_user':
         return <HelpCircle size={16} className="text-accent" />;
+      case 'workspace_ls':
+        return <FolderOpen size={16} className="text-accent" />;
+      case 'workspace_grep':
+        return <FolderSearch size={16} className="text-accent" />;
+      case 'workspace_read':
+        return <FileCode size={16} className="text-accent" />;
+      case 'workspace_edit':
+        return <FilePen size={16} className="text-accent" />;
+      case 'workspace_create_file':
+        return <FilePlus size={16} className="text-accent" />;
       default:
         return <Settings size={16} className="text-fg/70" />;
     }
@@ -252,7 +282,7 @@ const ToolCall = ({
         <>
           <span className="mr-2">{getIcon(type)}</span>
           <span>Web search:</span>
-          <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded font-mono text-sm">
+          <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm">
             {decodeHtmlEntities(query || (children as string))}
           </span>
         </>
@@ -264,14 +294,18 @@ const ToolCall = ({
         <>
           <span className="mr-2">{getIcon(type)}</span>
           <span>File search:</span>
-          <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded font-mono text-sm">
+          <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm">
             {decodeHtmlEntities(query || (children as string))}
           </span>
         </>
       );
     }
 
-    if (type === 'url' || type === 'url_summarization') {
+    if (
+      type === 'url' ||
+      type === 'url_fetch' ||
+      type === 'url_summarization'
+    ) {
       const urlCount = count ? parseInt(count) : 1;
       return (
         <>
@@ -292,7 +326,7 @@ const ToolCall = ({
           <a
             target="_blank"
             href={decodeHtmlEntities(url)}
-            className="ml-2 px-2 py-0.5 bg-fg/5 rounded font-mono text-sm"
+            className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm"
           >
             {decodeHtmlEntities(url)}
           </a>
@@ -305,7 +339,7 @@ const ToolCall = ({
         <>
           <span className="mr-2">{getIcon(type)}</span>
           <span>Image search:</span>
-          <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded font-mono text-sm">
+          <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm">
             {decodeHtmlEntities(query || (children as string))}
           </span>
         </>
@@ -317,7 +351,7 @@ const ToolCall = ({
         <>
           <span className="mr-2">{getIcon(type)}</span>
           <span>Analyzing image:</span>
-          <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded font-mono text-sm truncate max-w-xs">
+          <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm truncate max-w-xs">
             {decodeHtmlEntities(url || query || (children as string))}
           </span>
         </>
@@ -340,11 +374,11 @@ const ToolCall = ({
             <span className="mr-2">{getIcon(type)}</span>
             <span>Retrieved YouTube Transcript</span>
           </div>
-          <div className="mt-2 rounded">
+          <div className="mt-2 rounded-control">
             <div className="w-full">
               <iframe
                 src={`https://www.youtube.com/embed/${videoId}?enablejsapi=1`}
-                className="w-full aspect-video rounded-2xl"
+                className="w-full aspect-video rounded-floating"
                 allowFullScreen
                 allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
               />
@@ -360,7 +394,7 @@ const ToolCall = ({
           <span className="mr-2">{getIcon(type)}</span>
           <span>Saving memory:</span>
           {query && (
-            <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded font-mono text-sm truncate max-w-md">
+            <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm truncate max-w-md">
               {decodeHtmlEntities(query)}
             </span>
           )}
@@ -374,7 +408,7 @@ const ToolCall = ({
           <span className="mr-2">{getIcon(type)}</span>
           <span>Deleting memory:</span>
           {query && (
-            <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded font-mono text-sm truncate max-w-md">
+            <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm truncate max-w-md">
               {decodeHtmlEntities(query)}
             </span>
           )}
@@ -397,22 +431,22 @@ const ToolCall = ({
           <span className="mr-2">{getIcon(type)}</span>
           <span>Code execution{description ? ':' : ''}</span>
           {description && (
-            <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded font-mono text-sm truncate max-w-md">
+            <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm truncate max-w-md">
               {description}
             </span>
           )}
           {denied === 'true' && (
-            <span className="ml-2 px-2 py-0.5 bg-red-500/10 text-red-400 rounded text-xs">
+            <span className="ml-2 px-2 py-0.5 bg-danger-soft text-danger rounded-control text-xs">
               Denied
             </span>
           )}
           {timedOut === 'true' && (
-            <span className="ml-2 px-2 py-0.5 bg-red-500/10 text-red-400 rounded text-xs">
+            <span className="ml-2 px-2 py-0.5 bg-danger-soft text-danger rounded-control text-xs">
               Timed out
             </span>
           )}
           {oomKilled === 'true' && (
-            <span className="ml-2 px-2 py-0.5 bg-red-500/10 text-red-400 rounded text-xs">
+            <span className="ml-2 px-2 py-0.5 bg-danger-soft text-danger rounded-control text-xs">
               Out of memory
             </span>
           )}
@@ -422,10 +456,10 @@ const ToolCall = ({
             timedOut !== 'true' &&
             oomKilled !== 'true' && (
               <span
-                className={`ml-2 px-2 py-0.5 rounded text-xs ${
+                className={`ml-2 px-2 py-0.5 rounded-control text-xs ${
                   exitCode === '0'
-                    ? 'bg-green-500/10 text-green-500'
-                    : 'bg-red-500/10 text-red-400'
+                    ? 'bg-success-soft text-success'
+                    : 'bg-danger-soft text-danger'
                 }`}
               >
                 Exit code: {exitCode}
@@ -444,28 +478,93 @@ const ToolCall = ({
           <span className="mr-2">{getIcon(type)}</span>
           <span>Asked user{decodedQuery ? ':' : ''}</span>
           {decodedQuery && (
-            <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded text-sm truncate max-w-md">
+            <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control text-sm truncate max-w-md">
               {decodedQuery}
             </span>
           )}
           {skipped === 'true' && (
-            <span className="ml-2 px-2 py-0.5 bg-yellow-500/10 text-yellow-400 rounded text-xs">
+            <span className="ml-2 px-2 py-0.5 bg-warning-soft text-warning rounded-control text-xs">
               Skipped
             </span>
           )}
           {timedOut === 'true' && (
-            <span className="ml-2 px-2 py-0.5 bg-red-500/10 text-red-400 rounded text-xs">
+            <span className="ml-2 px-2 py-0.5 bg-danger-soft text-danger rounded-control text-xs">
               Timed out
             </span>
           )}
           {decodedSelectedOptions && (
-            <span className="ml-2 px-2 py-0.5 bg-green-500/10 text-green-500 rounded text-xs">
+            <span className="ml-2 px-2 py-0.5 bg-success-soft text-success rounded-control text-xs">
               {decodedSelectedOptions}
             </span>
           )}
           {decodedFreeformText && (
-            <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded text-sm truncate max-w-md">
+            <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control text-sm truncate max-w-md">
               {decodedFreeformText}
+            </span>
+          )}
+        </>
+      );
+    }
+
+    if (type === 'workspace_ls') {
+      return (
+        <>
+          <span className="mr-2">{getIcon(type)}</span>
+          <span>Listing workspace files</span>
+        </>
+      );
+    }
+
+    if (type === 'workspace_grep') {
+      return (
+        <>
+          <span className="mr-2">{getIcon(type)}</span>
+          <span>Searching workspace{query ? ':' : ''}</span>
+          {query && (
+            <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm truncate max-w-md">
+              {decodeHtmlEntities(query)}
+            </span>
+          )}
+        </>
+      );
+    }
+
+    if (type === 'workspace_read') {
+      return (
+        <>
+          <span className="mr-2">{getIcon(type)}</span>
+          <span>Reading workspace file{query ? ':' : ''}</span>
+          {query && (
+            <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm truncate max-w-md">
+              {decodeHtmlEntities(query)}
+            </span>
+          )}
+        </>
+      );
+    }
+
+    if (type === 'workspace_edit') {
+      return (
+        <>
+          <span className="mr-2">{getIcon(type)}</span>
+          <span>Editing workspace file{query ? ':' : ''}</span>
+          {query && (
+            <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm truncate max-w-md">
+              {decodeHtmlEntities(query)}
+            </span>
+          )}
+        </>
+      );
+    }
+
+    if (type === 'workspace_create_file') {
+      return (
+        <>
+          <span className="mr-2">{getIcon(type)}</span>
+          <span>Creating workspace file{query ? ':' : ''}</span>
+          {query && (
+            <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm truncate max-w-md">
+              {decodeHtmlEntities(query)}
             </span>
           )}
         </>
@@ -477,7 +576,7 @@ const ToolCall = ({
       <>
         <span className="mr-2">{getIcon(type || 'default')}</span>
         <span>Using tool:</span>
-        <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded font-mono text-sm border border-surface-2">
+        <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm border border-surface-2">
           {type || 'unknown'}
         </span>
       </>
@@ -485,7 +584,7 @@ const ToolCall = ({
   };
 
   return (
-    <div className="my-3 bg-surface border border-surface-2 rounded-lg overflow-hidden">
+    <div className="my-3 bg-surface border border-surface-2 rounded-surface overflow-hidden">
       <div
         className={`flex items-start justify-between gap-2 text-sm font-medium px-4 py-3 ${
           type === 'code_execution' && code
@@ -519,25 +618,25 @@ const ToolCall = ({
           )}
           {status === 'running' && (
             <div className="w-4 h-4">
-              <Loader2 className="animate-spin text-fg/70" />
+              <LoaderCircle className="animate-spin text-accent" />
             </div>
           )}
           {status === 'success' &&
             denied !== 'true' &&
             exitCode !== undefined &&
-            exitCode !== '0' && <X size={16} className="text-red-500" />}
+            exitCode !== '0' && <X size={16} className="text-danger" />}
           {status === 'success' &&
             denied !== 'true' &&
             (exitCode === undefined || exitCode === '0') && (
-              <CheckCheck size={16} className="text-green-500" />
+              <CheckCheck size={16} className="text-success" />
             )}
           {(status === 'error' || denied === 'true') && (
-            <X size={16} className="text-red-500" />
+            <X size={16} className="text-danger" />
           )}
         </div>
       </div>
       {status === 'error' && error && (
-        <div className="px-4 pb-3 text-xs text-red-400 break-words font-mono whitespace-pre-wrap">
+        <div className="px-4 pb-3 text-xs text-danger break-words font-mono whitespace-pre-wrap">
           {decodeHtmlEntities(error)}
         </div>
       )}
@@ -557,8 +656,8 @@ const ToolCall = ({
             </div>
           )}
           {stderr && (
-            <div className="border-t border-red-500/20">
-              <div className="px-4 py-1 text-xs text-red-400 font-mono bg-red-500/5">
+            <div className="border-t border-danger">
+              <div className="px-4 py-1 text-xs text-danger font-mono bg-danger-soft">
                 stderr
               </div>
               <CodeBlock className="language-text">
@@ -637,7 +736,7 @@ const MarkdownRenderer = ({
           }
           // Inline code block (`code`)
           return (
-            <code className="px-1.5 py-0.5 rounded bg-surface-2 font-mono text-sm">
+            <code className="px-1.5 py-0.5 rounded-control bg-surface-2 font-mono text-sm">
               {children}
             </code>
           );
@@ -701,7 +800,7 @@ const MarkdownRenderer = ({
     return (
       <div className="relative">
         <Markdown className={proseClassName} options={markdownOverrides}>
-          {stripped}
+          {ensureBlockElements(stripped)}
         </Markdown>
       </div>
     );
@@ -717,7 +816,7 @@ const MarkdownRenderer = ({
     return (
       <div className="relative">
         <Markdown className={proseClassName} options={markdownOverrides}>
-          {content}
+          {ensureBlockElements(content)}
         </Markdown>
       </div>
     );
@@ -753,7 +852,7 @@ const MarkdownRenderer = ({
             className={proseClassName}
             options={markdownOverrides}
           >
-            {segment.content}
+            {ensureBlockElements(segment.content)}
           </Markdown>
         );
       })}

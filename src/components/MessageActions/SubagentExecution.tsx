@@ -4,7 +4,7 @@ import {
   ChevronRight,
   CheckCircle,
   XCircle,
-  Loader2,
+  LoaderCircle,
   Bot,
   Search,
   FileText,
@@ -50,14 +50,14 @@ const responseMarkdownOptions: MarkdownToJSX.Options = {
         if (className) {
           // Fenced code block
           return (
-            <pre className="bg-surface-2 rounded p-2 overflow-x-auto my-2">
+            <pre className="bg-surface-2 rounded-control p-2 overflow-x-auto my-2">
               <code className={className}>{children}</code>
             </pre>
           );
         }
         // Inline code
         return (
-          <code className="px-1.5 py-0.5 rounded bg-surface-2 font-mono text-sm">
+          <code className="px-1.5 py-0.5 rounded-control bg-surface-2 font-mono text-sm">
             {children}
           </code>
         );
@@ -113,13 +113,13 @@ export const SubagentExecution: React.FC<SubagentExecutionProps> = ({
   const getStatusIcon = () => {
     switch (status) {
       case 'running':
-        return <Loader2 size={16} className="animate-spin text-accent" />;
+        return <LoaderCircle size={16} className="animate-spin text-accent" />;
       case 'success':
-        return <CheckCircle size={16} className="text-green-500" />;
+        return <CheckCircle size={16} className="text-success" />;
       case 'error':
-        return <XCircle size={16} className="text-red-500" />;
+        return <XCircle size={16} className="text-danger" />;
       default:
-        return <Loader2 size={16} className="animate-spin text-accent" />;
+        return <LoaderCircle size={16} className="animate-spin text-accent" />;
     }
   };
 
@@ -128,16 +128,16 @@ export const SubagentExecution: React.FC<SubagentExecutionProps> = ({
       case 'Deep Research':
         return <Search size={16} className="text-accent" />;
       case 'File Analyzer':
-        return <FileText size={16} className="text-green-600" />;
+        return <FileText size={16} className="text-success" />;
       case 'Content Synthesizer':
-        return <Globe size={16} className="text-purple-600" />;
+        return <Globe size={16} className="text-accent" />;
       default:
         return <Bot size={16} className="text-fg/70" />;
     }
   };
 
   return (
-    <div className="my-3 border border-surface-2 rounded-lg bg-surface overflow-hidden">
+    <div className="my-3 border border-surface-2 rounded-surface bg-surface overflow-hidden">
       {/* Main header - always visible */}
       <button
         onClick={() => setExpanded(!expanded)}
@@ -208,7 +208,7 @@ export const SubagentExecution: React.FC<SubagentExecutionProps> = ({
                     'prose-headings:font-semibold prose-h1:text-lg prose-h2:text-base prose-h3:text-sm',
                     'prose-ul:my-2 prose-ol:my-2 prose-li:my-1',
                     'prose-strong:font-bold prose-em:italic',
-                    'prose-code:bg-surface-2 prose-code:px-1 prose-code:py-0.5 prose-code:rounded',
+                    'prose-code:bg-surface-2 prose-code:px-1 prose-code:py-0.5 prose-code:rounded-control',
                     'prose-a:text-accent prose-a:no-underline hover:prose-a:underline',
                     'wrap-break-word',
                   )}
@@ -224,10 +224,10 @@ export const SubagentExecution: React.FC<SubagentExecutionProps> = ({
           {/* Show error if error status */}
           {status === 'error' && error && (
             <div>
-              <div className="text-xs font-semibold text-red-500 uppercase tracking-wide mb-1">
+              <div className="text-xs font-semibold text-danger uppercase tracking-wide mb-1">
                 Error
               </div>
-              <div className="text-xs text-red-400 font-mono whitespace-pre-wrap">
+              <div className="text-xs text-danger font-mono whitespace-pre-wrap">
                 {decodeHtmlEntities(error)}
               </div>
             </div>

@@ -2,12 +2,9 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import { UPLOADS_DIR } from '@/lib/dataDir';
 
-const uploadDir = path.join(process.cwd(), 'uploads');
-
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
+const uploadDir = UPLOADS_DIR;
 
 const ALLOWED_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp'];
 const ALLOWED_MIME_TYPES = [

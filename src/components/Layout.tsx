@@ -21,20 +21,29 @@ export const setWideWidth = (next: boolean) => {
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const segments = useSelectedLayoutSegments();
   const isDashboard = segments.includes('dashboard');
-  const isChat = segments[0] === 'c';
+  // The root path ('/') also renders a ChatWindow (new chat). The URL is later
+  // updated to /c/<id> via history.replaceState (not Next.js navigation), so
+  // useSelectedLayoutSegments never sees the change. Treat segments.length === 0
+  // (home page) as a chat route so the wide-width setting works from the start.
+  const isChat = segments[0] === 'c' || segments.length === 0;
+  const isWorkspaceChat =
+    segments[0] === 'workspaces' && segments.includes('c');
+  const isWorkspaceDetail = segments[0] === 'workspaces' && segments.length > 1;
   const wide = useWideWidth();
   const wideActive = isChat && wide;
 
   useEffect(() => {
-    if (!isChat) return;
+    if (!isChat && !isWorkspaceChat) return;
     window.dispatchEvent(new Event('resize'));
-  }, [wide, isChat]);
+  }, [wide, isChat, isWorkspaceChat]);
 
   const containerClass = isDashboard
     ? 'mx-4'
-    : wideActive
-      ? 'mx-4'
-      : 'max-w-screen-lg lg:mx-auto mx-4';
+    : isWorkspaceDetail
+      ? ''
+      : wideActive
+        ? 'mx-4'
+        : 'max-w-screen-lg lg:mx-auto mx-4';
 
   return (
     <main className="lg:pl-20 bg-bg min-h-screen">

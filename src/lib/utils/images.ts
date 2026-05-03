@@ -1,8 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 import { HumanMessage } from '@langchain/core/messages';
+import { UPLOADS_DIR } from '@/lib/dataDir';
 
-const uploadDir = path.join(process.cwd(), 'uploads');
+const uploadDir = UPLOADS_DIR;
 
 const MIME_TYPES: Record<string, string> = {
   png: 'image/png',

@@ -22,9 +22,9 @@ export function CodeExecutionWarning({ onAccept, onDecline }: Props) {
   const [declining, setDeclining] = useState(false);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-surface max-w-2xl max-h-[80vh] overflow-y-auto rounded-lg border border-surface-2 shadow-xl mx-4">
-        <div className="bg-yellow-500/20 border-b border-yellow-500/30 px-6 py-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay">
+      <div className="bg-surface max-w-2xl max-h-[80vh] overflow-y-auto rounded-surface border border-surface-2 shadow-floating mx-4">
+        <div className="bg-warning-soft border-b border-warning px-6 py-4">
           <h2 className="text-lg font-semibold text-fg flex items-center gap-2">
             ⚠ Code Execution — Risk Acknowledgment
           </h2>
@@ -53,7 +53,7 @@ export function CodeExecutionWarning({ onAccept, onDecline }: Props) {
             <ul className="list-disc pl-5 space-y-1">
               <li>
                 Run arbitrary JavaScript/Node.js code, including{' '}
-                <code className="px-1 py-0.5 rounded bg-surface-2 font-mono text-xs">
+                <code className="px-1 py-0.5 rounded-control bg-surface-2 font-mono text-xs">
                   require(&apos;child_process&apos;)
                 </code>
               </li>
@@ -63,7 +63,7 @@ export function CodeExecutionWarning({ onAccept, onDecline }: Props) {
               </li>
               <li>
                 Write to{' '}
-                <code className="px-1 py-0.5 rounded bg-surface-2 font-mono text-xs">
+                <code className="px-1 py-0.5 rounded-control bg-surface-2 font-mono text-xs">
                   /tmp
                 </code>{' '}
                 (up to 64MB, non-persistent)
@@ -95,7 +95,7 @@ export function CodeExecutionWarning({ onAccept, onDecline }: Props) {
             </ul>
           </div>
 
-          <div className="border border-yellow-500/30 bg-yellow-500/10 rounded-md p-4">
+          <div className="border border-warning bg-warning-soft rounded-control p-4">
             <p className="font-medium mb-2">Residual risks — read carefully:</p>
             <ul className="list-disc pl-5 space-y-1">
               <li>
@@ -134,7 +134,7 @@ export function CodeExecutionWarning({ onAccept, onDecline }: Props) {
               onDecline();
             }}
             disabled={declining}
-            className="px-4 py-2 text-sm rounded-md bg-red-500/20 text-red-500 hover:bg-red-500/30 border border-red-500/30 transition-colors disabled:opacity-50"
+            className="px-4 py-2 text-sm rounded-control bg-danger-soft text-danger hover:bg-danger-soft border border-danger transition-colors disabled:opacity-50"
           >
             Decline
           </button>
@@ -143,7 +143,7 @@ export function CodeExecutionWarning({ onAccept, onDecline }: Props) {
               acceptWarning();
               onAccept();
             }}
-            className="px-4 py-2 text-sm rounded-md bg-green-500/20 text-green-500 hover:bg-green-500/30 border border-green-500/30 transition-colors"
+            className="px-4 py-2 text-sm rounded-control bg-success-soft text-success hover:bg-success-soft border border-success transition-colors"
           >
             I understand the risks — Enable code execution
           </button>

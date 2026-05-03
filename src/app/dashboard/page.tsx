@@ -3,6 +3,7 @@
 import {
   Plus,
   RefreshCw,
+  LoaderCircle,
   Download,
   Upload,
   LayoutDashboard,
@@ -21,6 +22,7 @@ import {
 } from '@/components/ui/card';
 import WidgetConfigModal from '@/components/dashboard/WidgetConfigModal';
 import WidgetDisplay from '@/components/dashboard/WidgetDisplay';
+import PageHeader from '@/components/PageHeader';
 import { useDashboard } from '@/lib/hooks/useDashboard';
 import { Widget, WidgetConfig } from '@/lib/types/widget';
 import { DashboardLayouts } from '@/lib/types/dashboard';
@@ -50,7 +52,7 @@ const EmptyDashboard = ({ onAddWidget }: { onAddWidget: () => void }) => (
       <CardFooter className="justify-center">
         <button
           onClick={onAddWidget}
-          className="px-4 py-2 bg-accent text-white rounded hover:bg-accent-700 transition duration-200 flex items-center space-x-2"
+          className="px-4 py-2 bg-accent text-accent-fg rounded-control hover:bg-accent-700 transition duration-200 flex items-center space-x-2"
         >
           <Plus size={16} />
           <span>Create Your First Widget</span>
@@ -186,18 +188,14 @@ const DashboardPage = () => {
 
   return (
     <div className="flex flex-col min-h-screen">
-      {/* Header matching other pages */}
-      <div className="flex flex-col pt-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center">
-            <LayoutDashboard />
-            <h1 className="text-3xl font-medium p-2">Dashboard</h1>
-          </div>
-
-          <div className="flex items-center space-x-2">
+      <PageHeader
+        icon={LayoutDashboard}
+        title="Dashboard"
+        actions={
+          <>
             <button
               onClick={handleRefreshAll}
-              className="p-2 hover:bg-surface-2 rounded-lg transition duration-200"
+              className="p-2 hover:bg-surface-2 rounded-surface transition duration-200"
               title="Refresh All Widgets"
             >
               <RefreshCw size={18} />
@@ -205,7 +203,7 @@ const DashboardPage = () => {
 
             <button
               onClick={handleToggleProcessingMode}
-              className="p-2 hover:bg-surface-2 rounded-lg transition duration-200"
+              className="p-2 hover:bg-surface-2 rounded-surface transition duration-200"
               title={`Switch to ${settings.parallelLoading ? 'Sequential' : 'Parallel'} Processing`}
             >
               {settings.parallelLoading ? (
@@ -217,7 +215,7 @@ const DashboardPage = () => {
 
             <button
               onClick={handleExport}
-              className="p-2 hover:bg-surface-2 rounded-lg transition duration-200"
+              className="p-2 hover:bg-surface-2 rounded-surface transition duration-200"
               title="Export Dashboard Configuration"
             >
               <Download size={18} />
@@ -225,7 +223,7 @@ const DashboardPage = () => {
 
             <button
               onClick={handleImport}
-              className="p-2 hover:bg-surface-2 rounded-lg transition duration-200"
+              className="p-2 hover:bg-surface-2 rounded-surface transition duration-200"
               title="Import Dashboard Configuration"
             >
               <Upload size={18} />
@@ -233,22 +231,24 @@ const DashboardPage = () => {
 
             <button
               onClick={handleAddWidget}
-              className="p-2 bg-accent hover:bg-accent-700 rounded-lg transition duration-200"
+              className="p-2 bg-accent hover:bg-accent-700 rounded-surface transition duration-200"
               title="Add New Widget"
             >
               <Plus size={18} />
             </button>
-          </div>
-        </div>
-        <hr className="border-t my-4 w-full" />
-      </div>
+          </>
+        }
+      />
 
       {/* Main content area */}
       <div className="flex-1 pb-20 lg:pb-2">
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <div className="text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 mx-auto mb-4"></div>
+              <LoaderCircle
+                size={32}
+                className="animate-spin mx-auto mb-4 text-accent"
+              />
               <p className="text-fg/60">Loading dashboard...</p>
             </div>
           </div>

@@ -116,8 +116,8 @@ const Attach = ({
 
   return loading ? (
     <div className="flex flex-row items-center justify-between space-x-1">
-      <LoaderCircle size={18} className="text-sky-400 animate-spin" />
-      <p className="text-sky-400 inline whitespace-nowrap text-xs font-medium">
+      <LoaderCircle size={18} className="text-info animate-spin" />
+      <p className="text-info inline whitespace-nowrap text-xs font-medium">
         Uploading..
       </p>
     </div>
@@ -127,7 +127,7 @@ const Attach = ({
         <PopoverButton
           type="button"
           className={cn(
-            'flex flex-row items-center justify-between space-x-1 p-2 rounded-xl transition duration-200 text-fg/50 hover:bg-surface-2 hover:text-fg',
+            'flex flex-row items-center justify-between space-x-1 p-2 rounded-floating transition duration-200 text-fg/50 hover:bg-surface-2 hover:text-fg',
             files.length > 0 ? '-ml-2 lg:-ml-3' : '',
           )}
         >
@@ -163,7 +163,7 @@ const Attach = ({
           leaveTo="opacity-0 translate-y-1"
         >
           <PopoverPanel className="absolute z-10 w-64 md:w-[350px] right-0">
-            <div className="bg-surface border rounded-md border-surface-2 w-full max-h-[200px] md:max-h-none overflow-y-auto flex flex-col">
+            <div className="bg-surface border rounded-control border-surface-2 w-full max-h-[200px] md:max-h-none overflow-y-auto flex flex-col">
               <div className="flex flex-row items-center justify-between px-3 py-2">
                 <h4 className="text-fg font-medium text-sm">Attached files</h4>
                 <div className="flex flex-row items-center space-x-4">
@@ -206,7 +206,7 @@ const Attach = ({
                     key={i}
                     className="flex flex-row items-center justify-start w-full space-x-3 p-3"
                   >
-                    <div className="bg-surface-2 flex items-center justify-center w-10 h-10 rounded-md">
+                    <div className="bg-surface-2 flex items-center justify-center w-10 h-10 rounded-control">
                       <File size={16} className="text-fg/70" />
                     </div>
                     <p className="text-fg/70 text-sm">
@@ -229,7 +229,7 @@ const Attach = ({
       <button
         type="button"
         onClick={() => fileInputRef.current?.click()}
-        className="flex flex-row items-center space-x-1 rounded-xl transition duration-200 p-2 text-fg/50 hover:bg-surface-2 hover:text-fg"
+        className="flex flex-row items-center space-x-1 rounded-floating transition duration-200 p-2 text-fg/50 hover:bg-surface-2 hover:text-fg"
       >
         <input
           type="file"

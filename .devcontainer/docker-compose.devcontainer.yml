@@ -10,7 +10,7 @@ services:
       - ..:/workspaces/YAAWC:cached
     environment:
       - SEARXNG_API_URL=https://searxng.int.bit-shift.com
-      - DATA_DIR=/home/yaawc
+      - DATA_DIR=/home/yaawc/data
     cap_add:
       - SYS_ADMIN
     command: sleep infinity

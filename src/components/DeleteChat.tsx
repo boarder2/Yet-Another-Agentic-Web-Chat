@@ -10,7 +10,7 @@ import {
 } from '@headlessui/react';
 import { Fragment, useState } from 'react';
 import { toast } from 'sonner';
-import { Chat } from '@/app/library/page';
+import { Chat } from '@/components/Chats/ChatRow';
 
 const DeleteChat = ({
   chatId,
@@ -19,6 +19,7 @@ const DeleteChat = ({
   redirect = false,
   isPrivate = false,
   expiresIn,
+  asMenuItem = false,
 }: {
   chatId: string;
   chats: Chat[];
@@ -26,6 +27,7 @@ const DeleteChat = ({
   redirect?: boolean;
   isPrivate?: boolean;
   expiresIn?: string;
+  asMenuItem?: boolean;
 }) => {
   const [confirmationDialogOpen, setConfirmationDialogOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -61,10 +63,18 @@ const DeleteChat = ({
 
   return (
     <>
-      {isPrivate ? (
+      {asMenuItem ? (
         <button
           onClick={() => setConfirmationDialogOpen(true)}
-          className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-red-500/10 border border-red-500/20 text-red-500 hover:bg-red-500/20 transition duration-200 text-xs"
+          className="flex items-center gap-2 px-4 py-2 text-left hover:bg-surface-2 transition-colors rounded-surface font-medium text-sm text-danger w-full"
+        >
+          <Trash size={17} className="shrink-0" />
+          Delete chat
+        </button>
+      ) : isPrivate ? (
+        <button
+          onClick={() => setConfirmationDialogOpen(true)}
+          className="flex items-center gap-1.5 px-2 py-1 rounded-surface bg-danger-soft border border-danger text-danger hover:bg-danger-soft transition duration-200 text-xs"
         >
           <ShieldAlert size={14} />
           <span>Delete</span>
@@ -75,7 +85,7 @@ const DeleteChat = ({
           onClick={() => {
             setConfirmationDialogOpen(true);
           }}
-          className="bg-transparent text-red-400 hover:scale-105 transition duration-200"
+          className="bg-transparent text-danger hover:scale-105 transition duration-200"
         >
           <Trash size={17} />
         </button>
@@ -102,7 +112,7 @@ const DeleteChat = ({
                 leaveFrom="opacity-100 scale-200"
                 leaveTo="opacity-0 scale-95"
               >
-                <DialogPanel className="w-full max-w-md transform rounded-2xl bg-surface border border-surface-2 p-6 text-left align-middle shadow-xl transition-all">
+                <DialogPanel className="w-full max-w-md transform rounded-floating bg-surface border border-surface-2 p-6 text-left align-middle shadow-floating transition-all">
                   <DialogTitle className="text-lg font-medium leading-6">
                     Delete Confirmation
                   </DialogTitle>
@@ -122,7 +132,7 @@ const DeleteChat = ({
                     </button>
                     <button
                       onClick={handleDelete}
-                      className="text-red-400 text-sm hover:text-red-500 transition duration200"
+                      className="text-danger text-sm hover:text-danger transition duration200"
                     >
                       Delete
                     </button>

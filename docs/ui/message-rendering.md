@@ -55,16 +55,16 @@ Tool calls are rendered inline within the response as status indicators showing 
 
 ### Tool Types and Display
 
-| Tool Type                   | Icon        | Display                             |
-| --------------------------- | ----------- | ----------------------------------- |
-| `search` / `web_search`     | Globe       | Search query text                   |
-| `file` / `file_search`      | File        | Search query text                   |
-| `url` / `url_summarization` | Link        | "Reading N pages" or "Reading page" |
-| `image` / `image_search`    | Image       | Search query text                   |
-| `image_analysis`            | ScanEye     | URL being analyzed                  |
-| `firefoxAI`                 | Bot         | "Using Firefox AI"                  |
-| `youtube_transcript`        | YoutubeIcon | Embedded YouTube player iframe      |
-| `pdf_loader`                | FileText    | Clickable URL link                  |
+| Tool Type                | Icon        | Display                             |
+| ------------------------ | ----------- | ----------------------------------- |
+| `search` / `web_search`  | Globe       | Search query text                   |
+| `file` / `file_search`   | File        | Search query text                   |
+| `url` / `url_fetch`      | Link        | "Reading N pages" or "Reading page" |
+| `image` / `image_search` | Image       | Search query text                   |
+| `image_analysis`         | ScanEye     | URL being analyzed                  |
+| `firefoxAI`              | Bot         | "Using Firefox AI"                  |
+| `youtube_transcript`     | YoutubeIcon | Embedded YouTube player iframe      |
+| `pdf_loader`             | FileText    | Clickable URL link                  |
 
 ### Status Indicators
 

@@ -13,7 +13,7 @@ const ThemeSwitcher = ({ className }: { className?: string }) => {
       <div className="flex gap-2">
         <select
           aria-label="App theme"
-          className="bg-surface text-fg px-3 py-2 rounded-lg border border-surface-2 text-sm"
+          className="bg-surface text-fg px-3 py-2 rounded-surface border border-surface-2 text-sm"
           value={theme}
           onChange={(e) => setTheme(e.target.value as Theme)}
         >

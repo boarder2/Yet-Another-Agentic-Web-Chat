@@ -2,6 +2,7 @@ import { Document } from '@langchain/core/documents';
 import fs from 'node:fs';
 import path from 'node:path';
 import computeSimilarity from './computeSimilarity';
+import { UPLOADS_DIR } from '@/lib/dataDir';
 
 /**
  * File data interface for similarity search objects
@@ -27,7 +28,7 @@ export async function processFilesToDocuments(
   const filesData: FileData[] = fileIds
     .map((file) => {
       try {
-        const filePath = path.join(process.cwd(), 'uploads', file);
+        const filePath = path.join(UPLOADS_DIR, file);
 
         const contentPath = filePath + '-extracted.json';
         const embeddingsPath = filePath + '-embeddings.json';

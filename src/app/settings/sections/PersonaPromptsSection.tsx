@@ -41,7 +41,7 @@ export default function PersonaPromptsSection({
         research process itself; use a Research Methodology for that.
       </p>
       <div className="flex flex-col space-y-4">
-        <div className="flex items-center justify-between p-3 bg-surface rounded-lg border border-surface-2 gap-3">
+        <div className="flex items-center justify-between p-3 bg-surface rounded-surface border border-surface-2 gap-3">
           <div className="text-sm">
             Copy a starter Formatting & Citations template
           </div>
@@ -52,7 +52,7 @@ export default function PersonaPromptsSection({
           .map((prompt) => (
             <div
               key={prompt.id}
-              className="p-3 border border-surface-2 rounded-md bg-surface-2"
+              className="p-3 border border-surface-2 rounded-control bg-surface-2"
             >
               {editingPrompt && editingPrompt.id === prompt.id ? (
                 <div className="space-y-3">
@@ -82,14 +82,14 @@ export default function PersonaPromptsSection({
                   <div className="flex space-x-2 justify-end">
                     <button
                       onClick={() => setEditingPrompt(null)}
-                      className="px-3 py-2 text-sm rounded-md bg-surface hover:bg-surface-2 flex items-center gap-1.5"
+                      className="px-3 py-2 text-sm rounded-control bg-surface hover:bg-surface-2 flex items-center gap-1.5"
                     >
                       <X size={16} />
                       Cancel
                     </button>
                     <button
                       onClick={onAddOrUpdate}
-                      className="px-3 py-2 text-sm rounded-md bg-accent flex items-center gap-1.5"
+                      className="px-3 py-2 text-sm rounded-control bg-accent flex items-center gap-1.5"
                     >
                       <Save size={16} />
                       Save
@@ -116,14 +116,14 @@ export default function PersonaPromptsSection({
                     <button
                       onClick={() => setEditingPrompt({ ...prompt })}
                       title="Edit"
-                      className="p-1.5 rounded-md hover:bg-surface-2"
+                      className="p-1.5 rounded-control hover:bg-surface-2"
                     >
                       <Edit3 size={18} />
                     </button>
                     <button
                       onClick={() => onDelete(prompt.id)}
                       title="Delete"
-                      className="p-1.5 rounded-md hover:bg-surface-2 text-red-500 hover:text-red-600"
+                      className="p-1.5 rounded-control hover:bg-surface-2 text-danger hover:text-danger"
                     >
                       <Trash2 size={18} />
                     </button>
@@ -133,7 +133,7 @@ export default function PersonaPromptsSection({
             </div>
           ))}
         {isAddingNewPrompt && (
-          <div className="p-3 border border-dashed border-surface-2 rounded-md space-y-3 bg-surface-2">
+          <div className="p-3 border border-dashed border-surface-2 rounded-control space-y-3 bg-surface-2">
             <InputComponent
               type="text"
               value={newPromptName}
@@ -158,14 +158,14 @@ export default function PersonaPromptsSection({
                   setNewPromptName('');
                   setNewPromptContent('');
                 }}
-                className="px-3 py-2 text-sm rounded-md bg-surface hover:bg-surface-2 flex items-center gap-1.5"
+                className="px-3 py-2 text-sm rounded-control bg-surface hover:bg-surface-2 flex items-center gap-1.5"
               >
                 <X size={16} />
                 Cancel
               </button>
               <button
                 onClick={onAddOrUpdate}
-                className="px-3 py-2 text-sm rounded-md bg-accent flex items-center gap-1.5"
+                className="px-3 py-2 text-sm rounded-control bg-accent flex items-center gap-1.5"
               >
                 <Save size={16} />
                 Add Persona Prompt
@@ -176,7 +176,7 @@ export default function PersonaPromptsSection({
         {!isAddingNewPrompt && (
           <button
             onClick={() => setIsAddingNewPrompt(true)}
-            className="self-start px-3 py-2 text-sm rounded-md border border-surface-2 hover:bg-surface-2 flex items-center gap-1.5"
+            className="self-start px-3 py-2 text-sm rounded-control border border-surface-2 hover:bg-surface-2 flex items-center gap-1.5"
           >
             <PlusCircle size={18} /> Add Persona Prompt
           </button>

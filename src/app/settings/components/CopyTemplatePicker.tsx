@@ -54,8 +54,8 @@ export default function CopyTemplatePicker() {
       <button
         onClick={handleCopy}
         className={cn(
-          'px-3 py-2 text-sm rounded-md border border-surface-2 hover:bg-surface-2 flex items-center gap-1.5',
-          copied && 'bg-green-100 text-green-800 border-green-200',
+          'px-3 py-2 text-sm rounded-control border border-surface-2 hover:bg-surface-2 flex items-center gap-1.5',
+          copied && 'bg-success-soft text-success border-success',
         )}
         title="Copy selected template"
       >

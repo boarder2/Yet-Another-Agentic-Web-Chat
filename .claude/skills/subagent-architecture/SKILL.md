@@ -17,7 +17,7 @@ The main `SimplifiedAgent` has access to a `deep_research` tool that it can invo
 
 1. **Deep Research** (`deep_research`)
    - Purpose: Focused investigation of a specific, narrow aspect of a larger question
-   - Tools: `web_search`, `url_summarization`, `image_search`, `youtube_transcript`, `pdf_loader`
+   - Tools: `web_search`, `url_fetch`, `image_search`, `youtube_transcript`, `pdf_loader`
    - Model: Chat Model (needs reasoning capability)
    - Invoked by: Main agent via `deep_research` tool
    - **Key Principle**: Each call should research ONE specific aspect, not try to answer the entire user question
@@ -37,7 +37,7 @@ The main `SimplifiedAgent` has access to a `deep_research` tool that it can invo
 ```
 User Query → SimplifiedAgent (with all tools including deep_research)
                     ↓
-              [Agent researches using web_search, url_summarization, etc.]
+              [Agent researches using web_search, url_fetch, etc.]
                     ↓
               [Discovers complexity?]
                ↓              ↓
@@ -80,7 +80,7 @@ User Query → SimplifiedAgent (with all tools including deep_research)
 4. `deepResearchTool` creates a `SubagentExecutor` with the `deep_research` definition
 5. SubagentExecutor spawns a child `SimplifiedAgent` with:
    - Isolated EventEmitter (forwards events to parent as `subagent_data`)
-   - Filtered tools (web_search, url_summarization, image_search, youtube_transcript, pdf_loader — no deep_research)
+   - Filtered tools (web_search, url_fetch, image_search, youtube_transcript, pdf_loader — no deep_research)
    - Limited context (last 5 messages)
    - Chat Model for reasoning
 6. Child agent researches independently and streams tool events
@@ -113,7 +113,7 @@ The deep_research subagent has a whitelist of allowed tools enforced at executio
 ```typescript
 allowedTools: [
   'web_search',
-  'url_summarization',
+  'url_fetch',
   'image_search',
   'youtube_transcript',
   'pdf_loader',

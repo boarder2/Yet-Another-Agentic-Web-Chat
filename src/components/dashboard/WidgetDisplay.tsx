@@ -2,6 +2,7 @@
 
 import {
   RefreshCw,
+  LoaderCircle,
   Edit,
   Trash2,
   AlertCircle,
@@ -9,7 +10,6 @@ import {
   ChevronUp,
   GripVertical,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import MarkdownRenderer from '@/components/MarkdownRenderer';
 import { Widget } from '@/lib/types/widget';
@@ -56,7 +56,7 @@ const WidgetDisplay = ({
           <div className="flex items-center space-x-2 flex-1 min-w-0">
             {/* Drag Handle */}
             <div
-              className="widget-drag-handle flex-shrink-0 p-1 rounded hover:bg-surface-2 cursor-move transition-colors"
+              className="widget-drag-handle flex-shrink-0 p-1 rounded-control hover:bg-surface-2 cursor-move transition-colors"
               title="Drag to move widget"
             >
               <GripVertical size={16} className="text-fg/50" />
@@ -80,16 +80,14 @@ const WidgetDisplay = ({
             <button
               onClick={() => onRefresh(widget.id)}
               disabled={widget.isLoading}
-              className="p-1.5 hover:bg-surface-2 rounded transition-colors disabled:opacity-50"
+              className="p-1.5 hover:bg-surface-2 rounded-control transition-colors disabled:opacity-50"
               title="Refresh Widget"
             >
-              <RefreshCw
-                size={16}
-                className={cn(
-                  'text-fg/70',
-                  widget.isLoading ? 'animate-spin' : '',
-                )}
-              />
+              {widget.isLoading ? (
+                <LoaderCircle size={16} className="animate-spin text-accent" />
+              ) : (
+                <RefreshCw size={16} className="text-fg/70" />
+              )}
             </button>
           </div>
         </div>
@@ -99,20 +97,23 @@ const WidgetDisplay = ({
         <div className="h-full overflow-y-auto">
           {widget.isLoading ? (
             <div className="flex items-center justify-center py-8 text-fg/60">
-              <RefreshCw size={20} className="animate-spin mr-2" />
+              <LoaderCircle
+                size={20}
+                className="animate-spin mr-2 text-accent"
+              />
               <span>Loading content...</span>
             </div>
           ) : widget.error ? (
-            <div className="flex items-start space-x-2 p-3 bg-red-50 rounded border border-red-200">
+            <div className="flex items-start space-x-2 p-3 bg-danger-soft rounded-control border border-danger">
               <AlertCircle
                 size={16}
-                className="text-red-500 mt-0.5 flex-shrink-0"
+                className="text-danger mt-0.5 flex-shrink-0"
               />
               <div className="flex-1">
-                <p className="text-sm font-medium text-red-800">
+                <p className="text-sm font-medium text-danger">
                   Error Loading Content
                 </p>
-                <p className="text-xs text-red-600 mt-1">{widget.error}</p>
+                <p className="text-xs text-danger mt-1">{widget.error}</p>
               </div>
             </div>
           ) : widget.content ? (
@@ -156,7 +157,7 @@ const WidgetDisplay = ({
                       key={index}
                       className="flex items-center space-x-2 text-xs"
                     >
-                      <span className="inline-block w-2 h-2 bg-accent rounded-full"></span>
+                      <span className="inline-block w-2 h-2 bg-accent rounded-pill"></span>
                       <span className="text-fg/70 truncate">{source.url}</span>
                       <span className="text-fg/60">({source.type})</span>
                     </div>
@@ -169,7 +170,7 @@ const WidgetDisplay = ({
             <div className="flex items-center space-x-2 pt-2">
               <button
                 onClick={() => onEdit(widget)}
-                className="flex items-center space-x-1 px-2 py-1 text-xs text-fg/70 hover:bg-surface-2 rounded transition-colors"
+                className="flex items-center space-x-1 px-2 py-1 text-xs text-fg/70 hover:bg-surface-2 rounded-control transition-colors"
               >
                 <Edit size={12} />
                 <span>Edit</span>
@@ -177,7 +178,7 @@ const WidgetDisplay = ({
 
               <button
                 onClick={() => onDelete(widget.id)}
-                className="flex items-center space-x-1 px-2 py-1 text-xs text-red-500 hover:bg-surface-2 rounded transition-colors"
+                className="flex items-center space-x-1 px-2 py-1 text-xs text-danger hover:bg-surface-2 rounded-control transition-colors"
               >
                 <Trash2 size={12} />
                 <span>Delete</span>

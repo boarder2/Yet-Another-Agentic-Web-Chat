@@ -3,7 +3,7 @@ import {
   ChevronDown,
   CheckSquare,
   Square,
-  Loader2,
+  LoaderCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -80,7 +80,7 @@ const ToolSelector = ({
         <>
           <PopoverButton
             className={cn(
-              'flex items-center gap-1 rounded-lg text-sm transition-colors duration-150 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+              'flex items-center gap-1 rounded-surface text-sm transition-colors duration-150 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
               selectedCount > 0
                 ? 'text-accent hover:text-accent'
                 : 'text-fg/60 hover:text-fg/30',
@@ -101,7 +101,7 @@ const ToolSelector = ({
             leaveTo="opacity-0 translate-y-1"
           >
             <PopoverPanel className="absolute z-20 w-72 transform bottom-full mb-2">
-              <div className="overflow-hidden rounded-lg shadow-lg bg-surface border border-surface-2">
+              <div className="overflow-hidden rounded-surface shadow-raised bg-surface border border-surface-2">
                 <div className="px-4 py-3 border-b border-surface-2">
                   <h3 className="text-sm font-medium text-fg/90">
                     Select Tools
@@ -112,7 +112,7 @@ const ToolSelector = ({
                 </div>
                 {isLoading ? (
                   <div className="px-4 py-3">
-                    <Loader2 className="animate-spin text-fg/70" />
+                    <LoaderCircle className="animate-spin text-accent" />
                   </div>
                 ) : (
                   <div className="max-h-60 overflow-y-auto p-1.5 space-y-0.5">
@@ -126,7 +126,7 @@ const ToolSelector = ({
                       <div
                         key={tool.name}
                         onClick={() => handleToggleTool(tool.name)}
-                        className="flex items-start gap-2.5 p-2.5 rounded-md hover:bg-surface-2 cursor-pointer"
+                        className="flex items-start gap-2.5 p-2.5 rounded-control hover:bg-surface-2 cursor-pointer"
                       >
                         {selectedToolNames.includes(tool.name) ? (
                           <CheckSquare

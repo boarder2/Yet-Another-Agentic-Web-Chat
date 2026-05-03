@@ -1,4 +1,4 @@
-import { FlaskConical, Circle, CircleDot, Loader2 } from 'lucide-react';
+import { FlaskConical, Circle, CircleDot, LoaderCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   Popover,
@@ -65,7 +65,7 @@ const MethodologySelector = ({
       <PopoverButton
         onClick={fetchMethodologies}
         className={cn(
-          'flex items-center gap-1 rounded-lg text-sm transition-colors duration-150 ease-in-out focus:outline-none focus-visible:ring-2 p-1',
+          'flex items-center gap-1 rounded-surface text-sm transition-colors duration-150 ease-in-out focus:outline-none focus-visible:ring-2 p-1',
           selectedMethodologyId
             ? 'text-accent hover:text-accent'
             : 'text-fg/60 hover:text-fg/30',
@@ -84,7 +84,7 @@ const MethodologySelector = ({
         leaveTo="opacity-0 translate-y-1"
       >
         <PopoverPanel className="absolute right-0 z-20 w-72 transform bottom-full mb-2">
-          <div className="overflow-hidden rounded-lg shadow-lg ring-1 ring-surface-2 bg-surface">
+          <div className="overflow-hidden rounded-surface shadow-raised ring-1 ring-surface-2 bg-surface">
             <div className="px-4 py-3 border-b border-surface-2">
               <h3 className="text-sm font-medium text-fg/90">
                 Research Methodology
@@ -96,14 +96,14 @@ const MethodologySelector = ({
             </div>
             {isLoading ? (
               <div className="px-4 py-3">
-                <Loader2 className="animate-spin text-fg/70" />
+                <LoaderCircle className="animate-spin text-accent" />
               </div>
             ) : (
               <div className="max-h-60 overflow-y-auto p-1.5 space-y-3">
                 {/* No methodology option */}
                 <div
                   onClick={() => handleSelect(null)}
-                  className="flex items-center gap-2.5 p-2.5 rounded-md hover:bg-surface-2 cursor-pointer"
+                  className="flex items-center gap-2.5 p-2.5 rounded-control hover:bg-surface-2 cursor-pointer"
                 >
                   {selectedMethodologyId === null ? (
                     <CircleDot
@@ -127,7 +127,7 @@ const MethodologySelector = ({
                         <div
                           key={methodology.id}
                           onClick={() => handleSelect(methodology.id)}
-                          className="flex items-center gap-2.5 p-2.5 rounded-md hover:bg-surface-2 cursor-pointer"
+                          className="flex items-center gap-2.5 p-2.5 rounded-control hover:bg-surface-2 cursor-pointer"
                         >
                           {selectedMethodologyId === methodology.id ? (
                             <CircleDot
@@ -163,7 +163,7 @@ const MethodologySelector = ({
                         <div
                           key={methodology.id}
                           onClick={() => handleSelect(methodology.id)}
-                          className="flex items-center gap-2.5 p-2.5 rounded-md hover:bg-surface-2 cursor-pointer"
+                          className="flex items-center gap-2.5 p-2.5 rounded-control hover:bg-surface-2 cursor-pointer"
                         >
                           {selectedMethodologyId === methodology.id ? (
                             <CircleDot

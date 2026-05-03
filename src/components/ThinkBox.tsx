@@ -23,7 +23,7 @@ const ThinkBox = ({ content, expanded, onToggle }: ThinkBoxProps) => {
     onToggle || (() => setInternalExpanded(!internalExpanded));
 
   return (
-    <div className="my-4 bg-surface/50 rounded-xl border border-surface-2 overflow-hidden">
+    <div className="my-4 bg-surface/50 rounded-floating border border-surface-2 overflow-hidden">
       <button
         onClick={handleToggle}
         className="w-full flex items-center justify-between px-4 py-4 text-fg/90 hover:bg-surface-2 transition duration-200"

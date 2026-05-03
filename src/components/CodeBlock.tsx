@@ -49,18 +49,18 @@ export const CodeBlock = ({
 
   return (
     <div
-      className={`rounded-md overflow-hidden ${hideChrome ? '' : 'my-4 border border-surface-2'} relative group`}
+      className={`rounded-control overflow-hidden ${hideChrome ? '' : 'my-4 border border-surface-2'} relative group`}
     >
       {!hideChrome && (
         <div className="flex justify-between items-center px-4 py-2 bg-surface-2 border-b border-surface-2 text-xs text-fg/70 font-mono">
           <span>{language}</span>
           <button
             onClick={handleCopyCode}
-            className="p-1 rounded-md hover:bg-surface transition duration-200"
+            className="p-1 rounded-control hover:bg-surface transition duration-200"
             aria-label="Copy code to clipboard"
           >
             {isCopied ? (
-              <CheckCheck size={14} className="text-green-500" />
+              <CheckCheck size={14} className="text-success" />
             ) : (
               <CopyIcon size={14} className="text-fg" />
             )}

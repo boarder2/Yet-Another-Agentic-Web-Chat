@@ -2,6 +2,7 @@ import TokenPill from '@/components/common/TokenPill';
 import { Document } from '@langchain/core/documents';
 import MessageSource from './MessageSource';
 import { useState } from 'react';
+import { LoaderCircle } from 'lucide-react';
 
 interface TokenUsage {
   input_tokens: number;
@@ -44,7 +45,7 @@ const MessageBoxLoading = ({
   return (
     <div className="flex flex-col space-y-4 w-full lg:w-9/12">
       {progress && progress.current !== progress.total && !isAnswering && (
-        <div className="bg-surface rounded-lg p-4 border border-surface-2">
+        <div className="bg-surface rounded-surface p-4 border border-surface-2">
           <div className="flex flex-col space-y-3">
             <p className="text-base font-semibold">{progress.message}</p>
             {progress.subMessage && (
@@ -52,7 +53,7 @@ const MessageBoxLoading = ({
                 {progress.subMessage}
               </p>
             )}
-            <div className="w-full bg-surface-2 rounded-full h-2 overflow-hidden">
+            <div className="w-full bg-surface-2 rounded-pill h-2 overflow-hidden">
               <div
                 className={`h-full bg-accent transition-all duration-300 ease-in-out ${
                   progress.current === progress.total ? '' : 'animate-pulse'
@@ -130,7 +131,7 @@ const MessageBoxLoading = ({
 
       {/* Sources gathered during search phase */}
       {gatheringSources.length > 0 && !isAnswering && (
-        <div className="bg-surface rounded-lg p-4 border border-surface-2">
+        <div className="bg-surface rounded-surface p-4 border border-surface-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <button
@@ -183,30 +184,11 @@ const MessageBoxLoading = ({
                     }
                   }}
                   disabled={isAnsweringNow}
-                  className="text-xs px-3 py-1 w-28 h-8 rounded-md bg-accent text-fg hover:bg-opacity-90 transition disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center gap-1"
+                  className="text-xs px-3 py-1 w-28 h-8 rounded-control bg-accent text-fg hover:bg-opacity-90 transition disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center gap-1"
                 >
                   {isAnsweringNow ? (
                     <>
-                      <svg
-                        className="animate-spin w-6 h-6"
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                      >
-                        <circle
-                          className="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                        ></circle>
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                        ></path>
-                      </svg>
+                      <LoaderCircle size={24} className="animate-spin" />
                     </>
                   ) : (
                     'Answer now'
@@ -219,7 +201,7 @@ const MessageBoxLoading = ({
             <div className="mt-4 space-y-4">
               {gatheringSources.map((group, groupIndex) => (
                 <div key={groupIndex} className="space-y-2">
-                  <div className="text-xs font-medium text-fg/70 bg-surface-2 px-2 py-1 rounded">
+                  <div className="text-xs font-medium text-fg/70 bg-surface-2 px-2 py-1 rounded-control">
                     Search: &quot;{group.searchQuery}&quot;
                   </div>
                   <div className="grid gap-2">

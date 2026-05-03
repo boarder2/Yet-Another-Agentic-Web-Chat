@@ -19,7 +19,7 @@ const Copy = ({
         setCopied(true);
         setTimeout(() => setCopied(false), 1000);
       }}
-      className="p-2 rounded-xl transition duration-200"
+      className="p-2 rounded-floating transition duration-200"
     >
       {copied ? <Check size={18} /> : <ClipboardList size={18} />}
     </button>

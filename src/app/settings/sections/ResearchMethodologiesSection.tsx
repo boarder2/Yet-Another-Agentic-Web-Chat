@@ -21,8 +21,8 @@ import { builtinMethodologyTemplates } from '@/lib/prompts/methodologyTemplates'
 const AVAILABLE_TOOLS = [
   { name: 'web_search', description: 'Search the web for information' },
   {
-    name: 'url_summarization',
-    description: 'Fetch and summarize content from URLs',
+    name: 'url_fetch',
+    description: 'Fetch and retrieve content from URLs',
   },
   { name: 'image_search', description: 'Search for images on the web' },
   {
@@ -117,7 +117,7 @@ export default function ResearchMethodologiesSection({
         instead.
       </p>
       <div className="flex flex-col space-y-4">
-        <div className="flex items-center justify-between p-3 bg-surface rounded-lg border border-surface-2 gap-3">
+        <div className="flex items-center justify-between p-3 bg-surface rounded-surface border border-surface-2 gap-3">
           <div className="text-sm">Copy a built-in methodology template</div>
           <div className="flex items-center gap-2">
             <Select
@@ -127,7 +127,7 @@ export default function ResearchMethodologiesSection({
             />
             <button
               onClick={handleCopyTemplate}
-              className={`px-3 py-2 text-sm rounded-md border border-surface-2 hover:bg-surface-2 flex items-center gap-1.5 ${copiedTemplate ? 'bg-green-100 text-green-800 border-green-200' : ''}`}
+              className={`px-3 py-2 text-sm rounded-control border border-surface-2 hover:bg-surface-2 flex items-center gap-1.5 ${copiedTemplate ? 'bg-success-soft text-success border-success' : ''}`}
               title="Copy selected template"
             >
               {copiedTemplate ? (
@@ -142,7 +142,7 @@ export default function ResearchMethodologiesSection({
         </div>
 
         {/* Tool Reference Panel */}
-        <div className="border border-surface-2 rounded-lg bg-surface">
+        <div className="border border-surface-2 rounded-surface bg-surface">
           <button
             onClick={() => setToolRefOpen(!toolRefOpen)}
             className="flex items-center gap-2 w-full p-3 text-sm text-fg/70 hover:text-fg/90"
@@ -162,7 +162,7 @@ export default function ResearchMethodologiesSection({
               </p>
               {AVAILABLE_TOOLS.map((tool) => (
                 <div key={tool.name} className="flex gap-2 text-xs py-0.5">
-                  <code className="font-mono text-accent bg-surface-2 px-1 rounded whitespace-nowrap">
+                  <code className="font-mono text-accent bg-surface-2 px-1 rounded-control whitespace-nowrap">
                     {tool.name}
                   </code>
                   <span className="text-fg/60">{tool.description}</span>
@@ -177,7 +177,7 @@ export default function ResearchMethodologiesSection({
           .map((methodology) => (
             <div
               key={methodology.id}
-              className="p-3 border border-surface-2 rounded-md bg-surface-2"
+              className="p-3 border border-surface-2 rounded-control bg-surface-2"
             >
               {editingMethodology &&
               editingMethodology.id === methodology.id ? (
@@ -208,14 +208,14 @@ export default function ResearchMethodologiesSection({
                   <div className="flex space-x-2 justify-end">
                     <button
                       onClick={() => setEditingMethodology(null)}
-                      className="px-3 py-2 text-sm rounded-md bg-surface hover:bg-surface-2 flex items-center gap-1.5"
+                      className="px-3 py-2 text-sm rounded-control bg-surface hover:bg-surface-2 flex items-center gap-1.5"
                     >
                       <X size={16} />
                       Cancel
                     </button>
                     <button
                       onClick={onAddOrUpdate}
-                      className="px-3 py-2 text-sm rounded-md bg-accent flex items-center gap-1.5"
+                      className="px-3 py-2 text-sm rounded-control bg-accent flex items-center gap-1.5"
                     >
                       <Save size={16} />
                       Save
@@ -242,14 +242,14 @@ export default function ResearchMethodologiesSection({
                     <button
                       onClick={() => setEditingMethodology({ ...methodology })}
                       title="Edit"
-                      className="p-1.5 rounded-md hover:bg-surface-2"
+                      className="p-1.5 rounded-control hover:bg-surface-2"
                     >
                       <Edit3 size={18} />
                     </button>
                     <button
                       onClick={() => onDelete(methodology.id)}
                       title="Delete"
-                      className="p-1.5 rounded-md hover:bg-surface-2 text-red-500 hover:text-red-600"
+                      className="p-1.5 rounded-control hover:bg-surface-2 text-danger hover:text-danger"
                     >
                       <Trash2 size={18} />
                     </button>
@@ -259,7 +259,7 @@ export default function ResearchMethodologiesSection({
             </div>
           ))}
         {isAddingNewMethodology && (
-          <div className="p-3 border border-dashed border-surface-2 rounded-md space-y-3 bg-surface-2">
+          <div className="p-3 border border-dashed border-surface-2 rounded-control space-y-3 bg-surface-2">
             <InputComponent
               type="text"
               value={newMethodologyName}
@@ -284,14 +284,14 @@ export default function ResearchMethodologiesSection({
                   setNewMethodologyName('');
                   setNewMethodologyContent('');
                 }}
-                className="px-3 py-2 text-sm rounded-md bg-surface hover:bg-surface-2 flex items-center gap-1.5"
+                className="px-3 py-2 text-sm rounded-control bg-surface hover:bg-surface-2 flex items-center gap-1.5"
               >
                 <X size={16} />
                 Cancel
               </button>
               <button
                 onClick={onAddOrUpdate}
-                className="px-3 py-2 text-sm rounded-md bg-accent flex items-center gap-1.5"
+                className="px-3 py-2 text-sm rounded-control bg-accent flex items-center gap-1.5"
               >
                 <Save size={16} />
                 Add Methodology
@@ -302,7 +302,7 @@ export default function ResearchMethodologiesSection({
         {!isAddingNewMethodology && (
           <button
             onClick={() => setIsAddingNewMethodology(true)}
-            className="self-start px-3 py-2 text-sm rounded-md border border-surface-2 hover:bg-surface-2 flex items-center gap-1.5"
+            className="self-start px-3 py-2 text-sm rounded-control border border-surface-2 hover:bg-surface-2 flex items-center gap-1.5"
           >
             <PlusCircle size={18} /> Add Methodology
           </button>

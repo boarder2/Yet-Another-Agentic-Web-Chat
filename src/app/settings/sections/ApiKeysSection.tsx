@@ -1,9 +1,8 @@
 'use client';
 
-import { RefreshCw } from 'lucide-react';
+import { LoaderCircle, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
 import SettingsSection from '../components/SettingsSection';
 import InputComponent from '../components/InputComponent';
 import { SettingsType } from '../types';
@@ -44,12 +43,16 @@ export default function ApiKeysSection({
       headerAction={
         <button
           type="button"
-          className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border border-surface-2 hover:bg-surface-2 transition disabled:opacity-60"
+          className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-control border border-surface-2 hover:bg-surface-2 transition disabled:opacity-60"
           onClick={handleRefreshModels}
           disabled={refreshing}
           title="Refresh models from providers"
         >
-          <RefreshCw size={12} className={cn(refreshing && 'animate-spin')} />
+          {refreshing ? (
+            <LoaderCircle size={12} className="animate-spin text-accent" />
+          ) : (
+            <RefreshCw size={12} />
+          )}
           {refreshing ? 'Refreshing…' : 'Refresh models'}
         </button>
       }

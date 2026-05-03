@@ -11,6 +11,7 @@ import {
   StopCircle,
   VideoIcon,
   Volume2,
+  LoaderCircle,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useSpeech } from 'react-text-to-speech';
@@ -186,7 +187,7 @@ const MessageTabs = ({
               const url = source?.metadata?.url;
 
               if (url) {
-                return `<a href="${url}" target="_blank" data-citation="${number}" className="bg-surface px-1 rounded ml-1 no-underline text-xs relative hover:bg-surface-2 transition-colors duration-200">${numStr}</a>`;
+                return `<a href="${url}" target="_blank" data-citation="${number}" className="bg-surface px-1 rounded-control ml-1 no-underline text-xs relative hover:bg-surface-2 transition-colors duration-200">${numStr}</a>`;
               } else {
                 return `[${numStr}]`;
               }
@@ -221,7 +222,7 @@ const MessageTabs = ({
 
   const panelIconBtnClass = (active: boolean) =>
     cn(
-      'flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-sm transition duration-200',
+      'flex items-center gap-1.5 px-2 py-1.5 rounded-surface text-sm transition duration-200',
       active
         ? 'bg-surface-2 text-accent'
         : 'opacity-70 hover:bg-surface-2 hover:opacity-100',
@@ -303,7 +304,7 @@ const MessageTabs = ({
                       start();
                     }
                   }}
-                  className="p-2 opacity-70 rounded-xl hover:bg-surface-2 transition duration-200"
+                  className="p-2 opacity-70 rounded-floating hover:bg-surface-2 transition duration-200"
                 >
                   {speechStatus === 'started' ? (
                     <StopCircle size={18} />
@@ -317,9 +318,9 @@ const MessageTabs = ({
           {loading && isLast && (
             <div className="pl-3 flex items-center justify-start">
               <div className="flex space-x-1">
-                <div className="w-1.5 h-1.5 bg-fg/40 rounded-full animate-[high-bounce_1s_infinite] [animation-delay:-0.3s]"></div>
-                <div className="w-1.5 h-1.5 bg-fg/40 rounded-full animate-[high-bounce_1s_infinite] [animation-delay:-0.15s]"></div>
-                <div className="w-1.5 h-1.5 bg-fg/40 rounded-full animate-[high-bounce_1s_infinite]"></div>
+                <div className="w-1.5 h-1.5 bg-fg/40 rounded-pill animate-[high-bounce_1s_infinite] [animation-delay:-0.3s]"></div>
+                <div className="w-1.5 h-1.5 bg-fg/40 rounded-pill animate-[high-bounce_1s_infinite] [animation-delay:-0.15s]"></div>
+                <div className="w-1.5 h-1.5 bg-fg/40 rounded-pill animate-[high-bounce_1s_infinite]"></div>
               </div>
             </div>
           )}
@@ -327,7 +328,7 @@ const MessageTabs = ({
           {openPanel === 'sources' && hasSources && (
             <div className="px-4 pb-4 animate-fadeIn">
               {message.searchQuery && (
-                <div className="mb-4 text-sm bg-surface rounded-lg p-3">
+                <div className="mb-4 text-sm bg-surface rounded-surface p-3">
                   <span className="font-medium opacity-70">Search query:</span>{' '}
                   {message.searchUrl ? (
                     <a
@@ -393,10 +394,13 @@ const MessageTabs = ({
                     <button
                       onClick={handleLoadSuggestions}
                       disabled={loadingSuggestions}
-                      className="px-4 py-2 flex flex-row items-center justify-center space-x-2 rounded-lg bg-surface hover:bg-surface-2 transition duration-200"
+                      className="px-4 py-2 flex flex-row items-center justify-center space-x-2 rounded-surface bg-surface hover:bg-surface-2 transition duration-200"
                     >
                       {loadingSuggestions ? (
-                        <div className="w-4 h-4 border-2 border-t-transparent border-fg/40 rounded-full animate-spin" />
+                        <LoaderCircle
+                          size={16}
+                          className="animate-spin text-accent"
+                        />
                       ) : (
                         <Sparkles size={16} />
                       )}

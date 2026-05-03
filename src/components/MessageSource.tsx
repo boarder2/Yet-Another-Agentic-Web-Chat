@@ -19,13 +19,13 @@ const MessageSource = ({
 }: MessageSourceProps) => {
   return oneLiner ? (
     <a
-      className={`bg-surface hover:bg-surface-2 transition duration-200 rounded-lg p-2 flex flex-row no-underline items-center space-x-2 font-medium border border-surface-2 ${className || ''}`}
+      className={`bg-surface hover:bg-surface-2 transition duration-200 rounded-surface p-2 flex flex-row no-underline items-center space-x-2 font-medium border border-surface-2 ${className || ''}`}
       href={source.metadata.url}
       target="_blank"
       style={style}
     >
       {source.metadata.url === 'File' ? (
-        <div className="bg-surface-2 hover:bg-surface transition duration-200 flex items-center justify-center w-6 h-6 rounded-full">
+        <div className="bg-surface-2 hover:bg-surface transition duration-200 flex items-center justify-center w-6 h-6 rounded-pill">
           <File size={14} className="text-fg/70" />
         </div>
       ) : (
@@ -34,7 +34,7 @@ const MessageSource = ({
           width={20}
           height={20}
           alt="favicon"
-          className="rounded-lg h-5 w-5"
+          className="rounded-surface h-5 w-5"
         />
       )}
       <span className="text-xs text-fg/70 truncate">
@@ -43,7 +43,7 @@ const MessageSource = ({
     </a>
   ) : (
     <a
-      className={`bg-surface hover:bg-surface-2 transition duration-200 rounded-lg p-4 flex flex-row no-underline space-x-3 font-medium border border-surface-2 ${className || ''}`}
+      className={`bg-surface hover:bg-surface-2 transition duration-200 rounded-surface p-4 flex flex-row no-underline space-x-3 font-medium border border-surface-2 ${className || ''}`}
       href={source.metadata.url}
       target="_blank"
       style={style}
@@ -51,7 +51,7 @@ const MessageSource = ({
       {/* Left side: Favicon/Icon and source number */}
       <div className="flex flex-col items-center space-y-2 flex-shrink-0">
         {source.metadata.url === 'File' ? (
-          <div className="bg-surface-2 hover:bg-surface transition duration-200 flex items-center justify-center w-8 h-8 rounded-full">
+          <div className="bg-surface-2 hover:bg-surface transition duration-200 flex items-center justify-center w-8 h-8 rounded-pill">
             <File size={16} className="text-fg/70" />
           </div>
         ) : (
@@ -60,7 +60,7 @@ const MessageSource = ({
             width={28}
             height={28}
             alt="favicon"
-            className="rounded-lg h-7 w-7"
+            className="rounded-surface h-7 w-7"
           />
         )}
         <div className="flex flex-row items-center space-x-1 text-fg/50 text-xs">

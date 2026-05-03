@@ -1,7 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { Switch } from '@headlessui/react';
+import AppSwitch from '@/components/ui/AppSwitch';
 import { ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react';
 import { PROVIDER_METADATA } from '@/lib/providers';
 import SettingsSection from '../components/SettingsSection';
@@ -72,7 +72,7 @@ export default function ModelVisibilitySection({
               return (
                 <div
                   key={providerId}
-                  className="border border-surface-2 rounded-lg overflow-hidden"
+                  className="border border-surface-2 rounded-surface overflow-hidden"
                 >
                   <button
                     onClick={() => onToggleExpand(providerId)}
@@ -97,7 +97,7 @@ export default function ModelVisibilitySection({
                     <div className="flex items-center space-x-2 text-xs">
                       <span>{totalCount - hiddenCount} visible</span>
                       {hiddenCount > 0 && (
-                        <span className="px-2 py-1 bg-red-100 text-red-700 rounded">
+                        <span className="px-2 py-1 bg-danger-soft text-danger rounded-control">
                           {hiddenCount} hidden
                         </span>
                       )}
@@ -112,7 +112,7 @@ export default function ModelVisibilitySection({
                             e.stopPropagation();
                             onToggleProvider(models, true);
                           }}
-                          className="px-3 py-1.5 text-xs rounded-md bg-green-100 hover:bg-green-200 text-green-700 flex items-center gap-1.5 transition-colors"
+                          className="px-3 py-1.5 text-xs rounded-control bg-success-soft hover:bg-success-soft text-success flex items-center gap-1.5 transition-colors"
                           title="Show all models in this provider"
                         >
                           <Eye size={14} />
@@ -123,7 +123,7 @@ export default function ModelVisibilitySection({
                             e.stopPropagation();
                             onToggleProvider(models, false);
                           }}
-                          className="px-3 py-1.5 text-xs rounded-md bg-red-100 hover:bg-red-200 text-red-700 flex items-center gap-1.5 transition-colors"
+                          className="px-3 py-1.5 text-xs rounded-control bg-danger-soft hover:bg-danger-soft text-danger flex items-center gap-1.5 transition-colors"
                           title="Hide all models in this provider"
                         >
                           <EyeOff size={14} />
@@ -134,32 +134,17 @@ export default function ModelVisibilitySection({
                         {modelEntries.map(([modelKey, model]) => (
                           <div
                             key={`${provider}-${modelKey}`}
-                            className="flex items-center justify-between p-2 bg-surface rounded-md"
+                            className="flex items-center justify-between p-2 bg-surface rounded-control"
                           >
                             <span className="text-sm">
                               {model.displayName || modelKey}
                             </span>
-                            <Switch
+                            <AppSwitch
                               checked={!hiddenModels.includes(modelKey)}
                               onChange={(checked) => {
                                 onToggleModel(modelKey, checked);
                               }}
-                              className={cn(
-                                !hiddenModels.includes(modelKey)
-                                  ? 'bg-accent'
-                                  : 'bg-surface-2',
-                                'relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none',
-                              )}
-                            >
-                              <span
-                                className={cn(
-                                  !hiddenModels.includes(modelKey)
-                                    ? 'translate-x-5'
-                                    : 'translate-x-1',
-                                  'inline-block h-3 w-3 transform rounded-full bg-white transition-transform',
-                                )}
-                              />
-                            </Switch>
+                            />
                           </div>
                         ))}
                       </div>

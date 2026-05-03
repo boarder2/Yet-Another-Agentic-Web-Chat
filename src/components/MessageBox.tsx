@@ -156,12 +156,12 @@ const MessageBox = ({
             </div>
           ) : (
             <div className="ml-[15%]">
-              <div className="relative bg-surface-2 rounded-xl px-4 py-3 border-b-2 border-accent overflow-hidden">
+              <div className="relative bg-surface-2 rounded-floating px-4 py-3 border-b-2 border-accent overflow-hidden">
                 <button
                   onClick={startEditMessage}
                   disabled={loading}
                   className={cn(
-                    'absolute top-2 right-2 p-1.5 rounded-lg flex-shrink-0',
+                    'absolute top-2 right-2 z-10 p-1.5 rounded-surface flex-shrink-0',
                     loading
                       ? 'opacity-40 cursor-not-allowed'
                       : 'hover:bg-surface',
@@ -189,7 +189,7 @@ const MessageBox = ({
                         key={img.imageId}
                         src={`/api/uploads/images/${img.imageId}`}
                         alt={img.fileName}
-                        className="max-h-40 max-w-[200px] object-cover rounded-lg border border-surface-2"
+                        className="max-h-40 max-w-[200px] object-cover rounded-surface border border-surface-2"
                       />
                     ))}
                   </div>

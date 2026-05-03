@@ -82,7 +82,7 @@ export function CodeExecutionApproval({
   }
 
   return (
-    <div className="mb-2 border border-surface-2 rounded-xl overflow-hidden bg-surface shadow-lg">
+    <div className="mb-2 border border-surface-2 rounded-floating overflow-hidden bg-surface shadow-raised">
       <div className="flex items-center justify-between px-5 py-3 bg-surface-2/70">
         <div className="flex items-center gap-2">
           <Terminal size={16} className="text-accent" />
@@ -90,14 +90,14 @@ export function CodeExecutionApproval({
             Code Execution Request
           </span>
           {queueTotal && queueTotal > 1 && (
-            <span className="text-xs font-medium text-fg/60 bg-surface-2 px-2 py-0.5 rounded-full">
+            <span className="text-xs font-medium text-fg/60 bg-surface-2 px-2 py-0.5 rounded-pill">
               {queuePosition} of {queueTotal}
             </span>
           )}
         </div>
         <button
           onClick={() => sendApproval(false)}
-          className="p-1 rounded-md hover:bg-surface-2 transition-colors text-fg/50 hover:text-fg"
+          className="p-1 rounded-control hover:bg-surface-2 transition-colors text-fg/50 hover:text-fg"
           aria-label="Dismiss"
         >
           <X size={14} />
@@ -114,13 +114,13 @@ export function CodeExecutionApproval({
       <div className="flex gap-2 justify-end px-5 py-3 border-t border-surface-2 bg-surface">
         <button
           onClick={() => sendApproval(false)}
-          className="px-5 py-2 text-sm font-medium rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30 transition-colors"
+          className="px-5 py-2 text-sm font-medium rounded-surface bg-danger-soft text-danger hover:bg-danger-soft border border-danger transition-colors"
         >
           Deny
         </button>
         <button
           onClick={() => sendApproval(true)}
-          className="px-5 py-2 text-sm font-medium rounded-lg bg-green-500/20 text-green-500 hover:bg-green-500/30 border border-green-500/30 transition-colors"
+          className="px-5 py-2 text-sm font-medium rounded-surface bg-success-soft text-success hover:bg-success-soft border border-success transition-colors"
         >
           Run
         </button>

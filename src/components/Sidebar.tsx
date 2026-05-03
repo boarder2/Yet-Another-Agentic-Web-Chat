@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   Maximize2,
   Minimize2,
+  FolderOpen,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useSelectedLayoutSegments } from 'next/navigation';
@@ -40,7 +41,8 @@ const NewChatButtonMobile = () => (
 
 const WidthToggle = () => {
   const segments = useSelectedLayoutSegments();
-  const isChat = segments[0] === 'c';
+  // Show on /c/[id] routes and workspace chat routes (/workspaces/[id]/c/...).
+  const isChat = segments.some((s) => s === 'c');
   const wide = useWideWidth();
 
   if (!isChat) return null;
@@ -51,7 +53,7 @@ const WidthToggle = () => {
       onClick={() => setWideWidth(!wide)}
       aria-label={wide ? 'Switch to narrow width' : 'Switch to full width'}
       title={wide ? 'Narrow width' : 'Full width'}
-      className="flex items-center justify-center w-full py-2 rounded-lg text-fg/70 hover:text-fg hover:bg-surface-2 duration-150 transition"
+      className="flex items-center justify-center w-full py-2 rounded-surface text-fg/70 hover:text-fg hover:bg-surface-2 duration-150 transition"
     >
       {wide ? <Minimize2 /> : <Maximize2 />}
     </button>
@@ -96,7 +98,9 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
     {
       icon: Home,
       href: '/',
-      active: segments.length === 0 || segments.includes('c'),
+      active:
+        (segments.length === 0 || segments.includes('c')) &&
+        !segments.includes('workspaces'),
       label: 'Home',
       badgeCount: 0,
     },
@@ -128,6 +132,13 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
       label: 'Memory',
       badgeCount: 0,
     },
+    {
+      icon: FolderOpen,
+      href: '/workspaces',
+      active: segments.includes('workspaces'),
+      label: 'Workspaces',
+      badgeCount: 0,
+    },
   ];
 
   return (
@@ -144,18 +155,18 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
                   key={i}
                   href={link.href}
                   className={cn(
-                    'relative flex flex-row items-center justify-center cursor-pointer hover:bg-surface-2 duration-150 transition w-full py-2 rounded-lg',
+                    'relative flex flex-row items-center justify-center cursor-pointer hover:bg-surface-2 duration-150 transition w-full py-2 rounded-surface',
                     link.active ? 'text-fg' : 'text-fg/70',
                   )}
                 >
                   <link.icon />
                   {link.badgeCount > 0 && (
-                    <span className="absolute top-0.5 right-2 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-accent text-white text-[10px] font-bold leading-none px-1">
+                    <span className="absolute top-0.5 right-2 min-w-[18px] h-[18px] flex items-center justify-center rounded-pill bg-accent text-accent-fg text-[10px] font-bold leading-none px-1">
                       {link.badgeCount > 99 ? '99+' : link.badgeCount}
                     </span>
                   )}
                   {link.active && (
-                    <div className="absolute right-0 -mr-2 h-full w-1 rounded-l-lg bg-accent" />
+                    <div className="absolute right-0 -mr-2 h-full w-1 rounded-l-surface bg-accent" />
                   )}
                 </Link>
               ))}
@@ -166,7 +177,7 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
               <WidthToggle />
               <Link
                 href="/settings"
-                className="flex items-center justify-center w-full py-2 rounded-lg text-fg/70 hover:text-fg hover:bg-surface-2 duration-150 transition"
+                className="flex items-center justify-center w-full py-2 rounded-surface text-fg/70 hover:text-fg hover:bg-surface-2 duration-150 transition"
               >
                 <Settings />
               </Link>
@@ -175,7 +186,7 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
         </div>
       </div>
 
-      <div className="fixed bottom-0 w-full z-50 flex flex-row items-center gap-x-6 bg-bg px-4 py-4 shadow-sm lg:hidden">
+      <div className="fixed bottom-0 w-full z-50 flex flex-row items-center gap-x-6 bg-bg px-4 py-4 shadow-resting lg:hidden">
         <NewChatButtonMobile />
         {navLinks.map((link, i) => (
           <Link
@@ -187,12 +198,12 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
             )}
           >
             {link.active && (
-              <div className="absolute top-0 -mt-4 h-1 w-full rounded-b-lg bg-accent" />
+              <div className="absolute top-0 -mt-4 h-1 w-full rounded-b-surface bg-accent" />
             )}
             <div className="relative">
               <link.icon />
               {link.badgeCount > 0 && (
-                <span className="absolute -top-1.5 -right-2.5 min-w-[16px] h-[16px] flex items-center justify-center rounded-full bg-accent text-white text-[9px] font-bold leading-none px-0.5">
+                <span className="absolute -top-1.5 -right-2.5 min-w-[16px] h-[16px] flex items-center justify-center rounded-pill bg-accent text-accent-fg text-[9px] font-bold leading-none px-0.5">
                   {link.badgeCount > 99 ? '99+' : link.badgeCount}
                 </span>
               )}

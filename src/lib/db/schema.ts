@@ -1,5 +1,11 @@
 import { sql } from 'drizzle-orm';
-import { text, integer, sqliteTable } from 'drizzle-orm/sqlite-core';
+import {
+  text,
+  integer,
+  sqliteTable,
+  primaryKey,
+  uniqueIndex,
+} from 'drizzle-orm/sqlite-core';
 
 export const messages = sqliteTable('messages', {
   id: integer('id').primaryKey(),
@@ -50,6 +56,7 @@ export const chats = sqliteTable('chats', {
   pinned: integer('pinned')
     .notNull()
     .default(sql`0`),
+  workspaceId: text('workspace_id'),
 });
 
 export const memories = sqliteTable('memories', {
@@ -73,6 +80,7 @@ export const memories = sqliteTable('memories', {
   updatedAt: integer('updated_at', { mode: 'timestamp' })
     .notNull()
     .$defaultFn(() => new Date()),
+  workspaceId: text('workspace_id'),
 });
 
 export const scheduledTasks = sqliteTable('scheduled_tasks', {
@@ -122,3 +130,65 @@ export const scheduledTasks = sqliteTable('scheduled_tasks', {
     .notNull()
     .$defaultFn(() => new Date()),
 });
+
+export const workspaces = sqliteTable('workspaces', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  name: text('name').notNull(),
+  description: text('description'),
+  color: text('color'),
+  icon: text('icon'),
+  instructions: text('instructions'),
+  sourceUrls: text('source_urls', { mode: 'json' })
+    .$type<string[]>()
+    .default(sql`'[]'`),
+  autoMemoryEnabled: integer('auto_memory_enabled'),
+  autoAcceptFileEdits: integer('auto_accept_file_edits').notNull().default(0),
+  archivedAt: integer('archived_at', { mode: 'timestamp' }),
+  createdAt: integer('created_at', { mode: 'timestamp' })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer('updated_at', { mode: 'timestamp' })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+export const workspaceSystemPrompts = sqliteTable(
+  'workspace_system_prompts',
+  {
+    workspaceId: text('workspace_id').notNull(),
+    systemPromptId: text('system_prompt_id').notNull(),
+    order: integer('order').notNull().default(0),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.workspaceId, t.systemPromptId] }),
+  }),
+);
+
+export const workspaceFiles = sqliteTable(
+  'workspace_files',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text('workspace_id').notNull(),
+    name: text('name').notNull(),
+    mime: text('mime'),
+    size: integer('size').notNull(),
+    sha256: text('sha256').notNull(),
+    autoAcceptEdits: integer('auto_accept_edits'),
+    createdAt: integer('created_at', { mode: 'timestamp' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer('updated_at', { mode: 'timestamp' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => ({
+    uniqWorkspaceName: uniqueIndex('uniq_workspace_file_name').on(
+      t.workspaceId,
+      t.name,
+    ),
+  }),
+);

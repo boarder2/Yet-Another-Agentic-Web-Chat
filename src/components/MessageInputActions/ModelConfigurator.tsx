@@ -144,7 +144,7 @@ export default function ModelConfigurator({
     <>
       <button
         type="button"
-        className="p-1 group flex text-fg/50 rounded-xl hover:bg-surface-2 active:scale-95 transition duration-200 hover:text-fg"
+        className="p-1 group flex text-fg/50 rounded-floating hover:bg-surface-2 active:scale-95 transition duration-200 hover:text-fg"
         onClick={() => setOpen(true)}
         aria-label="Configure models"
       >
@@ -175,7 +175,7 @@ export default function ModelConfigurator({
             leaveFrom="opacity-100"
             leaveTo="opacity-0"
           >
-            <div className="fixed inset-0 bg-black/30" />
+            <div className="fixed inset-0 bg-overlay" />
           </TransitionChild>
 
           <div className="fixed inset-0 flex items-center justify-center p-4">
@@ -188,7 +188,7 @@ export default function ModelConfigurator({
               leaveFrom="opacity-100 translate-y-0"
               leaveTo="opacity-0 translate-y-1"
             >
-              <DialogPanel className="w-full max-w-lg rounded-lg bg-surface border border-surface-2 shadow-lg">
+              <DialogPanel className="w-full max-w-lg rounded-surface bg-surface border border-surface-2 shadow-raised">
                 <div className="px-5 py-4 border-b border-surface-2">
                   <h2 className="text-sm font-semibold text-fg/90">
                     Model Configuration
@@ -211,10 +211,10 @@ export default function ModelConfigurator({
                         checked={linkSystemToChat}
                         onChange={(e) => setLinkSystemToChat(e.target.checked)}
                       />
-                      <div className="w-10 h-5 bg-surface-2 rounded-full peer peer-checked:bg-accent transition-colors relative">
+                      <div className="w-10 h-5 bg-surface-2 rounded-pill peer peer-checked:bg-accent transition-colors relative">
                         <div
                           className={cn(
-                            'absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform',
+                            'absolute top-0.5 left-0.5 w-4 h-4 rounded-pill bg-bg transition-transform',
                             linkSystemToChat
                               ? 'translate-x-5'
                               : 'translate-x-0',
@@ -241,10 +241,10 @@ export default function ModelConfigurator({
                           handleImageCapableChange(e.target.checked)
                         }
                       />
-                      <div className="w-10 h-5 bg-surface-2 rounded-full peer peer-checked:bg-accent transition-colors relative">
+                      <div className="w-10 h-5 bg-surface-2 rounded-pill peer peer-checked:bg-accent transition-colors relative">
                         <div
                           className={cn(
-                            'absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform',
+                            'absolute top-0.5 left-0.5 w-4 h-4 rounded-pill bg-bg transition-transform',
                             imageCapable ? 'translate-x-5' : 'translate-x-0',
                           )}
                         />
@@ -268,7 +268,7 @@ export default function ModelConfigurator({
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-fg/70">System Model</span>
                         {linkSystemToChat && (
-                          <span className="text-[10px] bg-surface px-2 py-0.5 rounded border border-surface-2 text-fg/60">
+                          <span className="text-[10px] bg-surface px-2 py-0.5 rounded-control border border-surface-2 text-fg/60">
                             <Link size={14} />
                           </span>
                         )}
@@ -296,7 +296,7 @@ export default function ModelConfigurator({
                 <div className="px-5 py-3 border-t border-surface-2 flex justify-end gap-2">
                   <button
                     type="button"
-                    className="px-3 py-1.5 text-sm rounded bg-surface-2 hover:bg-surface-3 text-fg/80"
+                    className="px-3 py-1.5 text-sm rounded-control bg-surface-2 hover:bg-surface-3 text-fg/80"
                     onClick={() => setOpen(false)}
                   >
                     Close

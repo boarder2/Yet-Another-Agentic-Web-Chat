@@ -131,8 +131,8 @@ function getSourceForCapability(
 
 const BADGE_STYLES: Record<string, string> = {
   primary: 'bg-accent/20 text-accent',
-  fallback: 'bg-amber-500/20 text-amber-500',
-  unavailable: 'bg-red-500/20 text-red-500',
+  fallback: 'bg-warning-soft text-warning',
+  unavailable: 'bg-danger-soft text-danger',
 };
 
 export default function SearchProvidersSection({
@@ -258,7 +258,7 @@ export default function SearchProvidersSection({
 
       <div className="mt-6">
         <p className="text-sm font-medium mb-2">Capability availability</p>
-        <div className="rounded-lg border border-surface-2 overflow-hidden">
+        <div className="rounded-surface border border-surface-2 overflow-hidden">
           <table className="w-full text-xs">
             <thead className="bg-surface-2/40">
               <tr>
@@ -300,7 +300,7 @@ export default function SearchProvidersSection({
                     <td className="px-3 py-2">{label}</td>
                     <td className="px-3 py-2">
                       <span
-                        className={`px-2 py-0.5 rounded-full ${BADGE_STYLES[regular]}`}
+                        className={`px-2 py-0.5 rounded-pill ${BADGE_STYLES[regular]}`}
                       >
                         {regular}
                       </span>
@@ -310,7 +310,7 @@ export default function SearchProvidersSection({
                         <span className="text-fg/40">not applicable</span>
                       ) : (
                         <span
-                          className={`px-2 py-0.5 rounded-full ${BADGE_STYLES[priv]}`}
+                          className={`px-2 py-0.5 rounded-pill ${BADGE_STYLES[priv]}`}
                         >
                           {priv}
                         </span>

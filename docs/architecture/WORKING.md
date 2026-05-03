@@ -6,11 +6,11 @@ We'll understand how YAAWC works by taking an example of a scenario where a user
 
 1. The message is sent to the `/api/chat` route. The route resolves the selected chat model, system model, and embedding model from the request body and configured providers.
 2. The route creates a `SimplifiedAgent` — a LangGraph React Agent — and passes the `focusMode` (e.g., `webSearch`, `localResearch`, `chat`). The agent selects tools and prompts based on the focus mode:
-   - **Web Search mode**: `web_search`, `url_summarization`, `image_search`, `image_analysis`, `youtube_transcript`, `pdf_loader`, `deep_research`, `todo_list`
+   - **Web Search mode**: `web_search`, `url_fetch`, `image_search`, `image_analysis`, `youtube_transcript`, `pdf_loader`, `deep_research`, `todo_list`
    - **Local Research mode**: `file_search`
    - **Chat mode**: No tools (the agent responds from its training data)
 3. The agent autonomously reasons about the query and decides which tools to invoke. For a factual question like "How does an A.C. work?", it would typically call the `web_search` tool, which queries SearXNG for results.
-4. Search results are returned to the agent, which may then call `url_summarization` to fetch and read specific web pages for deeper content, or invoke additional tools as needed.
+4. Search results are returned to the agent, which may then call `url_fetch` to fetch and read specific web pages for deeper content, or invoke additional tools as needed.
 5. The agent synthesizes all gathered information and streams a response with cited sources back to the user.
 
 ## How are the answers cited?

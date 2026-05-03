@@ -1,4 +1,4 @@
-import { ArrowRight, ArrowUp, Square, X } from 'lucide-react';
+import { ArrowRight, ArrowUp, LoaderCircle, Square, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
 import { File, ImageAttachment } from './ChatWindow';
@@ -207,7 +207,7 @@ const MessageInput = ({
       }}
       className="w-full"
     >
-      <div className="flex flex-col bg-surface px-3 pt-4 pb-2 rounded-lg w-full border border-surface-2">
+      <div className="flex flex-col bg-surface px-3 pt-4 pb-2 rounded-surface w-full border border-surface-2">
         {(pendingImages.length > 0 || isUploadingImage) && (
           <div className="flex flex-row gap-2 mb-2 overflow-x-auto pb-1">
             {pendingImages.map((img) => (
@@ -215,11 +215,11 @@ const MessageInput = ({
                 <img
                   src={`/api/uploads/images/${img.imageId}`}
                   alt={img.fileName}
-                  className="h-20 w-20 object-cover rounded-lg border border-surface-2"
+                  className="h-20 w-20 object-cover rounded-surface border border-surface-2"
                 />
                 <button
                   type="button"
-                  className="absolute -top-1.5 -right-1.5 bg-surface border border-surface-2 rounded-full p-0.5 opacity-0 group-hover/thumb:opacity-100 transition-opacity"
+                  className="absolute -top-1.5 -right-1.5 bg-surface border border-surface-2 rounded-pill p-0.5 opacity-0 group-hover/thumb:opacity-100 transition-opacity"
                   onClick={() =>
                     setPendingImages(
                       pendingImages.filter((i) => i.imageId !== img.imageId),
@@ -232,8 +232,8 @@ const MessageInput = ({
               </div>
             ))}
             {isUploadingImage && (
-              <div className="h-20 w-20 shrink-0 flex items-center justify-center rounded-lg border border-surface-2 bg-surface-2/50">
-                <div className="w-5 h-5 border-2 border-fg/30 border-t-fg animate-spin rounded-full" />
+              <div className="h-20 w-20 shrink-0 flex items-center justify-center rounded-surface border border-surface-2 bg-surface-2/50">
+                <LoaderCircle size={20} className="animate-spin text-accent" />
               </div>
             )}
           </div>
@@ -246,7 +246,7 @@ const MessageInput = ({
             onChange={(e) => setMessage(e.target.value)}
             onPaste={handlePaste}
             minRows={1}
-            className="px-3 py-2 overflow-y-auto flex rounded-lg bg-transparent text-sm resize-none w-full max-h-24 lg:max-h-36 xl:max-h-48"
+            className="px-3 py-2 overflow-y-auto flex rounded-surface bg-transparent text-sm resize-none w-full max-h-24 lg:max-h-36 xl:max-h-48"
             placeholder={
               firstMessage
                 ? 'What would you like to learn today?'
@@ -296,15 +296,18 @@ const MessageInput = ({
             {loading ? (
               <button
                 type="button"
-                className="bg-red-700 text-white hover:bg-red-800 transition duration-100 rounded-full p-2 relative group"
+                className="bg-danger text-danger-fg hover:bg-danger transition duration-100 rounded-pill p-2 relative group"
                 onClick={onCancel}
                 aria-label="Cancel"
               >
                 {loading && (
-                  <div className="absolute inset-0 rounded-full border-2 border-fg/30 border-t-fg animate-spin" />
+                  <LoaderCircle
+                    size={20}
+                    className="absolute inset-0 m-auto animate-spin text-fg/40"
+                  />
                 )}
                 <span className="relative flex items-center justify-center w-4.25 h-4.25">
-                  <Square size={17} className="text-white" />
+                  <Square size={17} className="text-danger-fg" />
                 </span>
               </button>
             ) : (
@@ -313,7 +316,7 @@ const MessageInput = ({
                   <button
                     type="button"
                     onClick={onCancelEdit}
-                    className="p-2 rounded-full border border-surface-2 bg-surface hover:bg-surface-2 transition duration-200 text-fg/80"
+                    className="p-2 rounded-pill border border-surface-2 bg-surface hover:bg-surface-2 transition duration-200 text-fg/80"
                     aria-label="Cancel editing"
                   >
                     <X size={17} />
@@ -323,7 +326,7 @@ const MessageInput = ({
                   disabled={
                     message.trim().length === 0 && pendingImages.length === 0
                   }
-                  className="bg-accent text-white disabled:text-white/50 disabled:bg-accent/20 hover:bg-accent-700 transition duration-100 rounded-full p-2"
+                  className="bg-accent text-accent-fg disabled:text-accent-fg/50 disabled:bg-accent/20 hover:bg-accent-700 transition duration-100 rounded-pill p-2"
                   type="submit"
                 >
                   {firstMessage ? (

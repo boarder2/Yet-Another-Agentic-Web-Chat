@@ -8,6 +8,10 @@ import TodoWidget, { TodoItemData } from './TodoWidget';
 import { Document } from '@langchain/core/documents';
 import { PendingExecution, CodeExecutionApproval } from './CodeExecution';
 import { PendingQuestion, UserQuestionPrompt } from './UserQuestionPrompt';
+import {
+  PendingEditApproval,
+  WorkspaceEditApproval,
+} from './WorkspaceEditApproval';
 
 const Chat = ({
   loading,
@@ -43,11 +47,14 @@ const Chat = ({
   pendingQuestions = {},
   onQuestionAnswer,
   onQuestionSkip,
+  pendingEditApprovals = {},
+  onEditDecide,
   pendingImages,
   setPendingImages,
   imageCapable = false,
   isPrivateSession = false,
   searchCapabilities,
+  topPadding,
 }: {
   messages: Message[];
   sendMessage: (
@@ -123,6 +130,12 @@ const Chat = ({
     response: { selectedOptions?: string[]; freeformText?: string },
   ) => void;
   onQuestionSkip?: (questionId: string) => void;
+  pendingEditApprovals?: Record<string, PendingEditApproval[]>;
+  onEditDecide?: (
+    approvalId: string,
+    decision: 'accept' | 'accept_always' | 'reject' | 'always_prompt',
+    freeformText?: string,
+  ) => void;
   pendingImages: ImageAttachment[];
   setPendingImages: (images: ImageAttachment[]) => void;
   imageCapable?: boolean;
@@ -133,6 +146,8 @@ const Chat = ({
     videos: boolean;
     autocomplete: boolean;
   };
+  /** Top padding in px to clear all fixed header bars above the chat content. */
+  topPadding?: number;
 }) => {
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [manuallyScrolledUp, setManuallyScrolledUp] = useState(false);
@@ -291,7 +306,11 @@ const Chat = ({
   };
 
   return (
-    <div ref={containerRef} className="space-y-6 pt-8 pb-48 sm:mx-4 md:mx-8">
+    <div
+      ref={containerRef}
+      className="space-y-6 pb-48 sm:mx-4 md:mx-8"
+      style={{ paddingTop: topPadding ?? 32 }}
+    >
       {messages.map((msg, i) => {
         const isLast = i === messages.length - 1;
 
@@ -338,7 +357,7 @@ const Chat = ({
           </Fragment>
         );
       })}
-      <div className="fixed bottom-16 lg:bottom-6 z-40" style={inputStyle}>
+      <div className="fixed bottom-16 lg:bottom-0 z-40" style={inputStyle}>
         {/* Scroll to bottom button - appears above the MessageInput when user has scrolled up */}
         {manuallyScrolledUp && !isAtBottom && (
           <div className="absolute -top-14 right-2 z-10">
@@ -348,7 +367,7 @@ const Chat = ({
                 setIsAtBottom(true);
                 messageEnd.current?.scrollIntoView({ behavior: 'smooth' });
               }}
-              className="bg-accent text-fg hover:bg-opacity-85 transition duration-100 rounded-full px-4 py-2 shadow-lg flex items-center justify-center"
+              className="bg-accent text-fg hover:bg-opacity-85 transition duration-100 rounded-pill px-4 py-2 shadow-raised flex items-center justify-center"
               aria-label="Scroll to bottom"
             >
               <svg
@@ -411,6 +430,37 @@ const Chat = ({
               onSkip={onQuestionSkip}
               onDismiss={() => {
                 // Return focus to the message input after question is dismissed
+                setTimeout(() => {
+                  document.getElementById('message-input')?.focus();
+                }, 0);
+              }}
+              queuePosition={1}
+              queueTotal={allPending.length}
+            />
+          );
+        })()}
+        {/* Workspace edit approval queue */}
+        {(() => {
+          const allPending = Object.values(pendingEditApprovals)
+            .flat()
+            .filter((a) => a.status === 'pending');
+          if (allPending.length === 0 || !onEditDecide) return null;
+          const current = allPending[0];
+          return (
+            <WorkspaceEditApproval
+              key={current.approvalId}
+              approvalId={current.approvalId}
+              action={current.action}
+              file={current.file}
+              oldString={current.oldString}
+              newString={current.newString}
+              content={current.content}
+              replaceAll={current.replaceAll}
+              occurrences={current.occurrences}
+              workspaceAutoAccept={current.workspaceAutoAccept}
+              createdAt={current.createdAt}
+              onDecide={onEditDecide}
+              onDismiss={() => {
                 setTimeout(() => {
                   document.getElementById('message-input')?.focus();
                 }, 0);

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import {
   CheckCircle2,
   Circle,
-  Loader2,
+  LoaderCircle,
   ChevronDown,
   ListTodo,
 } from 'lucide-react';
@@ -32,10 +32,13 @@ const TodoWidget = ({ items }: TodoWidgetProps) => {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'completed':
-        return <CheckCircle2 size={14} className="text-green-500 shrink-0" />;
+        return <CheckCircle2 size={14} className="text-success shrink-0" />;
       case 'in_progress':
         return (
-          <Loader2 size={14} className="animate-spin text-accent shrink-0" />
+          <LoaderCircle
+            size={14}
+            className="animate-spin text-accent shrink-0"
+          />
         );
       case 'pending':
       default:
@@ -44,7 +47,7 @@ const TodoWidget = ({ items }: TodoWidgetProps) => {
   };
 
   return (
-    <div className="mb-2 bg-surface border border-surface-2 rounded-lg overflow-hidden shadow-sm">
+    <div className="mb-2 bg-surface border border-surface-2 rounded-surface overflow-hidden shadow-resting">
       {/* Collapsed header */}
       <button
         onClick={() => setExpanded(!expanded)}

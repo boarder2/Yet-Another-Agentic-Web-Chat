@@ -156,7 +156,7 @@ export function UserQuestionPrompt({
   const hasSelection = selectedOptions.size > 0 || freeformText.trim() !== '';
 
   return (
-    <div className="mb-2 border border-surface-2 rounded-xl overflow-hidden bg-surface shadow-lg flex flex-col max-h-[calc(100svh-16rem)] lg:max-h-[calc(100svh-16rem)]">
+    <div className="mb-2 border border-surface-2 rounded-floating overflow-hidden bg-surface shadow-raised flex flex-col max-h-[calc(100svh-16rem)] lg:max-h-[calc(100svh-16rem)]">
       {/* Header */}
       <div className="shrink-0 flex items-center justify-between px-5 py-3 bg-surface-2/70">
         <div className="flex items-center gap-2">
@@ -165,7 +165,7 @@ export function UserQuestionPrompt({
             Agent has a question
           </span>
           {queueTotal && queueTotal > 1 && (
-            <span className="text-xs font-medium text-fg/60 bg-surface-2 px-2 py-0.5 rounded-full">
+            <span className="text-xs font-medium text-fg/60 bg-surface-2 px-2 py-0.5 rounded-pill">
               {queuePosition} of {queueTotal}
             </span>
           )}
@@ -176,7 +176,7 @@ export function UserQuestionPrompt({
           </span>
           <button
             onClick={handleSkip}
-            className="p-1 rounded-md hover:bg-surface-2 transition-colors text-fg/50 hover:text-fg"
+            className="p-1 rounded-control hover:bg-surface-2 transition-colors text-fg/50 hover:text-fg"
             aria-label="Skip"
           >
             <X size={14} />
@@ -201,7 +201,7 @@ export function UserQuestionPrompt({
                 <button
                   key={opt.label}
                   onClick={() => handleOptionToggle(opt.label)}
-                  className={`w-full text-left px-4 py-2.5 rounded-lg border transition-colors text-sm ${
+                  className={`w-full text-left px-4 py-2.5 rounded-surface border transition-colors text-sm ${
                     isSelected
                       ? 'border-accent bg-accent/10 text-fg'
                       : 'border-surface-2 hover:border-fg/20 text-fg/80 hover:text-fg'
@@ -210,13 +210,13 @@ export function UserQuestionPrompt({
                   <div className="flex items-center gap-3">
                     {/* Radio/Checkbox indicator */}
                     <div
-                      className={`flex-shrink-0 w-4 h-4 rounded-${multiSelect ? 'sm' : 'full'} border-2 flex items-center justify-center ${
+                      className={`flex-shrink-0 w-4 h-4 rounded-${multiSelect ? 'sm' : 'pill'} border-2 flex items-center justify-center ${
                         isSelected ? 'border-accent bg-accent' : 'border-fg/30'
                       }`}
                     >
                       {isSelected && (
                         <div
-                          className={`w-1.5 h-1.5 rounded-${multiSelect ? 'sm' : 'full'} bg-white`}
+                          className={`w-1.5 h-1.5 rounded-${multiSelect ? 'sm' : 'pill'} bg-accent-fg`}
                         />
                       )}
                     </div>
@@ -248,7 +248,7 @@ export function UserQuestionPrompt({
                   ? 'Type additional context or an alternative response...'
                   : 'Type your response...'
               }
-              className="w-full bg-surface-2/50 border border-surface-2 rounded-lg px-3 py-2 text-sm text-fg placeholder:text-fg/30 focus:outline-none focus:border-accent resize-none"
+              className="w-full bg-surface-2/50 border border-surface-2 rounded-surface px-3 py-2 text-sm text-fg placeholder:text-fg/30 focus:outline-none focus:border-accent resize-none"
               rows={2}
             />
           </div>
@@ -260,7 +260,7 @@ export function UserQuestionPrompt({
       <div className="flex-shrink-0 flex gap-2 justify-end px-5 py-3 bg-surface border-t border-surface-2">
         <button
           onClick={handleSkip}
-          className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-surface-2 text-fg/70 hover:text-fg hover:bg-surface-2/80 transition-colors"
+          className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-surface bg-surface-2 text-fg/70 hover:text-fg hover:bg-surface-2/80 transition-colors"
         >
           <SkipForward size={14} />
           Skip
@@ -268,9 +268,9 @@ export function UserQuestionPrompt({
         <button
           onClick={handleSubmit}
           disabled={!hasSelection}
-          className={`flex items-center gap-1.5 px-5 py-2 text-sm font-medium rounded-lg transition-colors ${
+          className={`flex items-center gap-1.5 px-5 py-2 text-sm font-medium rounded-surface transition-colors ${
             hasSelection
-              ? 'bg-accent text-white hover:bg-accent/90'
+              ? 'bg-accent text-accent-fg hover:bg-accent/90'
               : 'bg-surface-2 text-fg/30 cursor-not-allowed'
           }`}
         >

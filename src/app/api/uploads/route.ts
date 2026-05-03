@@ -3,11 +3,12 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { getAvailableEmbeddingModelProviders, getAvailableChatModelProviders } from '@/lib/providers';
-import { 
+import {
   getCustomOpenaiApiKey,
   getCustomOpenaiApiUrl,
   getCustomOpenaiModelName,
 } from '@/lib/config';
+import { UPLOADS_DIR } from '@/lib/dataDir';
 import { PDFLoader } from '@langchain/community/document_loaders/fs/pdf';
 import { DocxLoader } from '@langchain/community/document_loaders/fs/docx';
 import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
@@ -25,11 +26,7 @@ interface FileRes {
   fileId: string;
 }
 
-const uploadDir = path.join(process.cwd(), 'uploads');
-
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
+const uploadDir = UPLOADS_DIR;
 
 const splitter = new RecursiveCharacterTextSplitter({
   chunkSize: 500,

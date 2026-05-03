@@ -19,7 +19,7 @@ const CitationLink = ({ number, source, url }: CitationLinkProps) => {
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="bg-surface px-1 rounded ml-1 no-underline text-xs text-fg/70 relative hover:bg-surface-2 transition-colors duration-200 border border-surface-2"
+      className="bg-surface px-1 rounded-control ml-1 no-underline text-xs text-fg/70 relative hover:bg-surface-2 transition-colors duration-200 border border-surface-2"
     >
       {number}
     </a>
@@ -64,7 +64,7 @@ const CitationLink = ({ number, source, url }: CitationLinkProps) => {
                 transform: 'translate(-50%, -100%)',
               }}
             >
-              <div className="bg-surface border rounded-lg border-surface-2 shadow-lg w-96">
+              <div className="bg-surface border rounded-surface border-surface-2 shadow-raised w-96">
                 <MessageSource
                   source={source}
                   className="shadow-none border-none bg-transparent hover:bg-transparent cursor-pointer"

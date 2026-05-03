@@ -236,7 +236,7 @@ const WidgetConfigModal = ({
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <DialogPanel className="w-full lg:max-w-[85vw]  transform overflow-hidden rounded-2xl bg-surface p-6 text-left align-middle shadow-xl transition-all">
+              <DialogPanel className="w-full lg:max-w-[85vw]  transform overflow-hidden rounded-floating bg-surface p-6 text-left align-middle shadow-floating transition-all">
                 <DialogTitle
                   as="h3"
                   className="text-lg font-medium leading-6 text-fg flex items-center justify-between"
@@ -244,7 +244,7 @@ const WidgetConfigModal = ({
                   {editingWidget ? 'Edit Widget' : 'Create New Widget'}
                   <button
                     onClick={handleClose}
-                    className="p-1 hover:bg-surface-2 rounded"
+                    className="p-1 hover:bg-surface-2 rounded-control"
                   >
                     <X size={20} />
                   </button>
@@ -267,7 +267,7 @@ const WidgetConfigModal = ({
                             title: e.target.value,
                           }))
                         }
-                        className="w-full px-3 py-2 border border-surface-2 rounded-md bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+                        className="w-full px-3 py-2 border border-surface-2 rounded-control bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
                         placeholder="Enter widget title..."
                       />
                     </div>
@@ -286,7 +286,7 @@ const WidgetConfigModal = ({
                               onChange={(e) =>
                                 updateSource(index, 'url', e.target.value)
                               }
-                              className="flex-1 px-3 py-2 border border-surface-2 rounded-md bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+                              className="flex-1 px-3 py-2 border border-surface-2 rounded-control bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
                               placeholder="https://example.com"
                             />
                             <select
@@ -298,7 +298,7 @@ const WidgetConfigModal = ({
                                   e.target.value as Source['type'],
                                 )
                               }
-                              className="px-3 py-2 border border-surface-2 rounded-md bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+                              className="px-3 py-2 border border-surface-2 rounded-control bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
                             >
                               <option value="Web Page">Web Page</option>
                               <option value="HTTP Data">HTTP Data</option>
@@ -306,7 +306,7 @@ const WidgetConfigModal = ({
                             {config.sources.length > 1 && (
                               <button
                                 onClick={() => removeSource(index)}
-                                className="p-2 text-red-500 hover:bg-red-50 rounded"
+                                className="p-2 text-danger hover:bg-danger-soft rounded-control"
                               >
                                 <Trash2 size={16} />
                               </button>
@@ -315,7 +315,7 @@ const WidgetConfigModal = ({
                         ))}
                         <button
                           onClick={addSource}
-                          className="flex items-center gap-2 px-3 py-2 text-sm text-accent hover:bg-surface-2 rounded"
+                          className="flex items-center gap-2 px-3 py-2 text-sm text-accent hover:bg-surface-2 rounded-control"
                         >
                           <Plus size={16} />
                           Add Source
@@ -337,7 +337,7 @@ const WidgetConfigModal = ({
                           }))
                         }
                         rows={8}
-                        className="w-full px-3 py-2 border border-surface-2 rounded-md bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+                        className="w-full px-3 py-2 border border-surface-2 rounded-control bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
                         placeholder="Enter your prompt here..."
                       />
                     </div>
@@ -390,7 +390,7 @@ const WidgetConfigModal = ({
                               refreshFrequency: parseInt(e.target.value) || 1,
                             }))
                           }
-                          className="flex-1 px-3 py-2 border border-surface-2 rounded-md bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+                          className="flex-1 px-3 py-2 border border-surface-2 rounded-control bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
                         />
                         <select
                           value={config.refreshUnit}
@@ -402,7 +402,7 @@ const WidgetConfigModal = ({
                                 | 'hours',
                             }))
                           }
-                          className="px-3 py-2 border border-surface-2 rounded-md bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+                          className="px-3 py-2 border border-surface-2 rounded-control bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
                         >
                           <option value="minutes">Minutes</option>
                           <option value="hours">Hours</option>
@@ -422,22 +422,22 @@ const WidgetConfigModal = ({
                           <Switch
                             checked={showThinking}
                             onChange={setShowThinking}
-                            className="bg-surface border border-surface-2 relative inline-flex h-5 w-10 sm:h-6 sm:w-11 items-center rounded-full"
+                            className="bg-surface border border-surface-2 relative inline-flex h-5 w-10 sm:h-6 sm:w-11 items-center rounded-pill"
                           >
                             <span className="sr-only">Show thinking tags</span>
                             <span
                               className={`${
                                 showThinking
-                                  ? 'translate-x-6 bg-purple-600'
+                                  ? 'translate-x-6 bg-accent'
                                   : 'translate-x-1 bg-fg/50'
-                              } inline-block h-3 w-3 sm:h-4 sm:w-4 transform rounded-full transition-all duration-200`}
+                              } inline-block h-3 w-3 sm:h-4 sm:w-4 transform rounded-pill transition-all duration-200`}
                             />
                           </Switch>
                         </div>
                         <button
                           onClick={handlePreview}
                           disabled={isPreviewLoading}
-                          className="flex items-center gap-2 px-3 py-2 bg-accent text-white rounded hover:bg-accent-700 disabled:opacity-50"
+                          className="flex items-center gap-2 px-3 py-2 bg-accent text-accent-fg rounded-control hover:bg-accent-700 disabled:opacity-50"
                         >
                           <Play size={16} />
                           {isPreviewLoading ? 'Loading...' : 'Run Preview'}
@@ -445,7 +445,7 @@ const WidgetConfigModal = ({
                       </div>
                     </div>
 
-                    <div className="h-80 p-4 border border-surface-2 rounded-md bg-surface overflow-y-auto max-w-full">
+                    <div className="h-80 p-4 border border-surface-2 rounded-control bg-surface overflow-y-auto max-w-full">
                       {previewContent ? (
                         <div className="prose prose-sm max-w-full">
                           <MarkdownRenderer
@@ -466,37 +466,37 @@ const WidgetConfigModal = ({
                       <h5 className="font-medium mb-2">Available Variables:</h5>
                       <div className="space-y-1">
                         <div>
-                          <code className="bg-surface-2 px-1 rounded">
+                          <code className="bg-surface-2 px-1 rounded-control">
                             {'{{current_utc_datetime}}'}
                           </code>{' '}
                           - Current UTC date and time
                         </div>
                         <div>
-                          <code className="bg-surface-2 px-1 rounded">
+                          <code className="bg-surface-2 px-1 rounded-control">
                             {'{{current_local_datetime}}'}
                           </code>{' '}
                           - Current local date and time
                         </div>
                         <div>
-                          <code className="bg-surface-2 px-1 rounded">
+                          <code className="bg-surface-2 px-1 rounded-control">
                             {'{{source_content_1}}'}
                           </code>{' '}
                           - Content from first source
                         </div>
                         <div>
-                          <code className="bg-surface-2 px-1 rounded">
+                          <code className="bg-surface-2 px-1 rounded-control">
                             {'{{source_content_2}}'}
                           </code>{' '}
                           - Content from second source
                         </div>
                         <div>
-                          <code className="bg-surface-2 px-1 rounded">
+                          <code className="bg-surface-2 px-1 rounded-control">
                             {'{{source_content_...}}'}
                           </code>{' '}
                           - Content from nth source
                         </div>
                         <div>
-                          <code className="bg-surface-2 px-1 rounded">
+                          <code className="bg-surface-2 px-1 rounded-control">
                             {'{{location}}'}
                           </code>{' '}
                           - Your current location
@@ -510,13 +510,13 @@ const WidgetConfigModal = ({
                 <div className="mt-6 flex justify-end gap-3">
                   <button
                     onClick={handleClose}
-                    className="px-4 py-2 text-sm font-medium text-fg bg-surface hover:bg-surface-2 rounded-md"
+                    className="px-4 py-2 text-sm font-medium text-fg bg-surface hover:bg-surface-2 rounded-control"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleSave}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-accent hover:bg-accent-700 rounded-md"
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-accent-fg bg-accent hover:bg-accent-700 rounded-control"
                   >
                     <Save size={16} />
                     {editingWidget ? 'Update Widget' : 'Create Widget'}

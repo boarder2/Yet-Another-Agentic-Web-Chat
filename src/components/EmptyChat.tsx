@@ -1,8 +1,10 @@
-import { EyeOff, Settings } from 'lucide-react';
+import { Eye, EyeOff, Settings } from 'lucide-react';
 import { File, ImageAttachment } from './ChatWindow';
 import Link from 'next/link';
 import MessageInput from './MessageInput';
 import { cn } from '@/lib/utils';
+
+import WorkspacePicker from './Workspaces/WorkspacePicker';
 
 const EmptyChat = ({
   sendMessage,
@@ -27,6 +29,9 @@ const EmptyChat = ({
   setPendingImages,
   imageCapable = false,
   isPrivateSession = false,
+  workspaceId,
+  selectedWorkspaceId,
+  setSelectedWorkspaceId,
 }: {
   sendMessage: (message: string) => void;
   focusMode: string;
@@ -50,7 +55,11 @@ const EmptyChat = ({
   setPendingImages: (images: ImageAttachment[]) => void;
   imageCapable?: boolean;
   isPrivateSession?: boolean;
+  workspaceId?: string;
+  selectedWorkspaceId?: string | null;
+  setSelectedWorkspaceId?: (id: string | null) => void;
 }) => {
+  const basePath = workspaceId ? `/workspaces/${workspaceId}/c/new` : '/';
   return (
     <div className="relative">
       <div className="absolute w-full flex flex-row items-center justify-end mr-5 mt-5">
@@ -59,23 +68,33 @@ const EmptyChat = ({
         </Link>
       </div>
       <div className="flex flex-col items-center justify-center min-h-screen max-w-screen-sm mx-auto p-2 space-y-4">
-        <div className="flex flex-col items-center justify-center w-full space-y-8">
-          <Link
-            href={isPrivateSession ? '/' : '/?private=1'}
-            className={cn(
-              'flex items-center gap-2 px-4 py-2 rounded-full border text-sm transition-colors',
-              isPrivateSession
-                ? 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400'
-                : 'bg-transparent border-surface-2 text-fg/40 hover:text-fg/70 hover:border-fg/20',
-            )}
-          >
-            <EyeOff size={15} />
-            <span>
-              {isPrivateSession
-                ? 'Private session — no personalization or memories'
-                : 'Start private session'}
-            </span>
-          </Link>
+        <div className="flex flex-col items-center justify-center w-full space-y-2">
+          <div className="flex w-full items-center justify-between px-1">
+            <div>
+              {setSelectedWorkspaceId && (
+                <WorkspacePicker
+                  value={selectedWorkspaceId ?? null}
+                  onChange={setSelectedWorkspaceId}
+                />
+              )}
+            </div>
+            <Link
+              href={isPrivateSession ? basePath : `${basePath}?private=1`}
+              title={
+                isPrivateSession
+                  ? 'Private session — no personalization or memories'
+                  : 'Start private session'
+              }
+              className={cn(
+                'flex items-center px-3 h-8 rounded-pill border text-sm transition-colors',
+                isPrivateSession
+                  ? 'bg-warning-soft border-warning text-warning dark:text-warning'
+                  : 'bg-transparent border-surface-2 text-fg/40 hover:text-fg/70 hover:border-fg/20',
+              )}
+            >
+              {isPrivateSession ? <EyeOff size={15} /> : <Eye size={15} />}
+            </Link>
+          </div>
           <MessageInput
             firstMessage={true}
             loading={false}

@@ -4,16 +4,17 @@ import { useEffect, useRef, useState } from 'react';
 import { updateToolCallMarkup } from '@/lib/utils/toolCallMarkup';
 import { encodeHtmlAttribute } from '@/lib/utils/html';
 import { Document } from '@langchain/core/documents';
-import Navbar from './Navbar';
+import ChatActions from './ChatActions';
 import Chat from './Chat';
 import { PendingExecution } from './CodeExecution';
 import { PendingQuestion } from './UserQuestionPrompt';
+import { PendingEditApproval } from './WorkspaceEditApproval';
 import EmptyChat from './EmptyChat';
 import crypto from 'crypto';
 import { toast } from 'sonner';
 import { useSearchParams, usePathname } from 'next/navigation';
 import { getSuggestions } from '@/lib/actions';
-import { Settings } from 'lucide-react';
+import { LoaderCircle, Settings } from 'lucide-react';
 import Link from 'next/link';
 import NextError from 'next/error';
 import {
@@ -302,6 +303,7 @@ const loadMessages = async (
   setFileIds: (fileIds: string[]) => void,
   setIsPrivateSession?: (isPrivate: boolean) => void,
   setPinned?: (pinned: boolean) => void,
+  setSelectedWorkspaceId?: (id: string | null) => void,
 ) => {
   const res = await fetch(`/api/chats/${chatId}`, {
     method: 'GET',
@@ -359,10 +361,19 @@ const loadMessages = async (
   if (setPinned) {
     setPinned(data.chat.pinned === 1);
   }
+  if (setSelectedWorkspaceId) {
+    setSelectedWorkspaceId(data.chat.workspaceId ?? null);
+  }
   setIsMessagesLoaded(true);
 };
 
-const ChatWindow = ({ id }: { id?: string }) => {
+const ChatWindow = ({
+  id,
+  workspaceId,
+}: {
+  id?: string;
+  workspaceId?: string;
+}) => {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const initialMessage = searchParams.get('q');
@@ -424,6 +435,10 @@ const ChatWindow = ({ id }: { id?: string }) => {
     Record<string, PendingQuestion[]>
   >({});
 
+  const [pendingEditApprovals, setPendingEditApprovals] = useState<
+    Record<string, PendingEditApproval[]>
+  >({});
+
   const [files, setFiles] = useState<File[]>([]);
   const [fileIds, setFileIds] = useState<string[]>([]);
 
@@ -436,6 +451,9 @@ const ChatWindow = ({ id }: { id?: string }) => {
   const [selectedMethodologyId, setSelectedMethodologyId] = useState<
     string | null
   >(null);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(
+    () => workspaceId ?? searchParams.get('workspace'),
+  );
 
   const [isMessagesLoaded, setIsMessagesLoaded] = useState(false);
 
@@ -536,6 +554,7 @@ const ChatWindow = ({ id }: { id?: string }) => {
         setFileIds,
         setIsPrivateSession,
         setPinned,
+        setSelectedWorkspaceId,
       );
     } else if (!chatId) {
       setNewChatCreated(true);
@@ -559,8 +578,13 @@ const ChatWindow = ({ id }: { id?: string }) => {
     if (prevSearchParamsRef.current === searchParams) return;
     prevSearchParamsRef.current = searchParams;
 
-    // Only act when we're on the root path (not a /c/... chat)
-    if (pathname !== '/' || id) return;
+    // Only act when we're on a new-chat page (root or workspace), not an existing chat
+    if (id || (pathname !== '/' && !workspaceId)) return;
+
+    // Skip when a message is in flight — replaceState drops ?private=1 from
+    // the URL when the chat URL is created, which would otherwise cause a
+    // spurious reset that clears the messages being streamed.
+    if (loading) return;
 
     const isPriv = searchParams.get('private') === '1';
     setMessages([]);
@@ -581,7 +605,7 @@ const ChatWindow = ({ id }: { id?: string }) => {
     setIsPrivateSession(isPriv);
     setChatId(crypto.randomBytes(20).toString('hex'));
     document.title = 'Chat - YAAWC';
-  }, [searchParams, pathname, id]);
+  }, [searchParams, pathname, id, workspaceId, loading]);
 
   // Reset to a fresh chat when the user navigates back to "/" (e.g. via the
   // sidebar "new chat" Link).  window.history.replaceState is used earlier to
@@ -611,6 +635,7 @@ const ChatWindow = ({ id }: { id?: string }) => {
       document.title = 'Chat - YAAWC';
     }
     prevPathnameRef.current = pathname;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname, id]);
 
   useEffect(() => {
@@ -718,7 +743,10 @@ const ChatWindow = ({ id }: { id?: string }) => {
 
     // If this is a new chat (no chatId in URL), replace the URL to include the new chatId
     if (messages.length <= 1) {
-      window.history.replaceState({}, '', `/c/${chatId}`);
+      const newUrl = workspaceId
+        ? `/workspaces/${workspaceId}/c/${chatId}`
+        : `/c/${chatId}`;
+      window.history.replaceState({}, '', newUrl);
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1351,6 +1379,52 @@ const ChatWindow = ({ id }: { id?: string }) => {
         return;
       }
 
+      if (data.type === 'workspace_edit_approval_pending') {
+        setPendingEditApprovals((prev) => ({
+          ...prev,
+          [data.messageId]: [
+            ...(prev[data.messageId] ?? []),
+            {
+              approvalId: data.data.approvalId,
+              toolCallId: data.data.toolCallId,
+              action: data.data.action,
+              workspaceId: data.data.workspaceId,
+              fileId: data.data.fileId,
+              file: data.data.file,
+              oldString: data.data.oldString,
+              newString: data.data.newString,
+              content: data.data.content,
+              replaceAll: data.data.replaceAll,
+              occurrences: data.data.occurrences,
+              workspaceAutoAccept: data.data.workspaceAutoAccept,
+              fileAutoAccept: data.data.fileAutoAccept,
+              createdAt: data.data.createdAt,
+              status: 'pending' as const,
+            },
+          ],
+        }));
+        setScrollTrigger((prev) => prev + 1);
+        return;
+      }
+
+      if (data.type === 'workspace_edit_approval_answered') {
+        setPendingEditApprovals((prev) => ({
+          ...prev,
+          [data.messageId]: (prev[data.messageId] ?? []).map((a) =>
+            a.approvalId === data.data.approvalId
+              ? {
+                  ...a,
+                  status: (data.data.decision === 'reject' ||
+                  data.data.decision === 'always_prompt'
+                    ? 'rejected'
+                    : 'accepted') as 'accepted' | 'rejected',
+                }
+              : a,
+          ),
+        }));
+        return;
+      }
+
       if (data.type === 'response') {
         // Add to buffer instead of immediately updating UI
         messageBuffer += data.data;
@@ -1569,6 +1643,14 @@ const ChatWindow = ({ id }: { id?: string }) => {
       payload.isPrivate = true;
     }
 
+    if (selectedWorkspaceId) {
+      payload.workspaceId = selectedWorkspaceId;
+    }
+
+    if (imageCapable) {
+      payload.imageCapable = true;
+    }
+
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: {
@@ -1706,7 +1788,7 @@ const ChatWindow = ({ id }: { id?: string }) => {
       <div>
         {messages.length > 0 ? (
           <>
-            <Navbar
+            <ChatActions
               chatId={chatId!}
               messages={messages}
               isPrivateSession={isPrivateSession}
@@ -1763,7 +1845,10 @@ const ChatWindow = ({ id }: { id?: string }) => {
               pendingQuestions={pendingQuestions}
               onQuestionAnswer={async (
                 questionId: string,
-                response: { selectedOptions?: string[]; freeformText?: string },
+                response: {
+                  selectedOptions?: string[];
+                  freeformText?: string;
+                },
               ) => {
                 setPendingQuestions((prev) => {
                   const updated: Record<string, PendingQuestion[]> = {};
@@ -1814,6 +1899,65 @@ const ChatWindow = ({ id }: { id?: string }) => {
                   );
                 }
               }}
+              pendingEditApprovals={pendingEditApprovals}
+              onEditDecide={async (
+                approvalId: string,
+                decision:
+                  | 'accept'
+                  | 'accept_always'
+                  | 'reject'
+                  | 'always_prompt',
+                freeformText?: string,
+              ) => {
+                setPendingEditApprovals((prev) => {
+                  const updated: Record<string, PendingEditApproval[]> = {};
+                  for (const [msgId, approvals] of Object.entries(prev)) {
+                    updated[msgId] = approvals.map((a) =>
+                      a.approvalId === approvalId
+                        ? {
+                            ...a,
+                            status: (decision === 'reject' ||
+                            decision === 'always_prompt'
+                              ? 'rejected'
+                              : 'accepted') as 'accepted' | 'rejected',
+                          }
+                        : a,
+                    );
+                  }
+                  return updated;
+                });
+                // Find the workspaceId for this approval
+                let workspaceId: string | undefined;
+                for (const approvals of Object.values(pendingEditApprovals)) {
+                  const found = approvals.find(
+                    (a) => a.approvalId === approvalId,
+                  );
+                  if (found) {
+                    workspaceId = found.workspaceId;
+                    break;
+                  }
+                }
+                if (!workspaceId) return;
+                try {
+                  const res = await fetch(
+                    `/api/workspaces/${workspaceId}/file-edit-approval`,
+                    {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        approvalId,
+                        decision,
+                        freeformText,
+                      }),
+                    },
+                  );
+                  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                } catch {
+                  toast.error(
+                    'Failed to send edit decision. The agent will continue on its own.',
+                  );
+                }
+              }}
               pendingImages={pendingImages}
               setPendingImages={setPendingImages}
               imageCapable={imageCapable}
@@ -1848,28 +1992,18 @@ const ChatWindow = ({ id }: { id?: string }) => {
             setPendingImages={setPendingImages}
             imageCapable={imageCapable}
             isPrivateSession={isPrivateSession}
+            workspaceId={workspaceId}
+            selectedWorkspaceId={selectedWorkspaceId}
+            setSelectedWorkspaceId={
+              workspaceId ? undefined : setSelectedWorkspaceId
+            }
           />
         )}
       </div>
     )
   ) : (
     <div className="flex flex-row items-center justify-center min-h-screen">
-      <svg
-        aria-hidden="true"
-        className="w-8 h-8 text-fg/20 fill-fg/30 animate-spin"
-        viewBox="0 0 100 101"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <path
-          d="M100 50.5908C100.003 78.2051 78.1951 100.003 50.5908 100C22.9765 99.9972 0.997224 78.018 1 50.4037C1.00281 22.7993 22.8108 0.997224 50.4251 1C78.0395 1.00281 100.018 22.8108 100 50.4251ZM9.08164 50.594C9.06312 73.3997 27.7909 92.1272 50.5966 92.1457C73.4023 92.1642 92.1298 73.4365 92.1483 50.6308C92.1669 27.8251 73.4392 9.0973 50.6335 9.07878C27.8278 9.06026 9.10003 27.787 9.08164 50.594Z"
-          fill="currentColor"
-        />
-        <path
-          d="M93.9676 39.0409C96.393 38.4037 97.8624 35.9116 96.9801 33.5533C95.1945 28.8227 92.871 24.3692 90.0681 20.348C85.6237 14.1775 79.4473 9.36872 72.0454 6.45794C64.6435 3.54717 56.3134 2.65431 48.3133 3.89319C45.869 4.27179 44.3768 6.77534 45.014 9.20079C45.6512 11.6262 48.1343 13.0956 50.5786 12.717C56.5073 11.8281 62.5542 12.5399 68.0406 14.7911C73.527 17.0422 78.2187 20.7487 81.5841 25.4923C83.7976 28.5886 85.4467 32.059 86.4416 35.7474C87.1273 38.1189 89.5423 39.6781 91.9676 39.0409Z"
-          fill="currentFill"
-        />
-      </svg>
+      <LoaderCircle size={32} className="animate-spin text-accent" />
     </div>
   );
 };

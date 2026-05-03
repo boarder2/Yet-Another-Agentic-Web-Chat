@@ -153,7 +153,9 @@ export const POST = async (req: Request) => {
 
     const updatedConfig = {
       GENERAL: {
-        HIDDEN_MODELS: config.hiddenModels || [],
+        ...(config.hiddenModels !== undefined && {
+          HIDDEN_MODELS: config.hiddenModels,
+        }),
         ...(config.privateSessionDurationMinutes !== undefined && {
           PRIVATE_SESSION_DURATION_MINUTES:
             config.privateSessionDurationMinutes,

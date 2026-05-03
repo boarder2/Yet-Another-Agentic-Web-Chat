@@ -87,6 +87,7 @@ export async function processExtraction(
   systemModel: BaseChatModel,
   embeddingModel: CachedEmbeddings,
   sourceChatId?: string,
+  workspaceId?: string | null,
 ): Promise<ExtractionResult> {
   const result: ExtractionResult = {
     saved: 0,
@@ -269,6 +270,7 @@ export async function processExtraction(
           category,
           sourceType: 'automatic',
           sourceChatId: sourceChatId ?? null,
+          workspaceId: workspaceId ?? null,
           createdAt: now,
           updatedAt: now,
         })

@@ -111,6 +111,7 @@ export const saveMemoryTool = tool(
       const id = crypto.randomUUID();
       const now = new Date();
       const chatId = config?.configurable?.chatId;
+      const workspaceId = config?.configurable?.workspaceId ?? null;
 
       await db
         .insert(memories)
@@ -122,6 +123,7 @@ export const saveMemoryTool = tool(
           category,
           sourceType: 'automatic',
           sourceChatId: chatId ?? null,
+          workspaceId,
           createdAt: now,
           updatedAt: now,
         })

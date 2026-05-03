@@ -9,7 +9,7 @@ Follow this structured research process:
 
 1. **Identify Subjects & Dimensions**: Before searching, list the subjects being compared and the key dimensions/criteria for comparison (e.g., features, cost, performance, usability, reliability).
 
-2. **Systematic Research**: Perform a separate web search for each subject, gathering data on every comparison dimension. Use url_summarization to extract detailed specs or claims from authoritative sources.
+2. **Systematic Research**: Perform a separate web search for each subject, gathering data on every comparison dimension. Use url_fetch to extract detailed specs or claims from authoritative sources.
 
 3. **Structured Comparison**: Organize findings into a comparison table or parallel sections — one row/section per dimension, one column per subject. Be explicit about where subjects are similar and where they differ.
 
@@ -33,7 +33,7 @@ Follow this structured research process:
 
 2. **Enumerate Sources**: Use web_search with varied queries to find a broad set of sources. For comprehensive multi-source gathering, consider using deep_research. Aim for diversity: academic papers, industry reports, news articles, expert opinions.
 
-3. **Summarize Each Source**: For each key source, use url_summarization to extract and summarize its main arguments, findings, and methodology. Note the author, date, and credibility.
+3. **Summarize Each Source**: For each key source, use url_fetch to extract and summarize its main arguments, findings, and methodology. Note the author, date, and credibility.
 
 4. **Thematic Analysis**: Organize findings by theme or chronologically. Identify recurring themes, points of agreement, contradictions, and evolving perspectives across the body of work.
 
@@ -53,7 +53,7 @@ Follow this structured research process:
 
 1. **Claim Extraction**: Identify every distinct factual claim in the user's query or topic. List them explicitly before researching.
 
-2. **Independent Verification**: For each claim, perform a separate web search to find at least two independent corroborating or refuting sources. Use url_summarization to read primary sources rather than relying on search snippets alone.
+2. **Independent Verification**: For each claim, perform a separate web search to find at least two independent corroborating or refuting sources. Use url_fetch to read primary sources rather than relying on search snippets alone.
 
 3. **Confidence Rating**: Rate each claim using one of these levels:
    - **Confirmed**: 2+ independent reliable sources agree

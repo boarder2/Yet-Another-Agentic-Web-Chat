@@ -40,7 +40,7 @@ You have been assigned a specific, focused research subtask as part of a larger 
 
 ## Research Approach
 1. **Start with web_search** to discover relevant sources and get an initial understanding of the topic.
-2. **Prioritize full content retrieval**: After identifying promising sources from web_search results, use url_summarization to retrieve and read the full content. Web search snippets are often incomplete — always prefer reading full sources before drawing conclusions or executing additional searches.
+2. **Prioritize full content retrieval**: After identifying promising sources from web_search results, use url_fetch to retrieve and read the full content. Web search snippets are often incomplete — always prefer reading full sources before drawing conclusions or executing additional searches.
 3. Use image_search when visual information would enhance understanding
 4. **Research cycle**: Search → Retrieve full content from best sources → Refine understanding → Search for gaps → Retrieve more full content. Read full source content between searches — depth comes from reading, not from running more queries.
 5. Be thorough but efficient - aim for depth without redundancy
@@ -60,7 +60,7 @@ You have been assigned a specific, focused research subtask as part of a larger 
 Begin researching your assigned task now.`,
     allowedTools: [
       'web_search',
-      'url_summarization',
+      'url_fetch',
       'image_search',
       'image_analysis',
       'youtube_transcript',

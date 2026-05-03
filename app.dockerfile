@@ -1,4 +1,4 @@
-FROM node:22-slim AS builder
+FROM node:24-slim AS builder
 
 WORKDIR /home/yaawc
 
@@ -17,7 +17,7 @@ RUN yarn build
 RUN yarn add --dev @vercel/ncc
 RUN yarn ncc build ./src/lib/db/migrate.ts -o migrator
 
-FROM node:22-slim
+FROM node:24-slim
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
@@ -34,8 +34,7 @@ COPY --from=builder /home/yaawc/migrator/index.js ./migrate.js
 
 COPY entrypoint.sh ./entrypoint.sh
 
-RUN mkdir /home/yaawc/uploads && \
-    chown -R node:node /home/yaawc && \
+RUN chown -R node:node /home/yaawc && \
     chmod +x /home/yaawc/entrypoint.sh && \
     npm install playwright -g --no-fund --no-audit && \
     npx playwright install-deps chromium && \
@@ -46,6 +45,8 @@ RUN mkdir /home/yaawc/uploads && \
 
 # Configure the container to run in an unprivileged mode
 USER node
+
+COPY --from=builder /home/yaawc/node_modules/onnxruntime-node/bin /home/yaawc/node_modules/onnxruntime-node/bin
 
 # Install Playwright and its dependencies
 RUN npx -y playwright install chromium --only-shell && \

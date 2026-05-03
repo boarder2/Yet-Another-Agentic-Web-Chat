@@ -26,14 +26,14 @@ export function buildWebSearchPrompt(
       : '- When the conversation history leaves any gaps, use web search to fill them — all prior knowledge benefits from verification with current sources.';
 
   const explicitUrlInstruction = hasExplicitUrls
-    ? `- The user query contains explicit URL${uniqueUrls.length === 1 ? '' : 's'} — retrieve them directly with url_summarization before answering.\n    - Pass URLs exactly as provided to preserve their integrity.\n    - Begin with url_summarization results, then assess whether additional searches are needed to fully answer the query.`
+    ? `- The user query contains explicit URL${uniqueUrls.length === 1 ? '' : 's'} — retrieve them directly with url_fetch before answering.\n    - Pass URLs exactly as provided to preserve their integrity.\n    - Begin with url_fetch results, then assess whether additional searches are needed to fully answer the query.`
     : '';
 
   const defaultStrategy = `# Research Strategy
 1. **Plan**:
     - Break down queries into manageable components
     - For multi-part queries, use 2-4 parallel deep_research subagents and todo_list
-    - For simple queries, use web_search and url_summarization as primary content gathering tools
+    - For simple queries, use web_search and url_fetch as primary content gathering tools
 
 2. **Clarify**: Decide what, if anything, you need to ask the user to clarify before researching. Use the \`ask_user\` tool for this purpose. Ask the user when:
     - The user's request is ambiguous and could lead to significantly different outcomes

@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Cpu, ChevronDown, ChevronRight, RefreshCw } from 'lucide-react';
+import {
+  Cpu,
+  ChevronDown,
+  ChevronRight,
+  LoaderCircle,
+  RefreshCw,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   Popover,
@@ -195,7 +201,7 @@ const ModelSelector = ({
           <div className="relative">
             <PopoverButton
               type="button"
-              className="p-2 group flex text-fg/50 rounded-xl hover:bg-surface-2 active:scale-95 transition duration-200 hover:text-fg"
+              className="p-2 group flex text-fg/50 rounded-floating hover:bg-surface-2 active:scale-95 transition duration-200 hover:text-fg"
             >
               <Cpu size={18} />
               {showModelName && (
@@ -230,7 +236,7 @@ const ModelSelector = ({
             leaveTo="opacity-0 translate-y-1"
           >
             <PopoverPanel className="absolute z-10 w-72 transform bottom-full mb-2">
-              <div className="overflow-hidden rounded-lg shadow-lg bg-surface border border-surface-2 divide-y divide-surface-2">
+              <div className="overflow-hidden rounded-surface shadow-raised bg-surface border border-surface-2 divide-y divide-surface-2">
                 <div className="px-4 py-3 flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
                     <h3 className="text-sm font-medium text-fg/90">
@@ -246,7 +252,7 @@ const ModelSelector = ({
                   </div>
                   <button
                     type="button"
-                    className="p-1.5 rounded-md hover:bg-surface-2 text-fg/60 hover:text-fg transition"
+                    className="p-1.5 rounded-control hover:bg-surface-2 text-fg/60 hover:text-fg transition"
                     title="Refresh models"
                     disabled={refreshing || loading}
                     onClick={(e) => {
@@ -254,10 +260,14 @@ const ModelSelector = ({
                       fetchModels(true);
                     }}
                   >
-                    <RefreshCw
-                      size={14}
-                      className={cn(refreshing && 'animate-spin')}
-                    />
+                    {refreshing ? (
+                      <LoaderCircle
+                        size={14}
+                        className="animate-spin text-accent"
+                      />
+                    ) : (
+                      <RefreshCw size={14} />
+                    )}
                   </button>
                 </div>
                 <div className="max-h-72 overflow-y-auto">
@@ -341,7 +351,7 @@ const ModelSelector = ({
                                       modelOption.provider &&
                                       selectedModel?.model ===
                                         modelOption.model && (
-                                        <div className="ml-auto bg-accent text-white text-xs px-1.5 py-0.5 rounded">
+                                        <div className="ml-auto bg-accent text-accent-fg text-xs px-1.5 py-0.5 rounded-control">
                                           Active
                                         </div>
                                       )}

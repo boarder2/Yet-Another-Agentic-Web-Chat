@@ -18,7 +18,7 @@ export default function TokenPill({
   return (
     <div
       className={cn(
-        'px-2 py-1 rounded-full border whitespace-nowrap text-xs',
+        'px-2 py-1 rounded-pill border whitespace-nowrap text-xs',
         highlight ? 'border-accent text-accent' : 'border-surface-2',
       )}
       title={title ?? `${label} tokens`}

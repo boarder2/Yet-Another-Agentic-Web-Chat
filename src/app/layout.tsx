@@ -42,7 +42,7 @@ export default function RootLayout({
               unstyled: true,
               classNames: {
                 toast:
-                  'bg-surface text-fg rounded-lg p-4 flex flex-row items-center space-x-2',
+                  'bg-surface text-fg rounded-surface p-4 flex flex-row items-center space-x-2',
               },
             }}
           />

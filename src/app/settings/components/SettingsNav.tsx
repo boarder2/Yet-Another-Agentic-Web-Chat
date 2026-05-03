@@ -18,9 +18,9 @@ export function MobileSettingsNav({
             key={section.key}
             onClick={() => onSelect(section.key)}
             className={cn(
-              'whitespace-nowrap px-3 py-1.5 rounded-full text-sm border transition-colors',
+              'whitespace-nowrap px-3 py-1.5 rounded-pill text-sm border transition-colors',
               activeSection === section.key
-                ? 'bg-accent text-white border-accent'
+                ? 'bg-accent text-accent-fg border-accent'
                 : 'bg-surface border-surface-2 text-fg/70 hover:text-fg',
             )}
           >
@@ -61,7 +61,7 @@ export function DesktopSettingsNav({
                 key={section.key}
                 onClick={() => onSelect(section.key)}
                 className={cn(
-                  'w-full text-left px-3 py-2 rounded-lg text-sm transition-colors',
+                  'w-full text-left px-3 py-2 rounded-surface text-sm transition-colors',
                   activeSection === section.key
                     ? 'bg-surface-2 text-fg font-medium'
                     : 'text-fg/70 hover:bg-surface hover:text-fg',

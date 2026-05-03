@@ -34,10 +34,10 @@ const Focus = ({
   );
 
   return (
-    <div className="rounded-xl transition duration-200">
+    <div className="rounded-floating transition duration-200">
       <div className="flex flex-row items-center space-x-1">
         <div className="relative">
-          <div className="flex items-center border border-surface-2 rounded-lg overflow-hidden">
+          <div className="flex items-center border border-surface-2 rounded-surface overflow-hidden">
             {/* Web Search Mode Icon */}
             <button
               type="button"
@@ -105,7 +105,7 @@ const Focus = ({
           {/* Web Search Mode Tooltip */}
           {showWebSearchTooltip && (
             <div className="absolute z-20 bottom-[100%] mb-2 left-0 animate-in fade-in-0 duration-150">
-              <div className="bg-surface border rounded-lg border-surface-2 p-4 w-80 shadow-lg">
+              <div className="bg-surface border rounded-surface border-surface-2 p-4 w-80 shadow-raised">
                 <div className="flex items-center space-x-2 mb-2">
                   <Globe size={16} className="text-accent" />
                   <h3 className="font-medium text-sm text-left">
@@ -122,7 +122,7 @@ const Focus = ({
           {/* Chat Mode Tooltip */}
           {showChatTooltip && (
             <div className="absolute z-20 bottom-[100%] mb-2 left-0 transform animate-in fade-in-0 duration-150">
-              <div className="bg-surface border rounded-lg border-surface-2 p-4 w-80 shadow-lg">
+              <div className="bg-surface border rounded-surface border-surface-2 p-4 w-80 shadow-raised">
                 <div className="flex items-center space-x-2 mb-2">
                   <MessageCircle size={16} className="text-accent" />
                   <h3 className="font-medium text-sm text-left">
@@ -139,7 +139,7 @@ const Focus = ({
           {/* Local Research Mode Tooltip */}
           {showLocalResearchTooltip && (
             <div className="absolute z-20 bottom-[100%] mb-2 left-0 animate-in fade-in-0 duration-150">
-              <div className="bg-surface border rounded-lg border-surface-2 p-4 w-80 shadow-lg">
+              <div className="bg-surface border rounded-surface border-surface-2 p-4 w-80 shadow-raised">
                 <div className="flex items-center space-x-2 mb-2">
                   <Pencil size={16} className="text-accent" />
                   <h3 className="font-medium text-sm text-left">

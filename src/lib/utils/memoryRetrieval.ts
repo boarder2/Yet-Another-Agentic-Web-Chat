@@ -2,7 +2,7 @@ import db from '@/lib/db';
 import { memories } from '@/lib/db/schema';
 import { CachedEmbeddings } from './cachedEmbeddings';
 import computeSimilarity from './computeSimilarity';
-import { eq } from 'drizzle-orm';
+import { eq, isNull, or } from 'drizzle-orm';
 
 export type ScoredMemory = {
   id: string;
@@ -18,15 +18,26 @@ export type ScoredMemory = {
 export async function retrieveRelevantMemories(
   queryText: string,
   embeddingModel: CachedEmbeddings,
-  options?: { limit?: number; threshold?: number },
+  options?: { limit?: number; threshold?: number; workspaceId?: string | null },
 ): Promise<ScoredMemory[]> {
   const limit = options?.limit ?? 10;
   const threshold = options?.threshold ?? 0.5;
+  const workspaceId = options?.workspaceId ?? null;
 
   const queryEmbedding = await embeddingModel.embedQuery(queryText);
   const embeddingIdentifier = embeddingModel.getIdentifier();
 
-  const allMemories = await db.select().from(memories).all();
+  // Workspace chats: global + workspace-scoped memories.
+  // Non-workspace chats: global memories only.
+  const whereCondition = workspaceId
+    ? or(isNull(memories.workspaceId), eq(memories.workspaceId, workspaceId))
+    : isNull(memories.workspaceId);
+
+  const allMemories = await db
+    .select()
+    .from(memories)
+    .where(whereCondition)
+    .all();
 
   const scored: ScoredMemory[] = [];
   for (const memory of allMemories) {

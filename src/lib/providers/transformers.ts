@@ -1,4 +1,4 @@
-import { HuggingFaceTransformersEmbeddings } from '../huggingfaceTransformer';
+import { HuggingFaceTransformersEmbeddings } from '@langchain/community/embeddings/huggingface_transformers';
 
 export const PROVIDER_INFO = {
   key: 'transformers',
@@ -8,22 +8,22 @@ export const PROVIDER_INFO = {
 export const loadTransformersEmbeddingsModels = async () => {
   try {
     const embeddingModels = {
-      'xenova-bge-small-en-v1.5': {
-        displayName: 'BGE Small',
+      'all-MiniLM-L6-v2': {
+        displayName: 'All MiniLM L6 v2',
         model: new HuggingFaceTransformersEmbeddings({
-          modelName: 'Xenova/bge-small-en-v1.5',
+          model: 'Xenova/all-MiniLM-L6-v2',
         }),
       },
-      'xenova-gte-small': {
-        displayName: 'GTE Small',
+      'mxbai-embed-large-v1': {
+        displayName: 'MXBAI Embed Large v1',
         model: new HuggingFaceTransformersEmbeddings({
-          modelName: 'Xenova/gte-small',
+          model: 'mixedbread-ai/mxbai-embed-large-v1',
         }),
       },
-      'xenova-bert-base-multilingual-uncased': {
-        displayName: 'Bert Multilingual',
+      'nomic-embed-text-v1.5': {
+        displayName: 'Nomic Embed Text v1.5',
         model: new HuggingFaceTransformersEmbeddings({
-          modelName: 'Xenova/bert-base-multilingual-uncased',
+          model: 'nomic-ai/nomic-embed-text-v1.5',
         }),
       },
     };

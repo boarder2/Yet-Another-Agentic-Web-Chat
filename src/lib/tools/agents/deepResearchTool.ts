@@ -20,7 +20,7 @@ const DeepResearchToolSchema = z.object({
  * DeepResearchTool - Spawns a focused research subagent for comprehensive investigation
  *
  * This tool creates a SubagentExecutor that runs an independent SimplifiedAgent
- * instance with web research tools (web_search, url_summarization, image_search,
+ * instance with web research tools (web_search, url_fetch, image_search,
  * youtube_transcript, pdf_loader). The subagent does NOT have access to deep_research
  * itself, preventing recursion.
  *

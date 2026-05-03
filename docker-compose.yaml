@@ -18,17 +18,16 @@ services:
     init: true
     environment:
       - SEARXNG_API_URL=http://searxng:8080
-      - DATA_DIR=/home/yaawc
+      - DATA_DIR=/home/yaawc/data
     ports:
       - 3000:3000
     networks:
       - yaawc-network
     volumes:
-      - backend-dbstore:/home/yaawc/data
-      - uploads:/home/yaawc/uploads
-      - ./config.toml:/home/yaawc/config.toml
-      # Persist deep research artifacts between runs (optional)
-      - deep_research:/home/yaawc/storage/deep_research
+      - app-data:/home/yaawc/data # single user-data volume
+      - ./config.toml:/home/yaawc/config.toml # config bind mount (unchanged)
+      # Legacy: drains old uploads into app-data on first start. Remove next release.
+      - uploads:/home/yaawc/uploads-legacy
       # Uncomment below to enable sandboxed code execution.
       # The app creates sibling containers on the host Docker daemon.
       # See README.md "Code Execution (Sandbox)" for permission setup.
@@ -43,6 +42,5 @@ networks:
   yaawc-network:
 
 volumes:
-  backend-dbstore:
-  uploads:
-  deep_research:
+  app-data:
+  uploads: # legacy, remove next release

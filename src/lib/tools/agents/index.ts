@@ -10,7 +10,7 @@
 import { simpleWebSearchTool } from './simpleWebSearchTool';
 import { fileSearchTool } from './fileSearchTool';
 import { imageSearchTool } from './imageSearchTool';
-import { urlSummarizationTool } from './urlSummarizationTool';
+import { urlFetchTool } from './urlFetchTool';
 import { youtubeTranscriptTool } from './youtubeTranscriptTool';
 import { pdfLoaderTool } from './pdfLoaderTool';
 import { deepResearchTool } from './deepResearchTool';
@@ -22,6 +22,7 @@ import { codeExecutionTool } from './codeExecutionTool';
 import { askUserTool } from './askUserTool';
 
 export { simpleWebSearchTool };
+export { urlFetchTool };
 export { fileSearchTool };
 export { imageSearchTool };
 export { imageAnalysisTool };
@@ -37,7 +38,7 @@ export { askUserTool };
 export const allAgentTools = [
   simpleWebSearchTool,
   fileSearchTool,
-  urlSummarizationTool,
+  urlFetchTool,
   imageSearchTool,
   imageAnalysisTool,
   youtubeTranscriptTool,
@@ -48,7 +49,7 @@ export const allAgentTools = [
 
 export const webSearchTools = [
   simpleWebSearchTool,
-  urlSummarizationTool,
+  urlFetchTool,
   imageSearchTool,
   imageAnalysisTool,
   youtubeTranscriptTool,

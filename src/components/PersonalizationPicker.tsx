@@ -68,7 +68,7 @@ const PopoverContent = ({
     <>
       <PopoverButton
         className={cn(
-          'flex items-center gap-1 rounded-lg text-sm transition-colors duration-150 focus:outline-none focus-visible:ring-2 p-1',
+          'flex items-center gap-1 rounded-surface text-sm transition-colors duration-150 focus:outline-none focus-visible:ring-2 p-1',
           sendLocation || sendPersonalization
             ? 'text-accent hover:text-accent'
             : 'text-fg/60 hover:text-fg/30',
@@ -87,7 +87,7 @@ const PopoverContent = ({
         leaveTo="opacity-0 translate-y-1"
       >
         <PopoverPanel className="absolute right-0 z-30 w-80 transform bottom-full mb-2">
-          <div className="overflow-hidden rounded-lg shadow-lg ring-1 ring-surface-2 bg-surface">
+          <div className="overflow-hidden rounded-surface shadow-raised ring-1 ring-surface-2 bg-surface">
             <div className="px-4 py-3 border-b border-surface-2 flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-medium text-fg/90">
@@ -122,7 +122,7 @@ const PopoverContent = ({
                         ? 'bg-accent'
                         : 'bg-surface-2',
                       !hasLocation && 'opacity-40 cursor-not-allowed',
-                      'relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none',
+                      'relative inline-flex h-5 w-9 items-center rounded-pill transition-colors focus:outline-none',
                     )}
                   >
                     <span
@@ -130,7 +130,7 @@ const PopoverContent = ({
                         sendLocation && hasLocation
                           ? 'translate-x-5'
                           : 'translate-x-1',
-                        'inline-block h-3 w-3 transform rounded-full bg-white transition-transform',
+                        'inline-block h-3 w-3 transform rounded-pill bg-bg transition-transform',
                       )}
                     />
                   </Switch>
@@ -153,7 +153,7 @@ const PopoverContent = ({
                         ? 'bg-accent'
                         : 'bg-surface-2',
                       !hasProfile && 'opacity-40 cursor-not-allowed',
-                      'relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none',
+                      'relative inline-flex h-5 w-9 items-center rounded-pill transition-colors focus:outline-none',
                     )}
                   >
                     <span
@@ -161,7 +161,7 @@ const PopoverContent = ({
                         sendPersonalization && hasProfile
                           ? 'translate-x-5'
                           : 'translate-x-1',
-                        'inline-block h-3 w-3 transform rounded-full bg-white transition-transform',
+                        'inline-block h-3 w-3 transform rounded-pill bg-bg transition-transform',
                       )}
                     />
                   </Switch>

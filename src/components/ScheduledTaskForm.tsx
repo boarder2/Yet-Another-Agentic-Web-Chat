@@ -258,7 +258,7 @@ export default function TaskForm({
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">
         {error && (
-          <div className="px-4 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-sm">
+          <div className="px-4 py-2 rounded-surface bg-danger-soft border border-danger text-danger dark:text-danger text-sm">
             {error}
           </div>
         )}
@@ -272,7 +272,7 @@ export default function TaskForm({
             onChange={(e) => updateField('name', e.target.value)}
             placeholder="Daily AI News Briefing"
             required
-            className="px-3 py-2 rounded-lg bg-surface border border-surface-2 text-fg placeholder:text-fg/40 focus:outline-none focus:ring-2 focus:ring-accent"
+            className="px-3 py-2 rounded-surface bg-surface border border-surface-2 text-fg placeholder:text-fg/40 focus:outline-none focus:ring-2 focus:ring-accent"
           />
         </div>
 
@@ -285,7 +285,7 @@ export default function TaskForm({
             placeholder="Summarize the top AI and machine learning news from today..."
             required
             rows={4}
-            className="px-3 py-2 rounded-lg bg-surface border border-surface-2 text-fg placeholder:text-fg/40 focus:outline-none focus:ring-2 focus:ring-accent resize-y"
+            className="px-3 py-2 rounded-surface bg-surface border border-surface-2 text-fg placeholder:text-fg/40 focus:outline-none focus:ring-2 focus:ring-accent resize-y"
           />
         </div>
 
@@ -308,7 +308,7 @@ export default function TaskForm({
                   )
                 }
                 placeholder="https://example.com"
-                className="flex-1 px-3 py-2 rounded-lg bg-surface border border-surface-2 text-fg placeholder:text-fg/40 focus:outline-none focus:ring-2 focus:ring-accent"
+                className="flex-1 px-3 py-2 rounded-surface bg-surface border border-surface-2 text-fg placeholder:text-fg/40 focus:outline-none focus:ring-2 focus:ring-accent"
               />
               <button
                 type="button"
@@ -318,7 +318,7 @@ export default function TaskForm({
                     form.sourceUrls.filter((_, i) => i !== idx),
                   )
                 }
-                className="p-1.5 rounded-lg hover:bg-surface-2 text-fg/60 hover:text-red-500 transition"
+                className="p-1.5 rounded-surface hover:bg-surface-2 text-fg/60 hover:text-danger transition"
               >
                 <Trash2 size={14} />
               </button>
@@ -339,7 +339,7 @@ export default function TaskForm({
           <select
             value={form.focusMode}
             onChange={(e) => updateField('focusMode', e.target.value)}
-            className="px-3 py-2 rounded-lg bg-surface border border-surface-2 text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+            className="px-3 py-2 rounded-surface bg-surface border border-surface-2 text-fg focus:outline-none focus:ring-2 focus:ring-accent"
           >
             {focusModes.map((mode) => (
               <option key={mode.key} value={mode.key}>
@@ -360,7 +360,7 @@ export default function TaskForm({
                   kind: e.target.value as Preset['kind'],
                 })
               }
-              className="px-3 py-2 rounded-lg bg-surface border border-surface-2 text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+              className="px-3 py-2 rounded-surface bg-surface border border-surface-2 text-fg focus:outline-none focus:ring-2 focus:ring-accent"
             >
               <option value="hourly">Hourly</option>
               <option value="daily">Daily</option>
@@ -383,7 +383,7 @@ export default function TaskForm({
                       minute: parseInt(e.target.value, 10) || 0,
                     })
                   }
-                  className="w-16 px-2 py-2 rounded-lg bg-surface border border-surface-2 text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+                  className="w-16 px-2 py-2 rounded-surface bg-surface border border-surface-2 text-fg focus:outline-none focus:ring-2 focus:ring-accent"
                 />
               </div>
             )}
@@ -403,7 +403,7 @@ export default function TaskForm({
                       hour: parseInt(e.target.value, 10) || 0,
                     })
                   }
-                  className="w-16 px-2 py-2 rounded-lg bg-surface border border-surface-2 text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+                  className="w-16 px-2 py-2 rounded-surface bg-surface border border-surface-2 text-fg focus:outline-none focus:ring-2 focus:ring-accent"
                 />
                 <span className="text-sm text-fg/60">:</span>
                 <input
@@ -418,7 +418,7 @@ export default function TaskForm({
                       minute: parseInt(e.target.value, 10) || 0,
                     })
                   }
-                  className="w-16 px-2 py-2 rounded-lg bg-surface border border-surface-2 text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+                  className="w-16 px-2 py-2 rounded-surface bg-surface border border-surface-2 text-fg focus:outline-none focus:ring-2 focus:ring-accent"
                 />
               </div>
             )}
@@ -441,7 +441,7 @@ export default function TaskForm({
                         | 6,
                     })
                   }
-                  className="px-3 py-2 rounded-lg bg-surface border border-surface-2 text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+                  className="px-3 py-2 rounded-surface bg-surface border border-surface-2 text-fg focus:outline-none focus:ring-2 focus:ring-accent"
                 >
                   {DAY_NAMES.map((d, i) => (
                     <option key={i} value={i}>
@@ -462,7 +462,7 @@ export default function TaskForm({
                       hour: parseInt(e.target.value, 10) || 0,
                     })
                   }
-                  className="w-16 px-2 py-2 rounded-lg bg-surface border border-surface-2 text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+                  className="w-16 px-2 py-2 rounded-surface bg-surface border border-surface-2 text-fg focus:outline-none focus:ring-2 focus:ring-accent"
                 />
                 <span className="text-sm text-fg/60">:</span>
                 <input
@@ -477,7 +477,7 @@ export default function TaskForm({
                       minute: parseInt(e.target.value, 10) || 0,
                     })
                   }
-                  className="w-16 px-2 py-2 rounded-lg bg-surface border border-surface-2 text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+                  className="w-16 px-2 py-2 rounded-surface bg-surface border border-surface-2 text-fg focus:outline-none focus:ring-2 focus:ring-accent"
                 />
               </div>
             )}
@@ -490,7 +490,7 @@ export default function TaskForm({
                   updateField('cronExpression', e.target.value);
                 }}
                 placeholder="*/5 * * * *"
-                className="flex-1 px-3 py-2 rounded-lg bg-surface border border-surface-2 text-fg placeholder:text-fg/40 focus:outline-none focus:ring-2 focus:ring-accent font-mono"
+                className="flex-1 px-3 py-2 rounded-surface bg-surface border border-surface-2 text-fg placeholder:text-fg/40 focus:outline-none focus:ring-2 focus:ring-accent font-mono"
               />
             )}
           </div>
@@ -509,7 +509,7 @@ export default function TaskForm({
             value={form.timezone}
             onChange={(e) => updateField('timezone', e.target.value)}
             placeholder="e.g. America/New_York (leave empty for system timezone)"
-            className="px-3 py-2 rounded-lg bg-surface border border-surface-2 text-fg placeholder:text-fg/40 focus:outline-none focus:ring-2 focus:ring-accent"
+            className="px-3 py-2 rounded-surface bg-surface border border-surface-2 text-fg placeholder:text-fg/40 focus:outline-none focus:ring-2 focus:ring-accent"
           />
         </div>
 
@@ -589,7 +589,7 @@ export default function TaskForm({
                       : [...form.selectedSystemPromptIds, p.id];
                     updateField('selectedSystemPromptIds', ids);
                   }}
-                  className={`px-3 py-1 rounded-full text-xs font-medium transition border ${
+                  className={`px-3 py-1 rounded-pill text-xs font-medium transition border ${
                     form.selectedSystemPromptIds.includes(p.id)
                       ? 'bg-accent/10 border-accent/30 text-accent'
                       : 'bg-surface border-surface-2 text-fg/60'
@@ -613,7 +613,7 @@ export default function TaskForm({
               onChange={(e) =>
                 updateField('selectedMethodologyId', e.target.value || null)
               }
-              className="px-3 py-2 rounded-lg bg-surface border border-surface-2 text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+              className="px-3 py-2 rounded-surface bg-surface border border-surface-2 text-fg focus:outline-none focus:ring-2 focus:ring-accent"
             >
               <option value="">None</option>
               {methodologies.map((m) => (
@@ -641,7 +641,7 @@ export default function TaskForm({
                 updateField('retentionValue', 10);
               }
             }}
-            className="px-3 py-2 rounded-lg bg-surface border border-surface-2 text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+            className="px-3 py-2 rounded-surface bg-surface border border-surface-2 text-fg focus:outline-none focus:ring-2 focus:ring-accent"
           >
             <option value="global">Use global default</option>
             <option value="override">Override</option>
@@ -651,7 +651,7 @@ export default function TaskForm({
               <select
                 value={form.retentionMode}
                 onChange={(e) => updateField('retentionMode', e.target.value)}
-                className="px-3 py-2 rounded-lg bg-surface border border-surface-2 text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+                className="px-3 py-2 rounded-surface bg-surface border border-surface-2 text-fg focus:outline-none focus:ring-2 focus:ring-accent"
               >
                 <option value="days">Keep for N days</option>
                 <option value="count">Keep N most recent</option>
@@ -665,7 +665,7 @@ export default function TaskForm({
                   onChange={(e) =>
                     updateField('retentionValue', parseInt(e.target.value) || 1)
                   }
-                  className="w-24 px-3 py-2 rounded-lg bg-surface border border-surface-2 text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+                  className="w-24 px-3 py-2 rounded-surface bg-surface border border-surface-2 text-fg focus:outline-none focus:ring-2 focus:ring-accent"
                 />
               )}
             </div>
@@ -678,12 +678,12 @@ export default function TaskForm({
           <button
             type="button"
             onClick={() => updateField('enabled', !form.enabled)}
-            className={`relative w-11 h-6 rounded-full transition ${
+            className={`relative w-11 h-6 rounded-pill transition ${
               form.enabled ? 'bg-accent' : 'bg-surface-2'
             }`}
           >
             <span
-              className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
+              className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-pill bg-bg transition-transform ${
                 form.enabled ? 'translate-x-5' : 'translate-x-0'
               }`}
             />
@@ -695,13 +695,13 @@ export default function TaskForm({
           <button
             type="submit"
             disabled={saving}
-            className="px-6 py-2 rounded-lg bg-accent text-white font-medium transition hover:opacity-90 disabled:opacity-50"
+            className="px-6 py-2 rounded-surface bg-accent text-accent-fg font-medium transition hover:opacity-90 disabled:opacity-50"
           >
             {saving ? 'Saving...' : taskId ? 'Update Task' : 'Create Task'}
           </button>
           <Link
             href="/scheduled-tasks/manage"
-            className="px-4 py-2 rounded-lg text-fg/60 hover:text-fg transition"
+            className="px-4 py-2 rounded-surface text-fg/60 hover:text-fg transition"
           >
             Cancel
           </Link>
@@ -767,7 +767,7 @@ function EmbeddingModelSelector({
         const [provider, name] = e.target.value.split(':');
         setSelectedModel({ provider, name });
       }}
-      className="px-3 py-2 rounded-lg bg-surface border border-surface-2 text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+      className="px-3 py-2 rounded-surface bg-surface border border-surface-2 text-fg focus:outline-none focus:ring-2 focus:ring-accent"
     >
       {models.map((m) => (
         <option

@@ -147,7 +147,7 @@ const Searchvideos = ({
           {[...Array(4)].map((_, i) => (
             <div
               key={i}
-              className="bg-surface-2 h-32 w-full rounded-lg animate-pulse aspect-video object-cover"
+              className="bg-surface-2 h-32 w-full rounded-surface animate-pulse aspect-video object-cover"
             />
           ))}
         </div>
@@ -174,9 +174,9 @@ const Searchvideos = ({
                 <img
                   src={video.img_src}
                   alt={video.title}
-                  className="relative h-full w-full aspect-video object-cover rounded-lg"
+                  className="relative h-full w-full aspect-video object-cover rounded-surface"
                 />
-                <div className="absolute bg-bg/70 text-fg/70 px-2 py-1 flex flex-row items-center space-x-1 bottom-1 right-1 rounded-md">
+                <div className="absolute bg-bg/70 text-fg/70 px-2 py-1 flex flex-row items-center space-x-1 bottom-1 right-1 rounded-control">
                   <PlayCircle size={15} />
                   <p className="text-xs">Video</p>
                 </div>
@@ -187,7 +187,7 @@ const Searchvideos = ({
             <div className="flex justify-center mt-4">
               <button
                 onClick={handleShowMore}
-                className="px-4 py-2 bg-surface hover:bg-surface-2 text-fg/70 hover:text-fg rounded-md transition duration-200 flex items-center space-x-2 border border-surface-2"
+                className="px-4 py-2 bg-surface hover:bg-surface-2 text-fg/70 hover:text-fg rounded-control transition duration-200 flex items-center space-x-2 border border-surface-2"
               >
                 <span>Show More Videos</span>
                 <span className="text-sm opacity-75">
@@ -226,7 +226,7 @@ const Searchvideos = ({
                           videoRefs.current[index] = el;
                         }
                       }}
-                      className="aspect-video max-h-[95vh] w-[95vw] rounded-2xl md:w-[80vw]"
+                      className="aspect-video max-h-[95vh] w-[95vw] rounded-floating md:w-[80vw]"
                       allowFullScreen
                       allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
                     />

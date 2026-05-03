@@ -10,7 +10,7 @@ export const Select = ({ className, options, ...restProps }: SelectProps) => {
     <select
       {...restProps}
       className={cn(
-        'bg-surface px-3 py-2 flex items-center overflow-hidden border border-surface-2 text-fg rounded-lg text-sm',
+        'bg-surface px-3 py-2 flex items-center overflow-hidden border border-surface-2 text-fg rounded-surface text-sm',
         className,
       )}
     >

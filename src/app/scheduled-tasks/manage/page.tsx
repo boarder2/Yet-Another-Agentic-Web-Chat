@@ -4,6 +4,7 @@ import { formatTimeDifference } from '@/lib/utils';
 import { describeCron } from '@/lib/scheduledTasks/presets';
 import {
   CalendarClock,
+  LoaderCircle,
   Plus,
   Play,
   Pencil,
@@ -107,7 +108,7 @@ const Page = () => {
         </div>
         <Link
           href="/scheduled-tasks/new"
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent text-white text-sm transition duration-200 hover:opacity-90"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-surface bg-accent text-accent-fg text-sm transition duration-200 hover:opacity-90"
         >
           <Plus size={14} />
           New task
@@ -116,21 +117,7 @@ const Page = () => {
 
       {loading && (
         <div className="flex flex-row items-center justify-center min-h-[50vh]">
-          <svg
-            aria-hidden="true"
-            className="w-8 h-8 text-surface-2 fill-accent animate-spin"
-            viewBox="0 0 100 101"
-            fill="none"
-          >
-            <path
-              d="M100 50.5908C100 78.2051 77.6142 100.591 50 100.591C22.3858 100.591 0 78.2051 0 50.5908C0 22.9766 22.3858 0.59082 50 0.59082C77.6142 0.59082 100 22.9766 100 50.5908ZM9.08144 50.5908C9.08144 73.1895 27.4013 91.5094 50 91.5094C72.5987 91.5094 90.9186 73.1895 90.9186 50.5908C90.9186 27.9921 72.5987 9.67226 50 9.67226C27.4013 9.67226 9.08144 27.9921 9.08144 50.5908Z"
-              fill="currentColor"
-            />
-            <path
-              d="M93.9676 39.0409C96.393 38.4038 97.8624 35.9116 97.0079 33.5539C95.2932 28.8227 92.871 24.3692 89.8167 20.348C85.8452 15.1192 80.8826 10.7238 75.2124 7.41289C69.5422 4.10194 63.2754 1.94025 56.7698 1.05124C51.7666 0.367541 46.6976 0.446843 41.7345 1.27873C39.2613 1.69328 37.813 4.19778 38.4501 6.62326C39.0873 9.04874 41.5694 10.4717 44.0505 10.1071C47.8511 9.54855 51.7191 9.52689 55.5402 10.0491C60.8642 10.7766 65.9928 12.5457 70.6331 15.2552C75.2735 17.9648 79.3347 21.5619 82.5849 25.841C84.9175 28.9121 86.7997 32.2913 88.1811 35.8758C89.083 38.2158 91.5421 39.6781 93.9676 39.0409Z"
-              fill="currentFill"
-            />
-          </svg>
+          <LoaderCircle size={32} className="animate-spin text-accent" />
         </div>
       )}
 
@@ -141,7 +128,7 @@ const Page = () => {
           <p className="text-sm mb-4">Create a task to get started.</p>
           <Link
             href="/scheduled-tasks/new"
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent text-white text-sm transition duration-200 hover:opacity-90"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-surface bg-accent text-accent-fg text-sm transition duration-200 hover:opacity-90"
           >
             <Plus size={14} />
             Create task
@@ -165,9 +152,9 @@ const Page = () => {
                   {task.lastRunAt && (
                     <span className="flex items-center gap-1">
                       {task.lastRunStatus === 'success' ? (
-                        <CheckCircle size={12} className="text-green-500" />
+                        <CheckCircle size={12} className="text-success" />
                       ) : task.lastRunStatus === 'error' ? (
-                        <XCircle size={12} className="text-red-500" />
+                        <XCircle size={12} className="text-danger" />
                       ) : null}
                       Last run{' '}
                       {formatTimeDifference(
@@ -194,9 +181,9 @@ const Page = () => {
               <div className="flex items-center gap-2 shrink-0">
                 <button
                   onClick={() => toggleEnabled(task)}
-                  className={`px-3 py-1 rounded-full text-xs font-medium transition ${
+                  className={`px-3 py-1 rounded-pill text-xs font-medium transition ${
                     task.enabled
-                      ? 'bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20'
+                      ? 'bg-success-soft text-success dark:text-success border border-success'
                       : 'bg-surface-2 text-fg/50 border border-surface-2'
                   }`}
                 >
@@ -205,21 +192,21 @@ const Page = () => {
                 <button
                   onClick={() => runNow(task)}
                   disabled={runningTaskId === task.id}
-                  className="p-1.5 rounded-lg hover:bg-surface-2 transition text-fg/60 hover:text-fg disabled:opacity-50"
+                  className="p-1.5 rounded-surface hover:bg-surface-2 transition text-fg/60 hover:text-fg disabled:opacity-50"
                   title="Run now"
                 >
                   <Play size={16} />
                 </button>
                 <Link
                   href={`/scheduled-tasks/manage/${task.id}/edit`}
-                  className="p-1.5 rounded-lg hover:bg-surface-2 transition text-fg/60 hover:text-fg"
+                  className="p-1.5 rounded-surface hover:bg-surface-2 transition text-fg/60 hover:text-fg"
                   title="Edit"
                 >
                   <Pencil size={16} />
                 </Link>
                 <button
                   onClick={() => deleteTask(task)}
-                  className="p-1.5 rounded-lg hover:bg-surface-2 transition text-fg/60 hover:text-red-500"
+                  className="p-1.5 rounded-surface hover:bg-surface-2 transition text-fg/60 hover:text-danger"
                   title="Delete"
                 >
                   <Trash2 size={16} />

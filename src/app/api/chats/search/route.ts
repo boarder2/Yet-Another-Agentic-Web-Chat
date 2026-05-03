@@ -13,7 +13,7 @@ import { PromptTemplate } from '@langchain/core/prompts';
 import { RunnableSequence } from '@langchain/core/runnables';
 import { ChatOllama } from '@langchain/ollama';
 import { ChatOpenAI } from '@langchain/openai';
-import { desc, inArray, like, or, sql } from 'drizzle-orm';
+import { desc, inArray, like, or, sql, isNull, eq, and } from 'drizzle-orm';
 
 const searchTermsPrompt = `You are a search assistant. Given a natural language query, extract specific search terms to find relevant conversations in a personal chat history.
 
@@ -42,7 +42,7 @@ interface ChatModel {
   ollamaContextWindow?: number;
 }
 
-interface LlmSearchBody {
+interface _LlmSearchBody {
   query: string;
   chatModel?: ChatModel;
 }
@@ -83,7 +83,31 @@ function extractExcerpt(
   return excerpt;
 }
 
-const searchByTerm = async (term: string): Promise<ChatRow[]> => {
+function buildWorkspaceCondition(
+  workspaceId: string | undefined,
+  workspaceIds: string[] | undefined,
+) {
+  if (workspaceIds && workspaceIds.length > 0) {
+    const realIds = workspaceIds.filter((id) => id !== 'none');
+    const includeNone = workspaceIds.includes('none');
+    if (realIds.length > 0 && includeNone) {
+      return or(inArray(chats.workspaceId, realIds), isNull(chats.workspaceId));
+    }
+    if (realIds.length > 0) return inArray(chats.workspaceId, realIds);
+    if (includeNone) return isNull(chats.workspaceId);
+  }
+  if (workspaceId === 'none' || workspaceId === 'null') {
+    return isNull(chats.workspaceId);
+  }
+  if (workspaceId) return eq(chats.workspaceId, workspaceId);
+  return undefined;
+}
+
+const searchByTerm = async (
+  term: string,
+  workspaceId?: string,
+  workspaceIds?: string[],
+): Promise<ChatRow[]> => {
   const pattern = `%${term}%`;
 
   const matchingMessages = await db
@@ -100,10 +124,15 @@ const searchByTerm = async (term: string): Promise<ChatRow[]> => {
 
   const matchingChatIds = Array.from(chatIdToExcerpt.keys());
 
-  const whereCondition =
+  const baseCondition =
     matchingChatIds.length > 0
       ? or(like(chats.title, pattern), inArray(chats.id, matchingChatIds))
       : like(chats.title, pattern);
+
+  const workspaceCondition = buildWorkspaceCondition(workspaceId, workspaceIds);
+  const whereCondition = workspaceCondition
+    ? and(baseCondition, workspaceCondition)
+    : baseCondition;
 
   const rows = await db
     .select()
@@ -119,25 +148,25 @@ const searchByTerm = async (term: string): Promise<ChatRow[]> => {
 
 export const POST = async (req: Request) => {
   try {
-    const body: LlmSearchBody = await req.json();
+    const { query, chatModel, workspaceId, workspaceIds } = await req.json();
 
-    if (!body.query?.trim()) {
+    if (!query?.trim()) {
       return Response.json({ message: 'Query is required' }, { status: 400 });
     }
 
     const chatModelProviders = await getAvailableChatModelProviders();
     const chatModelProvider =
       chatModelProviders[
-        body.chatModel?.provider || Object.keys(chatModelProviders)[0]
+        chatModel?.provider || Object.keys(chatModelProviders)[0]
       ];
-    const chatModel =
+    const selectedChatModel =
       chatModelProvider?.[
-        body.chatModel?.model || Object.keys(chatModelProvider)[0]
+        chatModel?.model || Object.keys(chatModelProvider)[0]
       ];
 
     let llm: BaseChatModel | undefined;
 
-    if (body.chatModel?.provider === 'custom_openai') {
+    if (chatModel?.provider === 'custom_openai') {
       llm = new ChatOpenAI({
         apiKey: getCustomOpenaiApiKey(),
         modelName: getCustomOpenaiModelName(),
@@ -145,10 +174,10 @@ export const POST = async (req: Request) => {
           baseURL: getCustomOpenaiApiUrl(),
         },
       }) as unknown as BaseChatModel;
-    } else if (chatModelProvider && chatModel) {
-      llm = chatModel.model;
-      if (llm instanceof ChatOllama && body.chatModel?.provider === 'ollama') {
-        llm.numCtx = body.chatModel.ollamaContextWindow || 2048;
+    } else if (chatModelProvider && selectedChatModel) {
+      llm = selectedChatModel.model;
+      if (llm instanceof ChatOllama && chatModel?.provider === 'ollama') {
+        llm.numCtx = chatModel.ollamaContextWindow || 2048;
       }
     }
 
@@ -164,7 +193,7 @@ export const POST = async (req: Request) => {
       new StringOutputParser(),
     ]);
 
-    const rawOutput = await chain.invoke({ query: body.query.trim() });
+    const rawOutput = await chain.invoke({ query: query.trim() });
 
     // Remove thinking blocks from output (e.g., reasoning models)
     const cleaned = removeThinkingBlocks(rawOutput);
@@ -179,13 +208,13 @@ export const POST = async (req: Request) => {
       .map((line) => line.replace(/^(\s*(-|\*|\d+\.)\s*)+/, '').trim())
       .filter((line) => line.length > 0 && !line.startsWith('<'));
 
-    const searchTerms = terms.length > 0 ? terms : [body.query.trim()];
+    const searchTerms = terms.length > 0 ? terms : [query.trim()];
 
     // Search for each term; first match wins for deduplication and excerpt
     const seen = new Map<string, ChatRow>();
 
     for (const term of searchTerms) {
-      const rows = await searchByTerm(term);
+      const rows = await searchByTerm(term, workspaceId, workspaceIds);
       for (const chat of rows) {
         if (!seen.has(chat.id)) {
           seen.set(chat.id, chat);

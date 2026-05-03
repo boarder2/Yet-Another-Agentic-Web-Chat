@@ -67,11 +67,14 @@ export class HuggingFaceTransformersEmbeddings
   }
 
   private async runEmbedding(texts: string[]) {
-    const { pipeline } = await import('@xenova/transformers');
+    const { pipeline } = await import('@huggingface/transformers');
 
     const pipe = await (this.pipelinePromise ??= pipeline(
       'feature-extraction',
       this.model,
+      {
+        dtype: 'fp32',
+      },
     ));
 
     return this.caller.call(async () => {

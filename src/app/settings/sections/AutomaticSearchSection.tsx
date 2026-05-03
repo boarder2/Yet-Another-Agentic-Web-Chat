@@ -1,7 +1,6 @@
 'use client';
 
-import { cn } from '@/lib/utils';
-import { Switch } from '@headlessui/react';
+import AppSwitch from '@/components/ui/AppSwitch';
 import { Layers3 } from 'lucide-react';
 import SettingsSection from '../components/SettingsSection';
 
@@ -15,9 +14,9 @@ export default function AutomaticSearchSection({
   return (
     <SettingsSection title="Automatic Search">
       <div className="flex flex-col space-y-4">
-        <div className="flex items-center justify-between p-3 bg-surface rounded-lg hover:bg-surface-2 transition-colors">
+        <div className="flex items-center justify-between p-3 bg-surface rounded-surface hover:bg-surface-2 transition-colors">
           <div className="flex items-center space-x-3">
-            <div className="p-2 bg-surface-2 rounded-lg">
+            <div className="p-2 bg-surface-2 rounded-surface">
               <Layers3 size={18} />
             </div>
             <div>
@@ -27,21 +26,7 @@ export default function AutomaticSearchSection({
               </p>
             </div>
           </div>
-          <Switch
-            checked={automaticSuggestions}
-            onChange={onToggle}
-            className={cn(
-              automaticSuggestions ? 'bg-accent' : 'bg-surface-2',
-              'relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none',
-            )}
-          >
-            <span
-              className={cn(
-                automaticSuggestions ? 'translate-x-6' : 'translate-x-1',
-                'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
-              )}
-            />
-          </Switch>
+          <AppSwitch checked={automaticSuggestions} onChange={onToggle} />
         </div>
       </div>
     </SettingsSection>

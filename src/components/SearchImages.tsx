@@ -129,7 +129,7 @@ const SearchImages = ({
           {[...Array(4)].map((_, i) => (
             <div
               key={i}
-              className="bg-surface-2 h-32 w-full rounded-lg animate-pulse aspect-video object-cover"
+              className="bg-surface-2 h-32 w-full rounded-surface animate-pulse aspect-video object-cover"
             />
           ))}
         </div>
@@ -153,7 +153,7 @@ const SearchImages = ({
                 key={i}
                 src={image.img_src}
                 alt={image.title}
-                className="h-full w-full aspect-video object-cover rounded-lg transition duration-200 active:scale-95 hover:scale-[1.02] cursor-zoom-in"
+                className="h-full w-full aspect-video object-cover rounded-surface transition duration-200 active:scale-95 hover:scale-[1.02] cursor-zoom-in"
               />
             ))}
           </div>
@@ -161,7 +161,7 @@ const SearchImages = ({
             <div className="flex justify-center mt-4">
               <button
                 onClick={handleShowMore}
-                className="px-4 py-2 bg-surface hover:bg-surface-2 text-fg/70 hover:text-fg rounded-md transition duration-200 flex items-center space-x-2 border border-surface-2"
+                className="px-4 py-2 bg-surface hover:bg-surface-2 text-fg/70 hover:text-fg rounded-control transition duration-200 flex items-center space-x-2 border border-surface-2"
               >
                 <span>Show More Images</span>
                 <span className="text-sm opacity-75">

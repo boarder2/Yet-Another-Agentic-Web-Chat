@@ -1,12 +1,9 @@
 import path from 'path';
 import fs from 'fs';
+import { UPLOADS_DIR } from '@/lib/dataDir';
 
 export const getFileDetails = (fileId: string) => {
-  const fileLoc = path.join(
-    process.cwd(),
-    './uploads',
-    fileId + '-extracted.json',
-  );
+  const fileLoc = path.join(UPLOADS_DIR, fileId + '-extracted.json');
 
   const parsedFile = JSON.parse(fs.readFileSync(fileLoc, 'utf8'));
 

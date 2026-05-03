@@ -20,6 +20,7 @@ YAAWC (**Pronounced: "yawck"** — as in the sound you make when yet another AI 
   - [Security Notes](#security-notes)
 - [Deep Research (Sub-Agents)](#deep-research-sub-agents)
 - [Dashboard Widgets](#dashboard-widgets)
+- [Workspaces](#workspaces)
 - [LLM Providers](#llm-providers)
   - [Chat Models](#chat-models)
   - [Embedding Models](#embedding-models)
@@ -76,6 +77,7 @@ Want to know more about the architecture? See [docs/architecture/README.md](docs
 | **Personalization**         | Per-message location and profile context injection                                                                                                                                    |
 | **Memory**                  | Long-term memory with semantic retrieval, automatic extraction, deduplication, and a full management UI                                                                               |
 | **Private Sessions**        | Temporary conversations with auto-expiry — no personalization, no memory, no trace left behind                                                                                        |
+| **Workspaces**              | Project-centric containers with per-workspace chats, files, source URLs, instructions, agent tools, and isolated memory                                                               |
 | **Privacy**                 | Self-hosted SearXNG — no tracking, no data brokering, no "we updated our privacy policy" emails                                                                                       |
 | **Browser Integration**     | OpenSearch XML, autocomplete, `?q=` URL queries with saved preferences                                                                                                                |
 | **Streaming UI**            | Real-time tool calls, sub-agent progress, todo widgets, thinking/reasoning display                                                                                                    |
@@ -213,7 +215,7 @@ Each sandbox container runs with:
 
 ## Deep Research (Sub-Agents)
 
-When the agent encounters a question that needs serious digging, it can invoke the **Deep Research** tool, which spawns an independent sub-agent with its own system prompt and tool access (`web_search`, `url_summarization`, `image_search`, `youtube_transcript`, `pdf_loader` — but not `deep_research`, because infinite recursion is nobody's friend).
+When the agent encounters a question that needs serious digging, it can invoke the **Deep Research** tool, which spawns an independent sub-agent with its own system prompt and tool access (`web_search`, `url_fetch`, `image_search`, `youtube_transcript`, `pdf_loader` — but not `deep_research`, because infinite recursion is nobody's friend).
 
 Sub-agent progress streams live to the UI: task description, nested tool calls, and the final synthesized response — all collapsible and inspectable.
 
@@ -227,6 +229,22 @@ The `/dashboard` page provides a configurable grid of AI-powered widgets:
 - **Auto-refresh** at configurable intervals (minutes/hours)
 - **Export/import** dashboard configurations as JSON
 - Date/time template variables for dynamic prompts (`{{current_utc_datetime}}`, `{{current_local_datetime}}`)
+
+## Workspaces
+
+Workspaces are project-centric containers that keep chats, uploaded files, source URLs, instructions, and memories organized under one banner. Each workspace acts as a self-contained research environment — switch between projects without mixing context.
+
+- **Project organization** — Create workspaces with a name, description, custom color, and icon. Archive unused workspaces to keep the list tidy.
+- **Per-workspace chats** — Start new chats scoped to a workspace. The agent has full awareness of the workspace's files, URLs, and instructions.
+- **File management** — Upload, view, edit, and search files within a workspace. The agent can list, read, create, and edit workspace files using dedicated tools (`workspace_ls`, `workspace_read`, `workspace_grep`, `workspace_edit`, `workspace_create`). File edits require user approval in the UI.
+- **Source URLs** — Attach reference URLs to a workspace for the agent to consult during research.
+- **Custom instructions** — Set workspace-specific instructions and link persona prompts. These shape how the agent behaves in all workspace chats without repeating setup each time.
+- **Workspace-scoped memory** — Each workspace has an isolated memory system, separate from the global memory store. Memories created inside a workspace stay with that project.
+- **Auto-memory & file edits** — Toggle automatic memory extraction and auto-accept file edits per workspace.
+- **Collapsible sidebar** — In workspace chats, a sidebar shows files, sources, instructions, and memory at a glance. Collapse it when you need more space.
+- **Quick switching** — Hop between workspaces (or no workspace) from any chat using the workspace picker in the message input.
+
+Configure workspaces from `/workspaces`, or pick one inline while chatting.
 
 ## LLM Providers
 
@@ -435,34 +453,44 @@ URL queries via `?q=` automatically apply your saved model preferences for a sea
 
 YAAWC exposes a full API for programmatic access:
 
-| Endpoint                           | Method              | Description                                                    |
-| ---------------------------------- | ------------------- | -------------------------------------------------------------- |
-| `/api/chat`                        | POST                | Streaming chat with tool calls, sources, and live events (SSE) |
-| `/api/models`                      | GET                 | List available models (`?include_hidden=true` for admin view)  |
-| `/api/config`                      | GET/POST            | Read/write server configuration                                |
-| `/api/chats`                       | GET                 | List all chats (paginated)                                     |
-| `/api/chats/[id]`                  | GET/DELETE/PATCH    | Get, delete, or update (e.g. pin) a specific chat              |
-| `/api/chats/search`                | GET                 | Full-text search across chat history                           |
-| `/api/suggestions`                 | POST                | Generate follow-up suggestions                                 |
-| `/api/system-prompts`              | GET/POST/PUT/DELETE | CRUD for persona prompts                                       |
-| `/api/images`                      | POST                | Image search                                                   |
-| `/api/videos`                      | POST                | Video search                                                   |
-| `/api/uploads`                     | POST                | File upload                                                    |
-| `/api/uploads/images`              | POST/GET            | Image upload and serving                                       |
-| `/api/memories`                    | GET/POST/DELETE     | List, add, or delete all memories                              |
-| `/api/memories/[id]`               | PUT/DELETE          | Update or delete a specific memory                             |
-| `/api/memories/reindex`            | POST                | Regenerate all memory embeddings                               |
-| `/api/tools`                       | GET                 | List available agent tools                                     |
-| `/api/dashboard`                   | GET/POST            | Dashboard widget CRUD                                          |
-| `/api/respond-now`                 | POST                | Interrupt retrieval for immediate response                     |
-| `/api/opensearch`                  | GET                 | OpenSearch description XML                                     |
-| `/api/autocomplete`                | GET                 | Search autocomplete (via configured search provider)           |
-| `/api/scheduled-tasks`             | GET/POST            | List or create scheduled tasks                                 |
-| `/api/scheduled-tasks/[id]`        | GET/PUT/DELETE      | Get, update, or delete a scheduled task                        |
-| `/api/scheduled-tasks/[id]/run`    | POST                | Trigger an immediate run of a scheduled task                   |
-| `/api/scheduled-tasks/[id]/runs`   | GET                 | List run history for a scheduled task                          |
-| `/api/scheduled-tasks/runs`        | GET                 | List recent runs across all scheduled tasks                    |
-| `/api/scheduled-tasks/runs/unread` | GET                 | Count of unread scheduled-task run results                     |
+| Endpoint                                  | Method              | Description                                                    |
+| ----------------------------------------- | ------------------- | -------------------------------------------------------------- |
+| `/api/chat`                               | POST                | Streaming chat with tool calls, sources, and live events (SSE) |
+| `/api/models`                             | GET                 | List available models (`?include_hidden=true` for admin view)  |
+| `/api/config`                             | GET/POST            | Read/write server configuration                                |
+| `/api/chats`                              | GET                 | List all chats (paginated)                                     |
+| `/api/chats/[id]`                         | GET/DELETE/PATCH    | Get, delete, or update (e.g. pin) a specific chat              |
+| `/api/chats/search`                       | GET                 | Full-text search across chat history                           |
+| `/api/suggestions`                        | POST                | Generate follow-up suggestions                                 |
+| `/api/system-prompts`                     | GET/POST/PUT/DELETE | CRUD for persona prompts                                       |
+| `/api/images`                             | POST                | Image search                                                   |
+| `/api/videos`                             | POST                | Video search                                                   |
+| `/api/uploads`                            | POST                | File upload                                                    |
+| `/api/uploads/images`                     | POST/GET            | Image upload and serving                                       |
+| `/api/memories`                           | GET/POST/DELETE     | List, add, or delete all memories                              |
+| `/api/memories/[id]`                      | PUT/DELETE          | Update or delete a specific memory                             |
+| `/api/memories/reindex`                   | POST                | Regenerate all memory embeddings                               |
+| `/api/tools`                              | GET                 | List available agent tools                                     |
+| `/api/dashboard`                          | GET/POST            | Dashboard widget CRUD                                          |
+| `/api/respond-now`                        | POST                | Interrupt retrieval for immediate response                     |
+| `/api/opensearch`                         | GET                 | OpenSearch description XML                                     |
+| `/api/autocomplete`                       | GET                 | Search autocomplete (via configured search provider)           |
+| `/api/scheduled-tasks`                    | GET/POST            | List or create scheduled tasks                                 |
+| `/api/scheduled-tasks/[id]`               | GET/PUT/DELETE      | Get, update, or delete a scheduled task                        |
+| `/api/scheduled-tasks/[id]/run`           | POST                | Trigger an immediate run of a scheduled task                   |
+| `/api/scheduled-tasks/[id]/runs`          | GET                 | List run history for a scheduled task                          |
+| `/api/scheduled-tasks/runs`               | GET                 | List recent runs across all scheduled tasks                    |
+| `/api/scheduled-tasks/runs/unread`        | GET                 | Count of unread scheduled-task run results                     |
+| `/api/workspaces`                         | GET/POST            | List all workspaces or create a new one                        |
+| `/api/workspaces/[id]`                    | GET/PUT/DELETE      | Get, update, or delete a workspace                             |
+| `/api/workspaces/[id]/archive`            | POST                | Archive a workspace                                            |
+| `/api/workspaces/[id]/unarchive`          | POST                | Unarchive a workspace                                          |
+| `/api/workspaces/[id]/files`              | GET/POST            | List or upload workspace files                                 |
+| `/api/workspaces/[id]/files/[fid]`        | GET/PUT/DELETE      | Get, update, or delete a workspace file                        |
+| `/api/workspaces/[id]/urls`               | GET/PUT             | Get or update workspace source URLs                            |
+| `/api/workspaces/[id]/urls/check`         | GET                 | Check reachability of workspace source URLs                    |
+| `/api/workspaces/[id]/system-prompts`     | GET/PUT             | Get or update linked persona prompts                           |
+| `/api/workspaces/[id]/file-edit-approval` | POST                | Approve or reject a pending agent file edit                    |
 
 For detailed payload schemas, see the [API documentation](docs/API/).
 

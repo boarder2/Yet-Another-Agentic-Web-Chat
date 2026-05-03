@@ -40,6 +40,7 @@ YAAWC (**Pronounced: "yawck"** — as in the sound you make when yet another AI 
   - [Research Methodologies](#research-methodologies)
 - [Scheduled Tasks](#scheduled-tasks)
 - [Chat Retention](#chat-retention)
+- [Conversation Compaction](#conversation-compaction)
 - [Search Providers](#search-providers)
 - [Installation](#installation)
   - [Docker (Recommended)](#docker-recommended)
@@ -371,6 +372,13 @@ Policies are applied independently to two groups:
 
 Configure from the Settings page under "Retention", or via `[GENERAL.RETENTION]` in `config.toml`. Cleanup runs on a background cron alongside the private-session cleanup job.
 
+## Conversation Compaction
+
+Long conversations eat up context window. Compaction summarizes older messages into a dense briefing while keeping recent turns verbatim, so the agent stays informed without burning tokens.
+
+- **Context gauge & compaction** — a circular indicator in the message input shows context usage. Click to compact the conversation, optionally with custom instructions for what the summary should capture.
+- **Adjustable context window** — pick a preset size or enter a custom value to match your model.
+
 ## Search Providers
 
 YAAWC supports multiple search backends and lets you choose from the Settings page:
@@ -424,9 +432,9 @@ YAAWC supports multiple search backends and lets you choose from the Settings pa
 3. Install dependencies and build:
 
    ```bash
-   npm install
-   npm run build
-   npm run start
+   yarn install
+   yarn build
+   yarn start
    ```
 
 See [docs/installation](docs/installation) for additional configuration, updating, and tracing setup.

@@ -9,12 +9,10 @@ import {
   CalendarClock,
   LoaderCircle,
   Pin,
-  Plus,
   Search,
   Sparkles,
   X,
 } from 'lucide-react';
-import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 interface Props {

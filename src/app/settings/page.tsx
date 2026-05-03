@@ -66,7 +66,7 @@ export default function SettingsPage() {
   const [memoryAutoDetectionEnabled, setMemoryAutoDetectionEnabled] =
     useState(false);
   const [savingStates, setSavingStates] = useState<Record<string, boolean>>({});
-  const [contextWindowSize, setContextWindowSize] = useState(2048);
+  const [contextWindowSize, setContextWindowSize] = useState(32768);
   const [isCustomContextWindow, setIsCustomContextWindow] = useState(false);
 
   const [privateSessionDurationMinutes, setPrivateSessionDurationMinutes] =
@@ -219,7 +219,7 @@ export default function SettingsPage() {
         localStorage.getItem('autoSuggestions') !== 'false',
       );
       const storedContextWindow = parseInt(
-        localStorage.getItem('ollamaContextWindow') ?? '2048',
+        localStorage.getItem('contextWindowSize') ?? '32768',
       );
       setContextWindowSize(storedContextWindow);
       setIsCustomContextWindow(
@@ -568,8 +568,8 @@ export default function SettingsPage() {
         localStorage.setItem('chatModelProvider', value as string);
       } else if (key === 'chatModel') {
         localStorage.setItem('chatModel', value as string);
-      } else if (key === 'ollamaContextWindow') {
-        localStorage.setItem('ollamaContextWindow', value.toString());
+      } else if (key === 'contextWindowSize') {
+        localStorage.setItem('contextWindowSize', value.toString());
       }
     } catch (err) {
       console.error('Failed to save:', err);

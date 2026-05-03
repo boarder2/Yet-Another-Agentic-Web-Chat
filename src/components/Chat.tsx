@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { File, ImageAttachment, Message } from './ChatWindow';
+import CompactionIndicator from './CompactionIndicator';
 import MessageBox from './MessageBox';
 import MessageInput from './MessageInput';
 import TodoWidget, { TodoItemData } from './TodoWidget';
@@ -55,6 +56,10 @@ const Chat = ({
   isPrivateSession = false,
   searchCapabilities,
   topPadding,
+  estimatedUsage,
+  messageCount,
+  onCompact,
+  compacting,
 }: {
   messages: Message[];
   sendMessage: (
@@ -148,6 +153,10 @@ const Chat = ({
   };
   /** Top padding in px to clear all fixed header bars above the chat content. */
   topPadding?: number;
+  estimatedUsage?: number;
+  messageCount?: number;
+  onCompact?: (instructions?: string) => void;
+  compacting?: boolean;
 }) => {
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [manuallyScrolledUp, setManuallyScrolledUp] = useState(false);
@@ -313,6 +322,15 @@ const Chat = ({
     >
       {messages.map((msg, i) => {
         const isLast = i === messages.length - 1;
+
+        if (msg.role === 'compaction' && msg.compaction) {
+          return (
+            <CompactionIndicator
+              key={msg.messageId}
+              compaction={msg.compaction}
+            />
+          );
+        }
 
         return (
           <Fragment key={msg.messageId}>
@@ -496,6 +514,10 @@ const Chat = ({
           setPendingImages={setPendingImages}
           imageCapable={imageCapable}
           isPrivateSession={isPrivateSession}
+          estimatedUsage={estimatedUsage}
+          messageCount={messageCount}
+          onCompact={onCompact}
+          compacting={compacting}
         />
       </div>
       <div ref={messageEnd} className="h-0" />

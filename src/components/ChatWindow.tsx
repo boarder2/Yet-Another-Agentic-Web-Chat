@@ -41,6 +41,15 @@ export type ModelStats = {
   usedLocation?: boolean;
   usedPersonalization?: boolean;
   memoriesUsed?: number;
+  firstChatCallInputTokens?: number;
+};
+
+export type CompactionData = {
+  summary: string;
+  compactedMessageCount: number;
+  tokensBefore: number;
+  tokensAfter: number;
+  compactedAt: string;
 };
 
 export type Message = {
@@ -48,7 +57,7 @@ export type Message = {
   chatId: string;
   createdAt: Date;
   content: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'compaction';
   suggestions?: string[];
   sources?: Document[];
   modelStats?: ModelStats;
@@ -64,6 +73,7 @@ export type Message = {
   usedLocation?: boolean;
   usedPersonalization?: boolean;
   images?: ImageAttachment[];
+  compaction?: CompactionData;
 };
 
 export interface File {
@@ -296,7 +306,6 @@ const loadMessages = async (
   chatId: string,
   setMessages: (messages: Message[]) => void,
   setIsMessagesLoaded: (loaded: boolean) => void,
-  setChatHistory: (history: [string, string, string[]?][]) => void,
   setFocusMode: (mode: string) => void,
   setNotFound: (notFound: boolean) => void,
   setFiles: (files: File[]) => void,
@@ -327,16 +336,54 @@ const loadMessages = async (
     };
   }) as Message[];
 
-  setMessages(messages);
+  // Each compaction is stored as a 'compaction' role row in the DB with metadata
+  // containing compactedUpTo (the integer id of the last compacted message).
+  // Position each marker right after its compactedUpTo message in the list.
+  type RawMsg = Message & {
+    id?: number;
+    compactedUpTo?: number;
+    positionId?: number;
+    compactedMessageCount?: number;
+    tokensBefore?: number;
+    tokensAfter?: number;
+    compactedAt?: string;
+  };
+  const rawMessages = messages as RawMsg[];
 
-  const history = messages.map((msg) => {
-    const role = msg.role === 'user' ? 'human' : msg.role;
-    const entry: [string, string, string[]?] = [role, msg.content];
-    if (msg.role === 'user' && msg.images && msg.images.length > 0) {
-      entry[2] = msg.images.map((img: ImageAttachment) => img.imageId);
-    }
-    return entry;
-  }) as [string, string, string[]?][];
+  const compactionByPosition = new Map<number, Message[]>();
+  for (const row of rawMessages) {
+    if (row.role !== 'compaction') continue;
+    // Use positionId if available (last message at compact time), otherwise
+    // fall back to compactedUpTo (last compacted message id).
+    const pos = row.positionId ?? row.compactedUpTo ?? -1;
+    const marker: Message = {
+      messageId: row.messageId,
+      chatId,
+      createdAt: new Date(row.compactedAt || Date.now()),
+      content: row.content,
+      role: 'compaction',
+      compaction: {
+        summary: row.content,
+        compactedMessageCount: row.compactedMessageCount || 0,
+        tokensBefore: row.tokensBefore || 0,
+        tokensAfter: row.tokensAfter || 0,
+        compactedAt: row.compactedAt || '',
+      },
+    };
+    const existing = compactionByPosition.get(pos) ?? [];
+    existing.push(marker);
+    compactionByPosition.set(pos, existing);
+  }
+
+  const finalMessages: Message[] = [];
+  for (const msg of rawMessages) {
+    if (msg.role === 'compaction') continue;
+    finalMessages.push(msg as Message);
+    const markersHere = compactionByPosition.get(msg.id ?? -1) ?? [];
+    finalMessages.push(...markersHere);
+  }
+
+  setMessages(finalMessages);
 
   console.debug(new Date(), 'app:messages_loaded');
 
@@ -353,7 +400,6 @@ const loadMessages = async (
   setFiles(files);
   setFileIds(files.map((file: File) => file.fileId));
 
-  setChatHistory(history);
   setFocusMode(data.chat.focusMode);
   if (setIsPrivateSession) {
     setIsPrivateSession(data.chat.isPrivate === 1);
@@ -418,10 +464,8 @@ const ChatWindow = ({
   } | null>(null);
   const [liveModelStats, setLiveModelStats] = useState<ModelStats | null>(null);
 
-  const [chatHistory, setChatHistory] = useState<[string, string, string[]?][]>(
-    [],
-  );
   const [messages, setMessages] = useState<Message[]>([]);
+  const [compacting, setCompacting] = useState(false);
 
   const [todoItems, setTodoItems] = useState<
     Array<{ content: string; status: string }>
@@ -547,7 +591,6 @@ const ChatWindow = ({
         chatId,
         setMessages,
         setIsMessagesLoaded,
-        setChatHistory,
         setFocusMode,
         setNotFound,
         setFiles,
@@ -588,7 +631,6 @@ const ChatWindow = ({
 
     const isPriv = searchParams.get('private') === '1';
     setMessages([]);
-    setChatHistory([]);
     setFiles([]);
     setFileIds([]);
     setPendingImages([]);
@@ -616,7 +658,6 @@ const ChatWindow = ({
   useEffect(() => {
     if (prevPathnameRef.current !== pathname && pathname === '/' && !id) {
       setMessages([]);
-      setChatHistory([]);
       setFiles([]);
       setFileIds([]);
       setPendingImages([]);
@@ -696,9 +737,9 @@ const ChatWindow = ({
     let tokenCount = 0;
     const bufferThreshold = 5;
     let added = false;
-    let messageChatHistory = chatHistory;
 
-    // If the user is editing or rewriting a message, we need to remove the messages after it
+    // If the user is editing or rewriting a message, truncate local UI state.
+    // The server handles DB truncation in handleHistorySave (authoritative).
     const rewriteIndex = messages.findIndex(
       (msg) => msg.messageId === options?.messageId,
     );
@@ -706,9 +747,6 @@ const ChatWindow = ({
       setMessages((prev) => {
         return [...prev.slice(0, rewriteIndex)];
       });
-
-      messageChatHistory = chatHistory.slice(0, rewriteIndex);
-      setChatHistory(messageChatHistory);
 
       setScrollTrigger((prev) => prev + 1);
     }
@@ -1521,18 +1559,6 @@ const ChatWindow = ({
           }),
         );
 
-        setChatHistory((prevHistory) => [
-          ...prevHistory,
-          messageImageIds?.length
-            ? (['human', message, messageImageIds] as [
-                string,
-                string,
-                string[],
-              ])
-            : (['human', message] as [string, string]),
-          ['assistant', recievedMessage],
-        ]);
-
         setLoading(false);
         setGatheringSources([]); // Clear gathering sources when message is complete
         setLiveModelStats(null);
@@ -1562,8 +1588,10 @@ const ChatWindow = ({
       }
     };
 
-    const ollamaContextWindow =
-      localStorage.getItem('ollamaContextWindow') || '2048';
+    const contextWindowSize = parseInt(
+      localStorage.getItem('contextWindowSize') || '32768',
+      10,
+    );
 
     // Get the latest model selection from localStorage
     const currentChatModelProvider = localStorage.getItem('chatModelProvider');
@@ -1589,20 +1617,15 @@ const ChatWindow = ({
       chatId: chatId!,
       files: fileIds,
       focusMode: focusMode,
-      history: messageChatHistory,
       chatModel: {
         name: modelName,
         provider: modelProvider,
-        ...(chatModelProvider.provider === 'ollama' && {
-          ollamaContextWindow: parseInt(ollamaContextWindow),
-        }),
+        contextWindowSize,
       },
       systemModel: {
         name: systemModelName,
         provider: systemModelProvider,
-        ...(systemModelProvider === 'ollama' && {
-          ollamaContextWindow: parseInt(ollamaContextWindow),
-        }),
+        contextWindowSize,
       },
       embeddingModel: {
         name: embeddingModelProvider.name,
@@ -1781,6 +1804,95 @@ const ChatWindow = ({
     );
   }
 
+  // Context usage: use firstChatCallInputTokens from the most recent message
+  // that has it — this is the input to the first model call of that turn
+  // (system prompt + history), before tool results inflate it. Then add the
+  // assistant's output text, since it will be part of the next request's input.
+  // Falls back to a character-based estimate for messages that predate the metric.
+  const contextUsage = (() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const stats = messages[i].modelStats;
+      if (stats?.firstChatCallInputTokens) {
+        const outputEstimate = Math.round(
+          (messages[i].content?.length || 0) / 4,
+        );
+        return stats.firstChatCallInputTokens + outputEstimate;
+      }
+    }
+    // Fallback: estimate from all message content
+    const contentChars = messages.reduce(
+      (sum, m) => sum + (m.content?.length || 0),
+      0,
+    );
+    return Math.round(contentChars / 4) + 3000;
+  })();
+
+  const handleCompact = async (instructions?: string) => {
+    if (!chatId || compacting) return;
+    setCompacting(true);
+    try {
+      const contextWindowSize = parseInt(
+        localStorage.getItem('contextWindowSize') || '32768',
+        10,
+      );
+
+      const chatModelProvider =
+        localStorage.getItem('chatModelProvider') || undefined;
+      const chatModel = localStorage.getItem('chatModel') || undefined;
+      const systemModelProvider =
+        localStorage.getItem('systemModelProvider') || chatModelProvider;
+      const systemModel = localStorage.getItem('systemModel') || chatModel;
+
+      const res = await fetch('/api/chat/compact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chatId,
+          instructions,
+          chatModel:
+            chatModelProvider && chatModel
+              ? {
+                  provider: chatModelProvider,
+                  name: chatModel,
+                  contextWindowSize,
+                }
+              : undefined,
+          systemModel:
+            systemModelProvider && systemModel
+              ? {
+                  provider: systemModelProvider,
+                  name: systemModel,
+                  contextWindowSize,
+                }
+              : undefined,
+        }),
+      });
+      if (res.ok) {
+        // Reload messages from the server so all compaction checkpoint rows
+        // are displayed at their correct positions in history.
+        await loadMessages(
+          chatId,
+          setMessages,
+          setIsMessagesLoaded,
+          setFocusMode,
+          setNotFound,
+          setFiles,
+          setFileIds,
+          setIsPrivateSession,
+          setPinned,
+          setSelectedWorkspaceId,
+        );
+        toast.success('Conversation compacted');
+      } else {
+        toast.error('Compaction failed');
+      }
+    } catch {
+      toast.error('Compaction failed');
+    } finally {
+      setCompacting(false);
+    }
+  };
+
   return isReady ? (
     notFound ? (
       <NextError statusCode={404} />
@@ -1794,6 +1906,7 @@ const ChatWindow = ({
               isPrivateSession={isPrivateSession}
               pinned={pinned}
               setPinned={setPinned}
+              workspaceId={selectedWorkspaceId ?? workspaceId}
             />
             <Chat
               loading={loading}
@@ -1967,6 +2080,10 @@ const ChatWindow = ({
                   ? searchCapabilitiesPrivate
                   : searchCapabilitiesRegular
               }
+              estimatedUsage={contextUsage}
+              messageCount={messages.length}
+              onCompact={handleCompact}
+              compacting={compacting}
             />
           </>
         ) : (

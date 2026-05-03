@@ -17,8 +17,7 @@ export interface SettingsType {
   customOpenaiApiKey: string;
   customOpenaiApiUrl: string;
   customOpenaiModelName: string;
-  ollamaContextWindow: number;
-  hiddenModels: string[];
+  contextWindowSize: number;
   selectedSystemModelProvider: string;
   selectedSystemModel: string;
   selectedEmbeddingModelProvider: string;
@@ -50,6 +49,7 @@ export interface SettingsType {
     videos: boolean;
     autocomplete: boolean;
   };
+  hiddenModels: string[];
 }
 
 export type SectionKey =

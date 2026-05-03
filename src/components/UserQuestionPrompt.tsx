@@ -80,7 +80,7 @@ export function UserQuestionPrompt({
       });
     }, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [submitted, onSkip, questionId, onDismiss]);
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);

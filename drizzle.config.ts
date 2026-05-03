@@ -8,6 +8,6 @@ export default defineConfig({
   schema: './src/lib/db/schema.ts',
   out: './drizzle',
   dbCredentials: {
-    url: path.join(DATA_DIR, 'data', 'db.sqlite'),
+    url: path.join(DATA_DIR, 'db.sqlite'),
   },
 });

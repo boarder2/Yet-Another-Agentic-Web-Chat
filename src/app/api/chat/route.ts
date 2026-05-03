@@ -3,6 +3,7 @@ import { encodeHtmlAttribute } from '@/lib/utils/html';
 import { cleanupCancelToken, registerCancelToken } from '@/lib/cancel-tokens';
 import db from '@/lib/db';
 import { chats, messages as messagesSchema, workspaces } from '@/lib/db/schema';
+import { getChatMessages, getCompactionRows } from '@/lib/db/queries';
 import { resolveChatAndEmbedding } from '@/lib/providers/resolveModels';
 import { getFileDetails } from '@/lib/utils/files';
 import {
@@ -10,9 +11,14 @@ import {
   getMethodologyInstructions,
 } from '@/lib/utils/prompts';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import { AIMessage, BaseMessage, HumanMessage } from '@langchain/core/messages';
+import {
+  AIMessage,
+  BaseMessage,
+  HumanMessage,
+  SystemMessage,
+} from '@langchain/core/messages';
 import crypto from 'crypto';
-import { and, eq, gt } from 'drizzle-orm';
+import { and, eq, gt, ne } from 'drizzle-orm';
 import { EventEmitter } from 'stream';
 import {
   registerRetrieval,
@@ -48,12 +54,12 @@ type Message = {
 type ChatModel = {
   provider: string;
   name: string;
-  ollamaContextWindow?: number;
+  contextWindowSize?: number;
 };
 type SystemModel = {
   provider: string;
   name: string;
-  ollamaContextWindow?: number;
+  contextWindowSize?: number;
 };
 
 type EmbeddingModel = {
@@ -64,7 +70,6 @@ type EmbeddingModel = {
 type Body = {
   message: Message;
   focusMode: string;
-  history: Array<[string, string, string[]?]>;
   files: Array<string>;
   chatModel: ChatModel;
   systemModel?: SystemModel; // optional; defaults to chatModel
@@ -101,6 +106,7 @@ type ModelStats = {
   usageSystem?: TokenUsage;
   usedLocation?: boolean;
   usedPersonalization?: boolean;
+  firstChatCallInputTokens?: number;
 };
 
 const handleEmitterEvents = async (
@@ -276,7 +282,7 @@ const handleEmitterEvents = async (
           );
           recievedMessage = recievedMessage.replace(
             subagentRegex,
-            (match, openTag, content, closeTag) => {
+            (_match, openTag, content, closeTag) => {
               return `${openTag}${content}${nestedEvent.data.content}\n${closeTag}`;
             },
           );
@@ -316,7 +322,7 @@ const handleEmitterEvents = async (
         );
         recievedMessage = recievedMessage.replace(
           subagentRegex,
-          (match, attrs, innerContent) => {
+          (_match, attrs, innerContent) => {
             let updatedAttrs = attrs
               .replace(/status="[^"]*"/, `status="${status}"`)
               .trim();
@@ -622,15 +628,43 @@ const handleHistorySave = async (
       })
       .where(eq(messagesSchema.messageId, humanMessageId))
       .execute();
+
+    // Delete non-compaction messages after the rewrite point.
+    // Compaction checkpoint rows are handled separately below.
     await db
       .delete(messagesSchema)
       .where(
         and(
           gt(messagesSchema.id, messageExists.id),
           eq(messagesSchema.chatId, message.chatId),
+          ne(messagesSchema.role, 'compaction'),
         ),
       )
       .execute();
+
+    // Delete any compaction checkpoints invalidated by this rewrite.
+    // A checkpoint is invalid if the rewrite touches any message that
+    // existed when the checkpoint was created. positionId records the
+    // last message in the chat at compaction time — if the rewrite
+    // point falls at or before it, the message set the summary was
+    // generated alongside has changed.
+    // Falls back to compactedUpTo for legacy checkpoints that lack positionId.
+    const compactionRows = await getCompactionRows(message.chatId);
+    for (const row of compactionRows) {
+      const meta = JSON.parse((row.metadata as string) || '{}');
+      const boundary =
+        typeof meta.positionId === 'number'
+          ? meta.positionId
+          : meta.compactedUpTo;
+      const isValid =
+        typeof boundary === 'number' && boundary < messageExists.id;
+      if (!isValid) {
+        await db
+          .delete(messagesSchema)
+          .where(eq(messagesSchema.messageId, row.messageId))
+          .execute();
+      }
+    }
   }
 };
 
@@ -674,21 +708,21 @@ export const POST = async (req: Request) => {
       message.messageId ?? crypto.randomBytes(7).toString('hex');
     const aiMessageId = crypto.randomBytes(7).toString('hex');
 
-    const history: BaseMessage[] = body.history.map((msg) => {
-      if (msg[0] === 'human' || msg[0] === 'user') {
-        // If this history entry has image IDs, build a multimodal message
-        if (msg[2] && msg[2].length > 0) {
-          return buildMultimodalHumanMessage(msg[1], msg[2]);
+    // Build LangChain BaseMessage[] from DB rows
+    const buildHistoryFromDb = (
+      rows: (typeof messagesSchema.$inferSelect)[],
+    ): BaseMessage[] => {
+      return rows.map((msg) => {
+        const metadata = JSON.parse((msg.metadata as string) || '{}');
+        if (msg.role === 'user') {
+          if (metadata.images && metadata.images.length > 0) {
+            return buildMultimodalHumanMessage(msg.content, metadata.images);
+          }
+          return new HumanMessage({ content: msg.content });
         }
-        return new HumanMessage({
-          content: msg[1],
-        });
-      } else {
-        return new AIMessage({
-          content: msg[1],
-        });
-      }
-    });
+        return new AIMessage({ content: msg.content });
+      });
+    };
 
     // System instructions deprecated; only use persona prompts
     const personaInstructionsContent = await getPersonaInstructionsOnly(
@@ -855,6 +889,73 @@ export const POST = async (req: Request) => {
       }
     }
 
+    // Save user message to DB first, so the DB is authoritative before we read from it
+    await handleHistorySave(
+      message,
+      humanMessageId,
+      body.focusMode,
+      body.files,
+      body.messageImages,
+      body.isPrivate,
+      body.workspaceId,
+    );
+
+    // Read messages from DB (now includes the just-saved user message)
+    const dbMessages = await getChatMessages(message.chatId);
+
+    // Exclude the current user message from history: it will be added directly
+    // to the agent as the query/humanMsg parameter. Including it here as well
+    // would cause it to appear twice in the LLM message list, which is
+    // especially visible when compaction is active (the message ends up
+    // after the summary AND again as the final human turn).
+    const historyMessages = dbMessages.filter(
+      (m) => m.messageId !== humanMessageId,
+    );
+    console.log(
+      `[DEBUG][POST] historyMessages after excluding current user msg (${humanMessageId}): ${historyMessages.length} (was ${dbMessages.length})`,
+    );
+
+    // Apply compaction if the chat has been compacted — read the latest
+    // checkpoint from the messages table (single source of truth).
+    const compactionRows = await getCompactionRows(message.chatId);
+    const lastCheckpoint = compactionRows[compactionRows.length - 1];
+    const compactionSummary = lastCheckpoint?.content;
+    const compactionMeta = lastCheckpoint
+      ? (JSON.parse((lastCheckpoint.metadata as string) || '{}') as Record<
+          string,
+          unknown
+        >)
+      : {};
+    const compactedUpTo = compactionMeta.compactedUpTo as number | undefined;
+
+    let history: BaseMessage[];
+    // compactedUpTo must be a number (the auto-increment id). Legacy
+    // compactions stored a UUID messageId instead — skip those since a
+    // UUID/number comparison always produces NaN and drops all messages.
+    if (
+      compactionSummary &&
+      typeof compactedUpTo === 'number' &&
+      compactedUpTo >= 0
+    ) {
+      // Prepend summary as a system message
+      const summaryMsg = new SystemMessage(
+        `[Previous conversation summary — compressed older messages. The verbatim messages that follow are more recent and more authoritative. Prefer them when they conflict.]:\n${compactionSummary}`,
+      );
+      // Only include messages after the compaction point (id is auto-increment)
+      const compactedMessages = historyMessages.filter(
+        (m) => m.id > compactedUpTo,
+      );
+      console.log(
+        `[DEBUG][POST] Building history WITH compaction: compactedUpTo=${compactedUpTo}, totalDbMessages=${dbMessages.length}, historyMessages=${historyMessages.length}, keptMessages=${compactedMessages.length}, keptIds=[${compactedMessages.map((m) => m.id).join(',')}]`,
+      );
+      history = [summaryMsg, ...buildHistoryFromDb(compactedMessages)];
+    } else {
+      console.log(
+        `[DEBUG][POST] Building history WITHOUT compaction: totalDbMessages=${dbMessages.length}, historyMessages=${historyMessages.length}, compactionSummary=${!!compactionSummary}, compactedUpTo=${compactedUpTo}`,
+      );
+      history = buildHistoryFromDb(historyMessages);
+    }
+
     const handler = new SimplifiedAgent(
       chatLlm,
       systemLlm!,
@@ -960,16 +1061,6 @@ export const POST = async (req: Request) => {
           });
       });
     }
-
-    handleHistorySave(
-      message,
-      humanMessageId,
-      body.focusMode,
-      body.files,
-      body.messageImages,
-      body.isPrivate,
-      body.workspaceId,
-    );
 
     return new Response(responseStream.readable, {
       headers: {

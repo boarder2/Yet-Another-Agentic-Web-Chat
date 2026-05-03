@@ -19,12 +19,14 @@ const ChatActions = ({
   isPrivateSession = false,
   pinned = false,
   setPinned,
+  workspaceId,
 }: {
   messages: Message[];
   chatId: string;
   isPrivateSession?: boolean;
   pinned?: boolean;
   setPinned?: (pinned: boolean) => void;
+  workspaceId?: string;
 }) => {
   const [title, setTitle] = useState<string>('');
   const [timeAgo, setTimeAgo] = useState<string>('');
@@ -183,6 +185,7 @@ const ChatActions = ({
                 chatId={chatId}
                 chats={[]}
                 setChats={() => {}}
+                redirectTo={workspaceId ? `/workspaces/${workspaceId}` : '/'}
                 isPrivate={isPrivateSession}
                 expiresIn={expiresIn}
                 asMenuItem

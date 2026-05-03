@@ -56,8 +56,10 @@ const SearchImages = ({
       const chatModel = localStorage.getItem('chatModel');
       const customOpenAIBaseURL = localStorage.getItem('openAIBaseURL');
       const customOpenAIKey = localStorage.getItem('openAIApiKey');
-      const ollamaContextWindow =
-        localStorage.getItem('ollamaContextWindow') || '2048';
+      const contextWindowSize = parseInt(
+        localStorage.getItem('contextWindowSize') || '32768',
+        10,
+      );
 
       // Get selected system prompt IDs from localStorage
       const storedPromptIds = localStorage.getItem('selectedSystemPromptIds');
@@ -85,12 +87,10 @@ const SearchImages = ({
             chatModel: {
               provider: chatModelProvider,
               model: chatModel,
+              contextWindowSize,
               ...(chatModelProvider === 'custom_openai' && {
                 customOpenAIBaseURL: customOpenAIBaseURL,
                 customOpenAIKey: customOpenAIKey,
-              }),
-              ...(chatModelProvider === 'ollama' && {
-                ollamaContextWindow: parseInt(ollamaContextWindow),
               }),
             },
             selectedSystemPromptIds: selectedSystemPromptIds,
@@ -120,7 +120,7 @@ const SearchImages = ({
     };
 
     fetchImages();
-  }, [query, messageId, chatHistory, onImagesLoaded]);
+  }, [query, messageId, chatHistory, onImagesLoaded, isPrivate]);
 
   return (
     <>

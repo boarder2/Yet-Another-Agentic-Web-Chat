@@ -90,7 +90,7 @@ export async function POST(req: Request) {
     const embedding_model_provider = formData.get('embedding_model_provider');
     const chat_model = formData.get('chat_model');
     const chat_model_provider = formData.get('chat_model_provider');
-    const ollama_context_window = formData.get('ollama_context_window');
+    const context_window = formData.get('context_window_size');
 
     if (!embedding_model || !embedding_model_provider) {
       return NextResponse.json(
@@ -149,13 +149,15 @@ export async function POST(req: Request) {
     } else if (chatModelProvider && chatModelConfig) {
       llm = chatModelConfig.model;
 
-      // Set context window size for Ollama models
       if (llm instanceof ChatOllama && chat_model_provider === 'ollama') {
-        // Use provided context window or default to 2048
-        const contextWindow = ollama_context_window ? 
-          parseInt(ollama_context_window as string, 10) : 2048;
+        const contextWindow = context_window
+          ? parseInt(context_window as string, 10)
+          : 32768;
         llm.numCtx = contextWindow;
       }
+      (llm as any).contextWindowSize = context_window
+        ? parseInt(context_window as string, 10)
+        : 32768;
     }
 
     const processedFiles: FileRes[] = [];

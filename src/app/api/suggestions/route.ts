@@ -13,7 +13,7 @@ import { ChatOllama } from '@langchain/ollama';
 interface ChatModel {
   provider: string;
   model: string;
-  ollamaContextWindow?: number;
+  contextWindowSize?: number;
 }
 
 interface SuggestionsGenerationBody {
@@ -60,10 +60,11 @@ export const POST = async (req: Request) => {
       }) as unknown as BaseChatModel;
     } else if (chatModelProvider && chatModel) {
       llm = chatModel.model;
-      // Set context window size for Ollama models
       if (llm instanceof ChatOllama && body.chatModel?.provider === 'ollama') {
-        llm.numCtx = body.chatModel.ollamaContextWindow || 2048;
+        llm.numCtx = body.chatModel.contextWindowSize || 32768;
       }
+      (llm as unknown as { contextWindowSize?: number }).contextWindowSize =
+        body.chatModel?.contextWindowSize || 32768;
     }
 
     if (!llm) {

@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils';
 import { Pencil } from 'lucide-react';
+import Image from 'next/image';
 import { useState } from 'react';
 import { File, ImageAttachment, Message } from './ChatWindow';
 import MarkdownRenderer from './MarkdownRenderer';
@@ -185,11 +186,13 @@ const MessageBox = ({
                 {message.images && message.images.length > 0 && (
                   <div className="flex flex-row gap-2 mt-3 flex-wrap">
                     {message.images.map((img) => (
-                      <img
+                      <Image
                         key={img.imageId}
                         src={`/api/uploads/images/${img.imageId}`}
                         alt={img.fileName}
-                        className="max-h-40 max-w-[200px] object-cover rounded-surface border border-surface-2"
+                        width={200}
+                        height={160}
+                        className="max-h-40 max-w-[200px] h-auto object-cover rounded-surface border border-surface-2"
                       />
                     ))}
                   </div>

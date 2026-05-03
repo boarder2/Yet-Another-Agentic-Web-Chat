@@ -9,13 +9,15 @@ import {
   getCustomOpenaiApiKey,
   getCustomOpenaiApiUrl,
   getCustomOpenaiModelName,
+  getSelectedSystemModel,
+  getSelectedEmbeddingModel,
 } from '@/lib/config';
 import { CachedEmbeddings } from '@/lib/utils/cachedEmbeddings';
 
 export type ModelRef = {
   provider: string;
   name: string;
-  ollamaContextWindow?: number;
+  contextWindowSize?: number;
 };
 export type EmbeddingRef = { provider: string; name: string };
 
@@ -42,14 +44,20 @@ export async function resolveChatAndEmbedding(input: {
       input.chatModel?.name || Object.keys(chatModelProvider || {})[0]
     ];
 
-  const embeddingProvider =
-    embeddingModelProviders[
-      input.embeddingModel?.provider || Object.keys(embeddingModelProviders)[0]
-    ];
-  const embeddingModelEntry =
-    embeddingProvider?.[
-      input.embeddingModel?.name || Object.keys(embeddingProvider || {})[0]
-    ];
+  // Embedding model: prefer explicit input, then config.toml, then first available
+  const selectedEmbedding = getSelectedEmbeddingModel();
+  const embeddingProviderKey =
+    input.embeddingModel?.provider ||
+    selectedEmbedding.provider ||
+    Object.keys(embeddingModelProviders)[0];
+  const embeddingProvider = embeddingModelProviders[embeddingProviderKey];
+  const embeddingModelName =
+    input.embeddingModel?.name ||
+    (embeddingProviderKey === selectedEmbedding.provider
+      ? selectedEmbedding.name
+      : undefined) ||
+    Object.keys(embeddingProvider || {})[0];
+  const embeddingModelEntry = embeddingProvider?.[embeddingModelName];
 
   let chatLlm: BaseChatModel | undefined;
   let systemLlm: BaseChatModel | undefined;
@@ -60,8 +68,8 @@ export async function resolveChatAndEmbedding(input: {
 
   const embedding = new CachedEmbeddings(
     embeddingModelEntry.model,
-    input.embeddingModel?.provider || Object.keys(embeddingModelProviders)[0],
-    input.embeddingModel?.name || Object.keys(embeddingProvider || {})[0],
+    embeddingProviderKey,
+    embeddingModelName,
   );
 
   if (input.chatModel?.provider === 'custom_openai') {
@@ -75,11 +83,16 @@ export async function resolveChatAndEmbedding(input: {
   } else if (chatModelProvider && chatModelEntry) {
     chatLlm = chatModelEntry.model;
 
-    if (
-      chatLlm instanceof ChatOllama &&
-      input.chatModel?.provider === 'ollama'
-    ) {
-      chatLlm.numCtx = input.chatModel.ollamaContextWindow || 2048;
+    if (chatLlm) {
+      const cw = input.chatModel?.contextWindowSize || 32768;
+      if (
+        chatLlm instanceof ChatOllama &&
+        input.chatModel?.provider === 'ollama'
+      ) {
+        chatLlm.numCtx = cw;
+      }
+      (chatLlm as unknown as { contextWindowSize?: number }).contextWindowSize =
+        cw;
     }
   }
 
@@ -102,11 +115,42 @@ export async function resolveChatAndEmbedding(input: {
         | BaseChatModel
         | undefined;
     }
+    if (systemLlm) {
+      const cw = input.systemModel?.contextWindowSize || 32768;
+      if (
+        systemLlm instanceof ChatOllama &&
+        input.systemModel?.provider === 'ollama'
+      ) {
+        systemLlm.numCtx = cw;
+      }
+      (
+        systemLlm as unknown as { contextWindowSize?: number }
+      ).contextWindowSize = cw;
+    }
+  }
+  if (!systemLlm) {
+    // Fall back to config.toml SELECTED_MODELS.system, then to chat model
+    const selectedSystem = getSelectedSystemModel();
     if (
-      systemLlm instanceof ChatOllama &&
-      input.systemModel?.provider === 'ollama'
+      selectedSystem.provider &&
+      selectedSystem.name &&
+      chatModelProviders[selectedSystem.provider]?.[selectedSystem.name]
     ) {
-      systemLlm.numCtx = input.systemModel.ollamaContextWindow || 2048;
+      systemLlm = chatModelProviders[selectedSystem.provider][
+        selectedSystem.name
+      ].model as unknown as BaseChatModel | undefined;
+      if (systemLlm) {
+        const cw = input.systemModel?.contextWindowSize || 32768;
+        if (
+          systemLlm instanceof ChatOllama &&
+          selectedSystem.provider === 'ollama'
+        ) {
+          systemLlm.numCtx = cw;
+        }
+        (
+          systemLlm as unknown as { contextWindowSize?: number }
+        ).contextWindowSize = cw;
+      }
     }
   }
   if (!systemLlm) systemLlm = chatLlm;

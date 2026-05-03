@@ -16,7 +16,7 @@ const DeleteChat = ({
   chatId,
   chats,
   setChats,
-  redirect = false,
+  redirectTo,
   isPrivate = false,
   expiresIn,
   asMenuItem = false,
@@ -24,7 +24,7 @@ const DeleteChat = ({
   chatId: string;
   chats: Chat[];
   setChats: (chats: Chat[]) => void;
-  redirect?: boolean;
+  redirectTo?: string;
   isPrivate?: boolean;
   expiresIn?: string;
   asMenuItem?: boolean;
@@ -50,8 +50,8 @@ const DeleteChat = ({
 
       setChats(newChats);
 
-      if (redirect) {
-        window.location.href = '/';
+      if (redirectTo) {
+        window.location.href = redirectTo;
       }
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : String(err));

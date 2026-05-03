@@ -149,6 +149,7 @@ export class SimplifiedAgent {
   private isPrivate: boolean;
   private initialSystemUsage: TokenUsage;
   private workspaceSuffix: string;
+  private firstChatCallInputTokens = 0;
 
   constructor(
     chatLlm: BaseChatModel,
@@ -230,6 +231,7 @@ export class SimplifiedAgent {
           },
           usageChat,
           usageSystem,
+          firstChatCallInputTokens: this.firstChatCallInputTokens,
         },
       }),
     );
@@ -1045,6 +1047,9 @@ export class SimplifiedAgent {
 
             if (output.usage_metadata) {
               const normalized = normalizeUsageMetadata(output.usage_metadata);
+              if (!this.firstChatCallInputTokens) {
+                this.firstChatCallInputTokens = normalized.input_tokens;
+              }
               usageChat.input_tokens += normalized.input_tokens;
               usageChat.output_tokens += normalized.output_tokens;
               usageChat.total_tokens += normalized.total_tokens;
@@ -1059,6 +1064,9 @@ export class SimplifiedAgent {
               const normalized = normalizeUsageMetadata(
                 output.response_metadata.usage,
               );
+              if (!this.firstChatCallInputTokens) {
+                this.firstChatCallInputTokens = normalized.input_tokens;
+              }
               usageChat.input_tokens += normalized.input_tokens;
               usageChat.output_tokens += normalized.output_tokens;
               usageChat.total_tokens += normalized.total_tokens;
@@ -1092,6 +1100,9 @@ export class SimplifiedAgent {
               const normalized = normalizeUsageMetadata(
                 output.llmOutput.tokenUsage,
               );
+              if (!this.firstChatCallInputTokens) {
+                this.firstChatCallInputTokens = normalized.input_tokens;
+              }
               usageChat.input_tokens += normalized.input_tokens;
               usageChat.output_tokens += normalized.output_tokens;
               usageChat.total_tokens += normalized.total_tokens;

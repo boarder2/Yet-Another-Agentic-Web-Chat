@@ -12,7 +12,7 @@ export const messages = sqliteTable('messages', {
   content: text('content').notNull(),
   chatId: text('chatId').notNull(),
   messageId: text('messageId').notNull(),
-  role: text('type', { enum: ['assistant', 'user'] }),
+  role: text('type', { enum: ['assistant', 'user', 'compaction'] }),
   metadata: text('metadata', {
     mode: 'json',
   }),
@@ -94,12 +94,12 @@ export const scheduledTasks = sqliteTable('scheduled_tasks', {
     .$type<string[]>()
     .default(sql`'[]'`),
   chatModel: text('chat_model', { mode: 'json' })
-    .$type<{ provider: string; name: string; ollamaContextWindow?: number }>()
+    .$type<{ provider: string; name: string; contextWindowSize?: number }>()
     .notNull(),
   systemModel: text('system_model', { mode: 'json' }).$type<{
     provider: string;
     name: string;
-    ollamaContextWindow?: number;
+    contextWindowSize?: number;
   } | null>(),
   embeddingModel: text('embedding_model', { mode: 'json' })
     .$type<{ provider: string; name: string }>()

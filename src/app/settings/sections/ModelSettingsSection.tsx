@@ -10,9 +10,7 @@ import Select from '../components/Select';
 import InputComponent from '../components/InputComponent';
 import { SettingsType } from '../types';
 
-const predefinedContextSizes = [
-  1024, 2048, 3072, 4096, 8192, 16384, 32768, 65536, 131072,
-];
+const predefinedContextSizes = [32768, 65536, 131072, 262144];
 
 export default function ModelSettingsSection({
   config,
@@ -80,6 +78,8 @@ export default function ModelSettingsSection({
       setRefreshing(false);
     }
   };
+
+  const chatModelLabel = selectedChatModel || 'Chat';
 
   return (
     <SettingsSection
@@ -185,78 +185,78 @@ export default function ModelSettingsSection({
                         ];
                   })()}
                 />
-                {selectedChatModelProvider === 'ollama' && (
-                  <div className="flex flex-col space-y-1">
-                    <p className="text-sm">Chat Context Window Size</p>
-                    <Select
-                      value={
-                        isCustomContextWindow
-                          ? 'custom'
-                          : contextWindowSize.toString()
-                      }
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        if (value === 'custom') {
-                          setIsCustomContextWindow(true);
-                        } else {
-                          setIsCustomContextWindow(false);
-                          const numValue = parseInt(value);
-                          setContextWindowSize(numValue);
-                          setConfig((prev) => ({
-                            ...prev!,
-                            ollamaContextWindow: numValue,
-                          }));
-                          saveConfig('ollamaContextWindow', numValue);
-                        }
-                      }}
-                      options={[
-                        ...predefinedContextSizes.map((size) => ({
-                          value: size.toString(),
-                          label: `${size.toLocaleString()} tokens`,
-                        })),
-                        { value: 'custom', label: 'Custom...' },
-                      ]}
-                    />
-                    {isCustomContextWindow && (
-                      <div className="mt-2">
-                        <InputComponent
-                          type="number"
-                          min={512}
-                          value={contextWindowSize}
-                          placeholder="Custom context window size (minimum 512)"
-                          isSaving={savingStates['ollamaContextWindow']}
-                          onChange={(e) => {
-                            const value =
-                              parseInt(e.target.value) || contextWindowSize;
-                            setContextWindowSize(value);
-                          }}
-                          onSave={(value) => {
-                            const numValue = Math.max(
-                              512,
-                              parseInt(value) || 2048,
-                            );
-                            setContextWindowSize(numValue);
-                            setConfig((prev) => ({
-                              ...prev!,
-                              ollamaContextWindow: numValue,
-                            }));
-                            saveConfig('ollamaContextWindow', numValue);
-                          }}
-                        />
-                      </div>
-                    )}
-                    <p className="text-xs mt-0.5">
-                      {isCustomContextWindow
-                        ? 'Adjust the context window size for Ollama models (minimum 512 tokens)'
-                        : 'Adjust the context window size for Ollama models'}
-                    </p>
-                  </div>
-                )}
                 <p className="text-xs mt-0.5">
                   Used for chat responses and agentic tasks.
                 </p>
               </div>
             )}
+
+          {/* Available Context Window */}
+          <div className="flex flex-col space-y-1 pt-2 border-t border-surface-2">
+            <p className="text-sm font-medium">Available Context Window</p>
+            <div className="flex flex-col space-y-1">
+              <p className="text-xs text-fg/60">{chatModelLabel}</p>
+              <Select
+                value={
+                  isCustomContextWindow
+                    ? 'custom'
+                    : contextWindowSize.toString()
+                }
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === 'custom') {
+                    setIsCustomContextWindow(true);
+                  } else {
+                    setIsCustomContextWindow(false);
+                    const numValue = parseInt(value);
+                    setContextWindowSize(numValue);
+                    setConfig((prev) => ({
+                      ...prev!,
+                      contextWindowSize: numValue,
+                    }));
+                    saveConfig('contextWindowSize', numValue);
+                  }
+                }}
+                options={[
+                  ...predefinedContextSizes.map((size) => ({
+                    value: size.toString(),
+                    label: `${size.toLocaleString()} tokens`,
+                  })),
+                  { value: 'custom', label: 'Custom...' },
+                ]}
+              />
+              {isCustomContextWindow && (
+                <div className="mt-2">
+                  <InputComponent
+                    type="number"
+                    min={512}
+                    value={contextWindowSize}
+                    placeholder="Custom context window size (minimum 512)"
+                    isSaving={savingStates['contextWindowSize']}
+                    onChange={(e) => {
+                      const value =
+                        parseInt(e.target.value) || contextWindowSize;
+                      setContextWindowSize(value);
+                    }}
+                    onSave={(value) => {
+                      const numValue = Math.max(512, parseInt(value) || 32768);
+                      setContextWindowSize(numValue);
+                      setConfig((prev) => ({
+                        ...prev!,
+                        contextWindowSize: numValue,
+                      }));
+                      saveConfig('contextWindowSize', numValue);
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+            <p className="text-xs mt-1 text-fg/40">
+              The maximum context size available to both your chat model and
+              system model. Both models must support this context size. For
+              non-Ollama providers, this acts as a compaction threshold.
+            </p>
+          </div>
         </div>
       )}
 

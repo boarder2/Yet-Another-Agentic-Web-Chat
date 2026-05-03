@@ -9,7 +9,7 @@ import {
   Check,
   X,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 
 interface Memory {
   id: string;
@@ -38,7 +38,10 @@ export default function WorkspaceMemoryTab({
   const [editContent, setEditContent] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
 
-  async function load() {
+  const onCountChangeRef = useRef(onCountChange);
+  onCountChangeRef.current = onCountChange;
+
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch(
@@ -47,15 +50,15 @@ export default function WorkspaceMemoryTab({
       const data = await res.json();
       const list = data.data ?? [];
       setMemories(list);
-      onCountChange?.(list.length);
+      onCountChangeRef.current?.(list.length);
     } finally {
       setLoading(false);
     }
-  }
+  }, [workspaceId]);
 
   useEffect(() => {
     load();
-  }, [workspaceId]);
+  }, [load]);
 
   async function handleAdd() {
     if (!newContent.trim()) return;

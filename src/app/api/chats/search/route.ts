@@ -36,17 +36,6 @@ Now extract terms for the actual query:
 <terms>
 `;
 
-interface ChatModel {
-  provider: string;
-  model: string;
-  ollamaContextWindow?: number;
-}
-
-interface _LlmSearchBody {
-  query: string;
-  chatModel?: ChatModel;
-}
-
 interface ChatRow {
   id: string;
   title: string;
@@ -177,8 +166,10 @@ export const POST = async (req: Request) => {
     } else if (chatModelProvider && selectedChatModel) {
       llm = selectedChatModel.model;
       if (llm instanceof ChatOllama && chatModel?.provider === 'ollama') {
-        llm.numCtx = chatModel.ollamaContextWindow || 2048;
+        llm.numCtx = chatModel.contextWindowSize || 32768;
       }
+      (llm as unknown as { contextWindowSize?: number }).contextWindowSize =
+        chatModel.contextWindowSize || 32768;
     }
 
     if (!llm) {

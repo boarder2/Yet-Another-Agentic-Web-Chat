@@ -6,8 +6,10 @@ export const getSuggestions = async (chatHisory: Message[]) => {
 
   const customOpenAIKey = localStorage.getItem('openAIApiKey');
   const customOpenAIBaseURL = localStorage.getItem('openAIBaseURL');
-  const ollamaContextWindow =
-    localStorage.getItem('ollamaContextWindow') || '2048';
+  const contextWindowSize = parseInt(
+    localStorage.getItem('contextWindowSize') || '32768',
+    10,
+  );
 
   // Get selected system prompt IDs from localStorage
   const storedPromptIds = localStorage.getItem('selectedSystemPromptIds');
@@ -33,12 +35,10 @@ export const getSuggestions = async (chatHisory: Message[]) => {
       chatModel: {
         provider: chatModelProvider,
         model: chatModel,
+        contextWindowSize,
         ...(chatModelProvider === 'custom_openai' && {
           customOpenAIKey,
           customOpenAIBaseURL,
-        }),
-        ...(chatModelProvider === 'ollama' && {
-          ollamaContextWindow: parseInt(ollamaContextWindow),
         }),
       },
       selectedSystemPromptIds: selectedSystemPromptIds,

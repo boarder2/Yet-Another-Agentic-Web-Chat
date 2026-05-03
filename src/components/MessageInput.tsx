@@ -1,8 +1,10 @@
+import Image from 'next/image';
 import { ArrowRight, ArrowUp, LoaderCircle, Square, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
 import { File, ImageAttachment } from './ChatWindow';
 import Attach from './MessageInputActions/Attach';
+import ContextIndicator from './MessageInputActions/ContextIndicator';
 import Focus from './MessageInputActions/Focus';
 import ModelConfigurator from './MessageInputActions/ModelConfigurator';
 import SystemPromptSelector from './MessageInputActions/SystemPromptSelector'; // Import new component
@@ -37,6 +39,10 @@ const MessageInput = ({
   isPrivateSession = false,
   selectedMethodologyId,
   setSelectedMethodologyId,
+  estimatedUsage,
+  messageCount,
+  onCompact,
+  compacting,
 }: {
   sendMessage: (
     message: string,
@@ -71,6 +77,10 @@ const MessageInput = ({
   isPrivateSession?: boolean;
   selectedMethodologyId?: string | null;
   setSelectedMethodologyId?: (id: string | null) => void;
+  estimatedUsage?: number;
+  messageCount?: number;
+  onCompact?: (instructions?: string) => void;
+  compacting?: boolean;
 }) => {
   const [message, setMessage] = useState(initialMessage || '');
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -212,9 +222,11 @@ const MessageInput = ({
           <div className="flex flex-row gap-2 mb-2 overflow-x-auto pb-1">
             {pendingImages.map((img) => (
               <div key={img.imageId} className="relative shrink-0 group/thumb">
-                <img
+                <Image
                   src={`/api/uploads/images/${img.imageId}`}
                   alt={img.fileName}
+                  width={80}
+                  height={80}
                   className="h-20 w-20 object-cover rounded-surface border border-surface-2"
                 />
                 <button
@@ -291,6 +303,23 @@ const MessageInput = ({
                 locationPreview={personalizationLocation}
                 profilePreview={personalizationAbout}
                 onRefresh={refreshPersonalization}
+              />
+            )}
+            {estimatedUsage !== undefined && onCompact && (
+              <ContextIndicator
+                chatModelContextWindow={parseInt(
+                  typeof window !== 'undefined'
+                    ? localStorage.getItem('contextWindowSize') || '32768'
+                    : '32768',
+                  10,
+                )}
+                estimatedUsage={estimatedUsage}
+                messageCount={messageCount ?? 0}
+                onCompact={onCompact}
+                onChatContextSizeChange={(size) => {
+                  localStorage.setItem('contextWindowSize', String(size));
+                }}
+                compacting={compacting}
               />
             )}
             {loading ? (

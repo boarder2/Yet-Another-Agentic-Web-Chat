@@ -458,6 +458,14 @@ const handleEmitterEvents = async (
           messageId: aiMessageId,
         }) + '\n',
       );
+    } else if (parsedData.type === 'workspace_file_changed') {
+      safeWrite(
+        JSON.stringify({
+          type: parsedData.type,
+          data: parsedData.data,
+          messageId: aiMessageId,
+        }) + '\n',
+      );
     }
   });
 

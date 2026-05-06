@@ -21,6 +21,17 @@ const URLFetchToolSchema = z.object({
     .optional()
     .default('extract relevant content')
     .describe('Processing intent for the URLs'),
+  fullContent: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe(
+      'If true, returns the full page content without LLM summarization. ' +
+        'Use when you need complete text for detailed analysis, fact-checking, ' +
+        'extracting specific data points, finding exact passages, or examining code. ' +
+        'Warning: full content can be very large and consumes significant context window space. ' +
+        'Only use when summarization would lose critical detail.',
+    ),
 });
 
 /**
@@ -38,7 +49,12 @@ export const urlFetchTool = tool(
     config?: RunnableConfig,
   ) => {
     try {
-      const { urls, query, intent = 'extract relevant content' } = input;
+      const {
+        urls,
+        query,
+        intent = 'extract relevant content',
+        fullContent = false,
+      } = input;
 
       const currentState = getCurrentTaskInput() as SimplifiedAgentStateType;
       let currentDocCount = currentState.relevantDocuments?.length ?? 0;
@@ -95,7 +111,12 @@ export const urlFetchTool = tool(
 
           // Fetch full content using the enhanced web content retrieval.
           // Content is returned as clean markdown with inline links.
-          const webContent = await getWebContent(url, 50000, retrievalSignal);
+          const truncateLimit = fullContent ? 200_000 : 50_000;
+          const webContent = await getWebContent(
+            url,
+            truncateLimit,
+            retrievalSignal,
+          );
 
           if (!webContent || !webContent.pageContent) {
             console.warn(`URLFetchTool: No content retrieved from URL: ${url}`);
@@ -106,8 +127,16 @@ export const urlFetchTool = tool(
           let finalContent: string;
           let processingType: string;
 
-          // If content is short (< 4000 chars), use it directly; otherwise summarize
-          if (contentLength < 4000) {
+          if (fullContent) {
+            // Full content mode: return as-is, no summarization
+            finalContent = webContent.pageContent;
+            processingType = 'url-full-content';
+
+            console.log(
+              `URLFetchTool: Full content mode, returning ${contentLength} chars directly`,
+            );
+          } else if (contentLength < 4000) {
+            // Content is short, use directly
             finalContent = webContent.pageContent;
             processingType = 'url-direct-content';
 
@@ -268,7 +297,7 @@ Provide a comprehensive summary of the above web page content, focusing on infor
   {
     name: 'url_fetch',
     description:
-      'Retrieves full web content from URLs. Returns the complete page content when it fits within limits, falling back to a focused summary for very long pages. Use this to read the actual contents of a URL. URLs must be real and should not be invented.',
+      'Retrieves web content from URLs. By default, returns full content for short pages and a focused LLM summary for long pages. Set fullContent=true to bypass summarization and get the complete page text — useful for detailed analysis, fact-checking, or data extraction. URLs must be real and should not be invented.',
     schema: URLFetchToolSchema,
   },
 );

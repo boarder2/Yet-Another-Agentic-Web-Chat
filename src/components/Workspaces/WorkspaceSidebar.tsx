@@ -94,6 +94,26 @@ export default function WorkspaceSidebar({
 
   const [openFileId, setOpenFileId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Listen for workspace-updated events to re-fetch counts
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ workspaceId: string }>).detail;
+      if (detail?.workspaceId === workspaceId) {
+        setCounts({
+          files: null,
+          sources: null,
+          memory: null,
+          instructionsLength: null,
+          instructionsLinked: null,
+        });
+        setRefreshKey((k) => k + 1);
+      }
+    };
+    window.addEventListener('workspace-updated', handler);
+    return () => window.removeEventListener('workspace-updated', handler);
+  }, [workspaceId]);
 
   // When a section is collapsed, fetch its count once so the summary is meaningful.
   useEffect(() => {
@@ -142,7 +162,7 @@ export default function WorkspaceSidebar({
         .catch(() => {});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId]);
+  }, [workspaceId, refreshKey]);
 
   function toggle(k: SectionKey) {
     setOpen((o) => ({ ...o, [k]: !o[k] }));

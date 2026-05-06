@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   FileText,
@@ -125,7 +125,7 @@ export default function FilesTab({
   const [noteName, setNoteName] = useState('note.md');
   const [uploading, setUploading] = useState(false);
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
     setLoading(true);
     const data = await fetch(`/api/workspaces/${workspaceId}/files`).then((r) =>
       r.json(),
@@ -134,12 +134,21 @@ export default function FilesTab({
     setFiles(list);
     onCountChange?.(list.length);
     setLoading(false);
-  }
+  }, [workspaceId, onCountChange]);
 
   useEffect(() => {
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId]);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ workspaceId: string }>).detail;
+      if (detail?.workspaceId === workspaceId) refresh();
+    };
+    window.addEventListener('workspace-updated', handler);
+    return () => window.removeEventListener('workspace-updated', handler);
+  }, [workspaceId, refresh]);
 
   async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];

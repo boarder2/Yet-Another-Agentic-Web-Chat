@@ -26,7 +26,7 @@ export function buildWebSearchPrompt(
       : '- When the conversation history leaves any gaps, use web search to fill them — all prior knowledge benefits from verification with current sources.';
 
   const explicitUrlInstruction = hasExplicitUrls
-    ? `- The user query contains explicit URL${uniqueUrls.length === 1 ? '' : 's'} — retrieve them directly with url_fetch before answering.\n    - Pass URLs exactly as provided to preserve their integrity.\n    - Begin with url_fetch results, then assess whether additional searches are needed to fully answer the query.`
+    ? `- The user query contains explicit URL${uniqueUrls.length === 1 ? '' : 's'} — retrieve them directly with url_fetch before answering.\n    - Pass URLs exactly as provided to preserve their integrity.\n    - Begin with url_fetch results, then assess whether additional searches are needed to fully answer the query.\n    - When you need specific data, code examples, exact quotes, or detailed fact-checking from a URL, set fullContent=true on url_fetch to get the complete page text without summarization.`
     : '';
 
   const defaultStrategy = `# Research Strategy

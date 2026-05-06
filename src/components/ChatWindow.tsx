@@ -12,6 +12,7 @@ import { PendingEditApproval } from './WorkspaceEditApproval';
 import EmptyChat from './EmptyChat';
 import crypto from 'crypto';
 import { toast } from 'sonner';
+import { notifyWorkspaceUpdated } from '@/lib/hooks/useWorkspace';
 import { useSearchParams, usePathname } from 'next/navigation';
 import { getSuggestions } from '@/lib/actions';
 import { LoaderCircle, Settings } from 'lucide-react';
@@ -1460,6 +1461,11 @@ const ChatWindow = ({
               : a,
           ),
         }));
+        return;
+      }
+
+      if (data.type === 'workspace_file_changed') {
+        notifyWorkspaceUpdated(data.data.workspaceId);
         return;
       }
 

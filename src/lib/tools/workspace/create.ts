@@ -209,6 +209,18 @@ export function workspaceCreateFileTool(opts: {
             .where(eq(workspaceFiles.id, row.id));
         }
 
+        opts.emitter.emit(
+          'data',
+          JSON.stringify({
+            type: 'workspace_file_changed',
+            data: {
+              workspaceId: opts.workspaceId,
+              file: input.file,
+              action: 'create',
+            },
+          }),
+        );
+
         return new Command({
           update: {
             messages: [
@@ -232,6 +244,18 @@ export function workspaceCreateFileTool(opts: {
         mime: input.mime ?? null,
         bytes,
       });
+
+      opts.emitter.emit(
+        'data',
+        JSON.stringify({
+          type: 'workspace_file_changed',
+          data: {
+            workspaceId: opts.workspaceId,
+            file: input.file,
+            action: 'create',
+          },
+        }),
+      );
 
       return new Command({
         update: {

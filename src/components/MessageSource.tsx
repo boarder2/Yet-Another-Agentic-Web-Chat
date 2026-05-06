@@ -83,6 +83,11 @@ const MessageSource = ({
               <FileText size={12} className="text-fg/40" />
             </span>
           )}
+          {source.metadata.processingType === 'url-full-content' && (
+            <span title="Full URL content" className="inline-flex">
+              <FileText size={12} className="text-fg/40" />
+            </span>
+          )}
           {source.metadata.processingType === 'url-content-extraction' && (
             <span title="Summarized URL content" className="inline-flex">
               <Sparkles size={12} className="text-fg/40" />

@@ -331,8 +331,8 @@ const MessageInput = ({
               >
                 {loading && (
                   <LoaderCircle
-                    size={20}
-                    className="absolute inset-0 m-auto animate-spin text-fg/40"
+                    size={40}
+                    className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-spin text-fg/40"
                   />
                 )}
                 <span className="relative flex items-center justify-center w-4.25 h-4.25">

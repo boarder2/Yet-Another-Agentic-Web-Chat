@@ -62,42 +62,42 @@ Want to know more about the architecture? See [docs/architecture/README.md](docs
 
 ## Features at a Glance
 
-| Category                    | Highlights                                                                                                                                                                            |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Agentic Search**          | LangGraph React agent with tool use, research planning, and multi-step reasoning                                                                                                      |
-| **Deep Research**           | Spawns focused sub-agents that search → read → refine → search again                                                                                                                  |
-| **13 Agent Tools**          | Web search, URL summarization, image search & analysis, YouTube transcripts, PDF loading, file search, deep research, sandboxed code execution, todo lists, memory (save/delete/list) |
-| **10 LLM Providers**        | OpenAI, Anthropic, Groq, Ollama, Gemini, DeepSeek, LM Studio, OpenRouter, AI/ML API, Custom OpenAI                                                                                    |
-| **6 Embedding Providers**   | OpenAI, Ollama, Gemini, Xenova Transformers (local), AI/ML API, LM Studio                                                                                                             |
-| **Dashboard Widgets**       | AI-powered info widgets with auto-refresh, drag-and-drop layout, export/import                                                                                                        |
-| **Personas**                | Custom system prompts with built-in templates (scholarly, conversational, etc.)                                                                                                       |
-| **Research Methodologies**  | Per-message selectable research playbooks (Comparative Analysis, Literature Review, Fact-Check) with custom methodology authoring                                                     |
-| **Scheduled Tasks**         | Cron-scheduled recurring agent runs with presets, per-task models/tools, run history, and unread-result badges                                                                        |
-| **Chat Retention**          | Configurable auto-delete policies for old chats and scheduled-task run history, with pinning to exempt individual chats                                                               |
-| **Search Providers**        | Pluggable backends — SearXNG, Brave Search, and Mojeek                                                                                                                                |
-| **Personalization**         | Per-message location and profile context injection                                                                                                                                    |
-| **Memory**                  | Long-term memory with semantic retrieval, automatic extraction, deduplication, and a full management UI                                                                               |
-| **Private Sessions**        | Temporary conversations with auto-expiry — no personalization, no memory, no trace left behind                                                                                        |
-| **Workspaces**              | Project-centric containers with per-workspace chats, files, source URLs, instructions, agent tools, and isolated memory                                                               |
-| **Privacy**                 | Self-hosted SearXNG — no tracking, no data brokering, no "we updated our privacy policy" emails                                                                                       |
-| **Browser Integration**     | OpenSearch XML, autocomplete, `?q=` URL queries with saved preferences                                                                                                                |
-| **Streaming UI**            | Real-time tool calls, sub-agent progress, todo widgets, thinking/reasoning display                                                                                                    |
-| **Image & Video Search**    | Dedicated search with gallery views and video embeds                                                                                                                                  |
-| **File Research**           | Upload documents and research them with cited excerpts                                                                                                                                |
-| **Respond Now**             | Interrupt ongoing retrieval and get an immediate answer from what's been gathered so far                                                                                              |
-| **Interactive Questions**   | The agent can pause mid-research to ask clarifying questions with single/multi-select options or freeform input                                                                       |
-| **Model Visibility**        | Admins can hide models from the UI to prevent accidental usage                                                                                                                        |
-| **Dual Model Architecture** | Separate Chat and System models, linkable or independent                                                                                                                              |
+| Category                    | Highlights                                                                                                                                                                                        |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Agentic Search**          | LangGraph React agent with tool use, research planning, and multi-step reasoning                                                                                                                  |
+| **Deep Research**           | Spawns focused sub-agents that search → read → refine → search again                                                                                                                              |
+| **14 Agent Tools**          | Web search, URL summarization, image search, analysis & generation, YouTube transcripts, PDF loading, file search, deep research, sandboxed code execution, todo lists, memory (save/delete/list) |
+| **10 LLM Providers**        | OpenAI, Anthropic, Groq, Ollama, Gemini, DeepSeek, LM Studio, OpenRouter, AI/ML API, Custom OpenAI                                                                                                |
+| **6 Embedding Providers**   | OpenAI, Ollama, Gemini, Xenova Transformers (local), AI/ML API, LM Studio                                                                                                                         |
+| **Dashboard Widgets**       | AI-powered info widgets with auto-refresh, drag-and-drop layout, export/import                                                                                                                    |
+| **Personas**                | Custom system prompts with built-in templates (scholarly, conversational, etc.)                                                                                                                   |
+| **Research Methodologies**  | Per-message selectable research playbooks (Comparative Analysis, Literature Review, Fact-Check) with custom methodology authoring                                                                 |
+| **Scheduled Tasks**         | Cron-scheduled recurring agent runs with presets, per-task models/tools, run history, and unread-result badges                                                                                    |
+| **Chat Retention**          | Configurable auto-delete policies for old chats and scheduled-task run history, with pinning to exempt individual chats                                                                           |
+| **Search Providers**        | Pluggable backends — SearXNG, Brave Search, and Mojeek                                                                                                                                            |
+| **Personalization**         | Per-message location and profile context injection                                                                                                                                                |
+| **Memory**                  | Long-term memory with semantic retrieval, automatic extraction, deduplication, and a full management UI                                                                                           |
+| **Private Sessions**        | Temporary conversations with auto-expiry — no personalization, no memory, no trace left behind                                                                                                    |
+| **Workspaces**              | Project-centric containers with per-workspace chats, files, source URLs, instructions, agent tools, and isolated memory                                                                           |
+| **Privacy**                 | Self-hosted SearXNG — no tracking, no data brokering, no "we updated our privacy policy" emails                                                                                                   |
+| **Browser Integration**     | OpenSearch XML, autocomplete, `?q=` URL queries with saved preferences                                                                                                                            |
+| **Streaming UI**            | Real-time tool calls, sub-agent progress, todo widgets, thinking/reasoning display                                                                                                                |
+| **Image & Video Search**    | Dedicated search with gallery views and video embeds                                                                                                                                              |
+| **File Research**           | Upload documents and research them with cited excerpts                                                                                                                                            |
+| **Respond Now**             | Interrupt ongoing retrieval and get an immediate answer from what's been gathered so far                                                                                                          |
+| **Interactive Questions**   | The agent can pause mid-research to ask clarifying questions with single/multi-select options or freeform input                                                                                   |
+| **Model Visibility**        | Admins can hide models from the UI to prevent accidental usage                                                                                                                                    |
+| **Dual Model Architecture** | Separate Chat and System models, linkable or independent                                                                                                                                          |
 
 ## Focus Modes
 
 Switch modes at any time during a conversation:
 
-| Mode               | Description                                                | Tools       |
-| ------------------ | ---------------------------------------------------------- | ----------- |
-| **Web Search**     | Full agentic search across the internet                    | All 9 tools |
-| **Chat**           | Creative conversation — no web searching, no tools         | None        |
-| **Local Research** | Research uploaded files with semantic search and citations | File search |
+| Mode               | Description                                                | Tools                         |
+| ------------------ | ---------------------------------------------------------- | ----------------------------- |
+| **Web Search**     | Full agentic search across the internet                    | All tools                     |
+| **Chat**           | Creative conversation with image generation                | Image generation              |
+| **Local Research** | Research uploaded files with semantic search and citations | File search, image generation |
 
 Firefox AI prompts are auto-detected and handled conversationally.
 
@@ -111,6 +111,7 @@ The LangGraph agent has access to the following tools (individually toggleable p
 | **URL Summarization**  | Fetches a URL's content (via Readability/Cheerio/Playwright) and summarizes it or uses it directly.                                                                          |
 | **Image Search**       | Searches for images via SearXNG (Bing Images, Google Images).                                                                                                                |
 | **Image Analysis**     | Fetches an image and analyzes it using a vision-capable LLM (PNG, JPEG, GIF, WebP up to 10 MB).                                                                              |
+| **Image Generation**   | Generates images from text prompts via OpenRouter's image-capable models. Configurable aspect ratio, resolution, and model selection.                                        |
 | **YouTube Transcript** | Retrieves the full transcript from a YouTube video.                                                                                                                          |
 | **PDF Loader**         | Extracts and returns content from a PDF URL.                                                                                                                                 |
 | **File Search**        | Semantic similarity search across uploaded documents with configurable threshold.                                                                                            |

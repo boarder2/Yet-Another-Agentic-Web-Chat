@@ -81,6 +81,13 @@ interface Config {
       MEMORY_MB?: number;
       MAX_OUTPUT_CHARS?: number;
     };
+    IMAGE_GENERATION?: {
+      ENABLED?: boolean;
+      PROVIDER?: string;
+      MODEL?: string;
+      ASPECT_RATIO?: string;
+      IMAGE_SIZE?: string;
+    };
   };
   SELECTED_MODELS?: {
     SYSTEM_PROVIDER?: string;
@@ -359,6 +366,37 @@ export const getCodeExecutionConfig = () => {
     timeoutSeconds: ce?.TIMEOUT_SECONDS ?? 30,
     memoryMb: ce?.MEMORY_MB ?? 128,
     maxOutputChars: ce?.MAX_OUTPUT_CHARS ?? 10000,
+  };
+};
+
+export interface ImageGenerationConfig {
+  enabled: boolean;
+  provider: string;
+  model: string;
+  aspectRatio: string;
+  imageSize: string;
+}
+
+export const getImageGenerationConfig = (): ImageGenerationConfig | null => {
+  const config = loadConfig();
+  const ig = config.TOOLS?.IMAGE_GENERATION;
+
+  if (!ig || !ig.ENABLED) {
+    return {
+      enabled: false,
+      provider: ig?.PROVIDER || 'openrouter',
+      model: ig?.MODEL || '',
+      aspectRatio: ig?.ASPECT_RATIO || '1:1',
+      imageSize: ig?.IMAGE_SIZE || '1K',
+    };
+  }
+
+  return {
+    enabled: true,
+    provider: ig.PROVIDER || 'openrouter',
+    model: ig.MODEL || '',
+    aspectRatio: ig.ASPECT_RATIO || '1:1',
+    imageSize: ig.IMAGE_SIZE || '1K',
   };
 };
 

@@ -215,7 +215,14 @@ export class SimplifiedAgent {
       output_tokens: number;
       total_tokens: number;
     },
+    usageImageGen?: {
+      modelName: string;
+      input_tokens: number;
+      output_tokens: number;
+      total_tokens: number;
+    },
   ) {
+    const imageGenTokens = usageImageGen?.total_tokens ?? 0;
     this.emitter.emit(
       'stats',
       JSON.stringify({
@@ -225,12 +232,29 @@ export class SimplifiedAgent {
           modelNameChat: getModelName(this.chatLlm),
           modelNameSystem: getModelName(this.systemLlm),
           usage: {
-            input_tokens: usageChat.input_tokens + usageSystem.input_tokens,
-            output_tokens: usageChat.output_tokens + usageSystem.output_tokens,
-            total_tokens: usageChat.total_tokens + usageSystem.total_tokens,
+            input_tokens:
+              usageChat.input_tokens +
+              usageSystem.input_tokens +
+              (usageImageGen?.input_tokens ?? 0),
+            output_tokens:
+              usageChat.output_tokens +
+              usageSystem.output_tokens +
+              (usageImageGen?.output_tokens ?? 0),
+            total_tokens:
+              usageChat.total_tokens +
+              usageSystem.total_tokens +
+              imageGenTokens,
           },
           usageChat,
           usageSystem,
+          usageImageGen: usageImageGen
+            ? {
+                modelName: usageImageGen.modelName,
+                input_tokens: usageImageGen.input_tokens,
+                output_tokens: usageImageGen.output_tokens,
+                total_tokens: usageImageGen.total_tokens,
+              }
+            : undefined,
           firstChatCallInputTokens: this.firstChatCallInputTokens,
         },
       }),
@@ -765,6 +789,20 @@ export class SimplifiedAgent {
                   extra = { videoId: String(videoId) };
                 }
               }
+              // If image_generation, extract imageId from tool output for UI rendering
+              if (toolName === 'image_generation') {
+                try {
+                  const msgContent = output?.update?.messages?.[0]?.content;
+                  if (typeof msgContent === 'string') {
+                    const parsed = JSON.parse(msgContent);
+                    if (parsed.imageId) {
+                      extra = { imageId: String(parsed.imageId) };
+                    }
+                  }
+                } catch {
+                  // If parsing fails, skip extra
+                }
+              }
               if (toolCalls[runId]) delete toolCalls[runId];
 
               // Emit success update so UI can swap spinner for checkmark
@@ -837,6 +875,12 @@ export class SimplifiedAgent {
       // Separate usage trackers for chat (final answer) and system (tools/internal chains).
       // Pre-seed usageSystem with any pre-agent LLM usage (e.g., query distillation).
       const usageChat = { input_tokens: 0, output_tokens: 0, total_tokens: 0 };
+      const usageImageGen: {
+        modelName: string;
+        input_tokens: number;
+        output_tokens: number;
+        total_tokens: number;
+      } = { modelName: '', input_tokens: 0, output_tokens: 0, total_tokens: 0 };
       const usageSystem = {
         input_tokens: this.initialSystemUsage.input_tokens,
         output_tokens: this.initialSystemUsage.output_tokens,
@@ -850,13 +894,23 @@ export class SimplifiedAgent {
       toolLlmUsageHandler = (data: string) => {
         try {
           const usage = JSON.parse(data);
-          // Route to the correct accumulator based on which model was used
-          const accumulator = usage.target === 'chat' ? usageChat : usageSystem;
-          accumulator.input_tokens += usage.input_tokens || 0;
-          accumulator.output_tokens += usage.output_tokens || 0;
-          accumulator.total_tokens += usage.total_tokens || 0;
+          if (usage.target === 'image_gen') {
+            usageImageGen.modelName = usage.modelName || 'unknown';
+            usageImageGen.input_tokens += usage.input_tokens || 0;
+            usageImageGen.output_tokens += usage.output_tokens || 0;
+            usageImageGen.total_tokens += usage.total_tokens || 0;
+          } else if (usage.target === 'chat') {
+            usageChat.input_tokens += usage.input_tokens || 0;
+            usageChat.output_tokens += usage.output_tokens || 0;
+            usageChat.total_tokens += usage.total_tokens || 0;
+          } else {
+            // Default to system
+            usageSystem.input_tokens += usage.input_tokens || 0;
+            usageSystem.output_tokens += usage.output_tokens || 0;
+            usageSystem.total_tokens += usage.total_tokens || 0;
+          }
           // Emit updated stats to client
-          this.emitModelStats(usageChat, usageSystem);
+          this.emitModelStats(usageChat, usageSystem, usageImageGen);
         } catch (error) {
           console.error(
             'SimplifiedAgent: Error processing tool_llm_usage:',
@@ -1058,7 +1112,7 @@ export class SimplifiedAgent {
                 normalized,
               );
               // Emit live snapshot
-              this.emitModelStats(usageChat, usageSystem);
+              this.emitModelStats(usageChat, usageSystem, usageImageGen);
             } else if (output.response_metadata?.usage) {
               // Fallback to response_metadata for different model providers
               const normalized = normalizeUsageMetadata(
@@ -1074,7 +1128,7 @@ export class SimplifiedAgent {
                 'SimplifiedAgent: Collected usage from response_metadata:',
                 normalized,
               );
-              this.emitModelStats(usageChat, usageSystem);
+              this.emitModelStats(usageChat, usageSystem, usageImageGen);
             }
           }
           // Drain activeAgentLlmRunIds AFTER the token-counting check above so the
@@ -1110,7 +1164,7 @@ export class SimplifiedAgent {
                 'SimplifiedAgent: Collected usage from llmOutput:',
                 normalized,
               );
-              this.emitModelStats(usageChat, usageSystem);
+              this.emitModelStats(usageChat, usageSystem, usageImageGen);
             }
           }
 
@@ -1297,7 +1351,7 @@ ${url ? `<url>${url}</url>` : ''}
         'system:',
         usageSystem,
       );
-      this.emitModelStats(usageChat, usageSystem);
+      this.emitModelStats(usageChat, usageSystem, usageImageGen);
 
       this.emitter.emit('end');
     } catch (error: unknown) {

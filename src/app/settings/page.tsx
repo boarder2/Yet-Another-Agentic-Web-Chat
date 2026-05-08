@@ -28,6 +28,7 @@ import DefaultSearchSection from './sections/DefaultSearchSection';
 import SearchProvidersSection from './sections/SearchProvidersSection';
 import ModelSettingsSection from './sections/ModelSettingsSection';
 import ModelVisibilitySection from './sections/ModelVisibilitySection';
+import ImageGenerationSection from './sections/ImageGenerationSection';
 import ApiKeysSection from './sections/ApiKeysSection';
 
 const predefinedContextSizes = [
@@ -1002,6 +1003,15 @@ export default function SettingsPage() {
                     onToggleModel={handleModelVisibilityToggle}
                     onToggleProvider={handleProviderVisibilityToggle}
                     onToggleExpand={toggleProviderExpansion}
+                  />
+                )}
+
+                {activeSection === 'image-generation' && config && (
+                  <ImageGenerationSection
+                    config={config}
+                    savingStates={savingStates}
+                    setConfig={setConfig}
+                    saveConfig={saveConfig}
                   />
                 )}
 

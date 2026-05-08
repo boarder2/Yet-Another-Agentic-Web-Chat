@@ -25,6 +25,7 @@ import {
   getBraveSearchApiKey,
   getBraveLLMApiKey,
   getMojeekApiKey,
+  getImageGenerationConfig,
   updateConfig,
 } from '@/lib/config';
 import { getResolvedSearchCapabilities } from '@/lib/search/providers';
@@ -124,6 +125,14 @@ export const GET = async (_req: Request) => {
     config['mojeekApiKey'] = protectApiKey(getMojeekApiKey());
     config['searchCapabilitiesRegular'] = getResolvedSearchCapabilities(false);
     config['searchCapabilitiesPrivate'] = getResolvedSearchCapabilities(true);
+
+    // Image generation config
+    const imgGenConfig = getImageGenerationConfig();
+    config['imageGenerationEnabled'] = imgGenConfig?.enabled ?? false;
+    config['imageGenerationProvider'] = imgGenConfig?.provider ?? 'openrouter';
+    config['imageGenerationModel'] = imgGenConfig?.model ?? '';
+    config['imageGenerationAspectRatio'] = imgGenConfig?.aspectRatio ?? '1:1';
+    config['imageGenerationImageSize'] = imgGenConfig?.imageSize ?? '1K';
 
     return Response.json({ ...config }, { status: 200 });
   } catch (err) {
@@ -361,6 +370,43 @@ export const POST = async (req: Request) => {
     }
     if (Object.keys(modelSelections).length > 0) {
       updateConfig({ SELECTED_MODELS: modelSelections });
+    }
+
+    // Save image generation settings if provided
+    const imgGenFields = [
+      'imageGenerationEnabled',
+      'imageGenerationModel',
+      'imageGenerationAspectRatio',
+      'imageGenerationImageSize',
+    ];
+    const hasImgGen = imgGenFields.some((field) => config[field] !== undefined);
+    if (hasImgGen) {
+      const imgGenUpdate: {
+        ENABLED?: boolean;
+        PROVIDER?: string;
+        MODEL?: string;
+        ASPECT_RATIO?: string;
+        IMAGE_SIZE?: string;
+      } = {};
+
+      if (config.imageGenerationEnabled !== undefined) {
+        imgGenUpdate.ENABLED = config.imageGenerationEnabled;
+      }
+      if (config.imageGenerationModel !== undefined) {
+        imgGenUpdate.MODEL = config.imageGenerationModel;
+      }
+      if (config.imageGenerationAspectRatio !== undefined) {
+        imgGenUpdate.ASPECT_RATIO = config.imageGenerationAspectRatio;
+      }
+      if (config.imageGenerationImageSize !== undefined) {
+        imgGenUpdate.IMAGE_SIZE = config.imageGenerationImageSize;
+      }
+
+      updateConfig({
+        TOOLS: {
+          IMAGE_GENERATION: imgGenUpdate,
+        },
+      });
     }
 
     return Response.json({ message: 'Config updated' }, { status: 200 });

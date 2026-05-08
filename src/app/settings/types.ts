@@ -64,6 +64,7 @@ export type SectionKey =
   | 'search-providers'
   | 'model-settings'
   | 'model-visibility'
+  | 'image-generation'
   | 'api-keys';
 
 export const SETTINGS_SECTIONS: {
@@ -86,5 +87,10 @@ export const SETTINGS_SECTIONS: {
   { key: 'search-providers', label: 'Search Providers', group: 'Search' },
   { key: 'model-settings', label: 'Model Settings', group: 'AI Models' },
   { key: 'model-visibility', label: 'Model Visibility', group: 'AI Models' },
+  {
+    key: 'image-generation',
+    label: 'Image Generation',
+    group: 'AI Models',
+  },
   { key: 'api-keys', label: 'API Keys', group: 'Security' },
 ];

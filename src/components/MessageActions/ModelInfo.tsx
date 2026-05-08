@@ -131,6 +131,45 @@ const ModelInfoButton: React.FC<ModelInfoButtonProps> = ({ modelStats }) => {
                 </>
               )}
 
+              {/* Image generation row */}
+              {modelStats?.usageImageGen && (
+                <>
+                  <div className="opacity-70">Image gen model</div>
+                  <div
+                    className="font-medium truncate"
+                    title={
+                      modelStats.usageImageGen.modelName ||
+                      'Image generation model'
+                    }
+                  >
+                    {modelStats.usageImageGen.modelName ||
+                      'Image generation model'}
+                  </div>
+                </>
+              )}
+              {modelStats?.usageImageGen &&
+                (modelStats.usageImageGen.input_tokens > 0 ||
+                  modelStats.usageImageGen.output_tokens > 0) && (
+                  <>
+                    <div className="opacity-70">Image gen tokens (est)</div>
+                    <div className="flex flex-wrap gap-2">
+                      <TokenPill
+                        label="In"
+                        value={modelStats.usageImageGen.input_tokens}
+                      />
+                      <TokenPill
+                        label="Out"
+                        value={modelStats.usageImageGen.output_tokens}
+                      />
+                      <TokenPill
+                        label="Total"
+                        value={modelStats.usageImageGen.total_tokens}
+                        highlight
+                      />
+                    </div>
+                  </>
+                )}
+
               {/* Legacy single-usage fallback */}
               {!modelStats?.usageChat &&
                 !modelStats?.usageSystem &&

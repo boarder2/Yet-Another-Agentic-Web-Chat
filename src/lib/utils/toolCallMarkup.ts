@@ -92,6 +92,8 @@ export function updateToolCallMarkup(
     'count',
     'url',
     'videoId',
+    'prompt',
+    'imageId',
     'error',
     ...Object.keys(attrs).filter(
       (k) =>

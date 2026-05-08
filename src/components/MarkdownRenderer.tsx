@@ -203,6 +203,7 @@ const ToolCall = ({
   selectedOptions,
   freeformText,
   skipped,
+  imageId,
   children,
 }: {
   type?: string;
@@ -225,6 +226,7 @@ const ToolCall = ({
   selectedOptions?: string;
   freeformText?: string;
   skipped?: string;
+  imageId?: string;
   children?: React.ReactNode;
 }) => {
   const [expanded, setExpanded] = useState(false);
@@ -245,6 +247,8 @@ const ToolCall = ({
         return <ImageIcon size={16} className="text-accent" />;
       case 'image_analysis':
         return <ScanEye size={16} className="text-accent" />;
+      case 'image_generation':
+        return <ImageIcon size={16} className="text-accent" />;
       case 'firefoxAI':
         return <BotIcon size={16} className="text-accent" />;
       case 'youtube_transcript':
@@ -354,6 +358,33 @@ const ToolCall = ({
           <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm truncate max-w-xs">
             {decodeHtmlEntities(url || query || (children as string))}
           </span>
+        </>
+      );
+    }
+
+    if (type === 'image_generation') {
+      return (
+        <>
+          <span className="mr-2">{getIcon(type)}</span>
+          <span>Generating image:</span>
+          <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm truncate max-w-xs">
+            {decodeHtmlEntities(query || (children as string))}
+          </span>
+          {status === 'success' && imageId && (
+            <div className="mt-2">
+              <a
+                href={`/api/uploads/images/${imageId}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <img
+                  src={`/api/uploads/images/${imageId}`}
+                  alt={decodeHtmlEntities(query || '')}
+                  className="max-w-full max-h-96 rounded-control border border-fg/10"
+                />
+              </a>
+            </div>
+          )}
         </>
       );
     }

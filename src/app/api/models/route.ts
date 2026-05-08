@@ -2,6 +2,7 @@ import {
   getAvailableChatModelProviders,
   getAvailableEmbeddingModelProviders,
 } from '@/lib/providers';
+import { getAvailableImageGenerationModels } from '@/lib/providers/imageGenerationModels';
 
 export const GET = async (req: Request) => {
   try {
@@ -9,10 +10,12 @@ export const GET = async (req: Request) => {
     const includeHidden = url.searchParams.get('include_hidden') === 'true';
     const forceRefresh = url.searchParams.get('refresh') === 'true';
 
-    const [chatModelProviders, embeddingModelProviders] = await Promise.all([
-      getAvailableChatModelProviders({ includeHidden, forceRefresh }),
-      getAvailableEmbeddingModelProviders({ includeHidden, forceRefresh }),
-    ]);
+    const [chatModelProviders, embeddingModelProviders, imageGenerationModels] =
+      await Promise.all([
+        getAvailableChatModelProviders({ includeHidden, forceRefresh }),
+        getAvailableEmbeddingModelProviders({ includeHidden, forceRefresh }),
+        getAvailableImageGenerationModels({ forceRefresh }),
+      ]);
 
     // Build serializable copies without mutating the cached model objects
     const chatResult: Record<
@@ -45,6 +48,7 @@ export const GET = async (req: Request) => {
       {
         chatModelProviders: chatResult,
         embeddingModelProviders: embeddingResult,
+        imageGenerationModels,
       },
       {
         status: 200,

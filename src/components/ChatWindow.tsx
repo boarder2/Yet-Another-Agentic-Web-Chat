@@ -39,6 +39,7 @@ export type ModelStats = {
   modelNameSystem?: string;
   usageChat?: TokenUsage;
   usageSystem?: TokenUsage;
+  usageImageGen?: TokenUsage & { modelName?: string };
   usedLocation?: boolean;
   usedPersonalization?: boolean;
   memoriesUsed?: number;

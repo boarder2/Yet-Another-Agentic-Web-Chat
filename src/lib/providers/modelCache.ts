@@ -25,6 +25,7 @@ interface CacheEntry<T> {
 // Separate namespaces for chat and embedding caches, keyed by provider name.
 const chatCache = new Map<string, CacheEntry<unknown>>();
 const embeddingCache = new Map<string, CacheEntry<unknown>>();
+const imageGenerationCache = new Map<string, CacheEntry<unknown>>();
 
 /**
  * Config signature per provider. If any input to the loader changes, the
@@ -105,12 +106,23 @@ export const setCachedEmbeddingModels = <T>(
 
 export { NEGATIVE_CACHE_TTL_MS };
 
+export const getCachedImageGenerationModels = <T>(provider: string): T | null =>
+  readCache<T>(imageGenerationCache, provider);
+
+export const setCachedImageGenerationModels = <T>(
+  provider: string,
+  value: T,
+  ttlMs?: number,
+): void => writeCache(imageGenerationCache, provider, value, ttlMs);
+
 export const invalidateModelCache = (provider?: string): void => {
   if (provider) {
     chatCache.delete(provider);
     embeddingCache.delete(provider);
+    imageGenerationCache.delete(provider);
   } else {
     chatCache.clear();
     embeddingCache.clear();
+    imageGenerationCache.clear();
   }
 };

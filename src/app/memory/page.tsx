@@ -432,11 +432,17 @@ const Page = () => {
                       </span>
                     )}
                     <span className="text-xs text-fg/40">
+                      Created{' '}
                       {formatTimeDifference(
                         new Date(),
                         new Date(memory.createdAt),
                       )}{' '}
                       ago
+                    </span>
+                    <span className="text-xs text-fg/40">
+                      {memory.lastAccessedAt
+                        ? `Last used ${formatTimeDifference(new Date(), new Date(memory.lastAccessedAt))} ago`
+                        : 'Never used'}
                     </span>
                     {memory.sourceType === 'automatic' &&
                       (memory.sourceChatId ? (

@@ -163,7 +163,9 @@ const Chat = ({
   const [inputStyle, setInputStyle] = useState<React.CSSProperties>({});
   const messageEnd = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const SCROLL_THRESHOLD = 250; // pixels from bottom to consider "at bottom"
+  const isAtBottomRef = useRef(isAtBottom);
+  const manuallyScrolledUpRef = useRef(manuallyScrolledUp);
+  const SCROLL_THRESHOLD = 100; // pixels from bottom to consider "at bottom"
   const [currentMessageId, setCurrentMessageId] = useState<string | undefined>(
     undefined,
   );
@@ -195,9 +197,12 @@ const Chat = ({
       const position = window.innerHeight + window.scrollY;
       const height = document.body.scrollHeight;
       const atBottom = position >= height - SCROLL_THRESHOLD;
+      const atExactBottom = position >= height - 5;
 
-      // If user scrolls to bottom, reset the manuallyScrolledUp flag
-      if (atBottom) {
+      // Only reset manual scroll flag when user reaches the very bottom,
+      // not just within the general threshold. This prevents auto-scroll
+      // from re-engaging when the user is merely reading near the bottom.
+      if (atExactBottom) {
         setManuallyScrolledUp(false);
       }
 
@@ -248,18 +253,25 @@ const Chat = ({
     }
   }, [messages]);
 
+  // Keep refs in sync with state so effects watching scrollTrigger can read current values
+  useEffect(() => {
+    isAtBottomRef.current = isAtBottom;
+  }, [isAtBottom]);
+
+  useEffect(() => {
+    manuallyScrolledUpRef.current = manuallyScrolledUp;
+  }, [manuallyScrolledUp]);
+
   // Auto-scroll for assistant responses only if user is at bottom and hasn't manually scrolled up
   useEffect(() => {
-    const position = window.innerHeight + window.scrollY;
-    const height = document.body.scrollHeight;
-    const atBottom = position >= height - SCROLL_THRESHOLD;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setIsAtBottom(atBottom);
-
-    if (isAtBottom && !manuallyScrolledUp && messages.length > 0) {
+    if (
+      isAtBottomRef.current &&
+      !manuallyScrolledUpRef.current &&
+      messages.length > 0
+    ) {
       messageEnd.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [scrollTrigger, isAtBottom, messages.length, manuallyScrolledUp]);
+  }, [scrollTrigger, messages.length]);
 
   // Sync input width with main container width
   useEffect(() => {

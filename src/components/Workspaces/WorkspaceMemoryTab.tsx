@@ -10,12 +10,15 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { formatTimeDifference } from '@/lib/utils';
 
 interface Memory {
   id: string;
   content: string;
   category: string | null;
   sourceType: string | null;
+  accessCount: number;
+  lastAccessedAt: string | null;
   createdAt: string;
   workspaceId: string | null;
 }
@@ -217,13 +220,18 @@ export default function WorkspaceMemoryTab({
                       {m.content}
                     </p>
                   )}
-                  <div className="flex items-center gap-2 mt-1">
+                  <div className="flex items-center gap-2 mt-1 flex-wrap">
                     <span className="text-xs px-1.5 py-0.5 rounded-control bg-accent/20 text-accent font-medium">
                       workspace
                     </span>
                     {m.sourceType && (
                       <span className="text-xs text-fg/40">{m.sourceType}</span>
                     )}
+                    <span className="text-xs text-fg/40">
+                      {m.lastAccessedAt
+                        ? `Last used ${formatTimeDifference(new Date(), new Date(m.lastAccessedAt))} ago`
+                        : 'Never used'}
+                    </span>
                   </div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0 mt-0.5">

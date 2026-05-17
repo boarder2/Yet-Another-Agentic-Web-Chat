@@ -208,8 +208,16 @@ export const codeExecutionTool = tool(
     description:
       'Execute JavaScript code in a secure, sandboxed Node.js environment. ' +
       'The code runs in an isolated Docker container with no network access and strict resource limits. ' +
-      'The user must approve the code before it executes. Use this for calculations, data processing, ' +
-      'generating outputs, or testing code snippets. Use console.log() to produce output.',
+      'The user must approve the code before it executes. Use console.log() to produce output.\n\n' +
+      'PREFER this tool over reasoning whenever a result must be exact. LLMs are unreliable at ' +
+      'deterministic operations — reach for code execution for tasks like:\n' +
+      '- Arithmetic and numeric calculations\n' +
+      '- Date and time math (durations, offsets, weekday lookups, timezone conversions)\n' +
+      '- Character, word, line, or token counting\n' +
+      '- String transformations, regex testing, encoding/decoding (base64, URL, JSON parse/stringify)\n' +
+      '- Sorting, deduplicating, filtering, or aggregating lists and tabular data\n' +
+      '- Unit conversions and basic statistics\n\n' +
+      'Keep snippets minimal and self-contained — there is no network or filesystem persistence.',
     schema: CodeExecutionToolSchema,
   },
 );

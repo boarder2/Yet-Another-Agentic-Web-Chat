@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import WorkspaceSettingsFields from './WorkspaceSettingsFields';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { notifyWorkspaceUpdated } from '@/lib/hooks/useWorkspace';
 
 interface Workspace {
@@ -30,27 +30,27 @@ export default function SettingsTab({ workspace }: { workspace: Workspace }) {
   const [color, setColor] = useState<string | null>(workspace.color ?? null);
   const [icon, setIcon] = useState<string | null>(workspace.icon ?? null);
   const [isArchived, setIsArchived] = useState(!!workspace.archivedAt);
-  const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteConfirmName, setDeleteConfirmName] = useState('');
   const [archiving, setArchiving] = useState(false);
 
-  async function saveSettings() {
-    setSaving(true);
+  // Use refs so patch closures always read the latest values without re-creating
+  const nameRef = useRef(name);
+  const descriptionRef = useRef(description);
+  useEffect(() => {
+    nameRef.current = name;
+  }, [name]);
+  useEffect(() => {
+    descriptionRef.current = description;
+  }, [description]);
+
+  async function patch(data: Record<string, unknown>) {
     await fetch(`/api/workspaces/${workspace.id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        name,
-        description,
-        color,
-        icon,
-        autoMemoryEnabled: autoMemory ? 1 : 0,
-        autoAcceptFileEdits: autoAcceptFileEdits ? 1 : 0,
-      }),
+      body: JSON.stringify(data),
     });
-    setSaving(false);
     notifyWorkspaceUpdated(workspace.id);
     router.refresh();
   }
@@ -89,26 +89,30 @@ export default function SettingsTab({ workspace }: { workspace: Workspace }) {
           variant="settings"
           name={name}
           onNameChange={setName}
+          onNameBlur={() => patch({ name: nameRef.current })}
           description={description}
           onDescriptionChange={setDescription}
+          onDescriptionBlur={() =>
+            patch({ description: descriptionRef.current })
+          }
           color={color}
           icon={icon}
           onAppearanceChange={(next) => {
             setColor(next.color);
             setIcon(next.icon);
+            patch({ color: next.color, icon: next.icon });
           }}
           autoMemory={autoMemory}
-          onAutoMemoryChange={setAutoMemory}
+          onAutoMemoryChange={(enabled) => {
+            setAutoMemory(enabled);
+            patch({ autoMemoryEnabled: enabled ? 1 : 0 });
+          }}
           autoAcceptFileEdits={autoAcceptFileEdits}
-          onAutoAcceptFileEditsChange={setAutoAcceptFileEdits}
+          onAutoAcceptFileEditsChange={(enabled) => {
+            setAutoAcceptFileEdits(enabled);
+            patch({ autoAcceptFileEdits: enabled ? 1 : 0 });
+          }}
         />
-        <button
-          onClick={saveSettings}
-          disabled={saving}
-          className="px-4 py-2 rounded-surface bg-accent text-accent-fg text-sm hover:opacity-90 disabled:opacity-50 transition-opacity"
-        >
-          {saving ? 'Saving…' : 'Save changes'}
-        </button>
       </section>
 
       <hr className="border-surface-2" />

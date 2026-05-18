@@ -8,8 +8,10 @@ import AppearancePicker from './AppearancePicker';
 interface WorkspaceSettingsFieldsProps {
   name: string;
   onNameChange: (value: string) => void;
+  onNameBlur?: () => void;
   description: string;
   onDescriptionChange: (value: string) => void;
+  onDescriptionBlur?: () => void;
   color: string | null;
   icon: string | null;
   onAppearanceChange: (next: {
@@ -27,8 +29,10 @@ interface WorkspaceSettingsFieldsProps {
 export default function WorkspaceSettingsFields({
   name,
   onNameChange,
+  onNameBlur,
   description,
   onDescriptionChange,
+  onDescriptionBlur,
   color,
   icon,
   onAppearanceChange,
@@ -54,6 +58,7 @@ export default function WorkspaceSettingsFields({
             type="text"
             value={name}
             onChange={(e) => onNameChange(e.target.value)}
+            onBlur={onNameBlur}
             className={inputClass}
           />
         </div>
@@ -63,6 +68,7 @@ export default function WorkspaceSettingsFields({
           placeholder="Workspace name"
           value={name}
           onChange={(e) => onNameChange(e.target.value)}
+          onBlur={onNameBlur}
           className={inputClass}
           autoFocus={autoFocusName}
         />
@@ -74,6 +80,7 @@ export default function WorkspaceSettingsFields({
           <textarea
             value={description}
             onChange={(e) => onDescriptionChange(e.target.value)}
+            onBlur={onDescriptionBlur}
             rows={3}
             className={cn(inputClass, 'resize-none')}
           />
@@ -83,6 +90,7 @@ export default function WorkspaceSettingsFields({
           placeholder="Description (optional)"
           value={description}
           onChange={(e) => onDescriptionChange(e.target.value)}
+          onBlur={onDescriptionBlur}
           rows={2}
           className={cn(inputClass, 'resize-none')}
         />

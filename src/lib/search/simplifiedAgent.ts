@@ -711,6 +711,17 @@ export class SimplifiedAgent {
                       extraAttr += ` context="${encodeHtmlAttribute(inputObj.context.slice(0, 200))}"`;
                     }
                   }
+                  // For get_message, expose messageId as the display query
+                  if (
+                    type === 'get_message' &&
+                    input &&
+                    typeof input === 'object'
+                  ) {
+                    const inputObj = input as Record<string, unknown>;
+                    if (inputObj.messageId !== undefined) {
+                      extraAttr += ` query="${encodeHtmlAttribute(String(inputObj.messageId))}"`;
+                    }
+                  }
                   // For workspace tools, extract relevant args for display
                   if (
                     (type === 'workspace_read' ||

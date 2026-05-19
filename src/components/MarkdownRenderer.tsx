@@ -23,6 +23,8 @@ import {
   FileCode,
   FilePen,
   FilePlus,
+  History,
+  MessageSquare,
 } from 'lucide-react';
 import { useState } from 'react';
 import Markdown, { MarkdownToJSX } from 'markdown-to-jsx';
@@ -275,6 +277,10 @@ const ToolCall = ({
         return <FilePen size={16} className="text-accent" />;
       case 'workspace_create_file':
         return <FilePlus size={16} className="text-accent" />;
+      case 'chat_history_search':
+        return <History size={16} className="text-accent" />;
+      case 'get_message':
+        return <MessageSquare size={16} className="text-accent" />;
       default:
         return <Settings size={16} className="text-fg/70" />;
     }
@@ -598,6 +604,30 @@ const ToolCall = ({
               {decodeHtmlEntities(query)}
             </span>
           )}
+        </>
+      );
+    }
+
+    if (type === 'chat_history_search') {
+      return (
+        <>
+          <span className="mr-2">{getIcon(type)}</span>
+          <span>Searching chat history:</span>
+          <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm">
+            {decodeHtmlEntities(query || (children as string))}
+          </span>
+        </>
+      );
+    }
+
+    if (type === 'get_message') {
+      return (
+        <>
+          <span className="mr-2">{getIcon(type)}</span>
+          <span>Fetching message:</span>
+          <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm">
+            {decodeHtmlEntities(query || (children as string))}
+          </span>
         </>
       );
     }

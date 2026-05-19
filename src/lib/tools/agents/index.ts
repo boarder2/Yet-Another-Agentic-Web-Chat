@@ -21,6 +21,8 @@ import { getCodeExecutionConfig } from '@/lib/config';
 import { codeExecutionTool } from './codeExecutionTool';
 import { askUserTool } from './askUserTool';
 import { imageGenerationTool } from './imageGenerationTool';
+import { chatHistorySearchTool } from './chatHistorySearchTool';
+import { getChatMessagesTool } from './getChatMessagesTool';
 
 export { simpleWebSearchTool };
 export { urlFetchTool };
@@ -35,6 +37,8 @@ export { memoryTools };
 export { codeExecutionTool };
 export { askUserTool };
 export { imageGenerationTool };
+export { chatHistorySearchTool };
+export { getChatMessagesTool };
 
 // Base tool arrays (non-interactive, used by subagents)
 export const allAgentTools = [
@@ -48,6 +52,8 @@ export const allAgentTools = [
   pdfLoaderTool,
   deepResearchTool,
   todoListTool,
+  chatHistorySearchTool,
+  getChatMessagesTool,
 ];
 
 export const webSearchTools = [
@@ -59,11 +65,17 @@ export const webSearchTools = [
   pdfLoaderTool,
   deepResearchTool,
   todoListTool,
+  chatHistorySearchTool,
+  getChatMessagesTool,
 ];
 
 export const fileSearchTools = [fileSearchTool];
 
-export const coreTools: typeof allAgentTools = [imageGenerationTool];
+export const coreTools: typeof allAgentTools = [
+  imageGenerationTool,
+  chatHistorySearchTool,
+  getChatMessagesTool,
+];
 
 // Helper to append interactive-only tools (code execution + ask_user) for top-level use
 function withInteractiveTools<T>(tools: T[]): T[] {

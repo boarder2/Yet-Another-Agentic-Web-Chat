@@ -722,6 +722,20 @@ export class SimplifiedAgent {
                       extraAttr += ` query="${encodeHtmlAttribute(String(inputObj.messageId))}"`;
                     }
                   }
+                  // For chat_history_search, join the keywords array for display
+                  if (
+                    type === 'chat_history_search' &&
+                    input &&
+                    typeof input === 'object'
+                  ) {
+                    const inputObj = input as Record<string, unknown>;
+                    if (Array.isArray(inputObj.keywords)) {
+                      const joined = inputObj.keywords
+                        .filter((k) => typeof k === 'string')
+                        .join(', ');
+                      extraAttr += ` query="${encodeHtmlAttribute(joined.slice(0, TOOL_ARG_MAX_LENGTH))}"`;
+                    }
+                  }
                   // For workspace tools, extract relevant args for display
                   if (
                     (type === 'workspace_read' ||

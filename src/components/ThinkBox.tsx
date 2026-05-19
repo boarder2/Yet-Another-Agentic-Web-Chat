@@ -1,7 +1,7 @@
 'use client';
 
 import { ReactNode, useState } from 'react';
-import { ChevronDown, ChevronUp, BrainCircuit } from 'lucide-react';
+import { ChevronDown, ChevronRight, BrainCircuit } from 'lucide-react';
 
 interface ThinkBoxProps {
   content: ReactNode;
@@ -25,6 +25,7 @@ const ThinkBox = ({ content, expanded, onToggle }: ThinkBoxProps) => {
   return (
     <div className="my-4 bg-surface/50 rounded-floating border border-surface-2 overflow-hidden">
       <button
+        type="button"
         onClick={handleToggle}
         className="w-full flex items-center justify-between px-4 py-4 text-fg/90 hover:bg-surface-2 transition duration-200"
       >
@@ -33,9 +34,9 @@ const ThinkBox = ({ content, expanded, onToggle }: ThinkBoxProps) => {
           <span className="font-medium text-sm">Thinking Process</span>
         </div>
         {isExpanded ? (
-          <ChevronUp size={18} className="text-fg/70" />
-        ) : (
           <ChevronDown size={18} className="text-fg/70" />
+        ) : (
+          <ChevronRight size={18} className="text-fg/70" />
         )}
       </button>
 

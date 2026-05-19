@@ -5,7 +5,7 @@ import {
   CheckCircle2,
   Circle,
   LoaderCircle,
-  ChevronDown,
+  ChevronRight,
   ListTodo,
 } from 'lucide-react';
 
@@ -50,6 +50,7 @@ const TodoWidget = ({ items }: TodoWidgetProps) => {
     <div className="mb-2 bg-surface border border-surface-2 rounded-surface overflow-hidden shadow-resting">
       {/* Collapsed header */}
       <button
+        type="button"
         onClick={() => setExpanded(!expanded)}
         className="w-full px-3 py-2 flex items-center gap-2 hover:bg-surface-2/50 transition-colors text-sm"
       >
@@ -66,9 +67,9 @@ const TodoWidget = ({ items }: TodoWidgetProps) => {
             </span>
           </>
         )}
-        <ChevronDown
+        <ChevronRight
           size={14}
-          className={`text-fg/50 shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`}
+          className={`text-fg/50 shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`}
         />
       </button>
 

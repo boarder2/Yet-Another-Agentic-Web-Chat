@@ -163,9 +163,9 @@ export const SubagentExecution: React.FC<SubagentExecutionProps> = ({
 
         {/* Expand icon */}
         <div className="shrink-0">
-          <ChevronDown
+          <ChevronRight
             size={16}
-            className={`text-fg/70 transition-transform ${expanded ? 'rotate-180' : ''}`}
+            className={`text-fg/70 transition-transform ${expanded ? 'rotate-90' : ''}`}
           />
         </div>
       </button>

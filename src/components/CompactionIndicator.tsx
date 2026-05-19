@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronUp, FolderArchive } from 'lucide-react';
+import { ChevronDown, ChevronRight, FolderArchive } from 'lucide-react';
 import MarkdownRenderer from './MarkdownRenderer';
 import { formatTokens } from '@/lib/utils/tokens';
 import type { CompactionData } from './ChatWindow';
@@ -36,17 +36,18 @@ export default function CompactionIndicator({
         {compaction.summary && (
           <div className="mt-2">
             <button
+              type="button"
               onClick={() => setExpanded(!expanded)}
               className="text-xs text-accent transition-colors duration-150 flex items-center gap-1 mb-1"
             >
               {expanded ? (
                 <>
-                  <ChevronUp className="size-3" />
+                  <ChevronDown className="size-3" />
                   Hide summary
                 </>
               ) : (
                 <>
-                  <ChevronDown className="size-3" />
+                  <ChevronRight className="size-3" />
                   Show summary
                 </>
               )}

@@ -25,8 +25,9 @@ import {
   FilePlus,
   History,
   MessageSquare,
+  ChevronRight,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Markdown, { MarkdownToJSX } from 'markdown-to-jsx';
 import ThinkBox from './ThinkBox';
 import { CodeBlock } from './CodeBlock';
@@ -170,6 +171,14 @@ const splitByThinkBlocks = (content: string): ContentSegment[] => {
   return segments;
 };
 
+interface FetchedMessage {
+  chatId: string;
+  chatTitle: string | null;
+  role: 'user' | 'assistant' | 'compaction' | null;
+  content: string;
+  createdAt: string | null;
+}
+
 interface MarkdownRendererProps {
   content: string;
   className?: string;
@@ -232,6 +241,54 @@ const ToolCall = ({
   children?: React.ReactNode;
 }) => {
   const [expanded, setExpanded] = useState(false);
+  const [fetchedMessage, setFetchedMessage] = useState<FetchedMessage | null>(
+    null,
+  );
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [fetchLoading, setFetchLoading] = useState(false);
+
+  // Lazy fetch the message content the first time the user expands a
+  // get_message tool call. The streamed tool-call payload only carries the
+  // messageId; the actual content lives behind /api/messages/[messageId].
+  useEffect(() => {
+    if (
+      type !== 'get_message' ||
+      !expanded ||
+      fetchedMessage ||
+      fetchLoading ||
+      !query
+    ) {
+      return;
+    }
+    const messageId = decodeHtmlEntities(query);
+
+    const load = async () => {
+      if (!/^\d+$/.test(messageId)) {
+        setFetchError('Invalid message id');
+        return;
+      }
+      setFetchLoading(true);
+      setFetchError(null);
+      try {
+        const res = await fetch(`/api/messages/${messageId}`);
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body?.message || `Request failed (${res.status})`);
+        }
+        const data: FetchedMessage = await res.json();
+        setFetchedMessage(data);
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : 'Failed to load message';
+        setFetchError(message);
+      } finally {
+        setFetchLoading(false);
+      }
+    };
+
+    load();
+  }, [type, expanded, fetchedMessage, fetchLoading, query]);
+
   const getIcon = (toolType: string) => {
     switch (toolType) {
       case 'search':
@@ -383,6 +440,11 @@ const ToolCall = ({
                 target="_blank"
                 rel="noreferrer"
               >
+                {/* eslint-disable-next-line @next/next/no-img-element --
+                  Locally-served generated image with unknown dimensions and
+                  responsive sizing; next/image would require fixed dimensions
+                  or a sized fill container with no real optimization benefit
+                  for this local API source. */}
                 <img
                   src={`/api/uploads/images/${imageId}`}
                   alt={decodeHtmlEntities(query || '')}
@@ -624,10 +686,7 @@ const ToolCall = ({
       return (
         <>
           <span className="mr-2">{getIcon(type)}</span>
-          <span>Fetching message:</span>
-          <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm">
-            {decodeHtmlEntities(query || (children as string))}
-          </span>
+          <span>Fetched message</span>
         </>
       );
     }
@@ -648,12 +707,12 @@ const ToolCall = ({
     <div className="my-3 bg-surface border border-surface-2 rounded-surface overflow-hidden">
       <div
         className={`flex items-start justify-between gap-2 text-sm font-medium px-4 py-3 ${
-          type === 'code_execution' && code
+          (type === 'code_execution' && code) || type === 'get_message'
             ? 'cursor-pointer hover:bg-surface-2/50 transition-colors'
             : ''
         }`}
         onClick={
-          type === 'code_execution' && code
+          (type === 'code_execution' && code) || type === 'get_message'
             ? () => setExpanded(!expanded)
             : undefined
         }
@@ -662,20 +721,11 @@ const ToolCall = ({
           {formatToolMessage()}
         </div>
         <div className="flex items-center gap-2 h-5">
-          {type === 'code_execution' && code && (
-            <svg
-              className={`w-4 h-4 text-fg/50 transition-transform ${expanded ? 'rotate-180' : ''}`}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M19 9l-7 7-7-7"
-              />
-            </svg>
+          {((type === 'code_execution' && code) || type === 'get_message') && (
+            <ChevronRight
+              size={16}
+              className={`text-fg/50 transition-transform ${expanded ? 'rotate-90' : ''}`}
+            />
           )}
           {status === 'running' && (
             <div className="w-4 h-4">
@@ -699,6 +749,40 @@ const ToolCall = ({
       {status === 'error' && error && (
         <div className="px-4 pb-3 text-xs text-danger break-words font-mono whitespace-pre-wrap">
           {decodeHtmlEntities(error)}
+        </div>
+      )}
+      {type === 'get_message' && expanded && (
+        <div className="border-t border-surface-2 px-4 py-3 text-sm">
+          {fetchLoading && (
+            <div className="flex items-center gap-2 text-fg/60">
+              <LoaderCircle className="w-4 h-4 animate-spin" />
+              <span>Loading message…</span>
+            </div>
+          )}
+          {fetchError && !fetchLoading && (
+            <div className="text-danger">{fetchError}</div>
+          )}
+          {fetchedMessage && !fetchLoading && (
+            <>
+              <div className="mb-3">
+                <div
+                  className="text-lg font-semibold text-fg truncate"
+                  title={fetchedMessage.chatTitle ?? ''}
+                >
+                  {fetchedMessage.chatTitle || '(untitled chat)'}
+                </div>
+                <a
+                  href={`/c/${fetchedMessage.chatId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent hover:underline text-xs"
+                >
+                  View chat thread ↗
+                </a>
+              </div>
+              <MarkdownRenderer content={fetchedMessage.content} />
+            </>
+          )}
         </div>
       )}
       {type === 'code_execution' && expanded && code && (

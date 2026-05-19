@@ -195,6 +195,7 @@ const AppearancePicker = ({ color, icon, onChange }: Props) => {
           <div className="flex items-center gap-2">
             <input
               type="text"
+              role="combobox"
               value={inputValue}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
@@ -207,6 +208,7 @@ const AppearancePicker = ({ color, icon, onChange }: Props) => {
               aria-label="Custom icon name"
               aria-autocomplete="list"
               aria-expanded={dropdownOpen}
+              aria-controls="appearance-picker-icon-listbox"
               className={cn(
                 'flex-1 px-2.5 py-1.5 text-xs bg-bg rounded-control border focus:outline-none transition-colors duration-150',
                 showError
@@ -239,6 +241,7 @@ const AppearancePicker = ({ color, icon, onChange }: Props) => {
 
           {dropdownOpen && suggestions.length > 0 && (
             <ul
+              id="appearance-picker-icon-listbox"
               role="listbox"
               className="absolute z-50 left-0 right-9 mt-1 bg-surface border border-surface-2 rounded-surface shadow-floating max-h-52 overflow-y-auto"
             >

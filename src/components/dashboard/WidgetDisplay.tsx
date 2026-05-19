@@ -7,7 +7,7 @@ import {
   Trash2,
   AlertCircle,
   ChevronDown,
-  ChevronUp,
+  ChevronRight,
   GripVertical,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -51,12 +51,12 @@ const WidgetDisplay = ({
 
   return (
     <Card className="flex flex-col h-full w-full">
-      <CardHeader className="pb-3 flex-shrink-0">
+      <CardHeader className="pb-3 shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2 flex-1 min-w-0">
             {/* Drag Handle */}
             <div
-              className="widget-drag-handle flex-shrink-0 p-1 rounded-control hover:bg-surface-2 cursor-move transition-colors"
+              className="widget-drag-handle shrink-0 p-1 rounded-control hover:bg-surface-2 cursor-move transition-colors"
               title="Drag to move widget"
             >
               <GripVertical size={16} className="text-fg/50" />
@@ -67,7 +67,7 @@ const WidgetDisplay = ({
             </CardTitle>
           </div>
 
-          <div className="flex items-center space-x-2 flex-shrink-0">
+          <div className="flex items-center space-x-2 shrink-0">
             {/* Last updated date with refresh frequency tooltip */}
             <span
               className="text-xs text-fg/60"
@@ -78,6 +78,7 @@ const WidgetDisplay = ({
 
             {/* Refresh button */}
             <button
+              type="button"
               onClick={() => onRefresh(widget.id)}
               disabled={widget.isLoading}
               className="p-1.5 hover:bg-surface-2 rounded-control transition-colors disabled:opacity-50"
@@ -105,10 +106,7 @@ const WidgetDisplay = ({
             </div>
           ) : widget.error ? (
             <div className="flex items-start space-x-2 p-3 bg-danger-soft rounded-control border border-danger">
-              <AlertCircle
-                size={16}
-                className="text-danger mt-0.5 flex-shrink-0"
-              />
+              <AlertCircle size={16} className="text-danger mt-0.5 shrink-0" />
               <div className="flex-1">
                 <p className="text-sm font-medium text-danger">
                   Error Loading Content
@@ -132,15 +130,16 @@ const WidgetDisplay = ({
       </CardContent>
 
       {/* Collapsible footer with sources and actions */}
-      <div className="bg-surface/30 flex-shrink-0">
+      <div className="bg-surface/30 shrink-0">
         <button
+          type="button"
           onClick={() => setIsFooterExpanded(!isFooterExpanded)}
           className="w-full px-4 py-2 flex items-center space-x-2 text-xs text-fg/60 hover:bg-surface-2 transition-colors"
         >
           {isFooterExpanded ? (
-            <ChevronUp size={14} />
-          ) : (
             <ChevronDown size={14} />
+          ) : (
+            <ChevronRight size={14} />
           )}
           <span>Sources & Actions</span>
         </button>
@@ -169,6 +168,7 @@ const WidgetDisplay = ({
             {/* Action buttons */}
             <div className="flex items-center space-x-2 pt-2">
               <button
+                type="button"
                 onClick={() => onEdit(widget)}
                 className="flex items-center space-x-1 px-2 py-1 text-xs text-fg/70 hover:bg-surface-2 rounded-control transition-colors"
               >
@@ -177,6 +177,7 @@ const WidgetDisplay = ({
               </button>
 
               <button
+                type="button"
                 onClick={() => onDelete(widget.id)}
                 className="flex items-center space-x-1 px-2 py-1 text-xs text-danger hover:bg-surface-2 rounded-control transition-colors"
               >

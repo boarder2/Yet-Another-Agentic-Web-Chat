@@ -44,7 +44,7 @@ export const getChatMessagesTool = tool(
   {
     name: 'get_message',
     description:
-      "Retrieve the full content of a single message by its messageId (obtained from chat_history_search). Use when the snippet from search isn't enough to answer the user's question.",
+      "Retrieve the full content of a single message by its messageId. Always obtain the messageId from chat_history_search first — do not guess or invent message IDs. Use this when the snippet returned by search is truncated or not enough to fully answer the user's question.",
     schema,
   },
 );

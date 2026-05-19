@@ -127,7 +127,7 @@ export const chatHistorySearchTool = tool(
   {
     name: 'chat_history_search',
     description:
-      "Search the user's previous conversations (titles and message content) by substring. Use when the user references something discussed before, or you need context from past chats. Excludes the current chat, private chats, and compaction summaries.",
+      "Search the user's previous conversations (titles and message content) by substring. Use when the user references something discussed before, or you need context from past chats. Excludes the current chat, private chats, and compaction summaries. Each result includes a messageId that can be passed to get_message to retrieve the full message content. IMPORTANT: this is keyword search, not semantic search — it matches exact substrings case-insensitively. Tips for best results: (1) use short, distinctive keywords rather than full sentences; (2) if the first search returns nothing useful, retry with synonyms or alternative phrasings the user might have used; (3) for multi-word concepts, try each word separately before combining them; (4) prefer nouns and domain-specific terms over common words.",
     schema,
   },
 );

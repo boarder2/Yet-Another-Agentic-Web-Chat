@@ -3,60 +3,13 @@ import {
   chats as chatsTable,
   messages as messagesTable,
 } from '@/lib/db/schema';
+import { desc, eq, sql, and, inArray, isNull, isNotNull } from 'drizzle-orm';
 import {
-  desc,
-  eq,
-  sql,
-  like,
-  or,
-  and,
-  inArray,
-  isNull,
-  isNotNull,
-} from 'drizzle-orm';
-
-async function getMessageCounts(
-  chatIds: string[],
-): Promise<Map<string, number>> {
-  const counts = new Map<string, number>();
-  if (chatIds.length === 0) return counts;
-  const rows = await db
-    .select({
-      chatId: messagesTable.chatId,
-      count: sql<number>`count(*)`,
-    })
-    .from(messagesTable)
-    .where(inArray(messagesTable.chatId, chatIds))
-    .groupBy(messagesTable.chatId);
-  for (const r of rows) counts.set(r.chatId, Number(r.count));
-  return counts;
-}
-
-function extractExcerpt(
-  content: string,
-  term: string,
-  contextLen = 80,
-): string {
-  const lowerContent = content.toLowerCase();
-  const lowerTerm = term.toLowerCase();
-  const idx = lowerContent.indexOf(lowerTerm);
-
-  if (idx === -1) {
-    const max = contextLen * 2;
-    return content.length > max
-      ? content.slice(0, max).trim() + '…'
-      : content.trim();
-  }
-
-  const start = Math.max(0, idx - contextLen);
-  const end = Math.min(content.length, idx + term.length + contextLen);
-
-  let excerpt = content.slice(start, end).trim();
-  if (start > 0) excerpt = '…' + excerpt;
-  if (end < content.length) excerpt = excerpt + '…';
-
-  return excerpt;
-}
+  buildWorkspaceCondition,
+  extractExcerpt,
+  getMessageCounts,
+  searchChatsByKeywords,
+} from '@/lib/db/chatSearch';
 
 export const GET = async (req: Request) => {
   try {
@@ -77,79 +30,43 @@ export const GET = async (req: Request) => {
     const offset = isNaN(parsedOffset) ? 0 : Math.max(parsedOffset, 0);
 
     if (q) {
-      const searchPattern = `%${q}%`;
+      const workspaceIds = workspaceIdsParam
+        ? workspaceIdsParam
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean)
+        : undefined;
 
-      // Fetch matching messages with content so we can build excerpts
-      const matchingMessages = await db
-        .select({
-          chatId: messagesTable.chatId,
-          content: messagesTable.content,
+      const hits = await searchChatsByKeywords({
+        keywords: [q],
+        workspaceId: workspaceIdParam ?? undefined,
+        workspaceIds,
+        includePrivate: true,
+        includeCompaction: true,
+        limit: 500,
+      });
+
+      const ids = hits.map((h) => h.chatId);
+      const fullChats = ids.length
+        ? await db.select().from(chatsTable).where(inArray(chatsTable.id, ids))
+        : [];
+      const chatById = new Map(fullChats.map((c) => [c.id, c]));
+      const messageCounts = await getMessageCounts(ids);
+
+      const chats = hits
+        .map((h) => {
+          const chat = chatById.get(h.chatId);
+          if (!chat) return null;
+          return {
+            ...chat,
+            matchExcerpt: h.messageContent
+              ? extractExcerpt(h.messageContent, q)
+              : null,
+            messageCount: messageCounts.get(h.chatId) ?? 0,
+          };
         })
-        .from(messagesTable)
-        .where(like(messagesTable.content, searchPattern));
-
-      // First match per chatId → excerpt
-      const chatIdToExcerpt = new Map<string, string>();
-      for (const msg of matchingMessages) {
-        if (!chatIdToExcerpt.has(msg.chatId)) {
-          chatIdToExcerpt.set(msg.chatId, extractExcerpt(msg.content, q));
-        }
-      }
-
-      const matchingChatIds = Array.from(chatIdToExcerpt.keys());
-
-      // Workspace filter for search branch
-      const wsConditions = [];
-      if (workspaceIdsParam) {
-        const ids = workspaceIdsParam
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean);
-        const realIds = ids.filter((id) => id !== 'none');
-        const includeNone = ids.includes('none');
-        if (realIds.length > 0 && includeNone) {
-          wsConditions.push(
-            or(
-              inArray(chatsTable.workspaceId, realIds),
-              isNull(chatsTable.workspaceId),
-            )!,
-          );
-        } else if (realIds.length > 0) {
-          wsConditions.push(inArray(chatsTable.workspaceId, realIds));
-        } else if (includeNone) {
-          wsConditions.push(isNull(chatsTable.workspaceId));
-        }
-      } else if (workspaceIdParam === 'none' || workspaceIdParam === 'null') {
-        wsConditions.push(isNull(chatsTable.workspaceId));
-      } else if (workspaceIdParam) {
-        wsConditions.push(eq(chatsTable.workspaceId, workspaceIdParam));
-      }
-
-      const baseTitleOrContent =
-        matchingChatIds.length > 0
-          ? or(
-              like(chatsTable.title, searchPattern),
-              inArray(chatsTable.id, matchingChatIds),
-            )
-          : like(chatsTable.title, searchPattern);
-
-      const whereCondition =
-        wsConditions.length > 0
-          ? and(baseTitleOrContent, ...wsConditions)
-          : baseTitleOrContent;
-
-      const rows = await db
-        .select()
-        .from(chatsTable)
-        .where(whereCondition)
-        .orderBy(desc(sql`rowid`));
-
-      const messageCounts = await getMessageCounts(rows.map((r) => r.id));
-      const chats = rows.map((chat) => ({
-        ...chat,
-        matchExcerpt: chatIdToExcerpt.get(chat.id) ?? null,
-        messageCount: messageCounts.get(chat.id) ?? 0,
-      }));
+        .filter((c): c is NonNullable<typeof c> => c !== null)
+        .sort((a, b) => b.createdAt - a.createdAt);
 
       const totalMessages = chats.reduce((sum, c) => sum + c.messageCount, 0);
 
@@ -170,30 +87,17 @@ export const GET = async (req: Request) => {
       conditions.push(isNotNull(chatsTable.scheduledTaskId));
     else if (scheduledParam === '0')
       conditions.push(isNull(chatsTable.scheduledTaskId));
-    if (workspaceIdsParam) {
-      const ids = workspaceIdsParam
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean);
-      const realIds = ids.filter((id) => id !== 'none');
-      const includeNone = ids.includes('none');
-      if (realIds.length > 0 && includeNone) {
-        conditions.push(
-          or(
-            inArray(chatsTable.workspaceId, realIds),
-            isNull(chatsTable.workspaceId),
-          )!,
-        );
-      } else if (realIds.length > 0) {
-        conditions.push(inArray(chatsTable.workspaceId, realIds));
-      } else if (includeNone) {
-        conditions.push(isNull(chatsTable.workspaceId));
-      }
-    } else if (workspaceIdParam === 'none' || workspaceIdParam === 'null') {
-      conditions.push(isNull(chatsTable.workspaceId));
-    } else if (workspaceIdParam) {
-      conditions.push(eq(chatsTable.workspaceId, workspaceIdParam));
-    }
+    const workspaceIds = workspaceIdsParam
+      ? workspaceIdsParam
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : undefined;
+    const wsCondition = buildWorkspaceCondition({
+      workspaceId: workspaceIdParam ?? undefined,
+      workspaceIds,
+    });
+    if (wsCondition) conditions.push(wsCondition);
     const whereCondition =
       conditions.length === 0
         ? undefined

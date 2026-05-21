@@ -1,9 +1,7 @@
 import { tool } from '@langchain/core/tools';
 import { RunnableConfig } from '@langchain/core/runnables';
 import { z } from 'zod';
-import db from '@/lib/db';
-import { chats, messages } from '@/lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { getMessageById } from '@/lib/db/messageLookup';
 
 const schema = z.object({
   messageId: z.coerce
@@ -21,37 +19,23 @@ export const getChatMessagesTool = tool(
       const configurable = config?.configurable ?? {};
       const workspaceId: string | undefined = configurable.workspaceId;
 
-      const row = db
-        .select({
-          content: messages.content,
-          role: messages.role,
-          chatId: messages.chatId,
-          isPrivate: chats.isPrivate,
-          chatTitle: chats.title,
-          chatWorkspaceId: chats.workspaceId,
-        })
-        .from(messages)
-        .leftJoin(chats, eq(chats.id, messages.chatId))
-        .where(eq(messages.id, input.messageId))
-        .get();
-
-      if (!row) {
-        return `No message found with id ${input.messageId}.`;
+      const result = getMessageById(input.messageId, {
+        workspaceId: workspaceId ?? null,
+      });
+      if (!result.ok) {
+        switch (result.reason) {
+          case 'not_found':
+            return `No message found with id ${input.messageId}.`;
+          case 'wrong_workspace':
+            return `Message ${input.messageId} is not accessible from the current workspace.`;
+          case 'private':
+            return `Message ${input.messageId} belongs to a private chat and cannot be retrieved.`;
+          case 'compaction':
+            return `Message ${input.messageId} is a compaction summary and cannot be retrieved.`;
+        }
       }
 
-      if ((row.chatWorkspaceId ?? null) !== (workspaceId ?? null)) {
-        return `Message ${input.messageId} is not accessible from the current workspace.`;
-      }
-
-      if (row.isPrivate === 1) {
-        return `Message ${input.messageId} belongs to a private chat and cannot be retrieved.`;
-      }
-
-      if (row.role === 'compaction') {
-        return `Message ${input.messageId} is a compaction summary and cannot be retrieved.`;
-      }
-
-      return `## Message ${input.messageId} from "${row.chatTitle || row.chatId}"\n\n**${row.role}**: ${row.content}`;
+      return `## Message ${input.messageId} from "${result.row.chatTitle || result.row.chatId}"\n\n**${result.row.role}**: ${result.row.content}`;
     } catch (error) {
       console.error('get_message tool error:', error);
       return 'Error: Failed to retrieve message.';

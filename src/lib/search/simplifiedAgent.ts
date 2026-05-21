@@ -711,7 +711,6 @@ export class SimplifiedAgent {
                       extraAttr += ` context="${encodeHtmlAttribute(inputObj.context.slice(0, 200))}"`;
                     }
                   }
-                  // For get_message, expose messageId as the display query
                   if (
                     type === 'get_message' &&
                     input &&
@@ -722,7 +721,6 @@ export class SimplifiedAgent {
                       extraAttr += ` query="${encodeHtmlAttribute(String(inputObj.messageId))}"`;
                     }
                   }
-                  // For chat_history_search, join the keywords array for display
                   if (
                     type === 'chat_history_search' &&
                     input &&

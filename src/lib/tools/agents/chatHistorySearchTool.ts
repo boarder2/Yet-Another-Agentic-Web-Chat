@@ -1,20 +1,7 @@
 import { tool } from '@langchain/core/tools';
 import { RunnableConfig } from '@langchain/core/runnables';
 import { z } from 'zod';
-import db from '@/lib/db';
-import { chats, messages } from '@/lib/db/schema';
-import {
-  and,
-  or,
-  eq,
-  ne,
-  isNull,
-  like,
-  desc,
-  sql,
-  gte,
-  lte,
-} from 'drizzle-orm';
+import { extractExcerpt, searchChatsByKeywords } from '@/lib/db/chatSearch';
 
 const schema = z.object({
   keywords: z
@@ -39,48 +26,6 @@ const schema = z.object({
   limit: z.number().int().min(1).max(20).optional().default(10),
 });
 
-function makeSnippet(
-  content: string,
-  keywords: string[],
-  radius = 150,
-): string {
-  const lower = content.toLowerCase();
-  let firstIdx = -1;
-  let firstLen = 0;
-  for (const kw of keywords) {
-    const k = kw.toLowerCase();
-    const idx = lower.indexOf(k);
-    if (idx !== -1 && (firstIdx === -1 || idx < firstIdx)) {
-      firstIdx = idx;
-      firstLen = k.length;
-    }
-  }
-  if (firstIdx === -1) {
-    return content.length > radius * 2
-      ? content.slice(0, radius * 2).trim() + '...'
-      : content.trim();
-  }
-  const start = Math.max(0, firstIdx - radius);
-  const end = Math.min(content.length, firstIdx + firstLen + radius);
-  let s = content.slice(start, end).replace(/\s+/g, ' ').trim();
-  if (start > 0) s = '...' + s;
-  if (end < content.length) s = s + '...';
-  return s;
-}
-
-function matchedKeywords(
-  content: string,
-  title: string | null,
-  keywords: string[],
-): string[] {
-  const c = content.toLowerCase();
-  const t = (title ?? '').toLowerCase();
-  return keywords.filter((kw) => {
-    const k = kw.toLowerCase();
-    return c.includes(k) || t.includes(k);
-  });
-}
-
 export const chatHistorySearchTool = tool(
   async (
     input: {
@@ -96,91 +41,14 @@ export const chatHistorySearchTool = tool(
       const workspaceId: string | undefined = configurable.workspaceId;
       const currentChatId: string | undefined = configurable.chatId;
 
-      const workspaceCond = workspaceId
-        ? eq(chats.workspaceId, workspaceId)
-        : isNull(chats.workspaceId);
-
-      const patterns = input.keywords.map(
-        (kw) =>
-          '%' +
-          kw.replace(/%/g, '\\%').replace(/_/g, '\\_').toLowerCase() +
-          '%',
-      );
-
-      // Score: +1 per keyword found in message content, +2 per keyword found in chat title
-      const contentScoreParts = patterns.map(
-        (p) =>
-          sql`(CASE WHEN lower(${messages.content}) LIKE ${p} THEN 1 ELSE 0 END)`,
-      );
-      const titleScoreParts = patterns.map(
-        (p) =>
-          sql`(CASE WHEN lower(${chats.title}) LIKE ${p} THEN 2 ELSE 0 END)`,
-      );
-      const scoreExpr = sql.join(
-        [...contentScoreParts, ...titleScoreParts],
-        sql` + `,
-      );
-
-      // Match condition: ANY keyword hits title or content
-      const anyMatchParts = patterns.flatMap((p) => [
-        like(sql`lower(${messages.content})`, p),
-        like(sql`lower(${chats.title})`, p),
-      ]);
-
-      const conditions = [
-        workspaceCond,
-        or(isNull(chats.isPrivate), eq(chats.isPrivate, 0)),
-        or(isNull(messages.role), ne(messages.role, 'compaction')),
-        or(...anyMatchParts),
-      ];
-
-      if (currentChatId) {
-        conditions.splice(1, 0, ne(chats.id, currentChatId));
-      }
-
-      if (input.after) {
-        const t = Date.parse(input.after);
-        if (!isNaN(t)) conditions.push(gte(chats.createdAt, t));
-      }
-      if (input.before) {
-        const t = Date.parse(input.before);
-        // Include the entire "before" day
-        if (!isNaN(t)) conditions.push(lte(chats.createdAt, t + 86_400_000));
-      }
-
-      const rows = await db
-        .select({
-          chatId: chats.id,
-          chatTitle: chats.title,
-          chatCreatedAt: chats.createdAt,
-          messageId: messages.id,
-          messageRole: messages.role,
-          content: messages.content,
-          messageCreatedAt: sql<
-            string | null
-          >`json_extract(${messages.metadata}, '$.createdAt')`,
-          score: sql<number>`(${scoreExpr})`.as('score'),
-        })
-        .from(chats)
-        .leftJoin(messages, eq(messages.chatId, chats.id))
-        .where(and(...conditions))
-        .orderBy(
-          desc(sql`score`),
-          desc(chats.createdAt),
-          sql`${messages.id} DESC NULLS LAST`,
-        )
-        .limit(input.limit * 4);
-
-      // Dedupe to highest-scoring message per chat (rows already score-sorted)
-      const seen = new Set<string>();
-      const results: typeof rows = [];
-      for (const row of rows) {
-        if (!seen.has(row.chatId)) {
-          seen.add(row.chatId);
-          results.push(row);
-          if (results.length >= input.limit) break;
-        }
-      }
+      const results = await searchChatsByKeywords({
+        keywords: input.keywords,
+        workspaceId: workspaceId ?? null,
+        excludeChatId: currentChatId,
+        after: input.after,
+        before: input.before,
+        limit: input.limit,
+      });
 
       if (results.length === 0) {
         return `No prior chats found matching keywords: ${input.keywords.join(', ')}.`;
@@ -189,9 +57,7 @@ export const chatHistorySearchTool = tool(
       let output = `Found ${results.length} match${results.length === 1 ? '' : 'es'} for keywords [${input.keywords.join(', ')}]:\n`;
 
       for (const row of results) {
-        const chatDate = row.chatCreatedAt
-          ? new Date(row.chatCreatedAt).toISOString().slice(0, 10)
-          : 'unknown';
+        const chatDate = new Date(row.chatCreatedAt).toISOString().slice(0, 10);
 
         let messageDate: string | null = null;
         if (row.messageCreatedAt) {
@@ -201,23 +67,17 @@ export const chatHistorySearchTool = tool(
           }
         }
 
-        const matched = matchedKeywords(
-          row.content ?? '',
-          row.chatTitle,
-          input.keywords,
-        );
-
         output += `\n### ${row.chatTitle || '(untitled)'}\n`;
         output += `- chatId: \`${row.chatId}\`\n`;
         output += `- chatDate: ${chatDate}\n`;
         output += `- score: ${row.score}\n`;
-        output += `- matchedKeywords: ${matched.length ? matched.join(', ') : '(none)'}\n`;
+        output += `- matchedKeywords: ${row.matchedKeywords.length ? row.matchedKeywords.join(', ') : '(none)'}\n`;
 
-        if (row.content) {
+        if (row.messageContent && row.messageId !== null) {
           output += `- messageId: \`${row.messageId}\`\n`;
           output += `- messageDate: ${messageDate ?? chatDate}\n`;
           output += `- role: ${row.messageRole ?? 'unknown'}\n`;
-          output += `> ${makeSnippet(row.content, input.keywords)}\n`;
+          output += `> ${extractExcerpt(row.messageContent, input.keywords, { radius: 150, ellipsis: '...' })}\n`;
         } else {
           output += `- (title match only)\n`;
         }

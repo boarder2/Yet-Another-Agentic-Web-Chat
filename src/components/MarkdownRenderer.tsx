@@ -27,7 +27,7 @@ import {
   MessageSquare,
   ChevronRight,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Markdown, { MarkdownToJSX } from 'markdown-to-jsx';
 import ThinkBox from './ThinkBox';
 import { CodeBlock } from './CodeBlock';
@@ -241,53 +241,54 @@ const ToolCall = ({
   children?: React.ReactNode;
 }) => {
   const [expanded, setExpanded] = useState(false);
-  const [fetchedMessage, setFetchedMessage] = useState<FetchedMessage | null>(
-    null,
-  );
-  const [fetchError, setFetchError] = useState<string | null>(null);
-  const [fetchLoading, setFetchLoading] = useState(false);
+  const [fetchState, setFetchState] = useState<
+    | { status: 'idle' }
+    | { status: 'loading' }
+    | { status: 'error'; error: string }
+    | { status: 'ok'; data: FetchedMessage }
+  >({ status: 'idle' });
+  const fetchedMessageIdRef = useRef<string | null>(null);
 
-  // Lazy fetch the message content the first time the user expands a
-  // get_message tool call. The streamed tool-call payload only carries the
-  // messageId; the actual content lives behind /api/messages/[messageId].
   useEffect(() => {
-    if (
-      type !== 'get_message' ||
-      !expanded ||
-      fetchedMessage ||
-      fetchLoading ||
-      !query
-    ) {
+    if (type !== 'get_message' || !expanded || !query) return;
+
+    const messageId = decodeHtmlEntities(query);
+    if (!/^\d+$/.test(messageId)) {
+      setFetchState({ status: 'error', error: 'Invalid message id' });
       return;
     }
-    const messageId = decodeHtmlEntities(query);
+    if (fetchedMessageIdRef.current === messageId) return;
+    fetchedMessageIdRef.current = messageId;
 
-    const load = async () => {
-      if (!/^\d+$/.test(messageId)) {
-        setFetchError('Invalid message id');
-        return;
-      }
-      setFetchLoading(true);
-      setFetchError(null);
+    const controller = new AbortController();
+    setFetchState({ status: 'loading' });
+
+    (async () => {
       try {
-        const res = await fetch(`/api/messages/${messageId}`);
+        const res = await fetch(`/api/messages/${messageId}`, {
+          signal: controller.signal,
+        });
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
           throw new Error(body?.message || `Request failed (${res.status})`);
         }
         const data: FetchedMessage = await res.json();
-        setFetchedMessage(data);
+        if (!controller.signal.aborted) setFetchState({ status: 'ok', data });
       } catch (err) {
-        const message =
+        if (controller.signal.aborted) return;
+        const error =
           err instanceof Error ? err.message : 'Failed to load message';
-        setFetchError(message);
-      } finally {
-        setFetchLoading(false);
+        setFetchState({ status: 'error', error });
+      }
+    })();
+
+    return () => {
+      controller.abort();
+      if (fetchedMessageIdRef.current === messageId) {
+        fetchedMessageIdRef.current = null;
       }
     };
-
-    load();
-  }, [type, expanded, fetchedMessage, fetchLoading, query]);
+  }, [type, expanded, query]);
 
   const getIcon = (toolType: string) => {
     switch (toolType) {
@@ -440,11 +441,7 @@ const ToolCall = ({
                 target="_blank"
                 rel="noreferrer"
               >
-                {/* eslint-disable-next-line @next/next/no-img-element --
-                  Locally-served generated image with unknown dimensions and
-                  responsive sizing; next/image would require fixed dimensions
-                  or a sized fill container with no real optimization benefit
-                  for this local API source. */}
+                {/* eslint-disable-next-line @next/next/no-img-element -- local API image with unknown dimensions */}
                 <img
                   src={`/api/uploads/images/${imageId}`}
                   alt={decodeHtmlEntities(query || '')}
@@ -752,35 +749,33 @@ const ToolCall = ({
         </div>
       )}
       {type === 'get_message' && expanded && (
-        <div className="border-t border-surface-2 px-4 py-3 text-sm">
-          {fetchLoading && (
+        <div className="border-t border-surface-2 px-4 py-3 text-sm space-y-3">
+          {fetchState.status === 'loading' && (
             <div className="flex items-center gap-2 text-fg/60">
               <LoaderCircle className="w-4 h-4 animate-spin" />
               <span>Loading message…</span>
             </div>
           )}
-          {fetchError && !fetchLoading && (
-            <div className="text-danger">{fetchError}</div>
+          {fetchState.status === 'error' && (
+            <div className="text-danger">{fetchState.error}</div>
           )}
-          {fetchedMessage && !fetchLoading && (
+          {fetchState.status === 'ok' && (
             <>
-              <div className="mb-3">
-                <div
-                  className="text-lg font-semibold text-fg truncate"
-                  title={fetchedMessage.chatTitle ?? ''}
-                >
-                  {fetchedMessage.chatTitle || '(untitled chat)'}
-                </div>
-                <a
-                  href={`/c/${fetchedMessage.chatId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-accent hover:underline text-xs"
-                >
-                  View chat thread ↗
-                </a>
+              <div
+                className="text-lg font-semibold text-fg truncate"
+                title={fetchState.data.chatTitle ?? ''}
+              >
+                {fetchState.data.chatTitle || '(untitled chat)'}
               </div>
-              <MarkdownRenderer content={fetchedMessage.content} />
+              <a
+                href={`/c/${fetchState.data.chatId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-accent hover:underline text-xs"
+              >
+                View chat thread ↗
+              </a>
+              <MarkdownRenderer content={fetchState.data.content} />
             </>
           )}
         </div>

@@ -1,19 +1,26 @@
 import { tool } from '@langchain/core/tools';
+import { RunnableConfig } from '@langchain/core/runnables';
 import { z } from 'zod';
 import db from '@/lib/db';
 import { chats, messages } from '@/lib/db/schema';
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 
 const schema = z.object({
-  messageId: z
+  messageId: z.coerce
     .number()
     .int()
     .describe('The messageId returned by chat_history_search.'),
 });
 
 export const getChatMessagesTool = tool(
-  async (input: { messageId: number }): Promise<string> => {
+  async (
+    input: { messageId: number },
+    config?: RunnableConfig,
+  ): Promise<string> => {
     try {
+      const configurable = config?.configurable ?? {};
+      const workspaceId: string | undefined = configurable.workspaceId;
+
       const row = db
         .select({
           content: messages.content,
@@ -21,18 +28,27 @@ export const getChatMessagesTool = tool(
           chatId: messages.chatId,
           isPrivate: chats.isPrivate,
           chatTitle: chats.title,
+          chatWorkspaceId: chats.workspaceId,
         })
         .from(messages)
         .leftJoin(chats, eq(chats.id, messages.chatId))
-        .where(and(eq(messages.id, input.messageId)))
+        .where(eq(messages.id, input.messageId))
         .get();
 
       if (!row) {
         return `No message found with id ${input.messageId}.`;
       }
 
+      if ((row.chatWorkspaceId ?? null) !== (workspaceId ?? null)) {
+        return `Message ${input.messageId} is not accessible from the current workspace.`;
+      }
+
       if (row.isPrivate === 1) {
         return `Message ${input.messageId} belongs to a private chat and cannot be retrieved.`;
+      }
+
+      if (row.role === 'compaction') {
+        return `Message ${input.messageId} is a compaction summary and cannot be retrieved.`;
       }
 
       return `## Message ${input.messageId} from "${row.chatTitle || row.chatId}"\n\n**${row.role}**: ${row.content}`;

@@ -1,9 +1,9 @@
 import db from '@/lib/db';
 import { chats, messages } from '@/lib/db/schema';
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 
 export const GET = async (
-  req: Request,
+  _req: Request,
   { params }: { params: Promise<{ messageId: string }> },
 ) => {
   try {
@@ -24,7 +24,7 @@ export const GET = async (
       })
       .from(messages)
       .leftJoin(chats, eq(chats.id, messages.chatId))
-      .where(and(eq(messages.id, idNum)))
+      .where(eq(messages.id, idNum))
       .get();
 
     if (!row) {

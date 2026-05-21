@@ -164,7 +164,11 @@ export const chatHistorySearchTool = tool(
         .from(chats)
         .leftJoin(messages, eq(messages.chatId, chats.id))
         .where(and(...conditions))
-        .orderBy(desc(sql`score`), desc(chats.createdAt), desc(messages.id))
+        .orderBy(
+          desc(sql`score`),
+          desc(chats.createdAt),
+          sql`${messages.id} DESC NULLS LAST`,
+        )
         .limit(input.limit * 4);
 
       // Dedupe to highest-scoring message per chat (rows already score-sorted)
@@ -186,13 +190,7 @@ export const chatHistorySearchTool = tool(
 
       for (const row of results) {
         const chatDate = row.chatCreatedAt
-          ? new Date(
-              typeof row.chatCreatedAt === 'number'
-                ? row.chatCreatedAt
-                : row.chatCreatedAt,
-            )
-              .toISOString()
-              .slice(0, 10)
+          ? new Date(row.chatCreatedAt).toISOString().slice(0, 10)
           : 'unknown';
 
         let messageDate: string | null = null;

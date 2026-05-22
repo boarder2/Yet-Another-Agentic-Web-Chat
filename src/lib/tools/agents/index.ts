@@ -23,6 +23,7 @@ import { askUserTool } from './askUserTool';
 import { imageGenerationTool } from './imageGenerationTool';
 import { chatHistorySearchTool } from './chatHistorySearchTool';
 import { getChatMessagesTool } from './getChatMessagesTool';
+import { createChartTool } from './createChartTool';
 
 export { simpleWebSearchTool };
 export { urlFetchTool };
@@ -39,6 +40,7 @@ export { askUserTool };
 export { imageGenerationTool };
 export { chatHistorySearchTool };
 export { getChatMessagesTool };
+export { createChartTool };
 
 // Base tool arrays (non-interactive, used by subagents)
 export const allAgentTools = [
@@ -52,6 +54,7 @@ export const allAgentTools = [
   pdfLoaderTool,
   deepResearchTool,
   todoListTool,
+  createChartTool,
   chatHistorySearchTool,
   getChatMessagesTool,
 ];
@@ -65,6 +68,7 @@ export const webSearchTools = [
   pdfLoaderTool,
   deepResearchTool,
   todoListTool,
+  createChartTool,
   chatHistorySearchTool,
   getChatMessagesTool,
 ];
@@ -94,3 +98,6 @@ export const getAllAgentTools = () => withInteractiveTools([...allAgentTools]);
 export const getWebSearchTools = () =>
   withInteractiveTools([...webSearchTools]);
 export const getCoreTools = () => withInteractiveTools([...coreTools]);
+// Local research includes core tools plus chart support (no web search)
+export const getLocalResearchTools = () =>
+  withInteractiveTools([...coreTools, createChartTool]);

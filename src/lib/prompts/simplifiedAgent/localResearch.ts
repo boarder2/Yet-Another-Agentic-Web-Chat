@@ -1,5 +1,6 @@
 import { formatDateForLLM } from '@/lib/utils';
 import { formattingAndCitationsLocal } from '@/lib/prompts/templates';
+import { chartingGuidance } from './chartingGuidance';
 
 /**
  * Build the Local Research mode system prompt for SimplifiedAgent
@@ -64,6 +65,8 @@ These rules always apply regardless of research strategy:
 - Use the available tools effectively to analyze and extract information from uploaded documents
 
 ${researchStrategy}
+
+${chartingGuidance}
 
 ## Current Context
 - Today's Date: ${formatDateForLLM(date)}

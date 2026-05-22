@@ -127,6 +127,8 @@ const handleEmitterEvents = async (
   const codeExecutionRunIdMap = new Map<string, string>();
   // Map questionId → runId for correlating user_question_answered with the correct ToolCall markup
   const userQuestionRunIdMap = new Map<string, string>();
+  // Accumulated chartId → ChartSpec map for persistence in metadata
+  const chartSpecs: Record<string, unknown> = {};
   let sources: Record<string, unknown>[] = [];
   let searchQuery: string | undefined;
   let searchUrl: string | undefined;
@@ -350,6 +352,19 @@ const handleEmitterEvents = async (
           },
         );
       }
+    } else if (parsedData.type === 'chart_spec') {
+      // Accumulate chart specs for persistence; forward to client for live rendering
+      const { chartId, spec } = parsedData.data ?? {};
+      if (chartId && spec) {
+        chartSpecs[chartId] = spec;
+      }
+      safeWrite(
+        JSON.stringify({
+          type: 'chart_spec',
+          data: parsedData.data,
+          messageId: aiMessageId,
+        }) + '\n',
+      );
     } else if (parsedData.type === 'todo_update') {
       // Forward todo_update event to client (transient UI, not persisted in message)
       safeWrite(
@@ -397,6 +412,8 @@ const handleEmitterEvents = async (
         if (d.timedOut) extra.timedOut = 'true';
         if (d.oomKilled) extra.oomKilled = 'true';
         if (d.denied) extra.denied = 'true';
+        if (Array.isArray(d.chartIds) && d.chartIds.length > 0)
+          extra.chartIds = d.chartIds.join(',');
         recievedMessage = updateToolCallMarkup(recievedMessage, tcId, {
           extra,
         });
@@ -553,6 +570,7 @@ const handleEmitterEvents = async (
           usedLocation,
           usedPersonalization,
           ...(memoriesUsed.length > 0 && { memoriesUsed }),
+          ...(Object.keys(chartSpecs).length > 0 && { chartSpecs }),
         }),
       })
       .execute();

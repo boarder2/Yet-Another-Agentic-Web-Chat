@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { updateToolCallMarkup } from '@/lib/utils/toolCallMarkup';
 import { encodeHtmlAttribute } from '@/lib/utils/html';
+import { ChartSpecContext } from '@/lib/chart/ChartSpecContext';
+import { ChartSpec, ChartSpecSchema } from '@/lib/chart/chartSpec';
 import { Document } from '@langchain/core/documents';
 import ChatActions from './ChatActions';
 import Chat from './Chat';
@@ -485,6 +487,12 @@ const ChatWindow = ({
     Record<string, PendingEditApproval[]>
   >({});
 
+  // Per-message chart spec map: messageId → (chartId → ChartSpec)
+  // Also exposed as a flat chartId → ChartSpec map via ChartSpecContext
+  const [chartSpecsByMessage, setChartSpecsByMessage] = useState<
+    Record<string, Record<string, ChartSpec>>
+  >({});
+
   const [files, setFiles] = useState<File[]>([]);
   const [fileIds, setFileIds] = useState<string[]>([]);
 
@@ -689,6 +697,31 @@ const ChatWindow = ({
       setIsReady(false);
     }
   }, [isMessagesLoaded, isConfigReady]);
+
+  // Hydrate chartSpecs from message metadata on initial load
+  useEffect(() => {
+    if (!isMessagesLoaded) return;
+    const hydrated: Record<string, Record<string, ChartSpec>> = {};
+    for (const msg of messages) {
+      const specs = (msg as unknown as Record<string, unknown>).chartSpecs as
+        | Record<string, unknown>
+        | undefined;
+      if (specs && Object.keys(specs).length > 0) {
+        const validSpecs: Record<string, ChartSpec> = {};
+        for (const [id, spec] of Object.entries(specs)) {
+          const result = ChartSpecSchema.safeParse(spec);
+          if (result.success) validSpecs[id] = result.data;
+        }
+        if (Object.keys(validSpecs).length > 0) {
+          hydrated[msg.messageId] = validSpecs;
+        }
+      }
+    }
+    if (Object.keys(hydrated).length > 0) {
+      setChartSpecsByMessage((prev) => ({ ...hydrated, ...prev }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMessagesLoaded]);
 
   const sendMessage = async (
     message: string,
@@ -1317,6 +1350,8 @@ const ChatWindow = ({
           if (d.timedOut) extra.timedOut = 'true';
           if (d.oomKilled) extra.oomKilled = 'true';
           if (d.denied) extra.denied = 'true';
+          if (Array.isArray(d.chartIds) && d.chartIds.length > 0)
+            extra.chartIds = d.chartIds.join(',');
           setMessages((prev) =>
             prev.map((message) => {
               if (message.messageId === data.messageId) {
@@ -1410,6 +1445,21 @@ const ChatWindow = ({
           });
         }
         setScrollTrigger((prev) => prev + 1);
+        return;
+      }
+
+      // Handle chart spec events
+      if (data.type === 'chart_spec') {
+        const { chartId, spec } = data.data;
+        if (chartId && spec) {
+          setChartSpecsByMessage((prev) => ({
+            ...prev,
+            [data.messageId]: {
+              ...(prev[data.messageId] ?? {}),
+              [chartId]: spec,
+            },
+          }));
+        }
         return;
       }
 
@@ -1794,6 +1844,20 @@ const ChatWindow = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isConfigReady, isReady, initialMessage]);
 
+  // Build a flat chartId → spec map for ChartSpecContext (must be before any early returns)
+  const flatChartSpecs = useMemo(() => {
+    const flat: Record<string, ChartSpec> = {};
+    for (const specs of Object.values(chartSpecsByMessage)) {
+      Object.assign(flat, specs);
+    }
+    return flat;
+  }, [chartSpecsByMessage]);
+
+  const chartSpecContextValue = useMemo(
+    () => ({ getChartSpec: (id: string) => flatChartSpecs[id] }),
+    [flatChartSpecs],
+  );
+
   if (hasError) {
     return (
       <div className="relative">
@@ -1900,235 +1964,244 @@ const ChatWindow = ({
     }
   };
 
-  return isReady ? (
-    notFound ? (
-      <NextError statusCode={404} />
-    ) : (
-      <div>
-        {messages.length > 0 ? (
-          <>
-            <ChatActions
-              chatId={chatId!}
-              messages={messages}
-              isPrivateSession={isPrivateSession}
-              pinned={pinned}
-              setPinned={setPinned}
-              workspaceId={selectedWorkspaceId ?? workspaceId}
-            />
-            <Chat
-              loading={loading}
-              messages={messages}
-              sendMessage={sendMessage}
-              scrollTrigger={scrollTrigger}
-              rewrite={rewrite}
-              fileIds={fileIds}
-              setFileIds={setFileIds}
-              files={files}
-              setFiles={setFiles}
-              focusMode={focusMode}
-              setFocusMode={setFocusMode}
-              handleEditMessage={handleEditMessage}
-              analysisProgress={analysisProgress}
-              modelStats={liveModelStats}
-              systemPromptIds={systemPromptIds}
-              setSystemPromptIds={setSystemPromptIds}
-              selectedMethodologyId={selectedMethodologyId}
-              setSelectedMethodologyId={setSelectedMethodologyId}
-              onThinkBoxToggle={handleThinkBoxToggle}
-              gatheringSources={gatheringSources}
-              sendLocation={sendLocation}
-              setSendLocation={setSendLocation}
-              sendPersonalization={sendPersonalization}
-              setSendPersonalization={setSendPersonalization}
-              personalizationLocation={personalizationLocation}
-              personalizationAbout={personalizationAbout}
-              todoItems={todoItems}
-              pendingExecutions={pendingExecutions}
-              onExecutionAction={(executionId: string, approved: boolean) => {
-                setPendingExecutions((prev) => {
-                  const updated: Record<string, PendingExecution[]> = {};
-                  for (const [msgId, executions] of Object.entries(prev)) {
-                    updated[msgId] = executions.map((e) =>
-                      e.executionId === executionId
-                        ? {
-                            ...e,
-                            status: approved
-                              ? ('approved' as const)
-                              : ('denied' as const),
-                          }
-                        : e,
-                    );
-                  }
-                  return updated;
-                });
-              }}
-              pendingQuestions={pendingQuestions}
-              onQuestionAnswer={async (
-                questionId: string,
-                response: {
-                  selectedOptions?: string[];
-                  freeformText?: string;
-                },
-              ) => {
-                setPendingQuestions((prev) => {
-                  const updated: Record<string, PendingQuestion[]> = {};
-                  for (const [msgId, questions] of Object.entries(prev)) {
-                    updated[msgId] = questions.map((q) =>
-                      q.questionId === questionId
-                        ? { ...q, status: 'answered' as const, response }
-                        : q,
-                    );
-                  }
-                  return updated;
-                });
-                try {
-                  const res = await fetch('/api/chat/answer', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ questionId, ...response }),
-                  });
-                  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                } catch {
-                  toast.error(
-                    'Failed to send answer. The agent will continue on its own.',
-                  );
-                }
-              }}
-              onQuestionSkip={async (questionId: string) => {
-                setPendingQuestions((prev) => {
-                  const updated: Record<string, PendingQuestion[]> = {};
-                  for (const [msgId, questions] of Object.entries(prev)) {
-                    updated[msgId] = questions.map((q) =>
-                      q.questionId === questionId
-                        ? { ...q, status: 'skipped' as const }
-                        : q,
-                    );
-                  }
-                  return updated;
-                });
-                try {
-                  const res = await fetch('/api/chat/answer', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ questionId, skipped: true }),
-                  });
-                  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                } catch {
-                  toast.error(
-                    'Failed to skip question. The agent will continue on its own.',
-                  );
-                }
-              }}
-              pendingEditApprovals={pendingEditApprovals}
-              onEditDecide={async (
-                approvalId: string,
-                decision:
-                  | 'accept'
-                  | 'accept_always'
-                  | 'reject'
-                  | 'always_prompt',
-                freeformText?: string,
-              ) => {
-                setPendingEditApprovals((prev) => {
-                  const updated: Record<string, PendingEditApproval[]> = {};
-                  for (const [msgId, approvals] of Object.entries(prev)) {
-                    updated[msgId] = approvals.map((a) =>
-                      a.approvalId === approvalId
-                        ? {
-                            ...a,
-                            status: (decision === 'reject' ||
-                            decision === 'always_prompt'
-                              ? 'rejected'
-                              : 'accepted') as 'accepted' | 'rejected',
-                          }
-                        : a,
-                    );
-                  }
-                  return updated;
-                });
-                // Find the workspaceId for this approval
-                let workspaceId: string | undefined;
-                for (const approvals of Object.values(pendingEditApprovals)) {
-                  const found = approvals.find(
-                    (a) => a.approvalId === approvalId,
-                  );
-                  if (found) {
-                    workspaceId = found.workspaceId;
-                    break;
-                  }
-                }
-                if (!workspaceId) return;
-                try {
-                  const res = await fetch(
-                    `/api/workspaces/${workspaceId}/file-edit-approval`,
-                    {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        approvalId,
-                        decision,
-                        freeformText,
-                      }),
-                    },
-                  );
-                  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                } catch {
-                  toast.error(
-                    'Failed to send edit decision. The agent will continue on its own.',
-                  );
-                }
-              }}
-              pendingImages={pendingImages}
-              setPendingImages={setPendingImages}
-              imageCapable={imageCapable}
-              isPrivateSession={isPrivateSession}
-              searchCapabilities={
-                isPrivateSession
-                  ? searchCapabilitiesPrivate
-                  : searchCapabilitiesRegular
-              }
-              estimatedUsage={contextUsage}
-              messageCount={messages.length}
-              onCompact={handleCompact}
-              compacting={compacting}
-            />
-          </>
+  return (
+    <ChartSpecContext.Provider value={chartSpecContextValue}>
+      {isReady ? (
+        notFound ? (
+          <NextError statusCode={404} />
         ) : (
-          <EmptyChat
-            sendMessage={sendMessage}
-            focusMode={focusMode}
-            setFocusMode={setFocusMode}
-            systemPromptIds={systemPromptIds}
-            setSystemPromptIds={setSystemPromptIds}
-            selectedMethodologyId={selectedMethodologyId}
-            setSelectedMethodologyId={setSelectedMethodologyId}
-            fileIds={fileIds}
-            setFileIds={setFileIds}
-            files={files}
-            setFiles={setFiles}
-            sendLocation={sendLocation}
-            setSendLocation={setSendLocation}
-            sendPersonalization={sendPersonalization}
-            setSendPersonalization={setSendPersonalization}
-            personalizationLocation={personalizationLocation}
-            personalizationAbout={personalizationAbout}
-            pendingImages={pendingImages}
-            setPendingImages={setPendingImages}
-            imageCapable={imageCapable}
-            isPrivateSession={isPrivateSession}
-            workspaceId={workspaceId}
-            selectedWorkspaceId={selectedWorkspaceId}
-            setSelectedWorkspaceId={
-              workspaceId ? undefined : setSelectedWorkspaceId
-            }
-          />
-        )}
-      </div>
-    )
-  ) : (
-    <div className="flex flex-row items-center justify-center min-h-screen">
-      <LoaderCircle size={32} className="animate-spin text-accent" />
-    </div>
+          <div>
+            {messages.length > 0 ? (
+              <>
+                <ChatActions
+                  chatId={chatId!}
+                  messages={messages}
+                  isPrivateSession={isPrivateSession}
+                  pinned={pinned}
+                  setPinned={setPinned}
+                  workspaceId={selectedWorkspaceId ?? workspaceId}
+                />
+                <Chat
+                  loading={loading}
+                  messages={messages}
+                  sendMessage={sendMessage}
+                  scrollTrigger={scrollTrigger}
+                  rewrite={rewrite}
+                  fileIds={fileIds}
+                  setFileIds={setFileIds}
+                  files={files}
+                  setFiles={setFiles}
+                  focusMode={focusMode}
+                  setFocusMode={setFocusMode}
+                  handleEditMessage={handleEditMessage}
+                  analysisProgress={analysisProgress}
+                  modelStats={liveModelStats}
+                  systemPromptIds={systemPromptIds}
+                  setSystemPromptIds={setSystemPromptIds}
+                  selectedMethodologyId={selectedMethodologyId}
+                  setSelectedMethodologyId={setSelectedMethodologyId}
+                  onThinkBoxToggle={handleThinkBoxToggle}
+                  gatheringSources={gatheringSources}
+                  sendLocation={sendLocation}
+                  setSendLocation={setSendLocation}
+                  sendPersonalization={sendPersonalization}
+                  setSendPersonalization={setSendPersonalization}
+                  personalizationLocation={personalizationLocation}
+                  personalizationAbout={personalizationAbout}
+                  todoItems={todoItems}
+                  pendingExecutions={pendingExecutions}
+                  onExecutionAction={(
+                    executionId: string,
+                    approved: boolean,
+                  ) => {
+                    setPendingExecutions((prev) => {
+                      const updated: Record<string, PendingExecution[]> = {};
+                      for (const [msgId, executions] of Object.entries(prev)) {
+                        updated[msgId] = executions.map((e) =>
+                          e.executionId === executionId
+                            ? {
+                                ...e,
+                                status: approved
+                                  ? ('approved' as const)
+                                  : ('denied' as const),
+                              }
+                            : e,
+                        );
+                      }
+                      return updated;
+                    });
+                  }}
+                  pendingQuestions={pendingQuestions}
+                  onQuestionAnswer={async (
+                    questionId: string,
+                    response: {
+                      selectedOptions?: string[];
+                      freeformText?: string;
+                    },
+                  ) => {
+                    setPendingQuestions((prev) => {
+                      const updated: Record<string, PendingQuestion[]> = {};
+                      for (const [msgId, questions] of Object.entries(prev)) {
+                        updated[msgId] = questions.map((q) =>
+                          q.questionId === questionId
+                            ? { ...q, status: 'answered' as const, response }
+                            : q,
+                        );
+                      }
+                      return updated;
+                    });
+                    try {
+                      const res = await fetch('/api/chat/answer', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ questionId, ...response }),
+                      });
+                      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    } catch {
+                      toast.error(
+                        'Failed to send answer. The agent will continue on its own.',
+                      );
+                    }
+                  }}
+                  onQuestionSkip={async (questionId: string) => {
+                    setPendingQuestions((prev) => {
+                      const updated: Record<string, PendingQuestion[]> = {};
+                      for (const [msgId, questions] of Object.entries(prev)) {
+                        updated[msgId] = questions.map((q) =>
+                          q.questionId === questionId
+                            ? { ...q, status: 'skipped' as const }
+                            : q,
+                        );
+                      }
+                      return updated;
+                    });
+                    try {
+                      const res = await fetch('/api/chat/answer', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ questionId, skipped: true }),
+                      });
+                      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    } catch {
+                      toast.error(
+                        'Failed to skip question. The agent will continue on its own.',
+                      );
+                    }
+                  }}
+                  pendingEditApprovals={pendingEditApprovals}
+                  onEditDecide={async (
+                    approvalId: string,
+                    decision:
+                      | 'accept'
+                      | 'accept_always'
+                      | 'reject'
+                      | 'always_prompt',
+                    freeformText?: string,
+                  ) => {
+                    setPendingEditApprovals((prev) => {
+                      const updated: Record<string, PendingEditApproval[]> = {};
+                      for (const [msgId, approvals] of Object.entries(prev)) {
+                        updated[msgId] = approvals.map((a) =>
+                          a.approvalId === approvalId
+                            ? {
+                                ...a,
+                                status: (decision === 'reject' ||
+                                decision === 'always_prompt'
+                                  ? 'rejected'
+                                  : 'accepted') as 'accepted' | 'rejected',
+                              }
+                            : a,
+                        );
+                      }
+                      return updated;
+                    });
+                    // Find the workspaceId for this approval
+                    let workspaceId: string | undefined;
+                    for (const approvals of Object.values(
+                      pendingEditApprovals,
+                    )) {
+                      const found = approvals.find(
+                        (a) => a.approvalId === approvalId,
+                      );
+                      if (found) {
+                        workspaceId = found.workspaceId;
+                        break;
+                      }
+                    }
+                    if (!workspaceId) return;
+                    try {
+                      const res = await fetch(
+                        `/api/workspaces/${workspaceId}/file-edit-approval`,
+                        {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            approvalId,
+                            decision,
+                            freeformText,
+                          }),
+                        },
+                      );
+                      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    } catch {
+                      toast.error(
+                        'Failed to send edit decision. The agent will continue on its own.',
+                      );
+                    }
+                  }}
+                  pendingImages={pendingImages}
+                  setPendingImages={setPendingImages}
+                  imageCapable={imageCapable}
+                  isPrivateSession={isPrivateSession}
+                  searchCapabilities={
+                    isPrivateSession
+                      ? searchCapabilitiesPrivate
+                      : searchCapabilitiesRegular
+                  }
+                  estimatedUsage={contextUsage}
+                  messageCount={messages.length}
+                  onCompact={handleCompact}
+                  compacting={compacting}
+                />
+              </>
+            ) : (
+              <EmptyChat
+                sendMessage={sendMessage}
+                focusMode={focusMode}
+                setFocusMode={setFocusMode}
+                systemPromptIds={systemPromptIds}
+                setSystemPromptIds={setSystemPromptIds}
+                selectedMethodologyId={selectedMethodologyId}
+                setSelectedMethodologyId={setSelectedMethodologyId}
+                fileIds={fileIds}
+                setFileIds={setFileIds}
+                files={files}
+                setFiles={setFiles}
+                sendLocation={sendLocation}
+                setSendLocation={setSendLocation}
+                sendPersonalization={sendPersonalization}
+                setSendPersonalization={setSendPersonalization}
+                personalizationLocation={personalizationLocation}
+                personalizationAbout={personalizationAbout}
+                pendingImages={pendingImages}
+                setPendingImages={setPendingImages}
+                imageCapable={imageCapable}
+                isPrivateSession={isPrivateSession}
+                workspaceId={workspaceId}
+                selectedWorkspaceId={selectedWorkspaceId}
+                setSelectedWorkspaceId={
+                  workspaceId ? undefined : setSelectedWorkspaceId
+                }
+              />
+            )}
+          </div>
+        )
+      ) : (
+        <div className="flex flex-row items-center justify-center min-h-screen">
+          <LoaderCircle size={32} className="animate-spin text-accent" />
+        </div>
+      )}
+    </ChartSpecContext.Provider>
   );
 };
 

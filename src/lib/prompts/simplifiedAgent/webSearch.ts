@@ -1,5 +1,6 @@
 import { formatDateForLLM } from '@/lib/utils';
 import { formattingAndCitationsWeb } from '@/lib/prompts/templates';
+import { chartingGuidance } from './chartingGuidance';
 
 /**
  * Build the Web Search mode system prompt for SimplifiedAgent
@@ -73,6 +74,8 @@ ${fileIds.length > 0 ? `- **file_search**: Search ${fileIds.length} uploaded fil
 - Use other available tools to supplement search results with deeper content extraction and analysis
 
 ${researchStrategy}
+
+${chartingGuidance}
 
 **Context**: Today's Date - use for time sensitive queries: ${formatDateForLLM(date)}
 `;

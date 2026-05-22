@@ -13,6 +13,9 @@ import {
   ensureImage,
 } from '@/lib/sandbox/dockerExecutor';
 import { getCodeExecutionConfig } from '@/lib/config';
+import { ChartSpecSchema } from '@/lib/chart/chartSpec';
+
+const CHART_ENVELOPE_RE = /^__CHART__(\{.*\})$/;
 
 const MAX_CODE_LENGTH = 50_000;
 
@@ -159,18 +162,73 @@ export const codeExecutionTool = tool(
 
     const result = await executeCode(code);
 
+    // Scan stdout for __CHART__ envelopes and extract chart specs
+    const chartIds: string[] = [];
+    let cleanedStdout = result.stdout;
+    if (result.stdout) {
+      const lines = result.stdout.split('\n');
+      const processedLines: string[] = [];
+      for (const line of lines) {
+        const m = line.trim().match(CHART_ENVELOPE_RE);
+        if (!m) {
+          processedLines.push(line);
+          continue;
+        }
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(m[1]);
+        } catch {
+          // Malformed JSON — leave line untouched
+          processedLines.push(line);
+          continue;
+        }
+        const validation = ChartSpecSchema.safeParse(parsed);
+        if (!validation.success) {
+          const reason = validation.error.issues
+            .map((i) => i.message)
+            .join('; ');
+          processedLines.push(`Chart skipped: ${reason}`);
+          continue;
+        }
+        const chartId = crypto.randomUUID();
+        chartIds.push(chartId);
+        processedLines.push(`[Chart rendered: id=${chartId}]`);
+        try {
+          emitter.emit(
+            'data',
+            JSON.stringify({
+              type: 'chart_spec',
+              data: {
+                chartId,
+                spec: validation.data,
+                source: 'code_execution',
+                toolCallId,
+              },
+            }),
+          );
+        } catch (err) {
+          console.warn(
+            'codeExecutionTool: Failed to emit chart_spec event',
+            err,
+          );
+        }
+      }
+      cleanedStdout = processedLines.join('\n');
+    }
+
     emitter.emit(
       'data',
       JSON.stringify({
         type: 'code_execution_result',
         data: {
           executionId,
-          stdout: result.stdout,
+          stdout: cleanedStdout,
           stderr: result.stderr,
           exitCode: result.exitCode,
           timedOut: result.timedOut,
           oomKilled: result.oomKilled,
           toolCallId,
+          ...(chartIds.length > 0 && { chartIds }),
         },
       }),
     );
@@ -182,7 +240,7 @@ export const codeExecutionTool = tool(
       resultText = `Execution ran out of memory (limit: ${ceConfig.memoryMb}MB).`;
     } else {
       resultText = `Exit code: ${result.exitCode}`;
-      if (result.stdout) resultText += `\n\nStdout:\n${result.stdout}`;
+      if (cleanedStdout) resultText += `\n\nStdout:\n${cleanedStdout}`;
       if (result.stderr) resultText += `\n\nStderr:\n${result.stderr}`;
     }
 

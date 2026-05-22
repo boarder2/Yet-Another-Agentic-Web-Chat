@@ -13,6 +13,17 @@ No formal test framework. Verify via LSP diagnostics, `curl`, and `playwright-cl
 2. Wait until `curl -s http://localhost:3000/api/config` returns JSON.
 3. Configure models via the Settings page or localStorage before testing LLM-dependent features.
 
+## Required Test Model
+
+Use **`Google: Gemma 4 31B`** via the **OpenRouter** provider for BOTH the chat model and the system model whenever running tests. It is vision-capable, so use it for multimodal/image tests as well — do not swap to a different model for vision cases.
+
+When constructing curl payloads or configuring the UI/localStorage:
+
+- `chatModel`: `{"provider": "openrouter", "name": "google/gemma-4-31b-it"}`
+- System model: same (`openrouter` / `google/gemma-4-31b-it`).
+
+If the exact OpenRouter model slug differs from `google/gemma-4-31b-it`, look it up via `curl -s http://localhost:3000/api/models` and use the matching id — but keep the display name `Google: Gemma 4 31B` and provider `openrouter`.
+
 ## Static Analysis
 
 Use the LSP tool for type and lint diagnostics on edited files.

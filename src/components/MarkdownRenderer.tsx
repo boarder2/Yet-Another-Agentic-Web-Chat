@@ -35,14 +35,16 @@ import { Document } from '@langchain/core/documents';
 import CitationLink from './CitationLink';
 import { decodeHtmlEntities, decodeBase64 } from '@/lib/utils/html';
 import { SubagentExecution } from './MessageActions/SubagentExecution';
+import ChartWidget from './ChartWidget';
+import { useChartSpec } from '@/lib/chart/ChartSpecContext';
 
 /**
- * Pattern matching known custom element closing tags (ToolCall, SubagentExecution).
+ * Pattern matching known custom element closing tags (ToolCall, SubagentExecution, Chart).
  * Used as boundaries to distinguish markdown content from orphaned think text.
  * Must NOT match arbitrary HTML-like tags that models may produce in their
  * thinking output (e.g. </parameter>, </tool>, </result>).
  */
-const KNOWN_CLOSING_TAG = '<\\/(?:ToolCall|SubagentExecution)\\s*>';
+const KNOWN_CLOSING_TAG = '<\\/(?:ToolCall|SubagentExecution|Chart)\\s*>';
 
 /**
  * Ensure custom block elements (ToolCall, SubagentExecution) are surrounded by
@@ -56,7 +58,8 @@ const ensureBlockElements = (text: string): string =>
     .replace(
       /(<SubagentExecution\b[^>]*>[\s\S]*?<\/SubagentExecution>)/g,
       '\n\n$1\n\n',
-    );
+    )
+    .replace(/(<Chart\b[^>]*\/>)/g, '\n\n$1\n\n');
 
 /**
  * Remove think-tag content, handling both properly paired <think>...</think>
@@ -215,6 +218,7 @@ const ToolCall = ({
   freeformText,
   skipped,
   imageId,
+  chartIds,
   children,
 }: {
   type?: string;
@@ -238,6 +242,7 @@ const ToolCall = ({
   freeformText?: string;
   skipped?: string;
   imageId?: string;
+  chartIds?: string;
   children?: React.ReactNode;
 }) => {
   const [expanded, setExpanded] = useState(false);
@@ -807,8 +812,31 @@ const ToolCall = ({
           )}
         </div>
       )}
+      {type === 'code_execution' &&
+        chartIds &&
+        chartIds
+          .split(',')
+          .filter(Boolean)
+          .map((cid) => (
+            <div key={cid} className="border-t border-surface-2 px-3 py-2">
+              <ChartElement id={cid} />
+            </div>
+          ))}
     </div>
   );
+};
+
+const ChartElement = ({ id }: { id?: string }) => {
+  const spec = useChartSpec(id ?? '');
+  if (!id) return null;
+  if (!spec) {
+    return (
+      <div className="my-3 bg-surface border border-surface-2 rounded-surface px-4 py-3 text-sm text-fg/60 italic">
+        Loading chart…
+      </div>
+    );
+  }
+  return <ChartWidget spec={spec} />;
 };
 
 const ThinkTagProcessor = ({
@@ -863,6 +891,9 @@ const MarkdownRenderer = ({
       },
       SubagentExecution: {
         component: SubagentExecution,
+      },
+      Chart: {
+        component: ChartElement,
       },
       code: {
         component: ({ className, children }) => {

@@ -11,6 +11,7 @@ import {
   getAllAgentTools,
   getWebSearchTools,
   getCoreTools,
+  getLocalResearchTools,
 } from '@/lib/tools/agents';
 // import {
 //   getLangfuseCallbacks,
@@ -349,8 +350,8 @@ export class SimplifiedAgent {
         }
         break;
       case 'localResearch':
-        // Local research mode: File search tools + core tools
-        tools = [...getCoreTools(), ...fileSearchTools];
+        // Local research mode: File search tools + core tools + chart
+        tools = [...getLocalResearchTools(), ...fileSearchTools];
         break;
       default:
         // Default to web search mode for unknown focus modes
@@ -608,8 +609,12 @@ export class SimplifiedAgent {
               const toolName = runName || tool.name || 'unknown';
               toolCalls[runId] = toolName;
 
-              // Skip generic tool events for deep_research and todo_list (have specialized rendering)
-              if (toolName === 'deep_research' || toolName === 'todo_list') {
+              // Skip generic tool events for tools with specialized inline rendering
+              if (
+                toolName === 'deep_research' ||
+                toolName === 'todo_list' ||
+                toolName === 'create_chart'
+              ) {
                 return;
               }
 
@@ -797,8 +802,12 @@ export class SimplifiedAgent {
               // Skip if the tool was never registered (e.g. filtered out as a child-graph call)
               if (!toolName) return;
 
-              // Skip generic tool events for deep_research and todo_list (have specialized rendering)
-              if (toolName === 'deep_research' || toolName === 'todo_list') {
+              // Skip generic tool events for tools with specialized inline rendering
+              if (
+                toolName === 'deep_research' ||
+                toolName === 'todo_list' ||
+                toolName === 'create_chart'
+              ) {
                 delete toolCalls[runId];
                 return;
               }
@@ -858,8 +867,12 @@ export class SimplifiedAgent {
               // Skip if the tool was never registered (e.g. filtered out as a child-graph call)
               if (!toolName) return;
 
-              // Skip generic tool events for deep_research and todo_list (have specialized rendering)
-              if (toolName === 'deep_research' || toolName === 'todo_list') {
+              // Skip generic tool events for tools with specialized inline rendering
+              if (
+                toolName === 'deep_research' ||
+                toolName === 'todo_list' ||
+                toolName === 'create_chart'
+              ) {
                 delete toolCalls[runId];
                 return;
               }

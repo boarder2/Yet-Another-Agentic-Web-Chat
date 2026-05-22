@@ -81,11 +81,16 @@ export const coreTools: typeof allAgentTools = [
   getChatMessagesTool,
 ];
 
+// Whether the code_execution tool is configured and available for use.
+export const isCodeExecutionEnabled = (): boolean => {
+  const config = getCodeExecutionConfig();
+  return config.enabled && !('validationError' in config);
+};
+
 // Helper to append interactive-only tools (code execution + ask_user) for top-level use
 function withInteractiveTools<T>(tools: T[]): T[] {
   const result = [...tools];
-  const config = getCodeExecutionConfig();
-  if (config.enabled && !('validationError' in config)) {
+  if (isCodeExecutionEnabled()) {
     result.push(codeExecutionTool as unknown as T);
   }
   // ask_user is always available; it checks interactiveSession at call time

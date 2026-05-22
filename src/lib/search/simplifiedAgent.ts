@@ -12,6 +12,7 @@ import {
   getWebSearchTools,
   getCoreTools,
   getLocalResearchTools,
+  isCodeExecutionEnabled,
 } from '@/lib/tools/agents';
 // import {
 //   getLangfuseCallbacks,
@@ -388,6 +389,7 @@ export class SimplifiedAgent {
     });
 
     let basePrompt: string;
+    const codeExecutionEnabled = isCodeExecutionEnabled();
 
     if (firefoxAIDetected) {
       basePrompt = buildFirefoxAIPrompt(
@@ -414,6 +416,7 @@ export class SimplifiedAgent {
             query,
             new Date(),
             this.methodologyInstructions,
+            codeExecutionEnabled,
           );
           break;
         case 'localResearch':
@@ -422,6 +425,7 @@ export class SimplifiedAgent {
             personalizationSection,
             new Date(),
             this.methodologyInstructions,
+            codeExecutionEnabled,
           );
           break;
         default:
@@ -436,6 +440,7 @@ export class SimplifiedAgent {
             query,
             new Date(),
             this.methodologyInstructions,
+            codeExecutionEnabled,
           );
           break;
       }

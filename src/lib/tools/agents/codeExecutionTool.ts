@@ -163,7 +163,6 @@ export const codeExecutionTool = tool(
     const result = await executeCode(code);
 
     // Scan stdout for __CHART__ envelopes and extract chart specs
-    const chartIds: string[] = [];
     let cleanedStdout = result.stdout;
     if (result.stdout) {
       const lines = result.stdout.split('\n');
@@ -191,8 +190,10 @@ export const codeExecutionTool = tool(
           continue;
         }
         const chartId = crypto.randomUUID();
-        chartIds.push(chartId);
-        processedLines.push(`[Chart rendered: id=${chartId}]`);
+        const chartTitle = validation.data.title;
+        processedLines.push(
+          `[Chart created:${chartTitle ? ` "${chartTitle}"` : ''} id=${chartId} — place a <Chart id="${chartId}"/> tag where the chart should appear in your response.]`,
+        );
         try {
           emitter.emit(
             'data',
@@ -228,7 +229,6 @@ export const codeExecutionTool = tool(
           timedOut: result.timedOut,
           oomKilled: result.oomKilled,
           toolCallId,
-          ...(chartIds.length > 0 && { chartIds }),
         },
       }),
     );

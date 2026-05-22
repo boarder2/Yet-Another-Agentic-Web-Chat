@@ -218,7 +218,6 @@ const ToolCall = ({
   freeformText,
   skipped,
   imageId,
-  chartIds,
   children,
 }: {
   type?: string;
@@ -242,7 +241,6 @@ const ToolCall = ({
   freeformText?: string;
   skipped?: string;
   imageId?: string;
-  chartIds?: string;
   children?: React.ReactNode;
 }) => {
   const [expanded, setExpanded] = useState(false);
@@ -812,16 +810,6 @@ const ToolCall = ({
           )}
         </div>
       )}
-      {type === 'code_execution' &&
-        chartIds &&
-        chartIds
-          .split(',')
-          .filter(Boolean)
-          .map((cid) => (
-            <div key={cid} className="border-t border-surface-2 px-3 py-2">
-              <ChartElement id={cid} />
-            </div>
-          ))}
     </div>
   );
 };

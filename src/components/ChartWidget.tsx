@@ -52,7 +52,14 @@ function ChartWidgetInner({ spec }: ChartWidgetProps) {
     showGrid = type !== 'pie',
     yLabel,
     xLabel,
+    yMin,
+    yMax,
   } = options;
+
+  const valueDomain: [number | string, number | string] | undefined =
+    yMin !== undefined || yMax !== undefined
+      ? [yMin ?? 'auto', yMax ?? 'auto']
+      : undefined;
 
   const commonProps = {
     data,
@@ -122,6 +129,7 @@ function ChartWidgetInner({ spec }: ChartWidgetProps) {
               <XAxis
                 type="number"
                 tick={axisStyle}
+                domain={valueDomain}
                 label={
                   xLabel
                     ? {
@@ -168,6 +176,7 @@ function ChartWidgetInner({ spec }: ChartWidgetProps) {
               />
               <YAxis
                 tick={axisStyle}
+                domain={valueDomain}
                 label={
                   yLabel
                     ? {
@@ -222,6 +231,7 @@ function ChartWidgetInner({ spec }: ChartWidgetProps) {
           />
           <YAxis
             tick={axisStyle}
+            domain={valueDomain}
             label={
               yLabel
                 ? {

@@ -24,6 +24,8 @@ export const ChartOptionsSchema = z
     showGrid: z.boolean().optional(),
     yLabel: z.string().optional(),
     xLabel: z.string().optional(),
+    yMin: z.number().optional(),
+    yMax: z.number().optional(),
   })
   .optional();
 

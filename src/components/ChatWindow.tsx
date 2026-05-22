@@ -1350,8 +1350,6 @@ const ChatWindow = ({
           if (d.timedOut) extra.timedOut = 'true';
           if (d.oomKilled) extra.oomKilled = 'true';
           if (d.denied) extra.denied = 'true';
-          if (Array.isArray(d.chartIds) && d.chartIds.length > 0)
-            extra.chartIds = d.chartIds.join(',');
           setMessages((prev) =>
             prev.map((message) => {
               if (message.messageId === data.messageId) {

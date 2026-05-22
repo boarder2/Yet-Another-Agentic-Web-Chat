@@ -9,50 +9,19 @@ import { waitForUserResponse } from '@/lib/userQuestion/pendingQuestions';
 import { popCallbackRunId } from '@/lib/userQuestion/questionCorrelation';
 
 const AskUserToolSchema = z.object({
-  question: z
-    .string()
-    .max(500)
-    .describe(
-      'The main question to ask the user. Be clear and concise. One question at a time.',
-    ),
+  question: z.string().max(500),
   options: z
     .array(
       z.object({
-        label: z.string().max(100).describe('Display label for this option'),
-        description: z
-          .string()
-          .max(200)
-          .optional()
-          .describe('Optional secondary description'),
+        label: z.string().max(100),
+        description: z.string().max(200).optional(),
       }),
     )
     .max(10)
-    .optional()
-    .describe(
-      'Optional predefined choices. Must be specific answers to the question. If omitted, only free-form text input is shown.',
-    ),
-  multiSelect: z
-    .boolean()
-    .optional()
-    .default(false)
-    .describe(
-      'Allow the user to select multiple options. Defaults to single-select.',
-    ),
-  allowFreeformInput: z
-    .boolean()
-    .optional()
-    .default(true)
-    .describe(
-      'Allow the user to type a free-form response in addition to options. ' +
-        'Defaults to true. The user can always use this to redirect the agent.',
-    ),
-  context: z
-    .string()
-    .max(200)
-    .optional()
-    .describe(
-      'Brief context shown to user about why this question is being asked.',
-    ),
+    .optional(),
+  multiSelect: z.boolean().optional().default(false),
+  allowFreeformInput: z.boolean().optional().default(true),
+  context: z.string().max(200).optional(),
 });
 
 export const askUserTool = tool(
@@ -176,12 +145,7 @@ export const askUserTool = tool(
   {
     name: 'ask_user',
     description:
-      'Ask the user a question and wait for their response. ' +
-      'Use this when you need clarification, the user must make a choice between options, ' +
-      'or critical information is missing that you cannot reasonably assume. ' +
-      'The user can select from predefined options and/or type a free-form response. ' +
-      'Ask ONE clear, concise question at a time. ' +
-      'Do NOT use this for trivial clarifications you can infer from context.',
+      'Ask the user one clear question and wait for their reply. Use for missing info you cannot infer; skip for trivial clarifications.',
     schema: AskUserToolSchema,
   },
 );

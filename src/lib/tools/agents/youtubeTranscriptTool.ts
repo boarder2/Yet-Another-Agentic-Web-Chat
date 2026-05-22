@@ -7,11 +7,7 @@ import { z } from 'zod';
 
 // Schema for YouTube transcript tool input
 const YoutubeTranscriptToolSchema = z.object({
-  videoUrl: z
-    .string()
-    .describe(
-      'The YouTube video URL. Provide the URL of the YouTube video to retrieve a transcript for.',
-    ),
+  videoUrl: z.string(),
 });
 
 /**
@@ -78,7 +74,7 @@ export const youtubeTranscriptTool = tool(
   },
   {
     name: 'youtube_transcript',
-    description: 'Retrieves the transcript of a YouTube video given its URL.',
+    description: 'Fetch YouTube transcript from a URL.',
     schema: YoutubeTranscriptToolSchema,
   },
 );

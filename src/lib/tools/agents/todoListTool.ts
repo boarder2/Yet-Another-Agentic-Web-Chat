@@ -3,10 +3,8 @@ import { z } from 'zod';
 import { RunnableConfig } from '@langchain/core/runnables';
 
 const TodoItemSchema = z.object({
-  content: z.string().describe('Description of the research task'),
-  status: z
-    .enum(['pending', 'in_progress', 'completed'])
-    .describe('Current status of this task'),
+  content: z.string(),
+  status: z.enum(['pending', 'in_progress', 'completed']),
 });
 
 const TodoListToolSchema = z.object({
@@ -14,9 +12,7 @@ const TodoListToolSchema = z.object({
     .array(TodoItemSchema)
     .max(10, 'Task list cannot exceed 10 items')
     .min(1, 'Task list must have at least 1 item')
-    .describe(
-      'The complete todo list state. Each call replaces the entire list. Maximum 10 items.',
-    ),
+    .describe('Full list state; replaces previous. Max 10.'),
 });
 
 /**
@@ -84,7 +80,7 @@ export const todoListTool = tool(
   {
     name: 'todo_list',
     description:
-      'Create or update a research plan todo list to track progress on complex, multi-part queries. Call with the complete list state — each call replaces the entire list. Use only for thorough research tasks requiring structured tracking.',
+      'Track progress on multi-step research. Send the full list each call.',
     schema: TodoListToolSchema,
   },
 );

@@ -9,11 +9,7 @@ import { getSubagentDefinition } from '@/lib/search/subagents/definitions';
 
 // Schema for deep research tool input
 const DeepResearchToolSchema = z.object({
-  task: z
-    .string()
-    .describe(
-      'A specific, focused research task to investigate in depth. Should describe exactly what to research and what kind of information to gather.',
-    ),
+  task: z.string().describe('Focused task with all needed context.'),
 });
 
 /**
@@ -168,7 +164,7 @@ export const deepResearchTool = tool(
   {
     name: 'deep_research',
     description:
-      'Spawns a focused research subagent to perform comprehensive, multi-source investigation on a specific aspect of the query. Use when a sub-problem requires deeper investigation than a single web search can provide. The subagent independently performs multiple searches, retrieves sources, and synthesizes findings. Give focused tasks to this tool, not broad ones. The input should specify exactly what to research and what information to gather. Include all necessary context in the task description since the subagent has limited access to the main conversation history.',
+      'Spawn a subagent for multi-source investigation beyond a single web_search. Give one focused task with all needed context.',
     schema: DeepResearchToolSchema,
   },
 );

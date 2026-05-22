@@ -52,18 +52,10 @@ Target: ${targetISO} (${targetDateTime.zoneName})`;
   {
     name: 'timezone_converter',
     description:
-      'Convert a date from one timezone to another (Works best with ISO 8601 formatted dates) - Expects target timezone in the IANA format (e.g., "America/New_York", "Europe/London", etc.)',
+      'Convert a date between timezones. Use IANA names (e.g. "Europe/London").',
     schema: z.object({
-      dateString: z
-        .string()
-        .describe(
-          'The date string to convert. This must include the timezone offset or Z for UTC (e.g., "2023-10-01T00:00:00Z" or "2025-08-10T00:00:00-06:00")',
-        ),
-      toTimezone: z
-        .string()
-        .describe(
-          'Target timezone to convert to (e.g., "Asia/Tokyo", "America/Los_Angeles", "Europe/Paris")',
-        ),
+      dateString: z.string().describe('ISO 8601 with offset or Z.'),
+      toTimezone: z.string().describe('IANA timezone.'),
     }),
   },
 );

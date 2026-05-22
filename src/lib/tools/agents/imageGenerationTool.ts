@@ -173,23 +173,12 @@ function saveGeneratedImage(
 // ─── Tool schema ──────────────────────────────────────────────────────────
 
 const ImageGenerationToolSchema = z.object({
-  query: z
-    .string()
-    .describe(
-      'A detailed text description of the image to generate. Be as specific and descriptive as possible.',
-    ),
+  query: z.string().describe('Detailed prompt.'),
   aspectRatio: z
     .string()
     .optional()
-    .describe(
-      'Aspect ratio for the generated image. Common values: "1:1", "16:9", "4:3", "3:2", "9:16". Only include when the user specifies a preference.',
-    ),
-  imageSize: z
-    .string()
-    .optional()
-    .describe(
-      'Image resolution. Options: "1K", "2K", "4K". Defaults to "1K" if not specified.',
-    ),
+    .describe('e.g. "1:1","16:9","4:3","9:16".'),
+  imageSize: z.string().optional().describe('"1K"|"2K"|"4K" (default 1K).'),
 });
 
 // ─── Tool implementation ──────────────────────────────────────────────────
@@ -356,8 +345,7 @@ export const imageGenerationTool = tool(
   },
   {
     name: 'image_generation',
-    description:
-      'Generates an image from a text prompt using AI. Use when the user asks to create, draw, or generate an image, picture, illustration, or artwork. Provide a detailed, descriptive prompt.',
+    description: 'Generate an image from a text prompt.',
     schema: ImageGenerationToolSchema,
   },
 );

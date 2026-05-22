@@ -20,17 +20,11 @@ const CodeExecutionToolSchema = z.object({
   description: z
     .string()
     .max(100)
-    .describe(
-      'A brief plain-text summary (under 15 words) of what this code does, shown to the user during approval.',
-    ),
+    .describe('Under 15 words; shown at approval.'),
   code: z
     .string()
     .max(MAX_CODE_LENGTH, 'Code must be 50,000 characters or less.')
-    .describe(
-      'JavaScript code to execute in a sandboxed Node.js environment. ' +
-        'The code runs in an isolated Docker container with no network access and no filesystem persistence. ' +
-        'Use console.log() for output. The user must approve execution before it runs.',
-    ),
+    .describe('Node.js JS. Use console.log for output.'),
 });
 
 export const codeExecutionTool = tool(
@@ -206,18 +200,7 @@ export const codeExecutionTool = tool(
   {
     name: 'code_execution',
     description:
-      'Execute JavaScript code in a secure, sandboxed Node.js environment. ' +
-      'The code runs in an isolated Docker container with no network access and strict resource limits. ' +
-      'The user must approve the code before it executes. Use console.log() to produce output.\n\n' +
-      'PREFER this tool over reasoning whenever a result must be exact. LLMs are unreliable at ' +
-      'deterministic operations — reach for code execution for tasks like:\n' +
-      '- Arithmetic and numeric calculations\n' +
-      '- Date and time math (durations, offsets, weekday lookups, timezone conversions)\n' +
-      '- Character, word, line, or token counting\n' +
-      '- String transformations, regex testing, encoding/decoding (base64, URL, JSON parse/stringify)\n' +
-      '- Sorting, deduplicating, filtering, or aggregating lists and tabular data\n' +
-      '- Unit conversions and basic statistics\n\n' +
-      'Keep snippets minimal and self-contained — there is no network or filesystem persistence.',
+      'Run sandboxed Node.js JS (no network/filesystem, user-approved). Prefer this over reasoning for exact results: math, date/time, counting, regex, encoding, sorting/aggregation, unit conversion.',
     schema: CodeExecutionToolSchema,
   },
 );

@@ -18,12 +18,8 @@ const ALLOWED_MIME_PREFIXES = [
 ];
 
 const ImageAnalysisToolSchema = z.object({
-  url: z.string().describe('The URL of the image to analyze'),
-  query: z
-    .string()
-    .describe(
-      'What to look for or describe about the image, guided by the user query',
-    ),
+  url: z.string(),
+  query: z.string().describe('What to look for in the image.'),
 });
 
 /**
@@ -310,7 +306,7 @@ Be factual and specific. Describe only what you can actually see in the image.`;
   {
     name: 'image_analysis',
     description:
-      'Fetches an image from a URL and analyzes its visual content using a vision model. Use this to understand what is shown in an image found on the web — charts, diagrams, photos, screenshots, infographics, etc. The URL must point directly to an image file.',
+      'Analyze an image URL with a vision model. URL must be a direct image file.',
     schema: ImageAnalysisToolSchema,
   },
 );

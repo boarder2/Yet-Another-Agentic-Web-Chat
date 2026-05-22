@@ -8,16 +8,8 @@ import { SimplifiedAgentStateType } from '@/lib/state/chatAgentState';
 import { ToolMessage } from '@langchain/core/messages';
 
 const ImageSearchToolSchema = z.object({
-  query: z
-    .string()
-    .describe(
-      'The image search query. Provide a concise description of what images to find.',
-    ),
-  maxResults: z
-    .number()
-    .optional()
-    .default(12)
-    .describe('Maximum number of image results to return.'),
+  query: z.string(),
+  maxResults: z.number().optional().default(12),
 });
 
 export const imageSearchTool = tool(
@@ -133,8 +125,7 @@ export const imageSearchTool = tool(
   },
   {
     name: 'image_search',
-    description:
-      'Searches the web for images related to a query and returns image URLs, titles, and sources. Use when the user asks for pictures, photos, charts, or visual examples.',
+    description: 'Web image search. Returns URLs, titles, sources.',
     schema: ImageSearchToolSchema,
   },
 );

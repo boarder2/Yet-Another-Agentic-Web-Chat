@@ -137,16 +137,10 @@ export const saveMemoryTool = tool(
   },
   {
     name: 'save_memory',
-    description:
-      'Save a fact, preference, or instruction about the user to long-term memory. Use when the user explicitly asks you to remember something.',
+    description: 'Save a user fact/preference long-term when asked.',
     schema: z.object({
-      content: z.string().describe('The fact or preference to remember'),
-      sensitivityOverride: z
-        .boolean()
-        .optional()
-        .describe(
-          'If true, skip sensitivity check (only after user confirmation)',
-        ),
+      content: z.string(),
+      sensitivityOverride: z.boolean().optional(),
     }),
   },
 );
@@ -225,19 +219,10 @@ export const deleteMemoryTool = tool(
   {
     name: 'delete_memory',
     description:
-      'Delete a stored memory. Prefer using the `id` field (from list_memories) for precise deletion. Fall back to `query` for fuzzy matching.',
+      'Delete a memory. Prefer id from list_memories; else fuzzy match on query.',
     schema: z.object({
-      query: z
-        .string()
-        .describe(
-          'Description of the memory to find and delete (used when id is not provided)',
-        ),
-      id: z
-        .string()
-        .optional()
-        .describe(
-          'The exact memory ID from list_memories. When provided, deletes that specific memory without any search.',
-        ),
+      query: z.string(),
+      id: z.string().optional(),
     }),
   },
 );
@@ -279,8 +264,7 @@ export const listMemoriesTool = tool(
   },
   {
     name: 'list_memories',
-    description:
-      'List all stored memories about the user, grouped by category. Use when the user asks what you remember about them.',
+    description: 'List stored memories grouped by category.',
     schema: z.object({}),
   },
 );

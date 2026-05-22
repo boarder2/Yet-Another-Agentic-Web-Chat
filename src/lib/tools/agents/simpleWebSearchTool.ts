@@ -11,11 +11,7 @@ import { z } from 'zod';
 const MAX_RESULTS = 20;
 
 const SimpleWebSearchToolSchema = z.object({
-  query: z
-    .string()
-    .describe(
-      'The query to use for web search. You can limit the scope to specific websites by including "site:example.com" in the query.',
-    ),
+  query: z.string().describe('Supports "site:example.com" to scope.'),
 });
 
 /**
@@ -164,8 +160,7 @@ export const simpleWebSearchTool = tool(
   },
   {
     name: 'web_search',
-    description:
-      'Performs web search using the configured search provider and returns up to 20 results as documents in provider order.',
+    description: 'Web search; up to 20 results.',
     schema: SimpleWebSearchToolSchema,
   },
 );

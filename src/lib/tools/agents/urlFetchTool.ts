@@ -12,25 +12,15 @@ import { isSoftStop } from '@/lib/utils/runControl';
 
 // Schema for URL fetch tool input
 const URLFetchToolSchema = z.object({
-  urls: z.array(z.string()).describe('Array of URLs to fetch and process'),
-  query: z
-    .string()
-    .describe('The user query to guide content extraction and summarization'),
-  intent: z
-    .string()
-    .optional()
-    .default('extract relevant content')
-    .describe('Processing intent for the URLs'),
+  urls: z.array(z.string()),
+  query: z.string().describe('Guides extraction/summarization.'),
+  intent: z.string().optional().default('extract relevant content'),
   fullContent: z
     .boolean()
     .optional()
     .default(false)
     .describe(
-      'If true, returns the full page content without LLM summarization. ' +
-        'Use when you need complete text for detailed analysis, fact-checking, ' +
-        'extracting specific data points, finding exact passages, or examining code. ' +
-        'Warning: full content can be very large and consumes significant context window space. ' +
-        'Only use when summarization would lose critical detail.',
+      'Skip summarization; large output — use only when detail matters.',
     ),
 });
 
@@ -297,7 +287,7 @@ Provide a comprehensive summary of the above web page content, focusing on infor
   {
     name: 'url_fetch',
     description:
-      'Retrieves web content from URLs. By default, returns full content for short pages and a focused LLM summary for long pages. Set fullContent=true to bypass summarization and get the complete page text — useful for detailed analysis, fact-checking, or data extraction. URLs must be real and should not be invented.',
+      'Fetch URL content. Short pages returned in full; long pages summarized unless fullContent=true. Do not invent URLs.',
     schema: URLFetchToolSchema,
   },
 );

@@ -8,11 +8,7 @@ import { retrievePdfDoc } from '@/lib/utils/documents';
 
 // Schema for PDF transcript tool input
 const PDFLoaderToolSchema = z.object({
-  pdfUrl: z
-    .string()
-    .describe(
-      'The PDF document URL. Provide the URL of the PDF document to retrieve its content.',
-    ),
+  pdfUrl: z.string(),
 });
 
 /**
@@ -112,7 +108,7 @@ export const pdfLoaderTool = tool(
   },
   {
     name: 'pdf_loader',
-    description: 'Retrieves the content of a PDF document given its URL.',
+    description: 'Fetch PDF text from a URL.',
     schema: PDFLoaderToolSchema,
   },
 );

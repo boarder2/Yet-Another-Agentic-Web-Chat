@@ -13,19 +13,9 @@ import { CachedEmbeddings } from '@/lib/utils/cachedEmbeddings';
 
 // Schema for file search tool input
 const FileSearchToolSchema = z.object({
-  query: z
-    .string()
-    .describe('The search query to find relevant content in files'),
-  maxResults: z
-    .number()
-    .optional()
-    .default(12)
-    .describe('Maximum number of results to return'),
-  similarityThreshold: z
-    .number()
-    .optional()
-    .default(0.3)
-    .describe('Minimum similarity threshold for results'),
+  query: z.string(),
+  maxResults: z.number().optional().default(12),
+  similarityThreshold: z.number().optional().default(0.3),
 });
 
 /**
@@ -207,8 +197,7 @@ export const fileSearchTool = tool(
   },
   {
     name: 'file_search',
-    description:
-      'Searches through all uploaded files to find relevant content sections based on a query using semantic similarity. Automatically searches all available files - no need to specify file IDs.',
+    description: 'Semantic search across uploaded files.',
     schema: FileSearchToolSchema,
   },
 );

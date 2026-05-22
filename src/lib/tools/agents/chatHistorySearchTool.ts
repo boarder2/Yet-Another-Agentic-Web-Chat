@@ -9,20 +9,10 @@ const schema = z.object({
     .min(1)
     .max(8)
     .describe(
-      'List of keywords or short phrases to search for (case-insensitive substrings). Provide several related terms and synonyms — results are scored by how many keywords match, so broader coverage ranks better. For "that trip we discussed" try ["trip","travel","vacation","flight","hotel"]. For "the bug from last month" try ["bug","error","crash","exception"].',
+      'Substrings to match; include synonyms — more matches rank higher.',
     ),
-  after: z
-    .string()
-    .optional()
-    .describe(
-      'Optional ISO date (YYYY-MM-DD). Only include chats created on or after this date.',
-    ),
-  before: z
-    .string()
-    .optional()
-    .describe(
-      'Optional ISO date (YYYY-MM-DD). Only include chats created on or before this date.',
-    ),
+  after: z.string().optional().describe('ISO date YYYY-MM-DD lower bound.'),
+  before: z.string().optional().describe('ISO date YYYY-MM-DD upper bound.'),
   limit: z.number().int().min(1).max(20).optional().default(10),
 });
 
@@ -92,7 +82,7 @@ export const chatHistorySearchTool = tool(
   {
     name: 'chat_history_search',
     description:
-      "Search the user's previous conversations by keyword. Provide multiple related keywords and synonyms in the `keywords` array — results are ranked by how many keywords match (title matches weighted higher than content matches). For vague references like \"that trip we discussed\" or \"the bug from last month\", supply diverse terms covering possible wordings: ['trip','travel','vacation','flight','hotel'] or ['bug','error','crash','exception']. Optionally restrict by date with `after`/`before` (YYYY-MM-DD). Each result includes a score, the keywords that matched, the chat date, and the message date. Pass `messageId` to `get_message` for full message content. Excludes the current chat, private chats, and compaction summaries.",
+      'Search prior chats by keyword. Returns ranked matches with messageId — pass to get_message for full text. Excludes current/private chats.',
     schema,
   },
 );

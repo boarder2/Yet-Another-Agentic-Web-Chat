@@ -4,10 +4,7 @@ import { z } from 'zod';
 import { getMessageById } from '@/lib/db/messageLookup';
 
 const schema = z.object({
-  messageId: z.coerce
-    .number()
-    .int()
-    .describe('The messageId returned by chat_history_search.'),
+  messageId: z.coerce.number().int(),
 });
 
 export const getChatMessagesTool = tool(
@@ -44,7 +41,7 @@ export const getChatMessagesTool = tool(
   {
     name: 'get_message',
     description:
-      "Retrieve the full content of a single message by its messageId. Always obtain the messageId from chat_history_search first — do not guess or invent message IDs. Use this when the snippet returned by search is truncated or not enough to fully answer the user's question.",
+      'Get full message text by messageId from chat_history_search. Do not invent IDs.',
     schema,
   },
 );

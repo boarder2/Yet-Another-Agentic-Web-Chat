@@ -125,19 +125,10 @@ Direction: Start date is ${isStartEarlier ? 'earlier than' : 'later than'} the e
   },
   {
     name: 'date_difference',
-    description:
-      'Get the difference between two dates (Works best with ISO 8601 formatted dates)',
+    description: 'Difference between two dates (prefer ISO 8601).',
     schema: z.object({
-      startDate: z
-        .string()
-        .describe(
-          'The start date (e.g., "2024-01-15", "Jan 15, 2024", "2024-01-15 14:30:00Z", "2024-01-15T14:30:00-05:00")',
-        ),
-      endDate: z
-        .string()
-        .describe(
-          'The end date (e.g., "2024-12-25", "Dec 25, 2024", "2024-12-25 18:00:00Z", "2024-12-25T18:00:00-05:00")',
-        ),
+      startDate: z.string(),
+      endDate: z.string(),
     }),
   },
 );

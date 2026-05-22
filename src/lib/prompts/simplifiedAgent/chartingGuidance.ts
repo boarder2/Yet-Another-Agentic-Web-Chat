@@ -38,10 +38,10 @@ console.log("__CHART__" + JSON.stringify(spec));
 
 The tool's stdout then contains, e.g.:
 \`\`\`
-[Chart created: "Monthly Revenue" id=a1b2c3d4 — place a <Chart id="a1b2c3d4"/> tag where the chart should appear in your response.]
+[Chart created — title: "Monthly Revenue". To display it, copy this tag verbatim into your response where the chart should appear: <Chart id="a1b2c3d4"/>]
 \`\`\`
 
-When you emit multiple charts, match each returned \`chartId\` to the right \`<Chart .../>\` tag by the quoted title in its \`[Chart created: ...]\` line — do not rely on output order.
+Copy the \`<Chart .../>\` tag exactly as given — the \`id\` is an opaque identifier, never the title. When you emit multiple charts, use the quoted title in each \`[Chart created ...]\` line to decide which tag goes where.
 
 Your response prose afterward (place the tag, no data table):
 \`\`\`

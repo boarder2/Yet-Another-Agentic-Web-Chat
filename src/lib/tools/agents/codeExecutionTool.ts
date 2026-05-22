@@ -192,7 +192,7 @@ export const codeExecutionTool = tool(
         const chartId = crypto.randomUUID();
         const chartTitle = validation.data.title;
         processedLines.push(
-          `[Chart created:${chartTitle ? ` "${chartTitle}"` : ''} id=${chartId} — place a <Chart id="${chartId}"/> tag where the chart should appear in your response.]`,
+          `[Chart created${chartTitle ? ` — title: "${chartTitle}"` : ''}. To display it, copy this tag verbatim into your response where the chart should appear: <Chart id="${chartId}"/>]`,
         );
         try {
           emitter.emit(

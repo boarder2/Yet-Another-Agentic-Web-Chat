@@ -58,6 +58,7 @@ export type SectionKey =
   | 'personalization'
   | 'memory'
   | 'retention'
+  | 'skills'
   | 'persona-prompts'
   | 'research-methodologies'
   | 'default-search'
@@ -77,6 +78,7 @@ export const SETTINGS_SECTIONS: {
   { key: 'personalization', label: 'Personalization', group: 'General' },
   { key: 'memory', label: 'Memory', group: 'General' },
   { key: 'retention', label: 'Retention', group: 'General' },
+  { key: 'skills', label: 'Skills', group: 'General' },
   { key: 'persona-prompts', label: 'Persona Prompts', group: 'General' },
   {
     key: 'research-methodologies',

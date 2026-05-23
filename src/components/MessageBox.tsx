@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import { Pencil } from 'lucide-react';
+import { BookOpen, Pencil } from 'lucide-react';
 import Image from 'next/image';
 import { useState } from 'react';
 import { File, ImageAttachment, Message } from './ChatWindow';
@@ -194,6 +194,19 @@ const MessageBox = ({
                         height={160}
                         className="max-h-40 max-w-[200px] h-auto object-cover rounded-surface border border-surface-2"
                       />
+                    ))}
+                  </div>
+                )}
+                {message.invokedSkills && message.invokedSkills.length > 0 && (
+                  <div className="flex flex-row gap-1.5 mt-2 flex-wrap">
+                    {message.invokedSkills.map((name) => (
+                      <span
+                        key={name}
+                        className="inline-flex items-center gap-1 text-xs bg-accent/10 text-accent border border-accent/20 rounded-pill px-2 py-0.5"
+                      >
+                        <BookOpen size={10} />
+                        Skill: {name}
+                      </span>
                     ))}
                   </div>
                 )}

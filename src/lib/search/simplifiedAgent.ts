@@ -37,6 +37,10 @@ import { getModelName } from '../utils/modelUtils';
 import { CachedEmbeddings } from '../utils/cachedEmbeddings';
 import { buildPersonalizationSection } from '../utils/personalization';
 import { TokenUsage } from '../utils/queryDistillation';
+import { resolveSkillsForChat } from '@/lib/skills/resolve';
+import { buildSkillsPromptSection } from '@/lib/skills/promptSection';
+import { storeSkillsForRun, cleanupSkillsForRun } from '@/lib/skills/runStore';
+import type { Skill } from '@/lib/skills/types';
 
 /**
  * Normalize usage metadata from different LLM providers
@@ -148,6 +152,7 @@ export class SimplifiedAgent {
   private chatId?: string;
   private workspaceId?: string | null;
   private interactiveSession: boolean;
+  private resolvedSkills: Skill[] = [];
   private isPrivate: boolean;
   private initialSystemUsage: TokenUsage;
   private workspaceSuffix: string;
@@ -266,7 +271,7 @@ export class SimplifiedAgent {
   /**
    * Initialize the createAgent with tools and configuration
    */
-  private initializeAgent(
+  private async initializeAgent(
     focusMode: string,
     fileIds: string[] = [],
     messagesCount?: number,
@@ -277,6 +282,17 @@ export class SimplifiedAgent {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     extraTools?: any[],
   ) {
+    // Resolve skills for this chat (workspace-scoped)
+    try {
+      this.resolvedSkills = await resolveSkillsForChat(this.workspaceId);
+    } catch (err) {
+      console.warn(
+        '[skills] Failed to resolve skills, continuing without:',
+        err,
+      );
+      this.resolvedSkills = [];
+    }
+
     const tools = customTools
       ? customTools
       : firefoxAIDetected
@@ -466,6 +482,11 @@ export class SimplifiedAgent {
       basePrompt += this.workspaceSuffix;
     }
 
+    // Append skills section if skills are available
+    if (this.resolvedSkills.length > 0) {
+      basePrompt += '\n\n' + buildSkillsPromptSection(this.resolvedSkills);
+    }
+
     return basePrompt;
   }
 
@@ -485,6 +506,7 @@ export class SimplifiedAgent {
   ): Promise<void> {
     // Declared outside try so the catch block can clean it up
     let toolLlmUsageHandler: ((data: string) => void) | null = null;
+    let skillRunId: string | null = null;
 
     try {
       console.log(`SimplifiedAgent: Starting search for query: "${query}"`);
@@ -539,7 +561,7 @@ export class SimplifiedAgent {
       // Initialize agent with the provided focus mode and file context
       // Pass the number of messages that will be sent to the LLM so prompts can adapt.
       const llmMessagesCount = messagesHistory.length;
-      const agent = this.initializeAgent(
+      const agent = await this.initializeAgent(
         focusMode,
         fileIds,
         llmMessagesCount,
@@ -560,6 +582,11 @@ export class SimplifiedAgent {
         subagentExecutions: [],
       };
 
+      // Stash resolved skills for this run so read_skill can look them up
+      const runId = `run_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      skillRunId = runId;
+      storeSkillsForRun(runId, this.resolvedSkills);
+
       // Configure the agent run
       const config: RunnableConfig = {
         configurable: {
@@ -574,6 +601,7 @@ export class SimplifiedAgent {
           firefoxAIDetected,
           // Pass through message and retrieval controls for tools
           messageId: this.messageId,
+          runId,
           retrievalSignal: this.retrievalSignal,
           userLocation: this.userLocation,
           userProfile: this.userProfile,
@@ -623,6 +651,26 @@ export class SimplifiedAgent {
                 return;
               }
 
+              // For read_skill: suppress events when loading a system skill (silent)
+              if (toolName === 'read_skill') {
+                try {
+                  const parsedInput =
+                    typeof input === 'string' ? JSON.parse(input) : input;
+                  const skillName = parsedInput?.name as string | undefined;
+                  if (skillName && this.resolvedSkills.length > 0) {
+                    const matched = this.resolvedSkills.find(
+                      (s) => s.name === skillName,
+                    );
+                    if (matched && matched.source === 'system') {
+                      delete toolCalls[runId];
+                      return;
+                    }
+                  }
+                } catch {
+                  // Fall through to emit normally
+                }
+              }
+
               // Skip tool calls from child SimplifiedAgent graphs.
               // parentRunId is the run_id of the invoking 'tools' node; if it isn't in
               // parentToolsNodeRunIds it belongs to a nested child graph, not this agent.
@@ -657,6 +705,16 @@ export class SimplifiedAgent {
                         inputObj.query.slice(0, TOOL_ARG_MAX_LENGTH),
                       );
                       extraAttr += ` query="${q}"`;
+                    }
+                    // For read_skill, surface the skill name as query for UI display
+                    if (
+                      toolName === 'read_skill' &&
+                      typeof inputObj.name === 'string'
+                    ) {
+                      const n = encodeHtmlAttribute(
+                        inputObj.name.slice(0, TOOL_ARG_MAX_LENGTH),
+                      );
+                      extraAttr += ` query="${n}"`;
                     }
                     if (Array.isArray(inputObj.urls)) {
                       const count = inputObj.urls.length;
@@ -1394,12 +1452,15 @@ ${url ? `<url>${url}</url>` : ''}
       );
       this.emitModelStats(usageChat, usageSystem, usageImageGen);
 
+      if (skillRunId) cleanupSkillsForRun(skillRunId);
       this.emitter.emit('end');
     } catch (error: unknown) {
       // Clean up tool_llm_usage listener on error
       if (toolLlmUsageHandler) {
         this.emitter.removeListener('tool_llm_usage', toolLlmUsageHandler);
       }
+
+      if (skillRunId) cleanupSkillsForRun(skillRunId);
 
       console.error('SimplifiedAgent: Error during search and answer:', error);
 

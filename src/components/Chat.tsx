@@ -13,6 +13,10 @@ import {
   PendingEditApproval,
   WorkspaceEditApproval,
 } from './WorkspaceEditApproval';
+import {
+  PendingSkillEditApproval,
+  SkillEditApproval,
+} from './SkillEditApproval';
 
 const Chat = ({
   loading,
@@ -50,6 +54,8 @@ const Chat = ({
   onQuestionSkip,
   pendingEditApprovals = {},
   onEditDecide,
+  pendingSkillEditApprovals = {},
+  onSkillEditDecide,
   pendingImages,
   setPendingImages,
   imageCapable = false,
@@ -60,6 +66,7 @@ const Chat = ({
   messageCount,
   onCompact,
   compacting,
+  enabledSkills,
 }: {
   messages: Message[];
   sendMessage: (
@@ -141,6 +148,12 @@ const Chat = ({
     decision: 'accept' | 'accept_always' | 'reject' | 'always_prompt',
     freeformText?: string,
   ) => void;
+  pendingSkillEditApprovals?: Record<string, PendingSkillEditApproval[]>;
+  onSkillEditDecide?: (
+    approvalId: string,
+    decision: 'accept' | 'reject',
+    freeformText?: string,
+  ) => void;
   pendingImages: ImageAttachment[];
   setPendingImages: (images: ImageAttachment[]) => void;
   imageCapable?: boolean;
@@ -157,6 +170,7 @@ const Chat = ({
   messageCount?: number;
   onCompact?: (instructions?: string) => void;
   compacting?: boolean;
+  enabledSkills?: Array<{ name: string; description: string }>;
 }) => {
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [manuallyScrolledUp, setManuallyScrolledUp] = useState(false);
@@ -500,6 +514,34 @@ const Chat = ({
             />
           );
         })()}
+        {/* Skill edit approval queue */}
+        {(() => {
+          const allPending = Object.values(pendingSkillEditApprovals)
+            .flat()
+            .filter((a) => a.status === 'pending');
+          if (allPending.length === 0 || !onSkillEditDecide) return null;
+          const current = allPending[0];
+          return (
+            <SkillEditApproval
+              key={current.approvalId}
+              approvalId={current.approvalId}
+              action={current.action}
+              name={current.name}
+              oldDescription={current.oldDescription}
+              newDescription={current.newDescription}
+              oldContent={current.oldContent}
+              newContent={current.newContent}
+              scope={current.scope}
+              createdAt={current.createdAt}
+              onDecide={onSkillEditDecide}
+              onDismiss={() => {
+                setTimeout(() => {
+                  document.getElementById('message-input')?.focus();
+                }, 0);
+              }}
+            />
+          );
+        })()}
         <MessageInput
           firstMessage={messages.length === 0}
           loading={loading}
@@ -530,6 +572,7 @@ const Chat = ({
           messageCount={messageCount}
           onCompact={onCompact}
           compacting={compacting}
+          enabledSkills={enabledSkills}
         />
       </div>
       <div ref={messageEnd} className="h-0" />

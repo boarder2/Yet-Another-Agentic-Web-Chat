@@ -64,6 +64,13 @@
       "when": 1777832153096,
       "tag": "0008_worthless_ender_wiggin",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1779567007566,
+      "tag": "0009_lonely_red_skull",
+      "breakpoints": true
     }
   ]
 }

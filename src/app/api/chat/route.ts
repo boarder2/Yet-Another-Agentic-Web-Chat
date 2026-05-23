@@ -41,6 +41,8 @@ import { workspaceReadTool } from '@/lib/tools/workspace/read';
 import { workspaceEditTool } from '@/lib/tools/workspace/edit';
 import { workspaceCreateFileTool } from '@/lib/tools/workspace/create';
 import { cancelEditsForMessage } from '@/lib/workspaces/pendingEdits';
+import { cancelEditsForMessage as cancelSkillEditsForMessage } from '@/lib/skills/pendingEdits';
+import { resolveSkillsForChat, getByName } from '@/lib/skills/resolve';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -89,6 +91,7 @@ type Body = {
   isPrivate?: boolean;
   workspaceId?: string | null;
   imageCapable?: boolean;
+  invokedSkills?: string[];
 };
 
 type TokenUsage = {
@@ -179,6 +182,8 @@ const handleEmitterEvents = async (
     cancelQuestionsForMessage(userMessageId);
     // Auto-cancel any pending workspace edit approvals for this message
     cancelEditsForMessage(userMessageId);
+    // Auto-cancel any pending skill edit approvals for this message
+    cancelSkillEditsForMessage(userMessageId);
   });
 
   stream.on('data', (data) => {
@@ -468,6 +473,22 @@ const handleEmitterEvents = async (
       );
     } else if (parsedData.type === 'workspace_edit_approval_answered') {
       // Forward workspace edit/create approval answer to client
+      safeWrite(
+        JSON.stringify({
+          type: parsedData.type,
+          data: parsedData.data,
+          messageId: aiMessageId,
+        }) + '\n',
+      );
+    } else if (parsedData.type === 'skill_edit_approval_pending') {
+      safeWrite(
+        JSON.stringify({
+          type: parsedData.type,
+          data: parsedData.data,
+          messageId: aiMessageId,
+        }) + '\n',
+      );
+    } else if (parsedData.type === 'skill_edit_approval_answered') {
       safeWrite(
         JSON.stringify({
           type: parsedData.type,
@@ -1004,11 +1025,35 @@ export const POST = async (req: Request) => {
       resolvedWorkspaceId,
     );
 
+    // Inject skill bodies for slash-invoked skills
+    let effectiveHistory = history;
+    if (body.invokedSkills && body.invokedSkills.length > 0) {
+      try {
+        const allSkills = await resolveSkillsForChat(resolvedWorkspaceId);
+        const injectedMessages: BaseMessage[] = [];
+        for (const skillName of body.invokedSkills) {
+          const skill = getByName(allSkills, skillName);
+          if (skill) {
+            injectedMessages.push(
+              new SystemMessage(
+                `[Skill "${skillName}" invoked by user]\n${skill.content}`,
+              ),
+            );
+          }
+        }
+        if (injectedMessages.length > 0) {
+          effectiveHistory = [...injectedMessages, ...history];
+        }
+      } catch (err) {
+        console.warn('[skills] Failed to inject invoked skills:', err);
+      }
+    }
+
     // Pass the abort signal to the search handler
     // Not awaited since the handler will manage its own lifecycle and emit events as data is processed
     handler.searchAndAnswer(
       message.content,
-      history,
+      effectiveHistory,
       body.files,
       body.focusMode,
       undefined,

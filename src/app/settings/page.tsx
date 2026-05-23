@@ -30,6 +30,7 @@ import ModelSettingsSection from './sections/ModelSettingsSection';
 import ModelVisibilitySection from './sections/ModelVisibilitySection';
 import ImageGenerationSection from './sections/ImageGenerationSection';
 import ApiKeysSection from './sections/ApiKeysSection';
+import SkillsSection from './sections/SkillsSection';
 
 const predefinedContextSizes = [
   1024, 2048, 3072, 4096, 8192, 16384, 32768, 65536, 131072,
@@ -901,6 +902,8 @@ export default function SettingsPage() {
                     }
                   />
                 )}
+
+                {activeSection === 'skills' && <SkillsSection />}
 
                 {activeSection === 'persona-prompts' && (
                   <PersonaPromptsSection

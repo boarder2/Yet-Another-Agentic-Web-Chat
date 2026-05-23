@@ -26,6 +26,7 @@ import {
   History,
   MessageSquare,
   ChevronRight,
+  BookOpen,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import Markdown, { MarkdownToJSX } from 'markdown-to-jsx';
@@ -687,6 +688,33 @@ const ToolCall = ({
         <>
           <span className="mr-2">{getIcon(type)}</span>
           <span>Fetched message</span>
+        </>
+      );
+    }
+
+    if (type === 'read_skill') {
+      return (
+        <>
+          <span className="mr-2">
+            <BookOpen size={16} />
+          </span>
+          <span>Loaded skill</span>
+          {query && (
+            <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm border border-surface-2">
+              {query}
+            </span>
+          )}
+        </>
+      );
+    }
+
+    if (type === 'edit_skill') {
+      return (
+        <>
+          <span className="mr-2">
+            <BookOpen size={16} />
+          </span>
+          <span>Edit skill</span>
         </>
       );
     }

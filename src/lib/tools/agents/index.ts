@@ -24,6 +24,8 @@ import { imageGenerationTool } from './imageGenerationTool';
 import { chatHistorySearchTool } from './chatHistorySearchTool';
 import { getChatMessagesTool } from './getChatMessagesTool';
 import { createChartTool } from './createChartTool';
+import { readSkillTool } from './readSkillTool';
+import { editSkillTool } from './editSkillTool';
 
 export { simpleWebSearchTool };
 export { urlFetchTool };
@@ -41,6 +43,8 @@ export { imageGenerationTool };
 export { chatHistorySearchTool };
 export { getChatMessagesTool };
 export { createChartTool };
+export { readSkillTool };
+export { editSkillTool };
 
 // Base tool arrays (non-interactive, used by subagents)
 export const allAgentTools = [
@@ -57,6 +61,7 @@ export const allAgentTools = [
   createChartTool,
   chatHistorySearchTool,
   getChatMessagesTool,
+  readSkillTool,
 ];
 
 export const webSearchTools = [
@@ -71,6 +76,7 @@ export const webSearchTools = [
   createChartTool,
   chatHistorySearchTool,
   getChatMessagesTool,
+  readSkillTool,
 ];
 
 export const fileSearchTools = [fileSearchTool];
@@ -79,6 +85,7 @@ export const coreTools: typeof allAgentTools = [
   imageGenerationTool,
   chatHistorySearchTool,
   getChatMessagesTool,
+  readSkillTool,
 ];
 
 // Whether the code_execution tool is configured and available for use.
@@ -95,6 +102,8 @@ function withInteractiveTools<T>(tools: T[]): T[] {
   }
   // ask_user is always available; it checks interactiveSession at call time
   result.push(askUserTool as unknown as T);
+  // edit_skill is always available; it checks interactiveSession at call time
+  result.push(editSkillTool as unknown as T);
   return result;
 }
 

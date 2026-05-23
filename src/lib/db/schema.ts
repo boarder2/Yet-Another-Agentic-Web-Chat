@@ -192,3 +192,29 @@ export const workspaceFiles = sqliteTable(
     ),
   }),
 );
+
+export const skills = sqliteTable(
+  'skills',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    name: text('name').notNull(),
+    description: text('description').notNull(),
+    content: text('content').notNull(),
+    workspaceId: text('workspace_id'),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    createdAt: integer('created_at', { mode: 'timestamp' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer('updated_at', { mode: 'timestamp' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => ({
+    uniqByScope: uniqueIndex('skills_name_scope_uniq').on(
+      t.name,
+      t.workspaceId,
+    ),
+  }),
+);

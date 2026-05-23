@@ -43,6 +43,7 @@ const MessageInput = ({
   messageCount,
   onCompact,
   compacting,
+  enabledSkills,
 }: {
   sendMessage: (
     message: string,
@@ -81,9 +82,15 @@ const MessageInput = ({
   messageCount?: number;
   onCompact?: (instructions?: string) => void;
   compacting?: boolean;
+  enabledSkills?: Array<{ name: string; description: string }>;
 }) => {
   const [message, setMessage] = useState(initialMessage || '');
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [skillSuggestions, setSkillSuggestions] = useState<
+    Array<{ name: string; description: string }>
+  >([]);
+  const [skillPopoverActive, setSkillPopoverActive] = useState(false);
+  const [skillPopoverIndex, setSkillPopoverIndex] = useState(0);
 
   const uploadImageFiles = async (imageFiles: globalThis.File[]) => {
     if (imageFiles.length === 0) return;
@@ -189,6 +196,80 @@ const MessageInput = ({
     };
   }, []);
 
+  // Detect slash token at caret position and update skill suggestions
+  const detectSlashToken = (
+    text: string,
+    cursorPos: number,
+    skills: Array<{ name: string; description: string }>,
+  ) => {
+    // Find start of current token by scanning backwards from cursor
+    const before = text.slice(0, cursorPos);
+    const slashIdx = before.lastIndexOf('/');
+    if (slashIdx === -1) {
+      setSkillPopoverActive(false);
+      return;
+    }
+    // Check that the char before '/' is start, whitespace, or newline
+    const charBefore = slashIdx > 0 ? before[slashIdx - 1] : null;
+    const validBefore =
+      charBefore === null || charBefore === ' ' || charBefore === '\n';
+    if (!validBefore) {
+      setSkillPopoverActive(false);
+      return;
+    }
+    // Make sure cursor is still inside the token (no space after slash)
+    const tokenPart = before.slice(slashIdx + 1);
+    if (/\s/.test(tokenPart)) {
+      setSkillPopoverActive(false);
+      return;
+    }
+    const token = tokenPart.toLowerCase();
+    const matches = skills.filter((s) => s.name.startsWith(token));
+    if (matches.length > 0) {
+      setSkillSuggestions(matches);
+      setSkillPopoverActive(true);
+      setSkillPopoverIndex(0);
+    } else {
+      setSkillPopoverActive(false);
+    }
+  };
+
+  const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setMessage(val);
+    if (enabledSkills && enabledSkills.length > 0) {
+      detectSlashToken(
+        val,
+        e.target.selectionStart ?? val.length,
+        enabledSkills,
+      );
+    }
+  };
+
+  const applySkillCompletion = (skillName: string) => {
+    // Replace the current /token with /skillName followed by a space
+    const before = message.slice(
+      0,
+      inputRef.current?.selectionStart ?? message.length,
+    );
+    const slashIdx = before.lastIndexOf('/');
+    const after = message.slice(
+      inputRef.current?.selectionStart ?? message.length,
+    );
+    const newMessage =
+      message.slice(0, slashIdx) + '/' + skillName + ' ' + after;
+    setMessage(newMessage);
+    setSkillPopoverActive(false);
+    // Restore focus
+    setTimeout(() => {
+      if (inputRef.current) {
+        const pos = slashIdx + skillName.length + 2; // +2 for '/' and ' '
+        inputRef.current.focus();
+        inputRef.current.setSelectionRange(pos, pos);
+      }
+    }, 0);
+  };
+
   // Function to handle message submission
   const handleSubmitMessage = () => {
     // Only submit if we have a non-empty message or images, and not currently loading
@@ -197,6 +278,7 @@ const MessageInput = ({
 
     sendMessage(message);
     setMessage('');
+    setSkillPopoverActive(false);
   };
 
   return (
@@ -206,6 +288,31 @@ const MessageInput = ({
         handleSubmitMessage();
       }}
       onKeyDown={(e) => {
+        if (skillPopoverActive && skillSuggestions.length > 0) {
+          if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setSkillPopoverIndex((i) => (i + 1) % skillSuggestions.length);
+            return;
+          }
+          if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            setSkillPopoverIndex(
+              (i) =>
+                (i - 1 + skillSuggestions.length) % skillSuggestions.length,
+            );
+            return;
+          }
+          if (e.key === 'Tab' || e.key === 'Enter') {
+            e.preventDefault();
+            applySkillCompletion(skillSuggestions[skillPopoverIndex].name);
+            return;
+          }
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            setSkillPopoverActive(false);
+            return;
+          }
+        }
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
           handleSubmitMessage();
@@ -250,12 +357,33 @@ const MessageInput = ({
             )}
           </div>
         )}
+        {/* Skill autocomplete popover */}
+        {skillPopoverActive && skillSuggestions.length > 0 && (
+          <div className="mb-1 border border-surface-2 rounded-control bg-surface shadow-raised overflow-hidden">
+            {skillSuggestions.slice(0, 6).map((skill, idx) => (
+              <button
+                key={skill.name}
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  applySkillCompletion(skill.name);
+                }}
+                className={`w-full text-left px-3 py-2 text-sm flex flex-col gap-0.5 hover:bg-surface-2 transition-colors ${
+                  idx === skillPopoverIndex ? 'bg-surface-2' : ''
+                }`}
+              >
+                <span className="font-mono text-accent">/{skill.name}</span>
+                <span className="text-xs text-fg/50">{skill.description}</span>
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex flex-row space-x-2 mb-2">
           <TextareaAutosize
             id="message-input"
             ref={inputRef}
             value={message}
-            onChange={(e) => setMessage(e.target.value)}
+            onChange={handleTextareaChange}
             onPaste={handlePaste}
             minRows={1}
             className="px-3 py-2 overflow-y-auto flex rounded-surface bg-transparent text-sm resize-none w-full max-h-24 lg:max-h-36 xl:max-h-48"

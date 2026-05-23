@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { updateToolCallMarkup } from '@/lib/utils/toolCallMarkup';
 import { encodeHtmlAttribute } from '@/lib/utils/html';
 import { ChartSpecContext } from '@/lib/chart/ChartSpecContext';
@@ -11,6 +11,7 @@ import Chat from './Chat';
 import { PendingExecution } from './CodeExecution';
 import { PendingQuestion } from './UserQuestionPrompt';
 import { PendingEditApproval } from './WorkspaceEditApproval';
+import { PendingSkillEditApproval } from './SkillEditApproval';
 import EmptyChat from './EmptyChat';
 import crypto from 'crypto';
 import { toast } from 'sonner';
@@ -78,6 +79,7 @@ export type Message = {
   usedPersonalization?: boolean;
   images?: ImageAttachment[];
   compaction?: CompactionData;
+  invokedSkills?: string[];
 };
 
 export interface File {
@@ -487,6 +489,17 @@ const ChatWindow = ({
     Record<string, PendingEditApproval[]>
   >({});
 
+  const [pendingSkillEditApprovals, setPendingSkillEditApprovals] = useState<
+    Record<string, PendingSkillEditApproval[]>
+  >({});
+
+  // Enabled user skills for slash-command invocation and autocomplete
+  const [enabledUserSkillNames, setEnabledUserSkillNames] = useState<
+    Set<string>
+  >(new Set());
+  const [enabledSkillsForAutocomplete, setEnabledSkillsForAutocomplete] =
+    useState<Array<{ name: string; description: string }>>([]);
+
   // Per-message chart spec map: messageId → (chartId → ChartSpec)
   // Also exposed as a flat chartId → ChartSpec map via ChartSpecContext
   const [chartSpecsByMessage, setChartSpecsByMessage] = useState<
@@ -723,6 +736,26 @@ const ChatWindow = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMessagesLoaded]);
 
+  // Load enabled user skills for slash-command invocation
+  const refreshEnabledSkills = useCallback(() => {
+    const params = new URLSearchParams();
+    params.set('enabled', 'true');
+    if (selectedWorkspaceId) params.set('workspaceId', selectedWorkspaceId);
+    fetch(`/api/skills?${params}`)
+      .then((r) => r.json())
+      .then((rows: Array<{ name: string; description: string }>) => {
+        setEnabledUserSkillNames(new Set(rows.map((r) => r.name)));
+        setEnabledSkillsForAutocomplete(
+          rows.map((r) => ({ name: r.name, description: r.description })),
+        );
+      })
+      .catch(() => {});
+  }, [selectedWorkspaceId]);
+
+  useEffect(() => {
+    refreshEnabledSkills();
+  }, [refreshEnabledSkills]);
+
   const sendMessage = async (
     message: string,
     options?: {
@@ -800,6 +833,17 @@ const ChatWindow = ({
           : undefined;
     const messageImageIds = messageImages?.map((img) => img.imageId);
 
+    // Scan message for /skill-name tokens (preceded by start, whitespace, or newline)
+    const skillTokenPattern = /(?:^|[\s\n])\/([a-z0-9][a-z0-9_:-]*)/g;
+    const msgInvokedSkills: string[] = [];
+    let skillTokenMatch;
+    while ((skillTokenMatch = skillTokenPattern.exec(message)) !== null) {
+      const name = skillTokenMatch[1];
+      if (enabledUserSkillNames.has(name) && !msgInvokedSkills.includes(name)) {
+        msgInvokedSkills.push(name);
+      }
+    }
+
     setMessages((prevMessages) => [
       ...prevMessages,
       {
@@ -809,6 +853,7 @@ const ChatWindow = ({
         role: 'user',
         createdAt: new Date(),
         ...(messageImages && { images: messageImages }),
+        ...(msgInvokedSkills.length > 0 && { invokedSkills: msgInvokedSkills }),
       },
     ]);
 
@@ -1518,6 +1563,57 @@ const ChatWindow = ({
         return;
       }
 
+      if (data.type === 'skill_edit_approval_pending') {
+        setPendingSkillEditApprovals((prev) => ({
+          ...prev,
+          [data.messageId]: [
+            ...(prev[data.messageId] ?? []),
+            {
+              approvalId: data.data.approvalId,
+              toolCallId: data.data.toolCallId,
+              action: data.data.action,
+              name: data.data.name,
+              oldDescription: data.data.oldDescription,
+              newDescription: data.data.newDescription,
+              oldContent: data.data.oldContent,
+              newContent: data.data.newContent,
+              scope: data.data.scope,
+              workspaceId: data.data.workspaceId,
+              skillId: data.data.skillId,
+              createdAt: data.data.createdAt,
+              status: 'pending' as const,
+            },
+          ],
+        }));
+        setScrollTrigger((prev) => prev + 1);
+        return;
+      }
+
+      if (data.type === 'skill_edit_approval_answered') {
+        setPendingSkillEditApprovals((prev) => ({
+          ...prev,
+          [data.messageId]: (prev[data.messageId] ?? []).map((a) =>
+            a.approvalId === data.data.approvalId
+              ? {
+                  ...a,
+                  status: (data.data.decision === 'reject'
+                    ? 'rejected'
+                    : 'accepted') as 'accepted' | 'rejected',
+                }
+              : a,
+          ),
+        }));
+        // Refresh autocomplete on accepted edits so newly created/updated skills appear
+        if (
+          data.data.decision !== 'reject' &&
+          data.data.decision !== 'always_prompt' &&
+          !data.data.timedOut
+        ) {
+          refreshEnabledSkills();
+        }
+        return;
+      }
+
       if (data.type === 'response') {
         // Add to buffer instead of immediately updating UI
         messageBuffer += data.data;
@@ -1727,6 +1823,10 @@ const ChatWindow = ({
 
     if (imageCapable) {
       payload.imageCapable = true;
+    }
+
+    if (msgInvokedSkills.length > 0) {
+      payload.invokedSkills = msgInvokedSkills;
     }
 
     const res = await fetch('/api/chat', {
@@ -2155,6 +2255,48 @@ const ChatWindow = ({
                       );
                     }
                   }}
+                  pendingSkillEditApprovals={pendingSkillEditApprovals}
+                  onSkillEditDecide={async (
+                    approvalId: string,
+                    decision: 'accept' | 'reject',
+                    freeformText?: string,
+                  ) => {
+                    setPendingSkillEditApprovals((prev) => {
+                      const updated: Record<
+                        string,
+                        PendingSkillEditApproval[]
+                      > = {};
+                      for (const [msgId, approvals] of Object.entries(prev)) {
+                        updated[msgId] = approvals.map((a) =>
+                          a.approvalId === approvalId
+                            ? {
+                                ...a,
+                                status: (decision === 'reject'
+                                  ? 'rejected'
+                                  : 'accepted') as 'accepted' | 'rejected',
+                              }
+                            : a,
+                        );
+                      }
+                      return updated;
+                    });
+                    try {
+                      const res = await fetch('/api/skills/pending-edit', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          approvalId,
+                          decision,
+                          freeformText,
+                        }),
+                      });
+                      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    } catch {
+                      toast.error(
+                        'Failed to send skill edit decision. The agent will continue on its own.',
+                      );
+                    }
+                  }}
                   pendingImages={pendingImages}
                   setPendingImages={setPendingImages}
                   imageCapable={imageCapable}
@@ -2168,6 +2310,7 @@ const ChatWindow = ({
                   messageCount={messages.length}
                   onCompact={handleCompact}
                   compacting={compacting}
+                  enabledSkills={enabledSkillsForAutocomplete}
                 />
               </>
             ) : (
@@ -2198,6 +2341,7 @@ const ChatWindow = ({
                 setSelectedWorkspaceId={
                   workspaceId ? undefined : setSelectedWorkspaceId
                 }
+                enabledSkills={enabledSkillsForAutocomplete}
               />
             )}
           </div>

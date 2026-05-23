@@ -32,6 +32,7 @@ const EmptyChat = ({
   workspaceId,
   selectedWorkspaceId,
   setSelectedWorkspaceId,
+  enabledSkills,
 }: {
   sendMessage: (message: string) => void;
   focusMode: string;
@@ -58,6 +59,7 @@ const EmptyChat = ({
   workspaceId?: string;
   selectedWorkspaceId?: string | null;
   setSelectedWorkspaceId?: (id: string | null) => void;
+  enabledSkills?: Array<{ name: string; description: string }>;
 }) => {
   const basePath = workspaceId ? `/workspaces/${workspaceId}/c/new` : '/';
   return (
@@ -120,6 +122,7 @@ const EmptyChat = ({
             setPendingImages={setPendingImages}
             imageCapable={imageCapable}
             isPrivateSession={isPrivateSession}
+            enabledSkills={enabledSkills}
           />
         </div>
       </div>

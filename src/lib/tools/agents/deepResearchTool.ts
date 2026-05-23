@@ -164,7 +164,7 @@ export const deepResearchTool = tool(
   {
     name: 'deep_research',
     description:
-      'Spawn a subagent for multi-source investigation beyond a single web_search. Give one focused task with all needed context.',
+      'Spawn a subagent for multi-source investigation beyond a single web_search. Give one focused task with all needed context. Before first use this session, call read_skill("deep-research") for task scoping, the subagent\'s tool set, and when to parallelize.',
     schema: DeepResearchToolSchema,
   },
 );

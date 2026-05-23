@@ -265,7 +265,7 @@ export const codeExecutionTool = tool(
   {
     name: 'code_execution',
     description:
-      'Run sandboxed Node.js JS (no network/filesystem, user-approved). Prefer this over reasoning for exact results: math, date/time, counting, regex, encoding, sorting/aggregation, unit conversion.',
+      'Run sandboxed Node.js JS (no network/filesystem, user-approved). Prefer this over reasoning for exact results: math, date/time, counting, regex, encoding, sorting/aggregation, unit conversion. Before first use this session, call read_skill("code-execution") for runtime details, sandbox limits, and output patterns.',
     schema: CodeExecutionToolSchema,
   },
 );

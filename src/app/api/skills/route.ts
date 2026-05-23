@@ -28,6 +28,9 @@ export async function GET(req: Request) {
           or(isNull(skills.workspaceId), eq(skills.workspaceId, workspaceId)),
         )
         .all();
+    } else if (enabledOnly) {
+      // Autocomplete/invocation outside a workspace: only global skills apply.
+      rows = db.select().from(skills).where(isNull(skills.workspaceId)).all();
     } else {
       rows = await listUserSkills();
     }

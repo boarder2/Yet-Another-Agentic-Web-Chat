@@ -1,10 +1,23 @@
 import fs from 'fs';
 import path from 'path';
 import type { Skill } from './types';
+import { buildChartCreationSkill } from './system/chart-creation';
+import { buildCodeExecutionSkill } from './system/code-execution';
 
 const NAME_REGEX = /^[a-z0-9][a-z0-9_:-]*$/;
 
-let cache: Skill[] | null = null;
+// File-based skills are stable per process; programmatic skills are computed
+// per call so they can react to runtime config (e.g. whether code_execution
+// is enabled).
+let fileCache: Skill[] | null = null;
+
+// Programmatic skills override file-based skills with the same name.
+// Builders may return null to omit the skill entirely (e.g. when the
+// underlying tool is disabled by server config).
+const PROGRAMMATIC_SKILL_BUILDERS: Array<() => Skill | null> = [
+  buildChartCreationSkill,
+  buildCodeExecutionSkill,
+];
 
 function parseSkillFile(filePath: string): Skill | null {
   const raw = fs.readFileSync(filePath, 'utf8');
@@ -37,12 +50,12 @@ function parseSkillFile(filePath: string): Skill | null {
   };
 }
 
-export function getSystemSkills(): Skill[] {
-  if (cache) return cache;
+function getFileSkills(): Skill[] {
+  if (fileCache) return fileCache;
   const dir = path.join(process.cwd(), 'src/lib/skills/system');
   if (!fs.existsSync(dir)) {
-    cache = [];
-    return cache;
+    fileCache = [];
+    return fileCache;
   }
   const files = fs.readdirSync(dir).filter((f) => f.endsWith('.md'));
   const result: Skill[] = [];
@@ -50,10 +63,20 @@ export function getSystemSkills(): Skill[] {
     const skill = parseSkillFile(path.join(dir, file));
     if (skill) result.push(skill);
   }
-  cache = result;
-  return cache;
+  fileCache = result;
+  return fileCache;
+}
+
+export function getSystemSkills(): Skill[] {
+  const merged = new Map<string, Skill>();
+  for (const s of getFileSkills()) merged.set(s.name, s);
+  for (const build of PROGRAMMATIC_SKILL_BUILDERS) {
+    const s = build();
+    if (s) merged.set(s.name, s);
+  }
+  return Array.from(merged.values());
 }
 
 export function clearSystemSkillsCache() {
-  cache = null;
+  fileCache = null;
 }

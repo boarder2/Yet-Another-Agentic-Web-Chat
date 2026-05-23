@@ -154,7 +154,7 @@ export const askUserTool = tool(
   {
     name: 'ask_user',
     description:
-      'Ask the user one clear question and wait for their reply. Use for missing info you cannot infer; skip for trivial clarifications.',
+      'Ask the user one clear question and wait for their reply. Use for missing info you cannot infer; skip for trivial clarifications. Before first use this session, call read_skill("ask-user") for phrasing rules, option formatting, and multi-select guidance.',
     schema: AskUserToolSchema,
   },
 );

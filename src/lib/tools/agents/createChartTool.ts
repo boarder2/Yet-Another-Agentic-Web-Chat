@@ -42,7 +42,7 @@ export const createChartTool = tool(
   {
     name: 'create_chart',
     description:
-      'Generate an interactive chart (bar, line, pie/donut, area). Call the tool, then place <Chart id="<chartId>"/> exactly where the chart should appear in your response.',
+      'Generate an interactive chart (bar, line, pie/donut, area). Call the tool, then place <Chart id="<chartId>"/> exactly where the chart should appear in your response. Before first use this session, call read_skill("chart-creation") for the spec schema, per-type examples, and the code_execution path that should be preferred when available.',
     schema: ChartSpecSchema,
   },
 );

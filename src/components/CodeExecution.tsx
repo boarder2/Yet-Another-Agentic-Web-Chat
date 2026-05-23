@@ -46,15 +46,17 @@ export function CodeExecutionApproval({
     hasAcceptedWarning(),
   );
   const [actionTaken, setActionTaken] = useState(false);
+  const [denying, setDenying] = useState(false);
+  const [denyReason, setDenyReason] = useState('');
 
-  const sendApproval = async (approved: boolean) => {
+  const sendApproval = async (approved: boolean, reason?: string) => {
     setActionTaken(true);
     if (onActionTaken) onActionTaken(executionId, approved);
     try {
       await fetch('/api/sandbox/approve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ executionId, approved }),
+        body: JSON.stringify({ executionId, approved, reason }),
       });
     } catch (err) {
       console.error('Failed to send approval:', err);
@@ -111,19 +113,64 @@ export function CodeExecutionApproval({
       <div className="max-h-[75vh] overflow-y-auto">
         <CodeBlock className="language-javascript">{code}</CodeBlock>
       </div>
+      {denying && (
+        <div className="px-5 py-3 border-t border-surface-2 bg-surface-2/30">
+          <label className="block text-xs font-medium text-fg/70 mb-1.5">
+            Tell the assistant what to do differently (optional)
+          </label>
+          <textarea
+            autoFocus
+            value={denyReason}
+            onChange={(e) => setDenyReason(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                sendApproval(false, denyReason.trim() || undefined);
+              }
+            }}
+            placeholder="e.g. don't fetch from the network; use a smaller input; try a different approach..."
+            className="w-full bg-surface border border-surface-2 rounded-surface px-3 py-2 text-sm text-fg placeholder:text-fg/30 focus:outline-none focus:border-accent resize-none"
+            rows={3}
+          />
+        </div>
+      )}
       <div className="flex gap-2 justify-end px-5 py-3 border-t border-surface-2 bg-surface">
-        <button
-          onClick={() => sendApproval(false)}
-          className="px-5 py-2 text-sm font-medium rounded-surface bg-danger-soft text-danger hover:bg-danger-soft border border-danger transition-colors"
-        >
-          Deny
-        </button>
-        <button
-          onClick={() => sendApproval(true)}
-          className="px-5 py-2 text-sm font-medium rounded-surface bg-success-soft text-success hover:bg-success-soft border border-success transition-colors"
-        >
-          Run
-        </button>
+        {denying ? (
+          <>
+            <button
+              onClick={() => {
+                setDenying(false);
+                setDenyReason('');
+              }}
+              className="px-5 py-2 text-sm font-medium rounded-surface bg-surface-2 text-fg/70 hover:text-fg hover:bg-surface-2/80 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() =>
+                sendApproval(false, denyReason.trim() || undefined)
+              }
+              className="px-5 py-2 text-sm font-medium rounded-surface bg-danger-soft text-danger hover:bg-danger-soft border border-danger transition-colors"
+            >
+              Deny
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              onClick={() => setDenying(true)}
+              className="px-5 py-2 text-sm font-medium rounded-surface bg-danger-soft text-danger hover:bg-danger-soft border border-danger transition-colors"
+            >
+              Deny
+            </button>
+            <button
+              onClick={() => sendApproval(true)}
+              className="px-5 py-2 text-sm font-medium rounded-surface bg-success-soft text-success hover:bg-success-soft border border-success transition-colors"
+            >
+              Run
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

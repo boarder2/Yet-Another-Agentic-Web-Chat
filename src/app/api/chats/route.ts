@@ -37,13 +37,14 @@ export const GET = async (req: Request) => {
             .filter(Boolean)
         : undefined;
 
+      const SEARCH_CAP = 500;
       const hits = await searchChatsByKeywords({
         keywords: [q],
         workspaceId: workspaceIdParam ?? undefined,
         workspaceIds,
         includePrivate: true,
         includeCompaction: true,
-        limit: 500,
+        limit: SEARCH_CAP,
       });
 
       const ids = hits.map((h) => h.chatId);
@@ -75,7 +76,7 @@ export const GET = async (req: Request) => {
           chats,
           total: chats.length,
           totalMessages,
-          hasMore: false,
+          hasMore: hits.length >= SEARCH_CAP,
         },
         { status: 200 },
       );

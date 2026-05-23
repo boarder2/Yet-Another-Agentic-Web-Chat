@@ -1,5 +1,5 @@
 type PendingApproval = {
-  resolve: (result: { approved: boolean }) => void;
+  resolve: (result: { approved: boolean; reason?: string }) => void;
   timeout: NodeJS.Timeout;
   messageId?: string;
   createdAt: number;
@@ -20,7 +20,7 @@ export function waitForApproval(
   executionId: string,
   timeoutMs: number = 300_000,
   messageId?: string,
-): Promise<{ approved: boolean }> {
+): Promise<{ approved: boolean; reason?: string }> {
   return new Promise((resolve) => {
     if (pending.size > 100) {
       console.warn(
@@ -45,13 +45,14 @@ export function waitForApproval(
 export function resolveApproval(
   executionId: string,
   approved: boolean,
+  reason?: string,
 ): boolean {
   const entry = pending.get(executionId);
   if (!entry) return false;
 
   clearTimeout(entry.timeout);
   pending.delete(executionId);
-  entry.resolve({ approved });
+  entry.resolve({ approved, reason });
   return true;
 }
 

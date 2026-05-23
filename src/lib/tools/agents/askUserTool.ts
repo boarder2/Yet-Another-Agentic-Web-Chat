@@ -9,19 +9,28 @@ import { waitForUserResponse } from '@/lib/userQuestion/pendingQuestions';
 import { popCallbackRunId } from '@/lib/userQuestion/questionCorrelation';
 
 const AskUserToolSchema = z.object({
-  question: z.string().max(500),
+  question: z.string().max(500).describe('One focused question.'),
   options: z
     .array(
       z.object({
-        label: z.string().max(100),
+        label: z.string().max(100).describe('Concrete answer choice.'),
         description: z.string().max(200).optional(),
       }),
     )
     .max(10)
-    .optional(),
+    .optional()
+    .describe('Suggested answers; omit if freeform suffices.'),
   multiSelect: z.boolean().optional().default(false),
-  allowFreeformInput: z.boolean().optional().default(true),
-  context: z.string().max(200).optional(),
+  allowFreeformInput: z
+    .boolean()
+    .optional()
+    .default(true)
+    .describe('Allow user to type a custom reply.'),
+  context: z
+    .string()
+    .max(200)
+    .optional()
+    .describe('Brief reason shown to user for why you are asking.'),
 });
 
 export const askUserTool = tool(

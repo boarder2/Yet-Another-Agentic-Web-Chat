@@ -1,9 +1,11 @@
 import { z } from 'zod';
 
 const isCssColor = (val: string) =>
-  /^#([0-9a-fA-F]{3,8})$/.test(val) ||
-  /^rgba?\(/.test(val) ||
-  /^hsla?\(/.test(val) ||
+  /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(
+    val,
+  ) ||
+  /^(rgba?|hsla?|oklch|oklab|color|hwb|lab|lch)\([^)]*\)$/.test(val) ||
+  /^var\(--[a-zA-Z0-9_-]+(\s*,[^)]*)?\)$/.test(val) ||
   /^[a-zA-Z]+$/.test(val);
 
 export const ChartSeriesSchema = z.object({

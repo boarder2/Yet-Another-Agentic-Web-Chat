@@ -133,7 +133,7 @@ export const codeExecutionTool = tool(
       }),
     );
 
-    const { approved } = await waitForApproval(
+    const { approved, reason } = await waitForApproval(
       executionId,
       5 * 60 * 1000,
       messageId,
@@ -144,15 +144,19 @@ export const codeExecutionTool = tool(
         'data',
         JSON.stringify({
           type: 'code_execution_result',
-          data: { executionId, denied: true, toolCallId },
+          data: { executionId, denied: true, denyReason: reason, toolCallId },
         }),
       );
+
+      const denialMessage = reason
+        ? `Code execution was denied by the user. User feedback: "${reason}"`
+        : 'Code execution was denied by the user.';
 
       return new Command({
         update: {
           messages: [
             new ToolMessage({
-              content: 'Code execution was denied by the user.',
+              content: denialMessage,
               tool_call_id: toolCallId,
             }),
           ],
@@ -164,6 +168,7 @@ export const codeExecutionTool = tool(
 
     // Scan stdout for __CHART__ envelopes and extract chart specs
     let cleanedStdout = result.stdout;
+    const chartIds: string[] = [];
     if (result.stdout) {
       const lines = result.stdout.split('\n');
       const processedLines: string[] = [];
@@ -190,6 +195,7 @@ export const codeExecutionTool = tool(
           continue;
         }
         const chartId = crypto.randomUUID();
+        chartIds.push(chartId);
         const chartTitle = validation.data.title;
         processedLines.push(
           `[Chart created${chartTitle ? ` — title: "${chartTitle}"` : ''}. To display it, copy this tag verbatim into your response where the chart should appear: <Chart id="${chartId}"/>]`,
@@ -229,6 +235,7 @@ export const codeExecutionTool = tool(
           timedOut: result.timedOut,
           oomKilled: result.oomKilled,
           toolCallId,
+          chartIds,
         },
       }),
     );

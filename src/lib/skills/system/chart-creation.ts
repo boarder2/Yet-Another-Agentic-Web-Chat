@@ -240,5 +240,6 @@ export function buildChartCreationSkill(): Skill {
     name: 'chart-creation',
     description: DESCRIPTION,
     content,
+    disableModelInvocation: false,
   };
 }

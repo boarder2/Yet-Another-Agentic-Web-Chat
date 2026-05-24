@@ -12,12 +12,19 @@ import {
   deleteUserSkill,
   getUserSkillByName,
 } from '@/lib/skills/service';
+import {
+  SKILL_NAME_REGEX,
+  SKILL_NAME_DESCRIPTION,
+} from '@/lib/skills/validation';
 
 const EditSkillSchema = z.object({
   action: z
     .enum(['create', 'update', 'delete'])
     .describe('The operation to perform on the user skill.'),
-  name: z.string().describe('The skill name.'),
+  name: z
+    .string()
+    .regex(SKILL_NAME_REGEX, SKILL_NAME_DESCRIPTION)
+    .describe(`The skill name. ${SKILL_NAME_DESCRIPTION}`),
   description: z
     .string()
     .optional()
@@ -32,6 +39,12 @@ const EditSkillSchema = z.object({
     .default('global')
     .describe(
       'Whether this skill applies globally or to the current workspace only.',
+    ),
+  disableModelInvocation: z
+    .boolean()
+    .optional()
+    .describe(
+      "When true, the skill is hidden from the model's auto-invocation list. It can still be invoked via slash command.",
     ),
 });
 
@@ -76,7 +89,14 @@ export const editSkillTool = tool(
       });
     }
 
-    const { action, name, description, content, scope } = input;
+    const {
+      action,
+      name,
+      description,
+      content,
+      scope,
+      disableModelInvocation,
+    } = input;
     const effectiveWorkspaceId =
       scope === 'workspace' ? (workspaceId ?? null) : null;
 
@@ -123,9 +143,17 @@ export const editSkillTool = tool(
       action === 'create' ? '' : (existingSkill?.content ?? '');
     const oldDescription =
       action === 'create' ? '' : (existingSkill?.description ?? '');
+    const oldDisableModelInvocation =
+      action === 'create'
+        ? false
+        : (existingSkill?.disableModelInvocation ?? false);
     const newContent = action === 'delete' ? '' : (content ?? oldContent);
     const newDescription =
       action === 'delete' ? '' : (description ?? oldDescription);
+    const newDisableModelInvocation =
+      action === 'delete'
+        ? false
+        : (disableModelInvocation ?? oldDisableModelInvocation);
 
     emitter.emit(
       'data',
@@ -143,6 +171,7 @@ export const editSkillTool = tool(
           scope: scope ?? 'global',
           workspaceId: effectiveWorkspaceId,
           skillId: existingSkill?.id,
+          disableModelInvocation: newDisableModelInvocation,
           createdAt: Date.now(),
         },
         messageId,
@@ -192,12 +221,17 @@ export const editSkillTool = tool(
           description: newDescription,
           content: newContent,
           workspaceId: effectiveWorkspaceId,
+          disableModelInvocation: newDisableModelInvocation,
         });
       } else if (action === 'update' && existingSkill) {
         await updateUserSkill(existingSkill.id, {
           description:
             newDescription !== oldDescription ? newDescription : undefined,
           content: newContent !== oldContent ? newContent : undefined,
+          disableModelInvocation:
+            newDisableModelInvocation !== oldDisableModelInvocation
+              ? newDisableModelInvocation
+              : undefined,
         });
       } else if (action === 'delete' && existingSkill) {
         await deleteUserSkill(existingSkill.id);
@@ -237,8 +271,7 @@ export const editSkillTool = tool(
   },
   {
     name: 'edit_skill',
-    description:
-      'Create, update, or delete a user skill. Requires user approval before applying changes.',
+    description: `Create, update, or delete a user skill. Requires user approval before applying changes. Name rules: ${SKILL_NAME_DESCRIPTION}`,
     schema: EditSkillSchema,
   },
 );

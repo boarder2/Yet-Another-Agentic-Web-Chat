@@ -5,4 +5,5 @@ export type Skill = {
   description: string;
   content: string;
   workspaceId?: string | null;
+  disableModelInvocation: boolean;
 };

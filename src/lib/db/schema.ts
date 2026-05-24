@@ -204,6 +204,11 @@ export const skills = sqliteTable(
     content: text('content').notNull(),
     workspaceId: text('workspace_id'),
     enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    disableModelInvocation: integer('disable_model_invocation', {
+      mode: 'boolean',
+    })
+      .notNull()
+      .default(false),
     createdAt: integer('created_at', { mode: 'timestamp' })
       .notNull()
       .$defaultFn(() => new Date()),

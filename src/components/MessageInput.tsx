@@ -324,7 +324,7 @@ const MessageInput = ({
       }}
       className="w-full"
     >
-      <div className="flex flex-col bg-surface px-3 pt-4 pb-2 rounded-surface w-full border border-surface-2">
+      <div className="relative flex flex-col bg-surface px-3 pt-4 pb-2 rounded-surface w-full border border-surface-2">
         {(pendingImages.length > 0 || isUploadingImage) && (
           <div className="flex flex-row gap-2 mb-2 overflow-x-auto pb-1">
             {pendingImages.map((img) => (
@@ -359,7 +359,7 @@ const MessageInput = ({
         )}
         {/* Skill autocomplete popover */}
         {skillPopoverActive && skillSuggestions.length > 0 && (
-          <div className="mb-1 border border-surface-2 rounded-control bg-surface shadow-raised overflow-hidden">
+          <div className="absolute bottom-full left-0 right-0 mb-1 border border-surface-2 rounded-control bg-surface shadow-raised overflow-hidden z-50">
             {skillSuggestions.slice(0, 6).map((skill, idx) => (
               <button
                 key={skill.name}

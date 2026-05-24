@@ -7,10 +7,11 @@ export type UserSkillCreate = {
   description: string;
   content: string;
   workspaceId?: string | null;
+  disableModelInvocation?: boolean;
 };
 
 export type UserSkillUpdate = Partial<
-  Pick<UserSkillCreate, 'description' | 'content'>
+  Pick<UserSkillCreate, 'description' | 'content' | 'disableModelInvocation'>
 >;
 
 export async function listUserSkills(workspaceId?: string | null) {
@@ -51,6 +52,7 @@ export async function createUserSkill(input: UserSkillCreate) {
     .values({
       ...input,
       workspaceId: input.workspaceId ?? null,
+      disableModelInvocation: input.disableModelInvocation ?? false,
     })
     .returning();
   return row;

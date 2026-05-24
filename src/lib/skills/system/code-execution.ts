@@ -144,5 +144,6 @@ export function buildCodeExecutionSkill(): Skill | null {
     name: 'code-execution',
     description: DESCRIPTION,
     content: buildContent(ce.timeoutSeconds, ce.memoryMb, ce.maxOutputChars),
+    disableModelInvocation: false,
   };
 }

@@ -36,6 +36,7 @@ export async function resolveSkillsForChat(
       description: r.description,
       content: r.content,
       workspaceId: r.workspaceId,
+      disableModelInvocation: r.disableModelInvocation,
     }));
 
   // Build merged set: user beats system, workspace beats global

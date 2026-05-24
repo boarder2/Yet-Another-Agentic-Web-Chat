@@ -15,6 +15,7 @@ type UserSkill = {
   content: string;
   workspaceId: string | null;
   enabled: boolean;
+  disableModelInvocation: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -37,6 +38,7 @@ export default function SkillsSection() {
     description: '',
     content: '',
     workspaceId: '' as string | null,
+    disableModelInvocation: false,
   });
 
   const fetchSkills = useCallback(async () => {
@@ -82,16 +84,26 @@ export default function SkillsSection() {
           description,
           content,
           workspaceId: workspaceId || null,
+          disableModelInvocation: newSkill.disableModelInvocation,
         }),
       });
       if (!res.ok) {
         const err = await res.json();
-        toast.error(err.error ?? 'Failed to create skill');
+        const msg = err.maxLength
+          ? `${err.error} (max ${err.maxLength} characters)`
+          : (err.error ?? 'Failed to create skill');
+        toast.error(msg);
         return;
       }
       toast.success(`Skill "${name}" created`);
       setIsAddingNew(false);
-      setNewSkill({ name: '', description: '', content: '', workspaceId: '' });
+      setNewSkill({
+        name: '',
+        description: '',
+        content: '',
+        workspaceId: '',
+        disableModelInvocation: false,
+      });
       fetchSkills();
     } catch {
       toast.error('Failed to create skill');
@@ -107,11 +119,15 @@ export default function SkillsSection() {
         body: JSON.stringify({
           description: editingSkill.description,
           content: editingSkill.content,
+          disableModelInvocation: editingSkill.disableModelInvocation,
         }),
       });
       if (!res.ok) {
         const err = await res.json();
-        toast.error(err.error ?? 'Failed to update skill');
+        const msg = err.maxLength
+          ? `${err.error} (max ${err.maxLength} characters)`
+          : (err.error ?? 'Failed to update skill');
+        toast.error(msg);
         return;
       }
       toast.success('Skill updated');
@@ -227,6 +243,23 @@ export default function SkillsSection() {
               ))}
             </select>
           </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-medium">
+                Disable model auto-invocation
+              </p>
+              <p className="text-xs text-fg/50">
+                Slash-command only — hidden from model&apos;s available skills
+                list
+              </p>
+            </div>
+            <AppSwitch
+              checked={newSkill.disableModelInvocation}
+              onChange={(val: boolean) =>
+                setNewSkill({ ...newSkill, disableModelInvocation: val })
+              }
+            />
+          </div>
           <div className="flex justify-end gap-2">
             <button
               onClick={() => {
@@ -236,6 +269,7 @@ export default function SkillsSection() {
                   description: '',
                   content: '',
                   workspaceId: '',
+                  disableModelInvocation: false,
                 });
               }}
               className="px-3 py-2 text-sm rounded-control bg-surface hover:bg-surface-2 flex items-center gap-1.5"
@@ -295,6 +329,26 @@ export default function SkillsSection() {
                     placeholder="Skill content"
                     className="min-h-[120px]"
                   />
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-medium">
+                        Disable model auto-invocation
+                      </p>
+                      <p className="text-xs text-fg/50">
+                        Slash-command only — hidden from model&apos;s available
+                        skills list
+                      </p>
+                    </div>
+                    <AppSwitch
+                      checked={editingSkill.disableModelInvocation}
+                      onChange={(val: boolean) =>
+                        setEditingSkill({
+                          ...editingSkill,
+                          disableModelInvocation: val,
+                        })
+                      }
+                    />
+                  </div>
                   <div className="flex justify-end gap-2">
                     <button
                       onClick={() => setEditingSkill(null)}
@@ -322,6 +376,11 @@ export default function SkillsSection() {
                       <span className="text-xs text-fg/50 bg-surface px-1.5 py-0.5 rounded-pill border border-surface-2">
                         {getScopeBadge(skill)}
                       </span>
+                      {skill.disableModelInvocation && (
+                        <span className="text-xs text-fg/50 bg-surface px-1.5 py-0.5 rounded-pill border border-surface-2">
+                          Slash-only
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-fg/60 mt-0.5 truncate">
                       {skill.description}

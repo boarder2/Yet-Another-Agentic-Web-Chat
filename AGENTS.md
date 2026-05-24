@@ -33,6 +33,7 @@ Stack: Next.js (App Router) + React 19 + Tailwind 4, LangChain/LangGraph, SQLite
 - Ask before adding dependencies
 - Scope changes to the specific task; follow existing patterns
 - Keep AGENTS.md reflecting the **current** state of the project
+- DB schema changes: edit `src/lib/db/schema.ts` only; run `yarn db:generate` to emit the drizzle migration — never hand-write files in `drizzle/`
 
 ## Subsystem Skills
 

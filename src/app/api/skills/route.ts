@@ -7,11 +7,12 @@ import {
 import db from '@/lib/db';
 import { skills } from '@/lib/db/schema';
 import { isNull, or, eq } from 'drizzle-orm';
-
-const NAME_REGEX = /^[a-z0-9][a-z0-9_:-]*$/;
-const MAX_NAME_LEN = 64;
-const MAX_DESC_LEN = 256;
-const MAX_CONTENT_LEN = 65536;
+import {
+  SKILL_NAME_REGEX,
+  MAX_SKILL_NAME_LEN,
+  MAX_SKILL_DESC_LEN,
+  MAX_SKILL_CONTENT_LEN,
+} from '@/lib/skills/validation';
 
 export async function GET(req: Request) {
   try {
@@ -52,7 +53,8 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { name, description, content, workspaceId } = body;
+    const { name, description, content, workspaceId, disableModelInvocation } =
+      body;
 
     if (!name || !description || !content) {
       return NextResponse.json(
@@ -61,22 +63,22 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!NAME_REGEX.test(name)) {
+    if (!SKILL_NAME_REGEX.test(name)) {
       return NextResponse.json(
-        { error: `name must match ${NAME_REGEX}` },
+        { error: `name must match ${SKILL_NAME_REGEX}` },
         { status: 400 },
       );
     }
-    if (name.length > MAX_NAME_LEN) {
+    if (name.length > MAX_SKILL_NAME_LEN) {
       return NextResponse.json({ error: 'name too long' }, { status: 400 });
     }
-    if (description.length > MAX_DESC_LEN) {
+    if (description.length > MAX_SKILL_DESC_LEN) {
       return NextResponse.json(
-        { error: 'description too long' },
+        { error: 'description too long', maxLength: MAX_SKILL_DESC_LEN },
         { status: 400 },
       );
     }
-    if (content.length > MAX_CONTENT_LEN) {
+    if (content.length > MAX_SKILL_CONTENT_LEN) {
       return NextResponse.json({ error: 'content too long' }, { status: 400 });
     }
 
@@ -94,6 +96,10 @@ export async function POST(req: Request) {
       description,
       content,
       workspaceId: workspaceId ?? null,
+      disableModelInvocation:
+        typeof disableModelInvocation === 'boolean'
+          ? disableModelInvocation
+          : false,
     });
 
     return NextResponse.json(skill, { status: 201 });

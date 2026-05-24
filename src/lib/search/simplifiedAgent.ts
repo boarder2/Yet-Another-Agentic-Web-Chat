@@ -482,9 +482,12 @@ export class SimplifiedAgent {
       basePrompt += this.workspaceSuffix;
     }
 
-    // Append skills section if skills are available
-    if (this.resolvedSkills.length > 0) {
-      basePrompt += '\n\n' + buildSkillsPromptSection(this.resolvedSkills);
+    // Append skills section if skills are available (exclude slash-only skills)
+    const modelVisibleSkills = this.resolvedSkills.filter(
+      (s) => !s.disableModelInvocation,
+    );
+    if (modelVisibleSkills.length > 0) {
+      basePrompt += '\n\n' + buildSkillsPromptSection(modelVisibleSkills);
     }
 
     return basePrompt;
@@ -873,6 +876,49 @@ export class SimplifiedAgent {
               ) {
                 delete toolCalls[runId];
                 return;
+              }
+
+              // For read_skill: surface structured {error} payloads as UI errors
+              if (toolName === 'read_skill') {
+                const outputStr =
+                  typeof output === 'string'
+                    ? output
+                    : typeof output?.content === 'string'
+                      ? output.content
+                      : null;
+                let errorMsg: string | null = null;
+                if (outputStr) {
+                  try {
+                    const parsed = JSON.parse(outputStr);
+                    if (parsed && typeof parsed.error === 'string') {
+                      errorMsg = parsed.error;
+                    }
+                  } catch {
+                    // Not JSON — treat as successful skill body
+                  }
+                }
+                if (errorMsg) {
+                  if (toolCalls[runId]) delete toolCalls[runId];
+                  try {
+                    this.emitter.emit(
+                      'data',
+                      JSON.stringify({
+                        type: 'tool_call_error',
+                        data: {
+                          toolCallId: runId,
+                          status: 'error',
+                          error: errorMsg.substring(0, 500),
+                        },
+                      }),
+                    );
+                  } catch (emitErr) {
+                    console.warn(
+                      'Failed to emit tool_call_error event',
+                      emitErr,
+                    );
+                  }
+                  return;
+                }
               }
 
               // If youtube transcript tool, capture videoId for potential future UI enhancements

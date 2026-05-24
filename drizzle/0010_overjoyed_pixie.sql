@@ -1,0 +1,1 @@
+ALTER TABLE `skills` ADD `disable_model_invocation` integer DEFAULT false NOT NULL;

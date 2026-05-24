@@ -42,11 +42,16 @@ function parseSkillFile(filePath: string): Skill | null {
     );
     return null;
   }
+  const disableMatch = fm.match(/^disable-model-invocation:\s*(.+)$/m);
+  const disableModelInvocation = disableMatch
+    ? disableMatch[1].trim() === 'true'
+    : false;
   return {
     source: 'system',
     name,
     description: descMatch[1].trim(),
     content: body.trim(),
+    disableModelInvocation,
   };
 }
 

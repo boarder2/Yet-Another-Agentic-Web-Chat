@@ -15,7 +15,7 @@ export const readSkillTool = tool(
     const runId = config?.configurable?.runId as string | undefined;
 
     if (!runId) {
-      return 'Error: No run context available.';
+      return JSON.stringify({ error: 'No run context available.' });
     }
 
     const skill = getSkillForRun(runId, input.name);
@@ -23,7 +23,9 @@ export const readSkillTool = tool(
       console.warn(
         `[skills] read_skill: unknown skill "${input.name}" (runId=${runId})`,
       );
-      return `Error: Unknown skill "${input.name}". Only skills listed in the Available Skills section can be loaded.`;
+      return JSON.stringify({
+        error: `Unknown skill "${input.name}". Only skills listed in the Available Skills section can be loaded.`,
+      });
     }
 
     console.log(

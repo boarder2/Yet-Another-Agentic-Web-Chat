@@ -34,7 +34,11 @@ export const removeThinkingBlocks = (text: string): string => {
  * but are pure UI overhead — and potentially misleading — when replayed to the LLM.
  */
 export const removeToolCallMarkup = (text: string): string => {
+  // Strip SubagentExecution blocks first so a single pass handles the whole
+  // nested tree (each SubagentExecution may contain nested ToolCall markup).
   return text
+    .replace(/<SubagentExecution\b[^>]*\/>/g, '')
+    .replace(/<SubagentExecution\b[^>]*>[\s\S]*?<\/SubagentExecution>/g, '')
     .replace(/<ToolCall\b[^>]*\/>/g, '')
     .replace(/<ToolCall\b[^>]*>[\s\S]*?<\/ToolCall>/g, '');
 };

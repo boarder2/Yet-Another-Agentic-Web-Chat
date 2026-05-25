@@ -5,6 +5,7 @@ import { Command, getCurrentTaskInput } from '@langchain/langgraph';
 import { SimplifiedAgentStateType } from '@/lib/state/chatAgentState';
 import { ToolMessage } from '@langchain/core/messages';
 import { retrievePdfDoc } from '@/lib/utils/documents';
+import { persistFromToolConfig } from '@/lib/utils/persistToolContext';
 
 // Schema for PDF transcript tool input
 const PDFLoaderToolSchema = z.object({
@@ -71,6 +72,14 @@ export const pdfLoaderTool = tool(
       }
 
       console.log(`[pdfLoaderTool] Retrieved document from PDF: ${pdfUrl}`);
+
+      await persistFromToolConfig({
+        config,
+        kind: 'pdf_loader',
+        body: `[pdf_loader ${pdfUrl}]\n${doc.pageContent ?? ''}`,
+        metadataExtras: { source: pdfUrl },
+      });
+
       return new Command({
         update: {
           relevantDocuments: [doc],

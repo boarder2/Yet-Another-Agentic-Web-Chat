@@ -170,7 +170,7 @@ export async function searchChatsByKeywords(
   if (!opts.includeCompaction) {
     const compactionCond = or(
       isNull(messages.role),
-      ne(messages.role, 'compaction'),
+      and(ne(messages.role, 'compaction'), ne(messages.role, 'system')),
     );
     if (compactionCond) conditions.push(compactionCond);
   }

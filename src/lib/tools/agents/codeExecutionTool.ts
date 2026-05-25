@@ -14,6 +14,7 @@ import {
 } from '@/lib/sandbox/dockerExecutor';
 import { getCodeExecutionConfig } from '@/lib/config';
 import { ChartSpecSchema } from '@/lib/chart/chartSpec';
+import { persistFromToolConfig } from '@/lib/utils/persistToolContext';
 
 const CHART_ENVELOPE_RE = /^__CHART__(\{.*\})$/;
 
@@ -250,6 +251,13 @@ export const codeExecutionTool = tool(
       if (cleanedStdout) resultText += `\n\nStdout:\n${cleanedStdout}`;
       if (result.stderr) resultText += `\n\nStderr:\n${result.stderr}`;
     }
+
+    await persistFromToolConfig({
+      config,
+      kind: 'code_execution',
+      body: `[code_execution]\nCode:\n${input.code}\n\nResult:\n${resultText}`,
+      metadataExtras: { language: 'javascript' },
+    });
 
     return new Command({
       update: {

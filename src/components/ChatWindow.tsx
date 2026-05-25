@@ -48,6 +48,7 @@ export type ModelStats = {
   usedPersonalization?: boolean;
   memoriesUsed?: number;
   firstChatCallInputTokens?: number;
+  projectedNextInputTokens?: number;
 };
 
 export type CompactionData = {
@@ -470,6 +471,12 @@ const ChatWindow = ({
     subMessage?: string;
   } | null>(null);
   const [liveModelStats, setLiveModelStats] = useState<ModelStats | null>(null);
+  const [liveContextGrew, setLiveContextGrew] = useState<{
+    kind: string;
+    tokens: number;
+    totalEstimated: number;
+    at: number;
+  } | null>(null);
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [compacting, setCompacting] = useState(false);
@@ -880,6 +887,18 @@ const ChatWindow = ({
       if (data.type === 'stats') {
         // live model stats snapshot during run
         setLiveModelStats(data.data);
+        return;
+      }
+      if (data.type === 'context_grew') {
+        // Live inflation signal: bump the most recent prior message's stats
+        // so the context-usage chip reflects newly persisted tool output
+        // before the turn ends.
+        setLiveContextGrew({
+          kind: data.kind,
+          tokens: data.tokens,
+          totalEstimated: data.totalEstimated,
+          at: Date.now(),
+        });
         return;
       }
 
@@ -1655,6 +1674,7 @@ const ChatWindow = ({
         // Clear analysis progress and todo list
         setAnalysisProgress(null);
         setLiveModelStats(null);
+        setLiveContextGrew(null);
         setTodoItems([]);
 
         // Ensure final message content is displayed (flush any remaining buffer)
@@ -1685,6 +1705,12 @@ const ChatWindow = ({
                       : {}),
                     ...(memoriesUsedCount !== undefined
                       ? { memoriesUsed: memoriesUsedCount }
+                      : {}),
+                    ...(typeof data.projectedNextInputTokens === 'number'
+                      ? {
+                          projectedNextInputTokens:
+                            data.projectedNextInputTokens,
+                        }
                       : {}),
                   }
                 : undefined;
@@ -1979,19 +2005,40 @@ const ChatWindow = ({
     );
   }
 
-  // Context usage: use firstChatCallInputTokens from the most recent message
-  // that has it — this is the input to the first model call of that turn
-  // (system prompt + history), before tool results inflate it. Then add the
-  // assistant's output text, since it will be part of the next request's input.
-  // Falls back to a character-based estimate for messages that predate the metric.
+  // Context usage chip: reflects estimated tokens that will be sent on the
+  // next model call. Priority order:
+  //   1. During a turn: liveModelStats.firstChatCallInputTokens (actual
+  //      measured input for this turn's first LLM call) + liveAdd (context_grew
+  //      inflation from tools that have already persisted rows this turn).
+  //   2. After a turn: projectedNextInputTokens from the most recent completed
+  //      assistant message — server-computed sum of all persisted rows + a
+  //      fixed system-prompt estimate. This is the baseline for the next turn.
+  //   3. Old messages (pre-dating projectedNextInputTokens): fall back to
+  //      firstChatCallInputTokens + output length estimate.
+  //   4. No modelStats at all: rough character-count estimate.
+  // liveAdd is added in every case so context_grew events update the chip live.
   const contextUsage = (() => {
+    const liveAdd = liveContextGrew?.totalEstimated ?? 0;
+
+    // During a turn the stats event fires before messageEnd and sets
+    // liveModelStats.firstChatCallInputTokens — use it as the live baseline.
+    if (liveModelStats?.firstChatCallInputTokens) {
+      return liveModelStats.firstChatCallInputTokens + liveAdd;
+    }
+
+    // After a turn, prefer projectedNextInputTokens (accounts for system rows
+    // persisted this turn). Fall back to firstChatCallInputTokens for old
+    // messages that predate this field.
     for (let i = messages.length - 1; i >= 0; i--) {
       const stats = messages[i].modelStats;
+      if (stats?.projectedNextInputTokens) {
+        return stats.projectedNextInputTokens + liveAdd;
+      }
       if (stats?.firstChatCallInputTokens) {
         const outputEstimate = Math.round(
           (messages[i].content?.length || 0) / 4,
         );
-        return stats.firstChatCallInputTokens + outputEstimate;
+        return stats.firstChatCallInputTokens + outputEstimate + liveAdd;
       }
     }
     // Fallback: estimate from all message content
@@ -1999,7 +2046,7 @@ const ChatWindow = ({
       (sum, m) => sum + (m.content?.length || 0),
       0,
     );
-    return Math.round(contentChars / 4) + 3000;
+    return Math.round(contentChars / 4) + 3000 + liveAdd;
   })();
 
   const handleCompact = async (instructions?: string) => {

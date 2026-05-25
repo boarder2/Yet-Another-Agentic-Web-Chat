@@ -12,7 +12,9 @@ export const messages = sqliteTable('messages', {
   content: text('content').notNull(),
   chatId: text('chatId').notNull(),
   messageId: text('messageId').notNull(),
-  role: text('type', { enum: ['assistant', 'user', 'compaction'] }),
+  role: text('type', {
+    enum: ['assistant', 'user', 'compaction', 'system'],
+  }),
   metadata: text('metadata', {
     mode: 'json',
   }),

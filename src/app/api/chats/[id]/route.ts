@@ -1,6 +1,6 @@
 import db from '@/lib/db';
 import { chats, messages } from '@/lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 import { deleteChatWithOrphanCleanup } from '@/lib/retention/deleteChat';
 
 export const PATCH = async (
@@ -43,7 +43,7 @@ export const GET = async (
     }
 
     const chatMessages = await db.query.messages.findMany({
-      where: eq(messages.chatId, id),
+      where: and(eq(messages.chatId, id), ne(messages.role, 'system')),
     });
 
     return Response.json(

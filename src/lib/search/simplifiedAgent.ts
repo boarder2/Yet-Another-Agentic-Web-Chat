@@ -39,7 +39,7 @@ import { buildPersonalizationSection } from '../utils/personalization';
 import { TokenUsage } from '../utils/queryDistillation';
 import { resolveSkillsForChat } from '@/lib/skills/resolve';
 import { buildSkillsPromptSection } from '@/lib/skills/promptSection';
-import { storeSkillsForRun, cleanupSkillsForRun } from '@/lib/skills/runStore';
+import { setRunContext, cleanupSkillsForRun } from '@/lib/skills/runStore';
 import type { Skill } from '@/lib/skills/types';
 
 /**
@@ -158,6 +158,7 @@ export class SimplifiedAgent {
   private initialSystemUsage: TokenUsage;
   private workspaceSuffix: string;
   private firstChatCallInputTokens = 0;
+  private aiMessageId?: string;
 
   constructor(
     chatLlm: BaseChatModel,
@@ -179,6 +180,7 @@ export class SimplifiedAgent {
     initialSystemUsage?: TokenUsage,
     workspaceSuffix: string = '',
     workspaceId?: string | null,
+    aiMessageId?: string,
   ) {
     this.chatLlm = chatLlm;
     this.systemLlm = systemLlm;
@@ -203,6 +205,7 @@ export class SimplifiedAgent {
     };
     this.workspaceSuffix = workspaceSuffix;
     this.workspaceId = workspaceId;
+    this.aiMessageId = aiMessageId;
   }
 
   public setInvokedSkillNames(names: Set<string> | Iterable<string>) {
@@ -592,10 +595,15 @@ export class SimplifiedAgent {
         subagentExecutions: [],
       };
 
-      // Stash resolved skills for this run so read_skill can look them up
+      // Stash resolved skills + per-run context (chatId/parentMessageId) so
+      // read_skill and other context-bearing tools can persist their reads.
       const runId = `run_${Date.now()}_${Math.random().toString(36).slice(2)}`;
       skillRunId = runId;
-      storeSkillsForRun(runId, this.resolvedSkills);
+      setRunContext(runId, {
+        chatId: this.chatId ?? '',
+        parentMessageId: this.aiMessageId ?? '',
+        skills: this.resolvedSkills,
+      });
 
       // Configure the agent run
       const config: RunnableConfig = {

@@ -1,7 +1,8 @@
 import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { RunnableConfig } from '@langchain/core/runnables';
-import { getSkillForRun } from '@/lib/skills/runStore';
+import { getRunContext } from '@/lib/skills/runStore';
+import { persistFromToolConfig } from '@/lib/utils/persistToolContext';
 
 const ReadSkillSchema = z.object({
   name: z.string().describe('The skill name to load.'),
@@ -18,7 +19,8 @@ export const readSkillTool = tool(
       return JSON.stringify({ error: 'No run context available.' });
     }
 
-    const skill = getSkillForRun(runId, input.name);
+    const ctx = getRunContext(runId);
+    const skill = ctx?.skills.get(input.name);
     if (!skill) {
       console.warn(
         `[skills] read_skill: unknown skill "${input.name}" (runId=${runId})`,
@@ -31,6 +33,13 @@ export const readSkillTool = tool(
     console.log(
       `[skills] Loaded ${skill.source} skill "${skill.name}" (${skill.content.length} chars, runId=${runId})`,
     );
+
+    await persistFromToolConfig({
+      config,
+      kind: 'skill_invocation',
+      body: `[Skill "${input.name}" loaded by agent]\n${skill.content}`,
+      metadataExtras: { skillName: input.name },
+    });
 
     return skill.content;
   },

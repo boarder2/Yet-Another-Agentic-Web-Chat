@@ -5,7 +5,7 @@ import { eq } from 'drizzle-orm';
 export interface MessageLookupRow {
   messageId: number;
   content: string;
-  role: 'assistant' | 'user' | 'compaction' | null;
+  role: 'assistant' | 'user' | 'compaction' | 'system' | null;
   metadata: unknown;
   createdAt: string | null;
   chatId: string;
@@ -50,6 +50,7 @@ export function getMessageById(
 
   if (row.isPrivate === 1) return { ok: false, reason: 'private' };
   if (row.role === 'compaction') return { ok: false, reason: 'compaction' };
+  if (row.role === 'system') return { ok: false, reason: 'not_found' };
 
   let createdAt: string | null = null;
   if (row.metadata && typeof row.metadata === 'object') {

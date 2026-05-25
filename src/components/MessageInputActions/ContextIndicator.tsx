@@ -22,7 +22,7 @@ interface ContextIndicatorProps {
 }
 
 const PRESET_SIZES = [32768, 65536, 131072, 262144];
-const MIN_MESSAGES_FOR_COMPACTION = 9; // server requires > KEEP_LAST_N (8)
+const MIN_MESSAGES_FOR_COMPACTION = 2; // one user message + one assistant reply
 
 export default function ContextIndicator({
   chatModelContextWindow,

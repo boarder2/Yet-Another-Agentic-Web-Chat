@@ -4,6 +4,7 @@ import { RunnableConfig } from '@langchain/core/runnables';
 import { tool } from '@langchain/core/tools';
 import { Command } from '@langchain/langgraph';
 import { z } from 'zod';
+import { persistFromToolConfig } from '@/lib/utils/persistToolContext';
 
 // Schema for YouTube transcript tool input
 const YoutubeTranscriptToolSchema = z.object({
@@ -57,6 +58,14 @@ export const youtubeTranscriptTool = tool(
     console.log(
       `[youtubeTranscriptTool] Retrieved document from video: ${videoUrl}`,
     );
+
+    await persistFromToolConfig({
+      config,
+      kind: 'youtube_transcript',
+      body: `[youtube_transcript ${videoUrl}]\n${doc.pageContent ?? ''}`,
+      metadataExtras: { videoId: videoUrl },
+    });
+
     return new Command({
       update: {
         relevantDocuments: [doc],

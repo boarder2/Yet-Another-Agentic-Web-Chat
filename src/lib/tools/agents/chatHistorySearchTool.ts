@@ -2,6 +2,7 @@ import { tool } from '@langchain/core/tools';
 import { RunnableConfig } from '@langchain/core/runnables';
 import { z } from 'zod';
 import { extractExcerpt, searchChatsByKeywords } from '@/lib/db/chatSearch';
+import { persistFromToolConfig } from '@/lib/utils/persistToolContext';
 
 const schema = z.object({
   keywords: z
@@ -72,6 +73,13 @@ export const chatHistorySearchTool = tool(
           output += `- (title match only)\n`;
         }
       }
+
+      await persistFromToolConfig({
+        config,
+        kind: 'chat_history_search',
+        body: output,
+        metadataExtras: { query: input.keywords.join(' ') },
+      });
 
       return output;
     } catch (error) {

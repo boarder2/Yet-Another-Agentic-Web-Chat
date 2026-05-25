@@ -11,14 +11,10 @@ import {
   getMethodologyInstructions,
 } from '@/lib/utils/prompts';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import {
-  AIMessage,
-  BaseMessage,
-  HumanMessage,
-  SystemMessage,
-} from '@langchain/core/messages';
+import { BaseMessage, SystemMessage } from '@langchain/core/messages';
+import { buildHistoryFromDb } from '@/lib/utils/buildHistory';
 import crypto from 'crypto';
-import { and, eq, gt, ne } from 'drizzle-orm';
+import { and, eq, gte } from 'drizzle-orm';
 import { EventEmitter } from 'stream';
 import {
   registerRetrieval,
@@ -26,7 +22,6 @@ import {
   clearSoftStop,
 } from '@/lib/utils/runControl';
 import { CachedEmbeddings } from '@/lib/utils/cachedEmbeddings';
-import { buildMultimodalHumanMessage } from '@/lib/utils/images';
 import { retrieveRelevantMemories } from '@/lib/utils/memoryRetrieval';
 import { buildMemorySection } from '@/lib/prompts/memory/memoryContext';
 import { processExtraction } from '@/lib/utils/memoryExtraction';
@@ -44,6 +39,7 @@ import { cancelEditsForMessage } from '@/lib/workspaces/pendingEdits';
 import { cancelEditsForMessage as cancelSkillEditsForMessage } from '@/lib/skills/pendingEdits';
 import { resolveSkillsForChat, getByName } from '@/lib/skills/resolve';
 import { SKILL_TOKEN_SCAN_REGEX } from '@/lib/skills/validation';
+import { persistToolContextRow } from '@/lib/utils/persistToolContext';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -497,6 +493,18 @@ const handleEmitterEvents = async (
           messageId: aiMessageId,
         }) + '\n',
       );
+    } else if (parsedData.type === 'context_grew') {
+      // Forward to client so the context-usage chip can flash an inflation
+      // badge live during the turn.
+      safeWrite(
+        JSON.stringify({
+          type: 'context_grew',
+          kind: parsedData.kind,
+          tokens: parsedData.tokens,
+          totalEstimated: parsedData.totalEstimated,
+          messageId: aiMessageId,
+        }) + '\n',
+      );
     } else if (parsedData.type === 'workspace_file_changed') {
       safeWrite(
         JSON.stringify({
@@ -546,7 +554,7 @@ const handleEmitterEvents = async (
     }
   });
 
-  stream.on('end', () => {
+  stream.on('end', async () => {
     clearInterval(pingInterval);
 
     const endTime = Date.now();
@@ -559,6 +567,49 @@ const handleEmitterEvents = async (
       usedPersonalization,
     };
 
+    // Best-effort projection of next-turn input tokens.
+    //
+    // Preferred path (accurate): use firstChatCallInputTokens (actual measured
+    // input for this turn's first LLM call, which includes system prompt +
+    // all prior history + this turn's user message) as the base, then add the
+    // system rows that were persisted during this turn (not yet in the base)
+    // and the assistant output. This closely approximates what the model will
+    // receive on the next call.
+    //
+    // Fallback: estimate from all persisted rows + a fixed system-prompt
+    // estimate (used when the LLM did not report token counts).
+    let projectedNextInputTokens: number | undefined;
+    try {
+      const assistantEstimate = Math.round(recievedMessage.length / 4);
+      if (modelStats.firstChatCallInputTokens) {
+        // Accurate path: base = actual measured input for this turn
+        const rows = await getChatMessages(chatId, { includeSystem: true });
+        // System rows appended during this turn sit after the user row.
+        const userRowIdx = rows.findIndex((r) => r.messageId === userMessageId);
+        const newRows = userRowIdx >= 0 ? rows.slice(userRowIdx + 1) : [];
+        const newRowsTokens = newRows.reduce(
+          (s, r) => s + Math.round(((r.content as string) || '').length / 4),
+          0,
+        );
+        projectedNextInputTokens =
+          modelStats.firstChatCallInputTokens +
+          newRowsTokens +
+          assistantEstimate;
+      } else {
+        // Fallback: estimate from all rows + fixed system-prompt estimate
+        const rows = await getChatMessages(chatId, { includeSystem: true });
+        const SYSTEM_PROMPT_ESTIMATE = 3000;
+        const fromRows = rows.reduce(
+          (s, r) => s + Math.round(((r.content as string) || '').length / 4),
+          0,
+        );
+        projectedNextInputTokens =
+          fromRows + assistantEstimate + SYSTEM_PROMPT_ESTIMATE;
+      }
+    } catch (err) {
+      console.warn('[messageEnd] projection failed:', err);
+    }
+
     safeWrite(
       JSON.stringify({
         type: 'messageEnd',
@@ -569,6 +620,7 @@ const handleEmitterEvents = async (
         usedLocation,
         usedPersonalization,
         memoriesUsed: memoriesUsed.length > 0 ? memoriesUsed : undefined,
+        projectedNextInputTokens,
       }) + '\n',
     );
     isStreamActive = false;
@@ -648,72 +700,35 @@ const handleHistorySave = async (
     where: eq(messagesSchema.messageId, humanMessageId),
   });
 
-  if (!messageExists) {
-    await db
-      .insert(messagesSchema)
-      .values({
-        content: message.content,
-        chatId: message.chatId,
-        messageId: humanMessageId,
-        role: 'user',
-        metadata: JSON.stringify({
-          createdAt: new Date(),
-          ...(messageImages &&
-            messageImages.length > 0 && { images: messageImages }),
-        }),
-      })
-      .execute();
-  } else {
-    await db
-      .update(messagesSchema)
-      .set({
-        content: message.content,
-        metadata: JSON.stringify({
-          createdAt: new Date(),
-          ...(messageImages &&
-            messageImages.length > 0 && { images: messageImages }),
-        }),
-      })
-      .where(eq(messagesSchema.messageId, humanMessageId))
-      .execute();
-
-    // Delete non-compaction messages after the rewrite point.
-    // Compaction checkpoint rows are handled separately below.
+  if (messageExists) {
+    // Edit equals nuke-and-rebuild from that point. Drops the edited user
+    // row, any newer assistant/system rows, and any compaction checkpoints
+    // whose summarized region the edit invalidates.
     await db
       .delete(messagesSchema)
       .where(
         and(
-          gt(messagesSchema.id, messageExists.id),
           eq(messagesSchema.chatId, message.chatId),
-          ne(messagesSchema.role, 'compaction'),
+          gte(messagesSchema.id, messageExists.id),
         ),
       )
       .execute();
-
-    // Delete any compaction checkpoints invalidated by this rewrite.
-    // A checkpoint is invalid if the rewrite touches any message that
-    // existed when the checkpoint was created. positionId records the
-    // last message in the chat at compaction time — if the rewrite
-    // point falls at or before it, the message set the summary was
-    // generated alongside has changed.
-    // Falls back to compactedUpTo for legacy checkpoints that lack positionId.
-    const compactionRows = await getCompactionRows(message.chatId);
-    for (const row of compactionRows) {
-      const meta = JSON.parse((row.metadata as string) || '{}');
-      const boundary =
-        typeof meta.positionId === 'number'
-          ? meta.positionId
-          : meta.compactedUpTo;
-      const isValid =
-        typeof boundary === 'number' && boundary < messageExists.id;
-      if (!isValid) {
-        await db
-          .delete(messagesSchema)
-          .where(eq(messagesSchema.messageId, row.messageId))
-          .execute();
-      }
-    }
   }
+
+  await db
+    .insert(messagesSchema)
+    .values({
+      content: message.content,
+      chatId: message.chatId,
+      messageId: humanMessageId,
+      role: 'user',
+      metadata: JSON.stringify({
+        createdAt: new Date(),
+        ...(messageImages &&
+          messageImages.length > 0 && { images: messageImages }),
+      }),
+    })
+    .execute();
 };
 
 export const POST = async (req: Request) => {
@@ -755,22 +770,6 @@ export const POST = async (req: Request) => {
     const humanMessageId =
       message.messageId ?? crypto.randomBytes(7).toString('hex');
     const aiMessageId = crypto.randomBytes(7).toString('hex');
-
-    // Build LangChain BaseMessage[] from DB rows
-    const buildHistoryFromDb = (
-      rows: (typeof messagesSchema.$inferSelect)[],
-    ): BaseMessage[] => {
-      return rows.map((msg) => {
-        const metadata = JSON.parse((msg.metadata as string) || '{}');
-        if (msg.role === 'user') {
-          if (metadata.images && metadata.images.length > 0) {
-            return buildMultimodalHumanMessage(msg.content, metadata.images);
-          }
-          return new HumanMessage({ content: msg.content });
-        }
-        return new AIMessage({ content: msg.content });
-      });
-    };
 
     // System instructions deprecated; only use persona prompts
     const personaInstructionsContent = await getPersonaInstructionsOnly(
@@ -948,8 +947,45 @@ export const POST = async (req: Request) => {
       body.workspaceId,
     );
 
-    // Read messages from DB (now includes the just-saved user message)
-    const dbMessages = await getChatMessages(message.chatId);
+    // Resolve invoked skill set (UI hints + server-side /skill-name scan).
+    // We need this both for persistence below and for the agent prompt later.
+    const allSkillsForChat = await resolveSkillsForChat(resolvedWorkspaceId);
+    const invokedSkillNames = new Set<string>(body.invokedSkills ?? []);
+    for (const m of message.content.matchAll(SKILL_TOKEN_SCAN_REGEX)) {
+      const name = m[1];
+      if (getByName(allSkillsForChat, name)) {
+        invokedSkillNames.add(name);
+      }
+    }
+
+    // Persist invoked-skill bodies as system rows attached to this turn.
+    // They ride along on subsequent turns via buildHistoryFromDb naturally,
+    // so no in-flight SystemMessage injection is needed.
+    for (const skillName of invokedSkillNames) {
+      const skill = getByName(allSkillsForChat, skillName);
+      if (!skill) continue;
+      try {
+        await persistToolContextRow({
+          chatId: message.chatId,
+          parentMessageId: humanMessageId,
+          kind: 'skill_invocation',
+          invoker: 'user',
+          body: `[Skill "${skillName}" invoked by user]\n${skill.content}`,
+          metadataExtras: { skillName },
+        });
+      } catch (err) {
+        console.warn(
+          `[skills] Failed to persist user-invoked skill "${skillName}":`,
+          err,
+        );
+      }
+    }
+
+    // Read messages from DB (now includes the just-saved user message and
+    // any system rows persisted just above).
+    const dbMessages = await getChatMessages(message.chatId, {
+      includeSystem: true,
+    });
 
     // Exclude the current user message from history: it will be added directly
     // to the agent as the query/humanMsg parameter. Including it here as well
@@ -1024,50 +1060,19 @@ export const POST = async (req: Request) => {
       distillationUsage,
       workspaceSuffix,
       resolvedWorkspaceId,
+      aiMessageId,
     );
 
-    // Inject skill bodies for slash-invoked skills.
-    // Union of explicit body.invokedSkills (UI may provide) and server-side
-    // scan of message.content for /skill-name tokens. Deduped.
-    let effectiveHistory = history;
-    try {
-      const allSkills = await resolveSkillsForChat(resolvedWorkspaceId);
-      const invoked = new Set<string>(body.invokedSkills ?? []);
-
-      for (const m of message.content.matchAll(SKILL_TOKEN_SCAN_REGEX)) {
-        const name = m[1];
-        if (getByName(allSkills, name)) {
-          invoked.add(name);
-        }
-      }
-
-      handler.setInvokedSkillNames(invoked);
-
-      if (invoked.size > 0) {
-        const injectedMessages: BaseMessage[] = [];
-        for (const skillName of invoked) {
-          const skill = getByName(allSkills, skillName);
-          if (skill) {
-            injectedMessages.push(
-              new SystemMessage(
-                `[Skill "${skillName}" invoked by user]\n${skill.content}`,
-              ),
-            );
-          }
-        }
-        if (injectedMessages.length > 0) {
-          effectiveHistory = [...injectedMessages, ...history];
-        }
-      }
-    } catch (err) {
-      console.warn('[skills] Failed to inject invoked skills:', err);
-    }
+    // Tell the agent which skills the user explicitly invoked. The bodies
+    // themselves were already persisted as system rows above and now live
+    // in `history` via buildHistoryFromDb — no in-flight injection needed.
+    handler.setInvokedSkillNames(invokedSkillNames);
 
     // Pass the abort signal to the search handler
     // Not awaited since the handler will manage its own lifecycle and emit events as data is processed
     handler.searchAndAnswer(
       message.content,
-      effectiveHistory,
+      history,
       body.files,
       body.focusMode,
       undefined,

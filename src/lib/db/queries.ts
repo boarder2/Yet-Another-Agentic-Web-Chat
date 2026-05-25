@@ -1,12 +1,18 @@
 import db from './index';
 import { messages as messagesSchema } from './schema';
-import { eq, asc, and, ne } from 'drizzle-orm';
+import { eq, asc, and, ne, notInArray } from 'drizzle-orm';
 
-export async function getChatMessages(chatId: string) {
+export async function getChatMessages(
+  chatId: string,
+  opts?: { includeSystem?: boolean },
+) {
+  const includeSystem = opts?.includeSystem ?? false;
   return db.query.messages.findMany({
     where: and(
       eq(messagesSchema.chatId, chatId),
-      ne(messagesSchema.role, 'compaction'),
+      includeSystem
+        ? ne(messagesSchema.role, 'compaction')
+        : notInArray(messagesSchema.role, ['compaction', 'system']),
     ),
     orderBy: asc(messagesSchema.id),
   });

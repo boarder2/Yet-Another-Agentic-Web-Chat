@@ -10,6 +10,7 @@ import {
   getRankedDocs,
 } from '@/lib/utils/fileProcessing';
 import { CachedEmbeddings } from '@/lib/utils/cachedEmbeddings';
+import { persistFromToolConfig } from '@/lib/utils/persistToolContext';
 
 // Schema for file search tool input
 const FileSearchToolSchema = z.object({
@@ -159,6 +160,21 @@ export const fileSearchTool = tool(
       console.log(
         `FileSearchTool: Created ${documentsWithMetadata.length} documents from file search`,
       );
+
+      const persistBody =
+        `[file_search query="${query}"]\n` +
+        rankedDocuments
+          .map(
+            (d) =>
+              `[${(d.metadata?.title as string | undefined) ?? 'file'}] ${d.pageContent}`,
+          )
+          .join('\n\n');
+      await persistFromToolConfig({
+        config,
+        kind: 'file_search',
+        body: persistBody,
+        metadataExtras: { query, fileCount: fileIds.length },
+      });
 
       return new Command({
         update: {

@@ -29,6 +29,9 @@ logs/
 
 # Testing
 /coverage/
+/test-results/
+/playwright-report/
+/blob-report/
 
 # Miscellaneous
 .DS_Store

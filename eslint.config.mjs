@@ -21,6 +21,14 @@ const config = [
   ...nextTypeScriptConfig,
   prettierConfig,
   {
+    // e2e/ uses Playwright fixtures whose `use` callback name collides with
+    // the React hooks rule — the rule is irrelevant in test files.
+    files: ['e2e/**'],
+    rules: {
+      'react-hooks/rules-of-hooks': 'off',
+    },
+  },
+  {
     rules: {
       '@typescript-eslint/no-unused-vars': [
         'warn',

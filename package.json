@@ -6,9 +6,16 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "npm run db:push && next build",
+    "postbuild": "rm -rf .next/standalone/.next/static && cp -r .next/static .next/standalone/.next/static",
     "start": "next start",
     "lint": "eslint .",
     "format:write": "prettier . --write",
+    "test:e2e": "playwright test",
+    "test:e2e:smoke": "playwright test --project=smoke",
+    "test:e2e:api": "playwright test --project=api",
+    "test:e2e:gate": "playwright test --project=smoke --project=api",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:report": "playwright show-report",
     "db:push": "drizzle-kit migrate && drizzle-kit push",
     "db:generate": "drizzle-kit generate",
     "prepare": "husky"
@@ -57,7 +64,7 @@
     "next-themes": "^0.4.6",
     "p-limit": "^7.3.0",
     "pdf-parse": "^2.4.5",
-    "playwright": "^1.58.2",
+    "playwright": "1.58.2",
     "react": "^19",
     "react-dom": "^19",
     "react-grid-layout": "^1.5.2",
@@ -74,6 +81,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@playwright/test": "1.58.2",
     "@tailwindcss/postcss": "^4.1.18",
     "@tailwindcss/typography": "^0.5.19",
     "@types/better-sqlite3": "^7.6.12",

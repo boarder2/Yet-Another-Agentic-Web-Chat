@@ -911,6 +911,11 @@ const MarkdownRenderer = ({
       Chart: {
         component: ChartElement,
       },
+      SkillToken: {
+        component: ({ children }) => (
+          <span className="text-accent font-mono">{children}</span>
+        ),
+      },
       code: {
         component: ({ className, children }) => {
           if (className) {

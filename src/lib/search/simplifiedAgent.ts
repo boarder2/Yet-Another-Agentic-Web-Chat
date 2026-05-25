@@ -153,6 +153,7 @@ export class SimplifiedAgent {
   private workspaceId?: string | null;
   private interactiveSession: boolean;
   private resolvedSkills: Skill[] = [];
+  private invokedSkillNames: Set<string> = new Set();
   private isPrivate: boolean;
   private initialSystemUsage: TokenUsage;
   private workspaceSuffix: string;
@@ -202,6 +203,10 @@ export class SimplifiedAgent {
     };
     this.workspaceSuffix = workspaceSuffix;
     this.workspaceId = workspaceId;
+  }
+
+  public setInvokedSkillNames(names: Set<string> | Iterable<string>) {
+    this.invokedSkillNames = new Set(names);
   }
 
   private emitResponse(text: string) {
@@ -482,9 +487,11 @@ export class SimplifiedAgent {
       basePrompt += this.workspaceSuffix;
     }
 
-    // Append skills section if skills are available (exclude slash-only skills)
+    // Append skills section if skills are available. Exclude slash-only skills
+    // and skills already invoked by the user — their bodies are injected into
+    // history, so re-listing them in the prompt would be redundant.
     const modelVisibleSkills = this.resolvedSkills.filter(
-      (s) => !s.disableModelInvocation,
+      (s) => !s.disableModelInvocation && !this.invokedSkillNames.has(s.name),
     );
     if (modelVisibleSkills.length > 0) {
       basePrompt += '\n\n' + buildSkillsPromptSection(modelVisibleSkills);

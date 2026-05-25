@@ -67,6 +67,7 @@ const Chat = ({
   onCompact,
   compacting,
   enabledSkills,
+  skillNames,
 }: {
   messages: Message[];
   sendMessage: (
@@ -171,6 +172,7 @@ const Chat = ({
   onCompact?: (instructions?: string) => void;
   compacting?: boolean;
   enabledSkills?: Array<{ name: string; description: string }>;
+  skillNames?: Set<string>;
 }) => {
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [manuallyScrolledUp, setManuallyScrolledUp] = useState(false);
@@ -377,6 +379,7 @@ const Chat = ({
               actionMessageId={currentMessageId}
               isPrivateSession={isPrivateSession}
               searchCapabilities={searchCapabilities}
+              skillNames={skillNames}
               editInputProps={{
                 fileIds,
                 setFileIds,

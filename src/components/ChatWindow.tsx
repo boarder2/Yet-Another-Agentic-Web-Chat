@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 import { notifyWorkspaceUpdated } from '@/lib/hooks/useWorkspace';
 import { useSearchParams, usePathname } from 'next/navigation';
 import { getSuggestions } from '@/lib/actions';
+import { SKILL_TOKEN_SCAN_REGEX } from '@/lib/skills/validation';
 import { LoaderCircle, Settings } from 'lucide-react';
 import Link from 'next/link';
 import NextError from 'next/error';
@@ -833,12 +834,9 @@ const ChatWindow = ({
           : undefined;
     const messageImageIds = messageImages?.map((img) => img.imageId);
 
-    // Scan message for /skill-name tokens (preceded by start, whitespace, or newline)
-    const skillTokenPattern = /(?:^|[\s\n])\/([a-z0-9][a-z0-9_:-]*)/g;
     const msgInvokedSkills: string[] = [];
-    let skillTokenMatch;
-    while ((skillTokenMatch = skillTokenPattern.exec(message)) !== null) {
-      const name = skillTokenMatch[1];
+    for (const m of message.matchAll(SKILL_TOKEN_SCAN_REGEX)) {
+      const name = m[1];
       if (enabledUserSkillNames.has(name) && !msgInvokedSkills.includes(name)) {
         msgInvokedSkills.push(name);
       }
@@ -2090,6 +2088,7 @@ const ChatWindow = ({
                 <Chat
                   loading={loading}
                   messages={messages}
+                  skillNames={enabledUserSkillNames}
                   sendMessage={sendMessage}
                   scrollTrigger={scrollTrigger}
                   rewrite={rewrite}

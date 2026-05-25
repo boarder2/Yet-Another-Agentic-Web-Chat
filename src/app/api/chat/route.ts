@@ -43,6 +43,7 @@ import { workspaceCreateFileTool } from '@/lib/tools/workspace/create';
 import { cancelEditsForMessage } from '@/lib/workspaces/pendingEdits';
 import { cancelEditsForMessage as cancelSkillEditsForMessage } from '@/lib/skills/pendingEdits';
 import { resolveSkillsForChat, getByName } from '@/lib/skills/resolve';
+import { SKILL_TOKEN_SCAN_REGEX } from '@/lib/skills/validation';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -1025,13 +1026,26 @@ export const POST = async (req: Request) => {
       resolvedWorkspaceId,
     );
 
-    // Inject skill bodies for slash-invoked skills
+    // Inject skill bodies for slash-invoked skills.
+    // Union of explicit body.invokedSkills (UI may provide) and server-side
+    // scan of message.content for /skill-name tokens. Deduped.
     let effectiveHistory = history;
-    if (body.invokedSkills && body.invokedSkills.length > 0) {
-      try {
-        const allSkills = await resolveSkillsForChat(resolvedWorkspaceId);
+    try {
+      const allSkills = await resolveSkillsForChat(resolvedWorkspaceId);
+      const invoked = new Set<string>(body.invokedSkills ?? []);
+
+      for (const m of message.content.matchAll(SKILL_TOKEN_SCAN_REGEX)) {
+        const name = m[1];
+        if (getByName(allSkills, name)) {
+          invoked.add(name);
+        }
+      }
+
+      handler.setInvokedSkillNames(invoked);
+
+      if (invoked.size > 0) {
         const injectedMessages: BaseMessage[] = [];
-        for (const skillName of body.invokedSkills) {
+        for (const skillName of invoked) {
           const skill = getByName(allSkills, skillName);
           if (skill) {
             injectedMessages.push(
@@ -1044,9 +1058,9 @@ export const POST = async (req: Request) => {
         if (injectedMessages.length > 0) {
           effectiveHistory = [...injectedMessages, ...history];
         }
-      } catch (err) {
-        console.warn('[skills] Failed to inject invoked skills:', err);
       }
+    } catch (err) {
+      console.warn('[skills] Failed to inject invoked skills:', err);
     }
 
     // Pass the abort signal to the search handler

@@ -2030,14 +2030,18 @@ const ChatWindow = ({
     // persisted this turn). Fall back to firstChatCallInputTokens for old
     // messages that predate this field.
     for (let i = messages.length - 1; i >= 0; i--) {
-      const stats = messages[i].modelStats;
+      const msg = messages[i];
+      // A compaction replaces everything before it, so if it's the most recent
+      // entry (no turns since) its post-compaction estimate is the live usage.
+      if (msg.role === 'compaction' && msg.compaction?.tokensAfter) {
+        return msg.compaction.tokensAfter + liveAdd;
+      }
+      const stats = msg.modelStats;
       if (stats?.projectedNextInputTokens) {
         return stats.projectedNextInputTokens + liveAdd;
       }
       if (stats?.firstChatCallInputTokens) {
-        const outputEstimate = Math.round(
-          (messages[i].content?.length || 0) / 4,
-        );
+        const outputEstimate = Math.round((msg.content?.length || 0) / 4);
         return stats.firstChatCallInputTokens + outputEstimate + liveAdd;
       }
     }

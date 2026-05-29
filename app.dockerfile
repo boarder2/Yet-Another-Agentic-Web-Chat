@@ -27,6 +27,11 @@ COPY --from=builder /home/yaawc/public ./public
 COPY --from=builder /home/yaawc/.next/static ./public/_next/static
 
 COPY --from=builder /home/yaawc/.next/standalone ./
+# Next.js standalone tracing copies playwright-core's JS but misses data files
+# like browsers.json (loaded via a runtime path read, not require()), which
+# crashes startup. Overlay the complete packages from the builder.
+COPY --from=builder /home/yaawc/node_modules/playwright ./node_modules/playwright
+COPY --from=builder /home/yaawc/node_modules/playwright-core ./node_modules/playwright-core
 COPY --from=builder /home/yaawc/data ./data
 COPY drizzle ./drizzle
 COPY --from=builder /home/yaawc/migrator/build ./build

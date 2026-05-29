@@ -75,7 +75,10 @@ const WidgetConfigModal = ({
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
   const [showThinking, setShowThinking] = useState(false);
 
-  // Update config when editingWidget changes
+  // Reset the form state when the widget being edited changes (or a new widget
+  // is started). Syncing form fields to the editing target is an intentional
+  // setState-in-effect.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (editingWidget) {
       setConfig({
@@ -121,6 +124,7 @@ const WidgetConfigModal = ({
       }));
     }
   }, [selectedModel]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleSave = () => {
     if (!config.title.trim() || !config.prompt.trim()) {
@@ -243,6 +247,7 @@ const WidgetConfigModal = ({
                 >
                   {editingWidget ? 'Edit Widget' : 'Create New Widget'}
                   <button
+                    type="button"
                     onClick={handleClose}
                     className="p-1 hover:bg-surface-2 rounded-control"
                   >
@@ -260,6 +265,7 @@ const WidgetConfigModal = ({
                       </label>
                       <input
                         type="text"
+                        aria-label="Widget title"
                         value={config.title}
                         onChange={(e) =>
                           setConfig((prev) => ({
@@ -282,6 +288,7 @@ const WidgetConfigModal = ({
                           <div key={index} className="flex gap-2">
                             <input
                               type="url"
+                              aria-label="Source URL"
                               value={source.url}
                               onChange={(e) =>
                                 updateSource(index, 'url', e.target.value)
@@ -305,6 +312,7 @@ const WidgetConfigModal = ({
                             </select>
                             {config.sources.length > 1 && (
                               <button
+                                type="button"
                                 onClick={() => removeSource(index)}
                                 className="p-2 text-danger hover:bg-danger-soft rounded-control"
                               >
@@ -314,6 +322,7 @@ const WidgetConfigModal = ({
                           </div>
                         ))}
                         <button
+                          type="button"
                           onClick={addSource}
                           className="flex items-center gap-2 px-3 py-2 text-sm text-accent hover:bg-surface-2 rounded-control"
                         >
@@ -329,6 +338,7 @@ const WidgetConfigModal = ({
                         LLM Prompt
                       </label>
                       <textarea
+                        aria-label="LLM prompt"
                         value={config.prompt}
                         onChange={(e) =>
                           setConfig((prev) => ({
@@ -382,6 +392,7 @@ const WidgetConfigModal = ({
                       <div className="flex gap-2">
                         <input
                           type="number"
+                          aria-label="Refresh frequency"
                           min="1"
                           value={config.refreshFrequency}
                           onChange={(e) =>
@@ -435,6 +446,7 @@ const WidgetConfigModal = ({
                           </Switch>
                         </div>
                         <button
+                          type="button"
                           onClick={handlePreview}
                           disabled={isPreviewLoading}
                           className="flex items-center gap-2 px-3 py-2 bg-accent text-accent-fg rounded-control hover:bg-accent-700 disabled:opacity-50"
@@ -509,12 +521,14 @@ const WidgetConfigModal = ({
                 {/* Action Buttons */}
                 <div className="mt-6 flex justify-end gap-3">
                   <button
+                    type="button"
                     onClick={handleClose}
                     className="px-4 py-2 text-sm font-medium text-fg bg-surface hover:bg-surface-2 rounded-control"
                   >
                     Cancel
                   </button>
                   <button
+                    type="button"
                     onClick={handleSave}
                     className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-accent-fg bg-accent hover:bg-accent-700 rounded-control"
                   >

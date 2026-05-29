@@ -98,6 +98,7 @@ export function CodeExecutionApproval({
           )}
         </div>
         <button
+          type="button"
           onClick={() => sendApproval(false)}
           className="p-1 rounded-control hover:bg-surface-2 transition-colors text-fg/50 hover:text-fg"
           aria-label="Dismiss"
@@ -120,6 +121,7 @@ export function CodeExecutionApproval({
           </label>
           <textarea
             autoFocus
+            aria-label="Reason for denial"
             value={denyReason}
             onChange={(e) => setDenyReason(e.target.value)}
             onKeyDown={(e) => {
@@ -138,6 +140,7 @@ export function CodeExecutionApproval({
         {denying ? (
           <>
             <button
+              type="button"
               onClick={() => {
                 setDenying(false);
                 setDenyReason('');
@@ -147,6 +150,7 @@ export function CodeExecutionApproval({
               Cancel
             </button>
             <button
+              type="button"
               onClick={() =>
                 sendApproval(false, denyReason.trim() || undefined)
               }
@@ -158,12 +162,14 @@ export function CodeExecutionApproval({
         ) : (
           <>
             <button
+              type="button"
               onClick={() => setDenying(true)}
               className="px-5 py-2 text-sm font-medium rounded-surface bg-danger-soft text-danger hover:bg-danger-soft border border-danger transition-colors"
             >
               Deny
             </button>
             <button
+              type="button"
               onClick={() => sendApproval(true)}
               className="px-5 py-2 text-sm font-medium rounded-surface bg-success-soft text-success hover:bg-success-soft border border-success transition-colors"
             >

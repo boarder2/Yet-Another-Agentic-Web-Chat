@@ -9,19 +9,14 @@ import {
   Check,
   X,
 } from 'lucide-react';
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { formatTimeDifference } from '@/lib/utils';
-
-interface Memory {
-  id: string;
-  content: string;
-  category: string | null;
-  sourceType: string | null;
-  accessCount: number;
-  lastAccessedAt: string | null;
-  createdAt: string;
-  workspaceId: string | null;
-}
+import {
+  useWorkspaceMemory,
+  useAddMemory,
+  useEditMemory,
+  useDeleteMemory,
+} from '@/lib/hooks/api/useWorkspaceMemory';
 
 export default function WorkspaceMemoryTab({
   workspaceId,
@@ -32,57 +27,33 @@ export default function WorkspaceMemoryTab({
   onCountChange?: (n: number) => void;
   compact?: boolean;
 }) {
-  const [memories, setMemories] = useState<Memory[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: memories = [], isLoading } = useWorkspaceMemory(workspaceId);
+  const addMemory = useAddMemory(workspaceId);
+  const editMemory = useEditMemory(workspaceId);
+  const deleteMemory = useDeleteMemory(workspaceId);
+
   const [isAdding, setIsAdding] = useState(false);
   const [newContent, setNewContent] = useState('');
-  const [submitting, setSubmitting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState('');
-  const [savingEdit, setSavingEdit] = useState(false);
-
-  const onCountChangeRef = useRef(onCountChange);
-  onCountChangeRef.current = onCountChange;
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(
-        `/api/memories?workspaceId=${workspaceId}&limit=100`,
-      );
-      const data = await res.json();
-      const list = data.data ?? [];
-      setMemories(list);
-      onCountChangeRef.current?.(list.length);
-    } finally {
-      setLoading(false);
-    }
-  }, [workspaceId]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    onCountChange?.(memories.length);
+  }, [memories.length, onCountChange]);
 
-  async function handleAdd() {
+  function handleAdd() {
     if (!newContent.trim()) return;
-    setSubmitting(true);
-    try {
-      await fetch('/api/memories', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ content: newContent.trim(), workspaceId }),
-      });
-      setNewContent('');
-      setIsAdding(false);
-      await load();
-    } finally {
-      setSubmitting(false);
-    }
+    addMemory.mutate(newContent.trim(), {
+      onSuccess: () => {
+        setNewContent('');
+        setIsAdding(false);
+      },
+    });
   }
 
-  function startEdit(m: Memory) {
-    setEditingId(m.id);
-    setEditContent(m.content);
+  function startEdit(id: string, content: string) {
+    setEditingId(id);
+    setEditContent(content);
   }
 
   function cancelEdit() {
@@ -90,31 +61,17 @@ export default function WorkspaceMemoryTab({
     setEditContent('');
   }
 
-  async function saveEdit(id: string) {
+  function saveEdit(id: string) {
     if (!editContent.trim()) return;
-    setSavingEdit(true);
-    try {
-      const res = await fetch(`/api/memories/${id}`, {
-        method: 'PUT',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ content: editContent.trim() }),
-      });
-      if (res.ok) {
-        const trimmed = editContent.trim();
-        setMemories((prev) =>
-          prev.map((m) => (m.id === id ? { ...m, content: trimmed } : m)),
-        );
-        cancelEdit();
-      }
-    } finally {
-      setSavingEdit(false);
-    }
+    editMemory.mutate(
+      { id, content: editContent.trim() },
+      { onSuccess: cancelEdit },
+    );
   }
 
-  async function handleDelete(id: string) {
+  function handleDelete(id: string) {
     if (!window.confirm('Delete this memory?')) return;
-    await fetch(`/api/memories/${id}`, { method: 'DELETE' });
-    setMemories((prev) => prev.filter((m) => m.id !== id));
+    deleteMemory.mutate(id);
   }
 
   return (
@@ -131,6 +88,7 @@ export default function WorkspaceMemoryTab({
           workspace chats.
         </p>
         <button
+          type="button"
           onClick={() => setIsAdding(true)}
           className={`flex items-center justify-center gap-1.5 px-3 py-1.5 text-sm rounded-surface bg-accent text-accent-fg hover:bg-accent/90 transition shrink-0 ${compact ? 'w-full' : ''}`}
         >
@@ -145,6 +103,7 @@ export default function WorkspaceMemoryTab({
             Save to workspace
           </p>
           <textarea
+            aria-label="New workspace memory content"
             value={newContent}
             onChange={(e) => setNewContent(e.target.value)}
             placeholder="Enter a fact, preference, or instruction to remember..."
@@ -163,6 +122,7 @@ export default function WorkspaceMemoryTab({
           />
           <div className="flex justify-end gap-2 mt-2">
             <button
+              type="button"
               onClick={() => {
                 setIsAdding(false);
                 setNewContent('');
@@ -172,11 +132,12 @@ export default function WorkspaceMemoryTab({
               Cancel
             </button>
             <button
+              type="button"
               onClick={handleAdd}
-              disabled={!newContent.trim() || submitting}
+              disabled={!newContent.trim() || addMemory.isPending}
               className="px-3 py-1.5 text-sm rounded-surface bg-accent text-accent-fg hover:bg-accent/90 transition disabled:opacity-50 flex items-center gap-1.5"
             >
-              {submitting && (
+              {addMemory.isPending && (
                 <LoaderCircle size={12} className="animate-spin" />
               )}
               Save to workspace
@@ -185,7 +146,7 @@ export default function WorkspaceMemoryTab({
         </div>
       )}
 
-      {loading ? (
+      {isLoading ? (
         <div className="flex justify-center py-12">
           <LoaderCircle size={20} className="animate-spin text-accent" />
         </div>
@@ -203,6 +164,7 @@ export default function WorkspaceMemoryTab({
                 <div className="flex-1 min-w-0">
                   {isEditing ? (
                     <textarea
+                      aria-label="Edit workspace memory content"
                       value={editContent}
                       onChange={(e) => setEditContent(e.target.value)}
                       className="w-full bg-bg border border-surface-2 rounded-surface p-2 text-sm focus:outline-none focus:border-accent resize-y min-h-[60px]"
@@ -238,12 +200,13 @@ export default function WorkspaceMemoryTab({
                   {isEditing ? (
                     <>
                       <button
+                        type="button"
                         onClick={() => saveEdit(m.id)}
-                        disabled={savingEdit || !editContent.trim()}
+                        disabled={editMemory.isPending || !editContent.trim()}
                         className="text-fg/40 hover:text-accent transition disabled:opacity-40"
                         title="Save"
                       >
-                        {savingEdit ? (
+                        {editMemory.isPending ? (
                           <LoaderCircle
                             size={14}
                             className="animate-spin text-accent"
@@ -253,6 +216,7 @@ export default function WorkspaceMemoryTab({
                         )}
                       </button>
                       <button
+                        type="button"
                         onClick={cancelEdit}
                         className="text-fg/40 hover:text-fg transition"
                         title="Cancel"
@@ -263,13 +227,15 @@ export default function WorkspaceMemoryTab({
                   ) : (
                     <>
                       <button
-                        onClick={() => startEdit(m)}
+                        type="button"
+                        onClick={() => startEdit(m.id, m.content)}
                         className="text-fg/30 hover:text-fg transition"
                         title="Edit"
                       >
                         <Pencil size={14} />
                       </button>
                       <button
+                        type="button"
                         onClick={() => handleDelete(m.id)}
                         className="text-fg/30 hover:text-danger transition"
                         title="Delete"

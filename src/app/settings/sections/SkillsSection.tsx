@@ -1,36 +1,32 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import { PlusCircle, Edit3, Trash2, X, Save, BookOpen } from 'lucide-react';
 import SettingsSection from '../components/SettingsSection';
 import InputComponent from '../components/InputComponent';
 import TextareaComponent from '../components/TextareaComponent';
 import AppSwitch from '@/components/ui/AppSwitch';
 import { toast } from 'sonner';
-
-type UserSkill = {
-  id: string;
-  name: string;
-  description: string;
-  content: string;
-  workspaceId: string | null;
-  enabled: boolean;
-  disableModelInvocation: boolean;
-  createdAt: string;
-  updatedAt: string;
-};
-
-type Workspace = {
-  id: string;
-  name: string;
-};
+import {
+  useSkills,
+  useCreateSkill,
+  useUpdateSkill,
+  useDeleteSkill,
+  useToggleSkill,
+  type UserSkill,
+} from '@/lib/hooks/api/useSkills';
+import { useWorkspacesList } from '@/lib/hooks/api/useWorkspaces';
 
 const NAME_REGEX = /^[a-z0-9][a-z0-9_:-]*$/;
 
 export default function SkillsSection() {
-  const [skills, setSkills] = useState<UserSkill[]>([]);
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: skills = [], isLoading: loading } = useSkills();
+  const { data: workspaces = [] } = useWorkspacesList();
+  const createSkill = useCreateSkill();
+  const updateSkill = useUpdateSkill();
+  const deleteSkill = useDeleteSkill();
+  const toggleSkill = useToggleSkill();
+
   const [editingSkill, setEditingSkill] = useState<UserSkill | null>(null);
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [newSkill, setNewSkill] = useState({
@@ -41,31 +37,7 @@ export default function SkillsSection() {
     disableModelInvocation: false,
   });
 
-  const fetchSkills = useCallback(async () => {
-    try {
-      const res = await fetch('/api/skills');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      setSkills(data);
-    } catch {
-      toast.error('Failed to load skills');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchSkills();
-    fetch('/api/workspaces')
-      .then((r) => r.json())
-      .then((data: { workspaces?: Workspace[] } | Workspace[]) => {
-        const list = Array.isArray(data) ? data : (data.workspaces ?? []);
-        setWorkspaces(list);
-      })
-      .catch(() => {});
-  }, [fetchSkills]);
-
-  const handleCreate = async () => {
+  const handleCreate = () => {
     const { name, description, content, workspaceId } = newSkill;
     if (!name || !description || !content) {
       toast.error('Name, description, and content are required');
@@ -75,100 +47,74 @@ export default function SkillsSection() {
       toast.error('Name must match pattern: [a-z0-9][a-z0-9_:-]*');
       return;
     }
-    try {
-      const res = await fetch('/api/skills', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name,
-          description,
-          content,
-          workspaceId: workspaceId || null,
-          disableModelInvocation: newSkill.disableModelInvocation,
-        }),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        const msg = err.maxLength
-          ? `${err.error} (max ${err.maxLength} characters)`
-          : (err.error ?? 'Failed to create skill');
-        toast.error(msg);
-        return;
-      }
-      toast.success(`Skill "${name}" created`);
-      setIsAddingNew(false);
-      setNewSkill({
-        name: '',
-        description: '',
-        content: '',
-        workspaceId: '',
-        disableModelInvocation: false,
-      });
-      fetchSkills();
-    } catch {
-      toast.error('Failed to create skill');
-    }
+    createSkill.mutate(
+      {
+        name,
+        description,
+        content,
+        workspaceId: workspaceId || null,
+        disableModelInvocation: newSkill.disableModelInvocation,
+      },
+      {
+        onSuccess: () => {
+          toast.success(`Skill "${name}" created`);
+          setIsAddingNew(false);
+          setNewSkill({
+            name: '',
+            description: '',
+            content: '',
+            workspaceId: '',
+            disableModelInvocation: false,
+          });
+        },
+        onError: (err) => {
+          toast.error(err.message ?? 'Failed to create skill');
+        },
+      },
+    );
   };
 
-  const handleUpdate = async () => {
+  const handleUpdate = () => {
     if (!editingSkill) return;
-    try {
-      const res = await fetch(`/api/skills/${editingSkill.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+    updateSkill.mutate(
+      {
+        id: editingSkill.id,
+        data: {
           description: editingSkill.description,
           content: editingSkill.content,
           disableModelInvocation: editingSkill.disableModelInvocation,
-        }),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        const msg = err.maxLength
-          ? `${err.error} (max ${err.maxLength} characters)`
-          : (err.error ?? 'Failed to update skill');
-        toast.error(msg);
-        return;
-      }
-      toast.success('Skill updated');
-      setEditingSkill(null);
-      fetchSkills();
-    } catch {
-      toast.error('Failed to update skill');
-    }
+        },
+      },
+      {
+        onSuccess: () => {
+          toast.success('Skill updated');
+          setEditingSkill(null);
+        },
+        onError: (err) => {
+          toast.error(err.message ?? 'Failed to update skill');
+        },
+      },
+    );
   };
 
-  const handleDelete = async (skill: UserSkill) => {
+  const handleDelete = (skill: UserSkill) => {
     if (
       !window.confirm(
         `Are you sure you want to delete the skill "${skill.name}"?`,
       )
     )
       return;
-    try {
-      const res = await fetch(`/api/skills/${skill.id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      toast.success(`Skill "${skill.name}" deleted`);
-      fetchSkills();
-    } catch {
-      toast.error('Failed to delete skill');
-    }
+    deleteSkill.mutate(skill.id, {
+      onSuccess: () => toast.success(`Skill "${skill.name}" deleted`),
+      onError: () => toast.error('Failed to delete skill'),
+    });
   };
 
-  const handleToggle = async (skill: UserSkill, enabled: boolean) => {
-    try {
-      const res = await fetch(`/api/skills/${skill.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setSkills((prev) =>
-        prev.map((s) => (s.id === skill.id ? { ...s, enabled } : s)),
-      );
-    } catch {
-      toast.error('Failed to update skill');
-    }
+  const handleToggle = (skill: UserSkill, enabled: boolean) => {
+    toggleSkill.mutate(
+      { id: skill.id, enabled },
+      { onError: () => toast.error('Failed to update skill') },
+    );
   };
 
   const getScopeBadge = (skill: UserSkill) => {
@@ -182,6 +128,7 @@ export default function SkillsSection() {
       title="Skills"
       headerAction={
         <button
+          type="button"
           onClick={() => setIsAddingNew(true)}
           className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-control bg-accent text-accent-fg hover:bg-accent/90 transition-colors"
         >
@@ -195,7 +142,6 @@ export default function SkillsSection() {
         or workspace-scoped skills that the agent can load when needed.
       </p>
 
-      {/* New skill form */}
       {isAddingNew && (
         <div className="p-3 border border-accent/40 rounded-control bg-surface-2 space-y-3">
           <p className="text-sm font-medium">New Skill</p>
@@ -262,6 +208,7 @@ export default function SkillsSection() {
           </div>
           <div className="flex justify-end gap-2">
             <button
+              type="button"
               onClick={() => {
                 setIsAddingNew(false);
                 setNewSkill({
@@ -278,7 +225,9 @@ export default function SkillsSection() {
               Cancel
             </button>
             <button
+              type="button"
               onClick={handleCreate}
+              disabled={createSkill.isPending}
               className="px-3 py-2 text-sm rounded-control bg-accent text-accent-fg flex items-center gap-1.5"
             >
               <Save size={14} />
@@ -351,6 +300,7 @@ export default function SkillsSection() {
                   </div>
                   <div className="flex justify-end gap-2">
                     <button
+                      type="button"
                       onClick={() => setEditingSkill(null)}
                       className="px-3 py-2 text-sm rounded-control bg-surface hover:bg-surface-2 flex items-center gap-1.5"
                     >
@@ -358,7 +308,9 @@ export default function SkillsSection() {
                       Cancel
                     </button>
                     <button
+                      type="button"
                       onClick={handleUpdate}
+                      disabled={updateSkill.isPending}
                       className="px-3 py-2 text-sm rounded-control bg-accent text-accent-fg flex items-center gap-1.5"
                     >
                       <Save size={14} />
@@ -392,6 +344,7 @@ export default function SkillsSection() {
                       onChange={(val: boolean) => handleToggle(skill, val)}
                     />
                     <button
+                      type="button"
                       onClick={() => setEditingSkill({ ...skill })}
                       title="Edit"
                       className="p-1.5 rounded-control hover:bg-surface"
@@ -399,6 +352,7 @@ export default function SkillsSection() {
                       <Edit3 size={14} />
                     </button>
                     <button
+                      type="button"
                       onClick={() => handleDelete(skill)}
                       title="Delete"
                       className="p-1.5 rounded-control hover:bg-surface text-danger"

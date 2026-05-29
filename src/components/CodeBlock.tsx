@@ -55,6 +55,7 @@ export const CodeBlock = ({
         <div className="flex justify-between items-center px-4 py-2 bg-surface-2 border-b border-surface-2 text-xs text-fg/70 font-mono">
           <span>{language}</span>
           <button
+            type="button"
             onClick={handleCopyCode}
             className="p-1 rounded-control hover:bg-surface transition duration-200"
             aria-label="Copy code to clipboard"

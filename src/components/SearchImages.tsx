@@ -160,6 +160,7 @@ const SearchImages = ({
           {images.length > displayLimit && (
             <div className="flex justify-center mt-4">
               <button
+                type="button"
                 onClick={handleShowMore}
                 className="px-4 py-2 bg-surface hover:bg-surface-2 text-fg/70 hover:text-fg rounded-control transition duration-200 flex items-center space-x-2 border border-surface-2"
               >

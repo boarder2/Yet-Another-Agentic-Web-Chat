@@ -28,10 +28,11 @@ import {
   ChevronRight,
   BookOpen,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import Markdown, { MarkdownToJSX } from 'markdown-to-jsx';
 import ThinkBox from './ThinkBox';
 import { CodeBlock } from './CodeBlock';
+import { useMessage } from '@/lib/hooks/api/useMessage';
 import { Document } from '@langchain/core/documents';
 import CitationLink from './CitationLink';
 import { decodeHtmlEntities, decodeBase64 } from '@/lib/utils/html';
@@ -175,14 +176,6 @@ const splitByThinkBlocks = (content: string): ContentSegment[] => {
   return segments;
 };
 
-interface FetchedMessage {
-  chatId: string;
-  chatTitle: string | null;
-  role: 'user' | 'assistant' | 'compaction' | null;
-  content: string;
-  createdAt: string | null;
-}
-
 interface MarkdownRendererProps {
   content: string;
   className?: string;
@@ -245,54 +238,25 @@ const ToolCall = ({
   children?: React.ReactNode;
 }) => {
   const [expanded, setExpanded] = useState(false);
-  const [fetchState, setFetchState] = useState<
-    | { status: 'idle' }
-    | { status: 'loading' }
-    | { status: 'error'; error: string }
-    | { status: 'ok'; data: FetchedMessage }
-  >({ status: 'idle' });
-  const fetchedMessageIdRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    if (type !== 'get_message' || !expanded || !query) return;
+  const messageId =
+    type === 'get_message' && query ? decodeHtmlEntities(query) : '';
+  const {
+    data: msgData,
+    isLoading: msgLoading,
+    error: msgError,
+  } = useMessage(messageId, type === 'get_message' && expanded && !!messageId);
 
-    const messageId = decodeHtmlEntities(query);
-    if (!/^\d+$/.test(messageId)) {
-      setFetchState({ status: 'error', error: 'Invalid message id' });
-      return;
-    }
-    if (fetchedMessageIdRef.current === messageId) return;
-    fetchedMessageIdRef.current = messageId;
-
-    const controller = new AbortController();
-    setFetchState({ status: 'loading' });
-
-    (async () => {
-      try {
-        const res = await fetch(`/api/messages/${messageId}`, {
-          signal: controller.signal,
-        });
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          throw new Error(body?.message || `Request failed (${res.status})`);
-        }
-        const data: FetchedMessage = await res.json();
-        if (!controller.signal.aborted) setFetchState({ status: 'ok', data });
-      } catch (err) {
-        if (controller.signal.aborted) return;
-        const error =
-          err instanceof Error ? err.message : 'Failed to load message';
-        setFetchState({ status: 'error', error });
-      }
-    })();
-
-    return () => {
-      controller.abort();
-      if (fetchedMessageIdRef.current === messageId) {
-        fetchedMessageIdRef.current = null;
-      }
-    };
-  }, [type, expanded, query]);
+  const fetchState =
+    !expanded || type !== 'get_message'
+      ? { status: 'idle' as const }
+      : msgLoading
+        ? { status: 'loading' as const }
+        : msgError
+          ? { status: 'error' as const, error: msgError.message }
+          : msgData
+            ? { status: 'ok' as const, data: msgData }
+            : { status: 'idle' as const };
 
   const getIcon = (toolType: string) => {
     switch (toolType) {

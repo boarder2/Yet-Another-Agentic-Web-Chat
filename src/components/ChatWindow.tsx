@@ -15,7 +15,7 @@ import { PendingSkillEditApproval } from './SkillEditApproval';
 import EmptyChat from './EmptyChat';
 import crypto from 'crypto';
 import { toast } from 'sonner';
-import { notifyWorkspaceUpdated } from '@/lib/hooks/useWorkspace';
+import { useQueryClient } from '@tanstack/react-query';
 import { useSearchParams, usePathname } from 'next/navigation';
 import { getSuggestions } from '@/lib/actions';
 import { SKILL_TOKEN_SCAN_REGEX } from '@/lib/skills/validation';
@@ -431,6 +431,7 @@ const ChatWindow = ({
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const initialMessage = searchParams.get('q');
+  const queryClient = useQueryClient();
 
   const [chatId, setChatId] = useState<string | undefined>(id);
   const [newChatCreated, setNewChatCreated] = useState(false);
@@ -451,7 +452,6 @@ const ChatWindow = ({
 
   const [isConfigReady, setIsConfigReady] = useState(false);
   const [hasError, setHasError] = useState(false);
-  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
     checkConfig(
@@ -611,6 +611,10 @@ const ChatWindow = ({
     }
   }, [personalizationAbout, sendPersonalization, setSendPersonalization]);
 
+  // One-time mount init: either load an existing chat or establish a fresh
+  // chat id. The synchronous setState in the new-chat branch is intentional
+  // initialization, not a render-driven update.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (
       chatId &&
@@ -637,6 +641,7 @@ const ChatWindow = ({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const messagesRef = useRef<Message[]>([]);
 
@@ -648,6 +653,10 @@ const ChatWindow = ({
   // so the pathname effect below won't fire. Watch searchParams directly and
   // reset + activate private mode when the private param appears or disappears.
   const prevSearchParamsRef = useRef(searchParams);
+  // These two effects reset the chat to a fresh state in response to router
+  // navigation (private-mode query param, or returning to "/"). Resetting state
+  // when the external URL changes is the intended use of setState-in-effect.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (prevSearchParamsRef.current === searchParams) return;
     prevSearchParamsRef.current = searchParams;
@@ -709,15 +718,13 @@ const ChatWindow = ({
     prevPathnameRef.current = pathname;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname, id]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  const isReady = isMessagesLoaded && isConfigReady;
 
   useEffect(() => {
-    if (isMessagesLoaded && isConfigReady) {
-      setIsReady(true);
-      console.debug(new Date(), 'app:ready');
-    } else {
-      setIsReady(false);
-    }
-  }, [isMessagesLoaded, isConfigReady]);
+    if (isReady) console.debug(new Date(), 'app:ready');
+  }, [isReady]);
 
   // Hydrate chartSpecs from message metadata on initial load
   useEffect(() => {
@@ -739,6 +746,8 @@ const ChatWindow = ({
       }
     }
     if (Object.keys(hydrated).length > 0) {
+      // Merge persisted specs from loaded messages with any already set live.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setChartSpecsByMessage((prev) => ({ ...hydrated, ...prev }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1576,7 +1585,9 @@ const ChatWindow = ({
       }
 
       if (data.type === 'workspace_file_changed') {
-        notifyWorkspaceUpdated(data.data.workspaceId);
+        queryClient.invalidateQueries({
+          queryKey: ['workspaces', data.data.workspaceId],
+        });
         return;
       }
 
@@ -1950,8 +1961,10 @@ const ChatWindow = ({
       );
       const searchChatModel = localStorage.getItem('searchChatModel');
 
-      // Apply saved chat model if valid
+      // Apply saved chat model if valid. One-shot setup before auto-sending the
+      // initial query; the synchronous setState here is intentional.
       if (searchChatModelProvider && searchChatModel) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setChatModelProvider({
           name: searchChatModel,
           provider: searchChatModelProvider,

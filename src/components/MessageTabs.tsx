@@ -13,7 +13,7 @@ import {
   Volume2,
   LoaderCircle,
 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSpeech } from 'react-text-to-speech';
 import { Message } from './ChatWindow';
 import MarkdownRenderer from './MarkdownRenderer';
@@ -116,10 +116,7 @@ const MessageTabs = ({
     if (panel === 'images') setImagesOpenedOnce(true);
     if (panel === 'videos') setVideosOpenedOnce(true);
   };
-  const [parsedMessage, setParsedMessage] = useState(message.content);
-  const [speechMessage, setSpeechMessage] = useState(message.content);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
-  const { speechStatus, start, stop } = useSpeech({ text: speechMessage });
 
   // Callback functions to update counts
   const updateImageCount = (count: number) => {
@@ -150,8 +147,8 @@ const MessageTabs = ({
     }
   }, [loadingSuggestions, message, chatHistory, sendMessage]);
 
-  // Process message content
-  useEffect(() => {
+  // Process message content into rendered citations + plain speech text
+  const { parsedMessage, speechMessage } = useMemo(() => {
     const regex = /\[(\d+)\]/g;
     let processedMessage = message.content;
 
@@ -164,13 +161,16 @@ const MessageTabs = ({
       }
     }
 
+    const speech = message.content.replace(regex, '');
+
     if (
       message.role === 'assistant' &&
       message?.sources &&
       message.sources.length > 0
     ) {
-      setParsedMessage(
-        processedMessage.replace(regex, (_, capturedContent: string) => {
+      const parsed = processedMessage.replace(
+        regex,
+        (_, capturedContent: string) => {
           const numbers = capturedContent
             .split(',')
             .map((numStr) => numStr.trim());
@@ -195,15 +195,15 @@ const MessageTabs = ({
             .join('');
 
           return linksHtml;
-        }),
+        },
       );
-      setSpeechMessage(message.content.replace(regex, ''));
-      return;
+      return { parsedMessage: parsed, speechMessage: speech };
     }
 
-    setSpeechMessage(message.content.replace(regex, ''));
-    setParsedMessage(processedMessage);
+    return { parsedMessage: processedMessage, speechMessage: speech };
   }, [message.content, message.sources, message.role]);
+
+  const { speechStatus, start, stop } = useSpeech({ text: speechMessage });
 
   // Auto-suggest effect (similar to MessageBox)
   useEffect(() => {
@@ -214,7 +214,9 @@ const MessageTabs = ({
       !loading &&
       autoSuggestions === 'true'
     ) {
-      handleLoadSuggestions();
+      void (async () => {
+        await handleLoadSuggestions();
+      })();
     }
   }, [isLast, loading, message.role, handleLoadSuggestions]);
 
@@ -258,6 +260,7 @@ const MessageTabs = ({
                 )}
                 {hasSources && (
                   <button
+                    type="button"
                     onClick={() => togglePanel('sources')}
                     className={panelIconBtnClass(openPanel === 'sources')}
                     title="Sources"
@@ -269,6 +272,7 @@ const MessageTabs = ({
                 )}
                 {imagesAvailable && (
                   <button
+                    type="button"
                     onClick={() => togglePanel('images')}
                     className={panelIconBtnClass(openPanel === 'images')}
                     title="Images"
@@ -282,6 +286,7 @@ const MessageTabs = ({
                 )}
                 {videosAvailable && (
                   <button
+                    type="button"
                     onClick={() => togglePanel('videos')}
                     className={panelIconBtnClass(openPanel === 'videos')}
                     title="Videos"
@@ -297,6 +302,7 @@ const MessageTabs = ({
               <div className="flex flex-row items-center space-x-1">
                 <Copy initialMessage={message.content} message={message} />
                 <button
+                  type="button"
                   onClick={() => {
                     if (speechStatus === 'started') {
                       stop();
@@ -392,6 +398,7 @@ const MessageTabs = ({
                   {(!message.suggestions ||
                     message.suggestions.length === 0) && (
                     <button
+                      type="button"
                       onClick={handleLoadSuggestions}
                       disabled={loadingSuggestions}
                       className="px-4 py-2 flex flex-row items-center justify-center space-x-2 rounded-surface bg-surface hover:bg-surface-2 transition duration-200"

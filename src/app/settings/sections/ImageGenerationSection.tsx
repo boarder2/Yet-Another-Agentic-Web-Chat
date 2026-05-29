@@ -1,11 +1,14 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import SettingsSection from '../components/SettingsSection';
 import Select from '../components/Select';
 import { SettingsType } from '../types';
 import { LoaderCircle, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
+import { useModels } from '@/lib/hooks/api/useModels';
+import { useQueryClient } from '@tanstack/react-query';
+import { qk } from '@/lib/api/keys';
 
 const ASPECT_RATIOS = [
   { value: '1:1', label: '1:1 (Square)' },
@@ -22,11 +25,6 @@ const IMAGE_SIZES = [
   { value: '4K', label: '4K (Ultra High)' },
 ];
 
-interface ImageGenModel {
-  id: string;
-  name: string;
-}
-
 type ConfigRecord = Record<string, unknown>;
 
 export default function ImageGenerationSection({
@@ -39,6 +37,10 @@ export default function ImageGenerationSection({
   setConfig: React.Dispatch<React.SetStateAction<SettingsType | null>>;
   saveConfig: (key: string, value: string | boolean) => Promise<void>;
 }) {
+  const qc = useQueryClient();
+  const { data: modelsData, isLoading: loadingModels } = useModels();
+  const [refreshing, setRefreshing] = useState(false);
+
   const enabled =
     ((config as unknown as ConfigRecord).imageGenerationEnabled as boolean) ??
     false;
@@ -51,70 +53,46 @@ export default function ImageGenerationSection({
     ((config as unknown as ConfigRecord).imageGenerationImageSize as string) ||
     '1K';
 
-  const [models, setModels] = useState<ImageGenModel[]>([]);
-  const [loadingModels, setLoadingModels] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const imageGenModels = modelsData?.imageGenerationModels ?? [];
+  const modelOptions = imageGenModels.map((m) => ({
+    value: m.id,
+    label: m.name,
+  }));
 
-  const fetchModels = useCallback(async (forceRefresh = false) => {
-    if (forceRefresh) setRefreshing(true);
+  async function handleRefresh() {
+    setRefreshing(true);
     try {
-      const url = forceRefresh ? '/api/models?refresh=true' : '/api/models';
-      const res = await fetch(url);
-      if (!res.ok) return;
-      const data = await res.json();
-      if (Array.isArray(data.imageGenerationModels)) {
-        setModels(data.imageGenerationModels);
-      }
-    } catch {
-      // Silently fail
+      await fetch('/api/models?refresh=true');
+      await qc.invalidateQueries({ queryKey: qk.models });
     } finally {
-      setLoadingModels(false);
-      if (forceRefresh) setRefreshing(false);
+      setRefreshing(false);
     }
-  }, []);
+  }
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoadingModels(true);
-    fetchModels().then(() => {
-      if (!cancelled) setLoadingModels(false);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [fetchModels]);
-
-  const handleChange = useCallback(
+  const handleChange =
     (key: string) => (e: React.ChangeEvent<HTMLSelectElement>) => {
       const value = e.target.value;
       setConfig((prev) =>
         prev ? ({ ...prev, [key]: value } as unknown as SettingsType) : prev,
       );
       saveConfig(key, value);
-    },
-    [setConfig, saveConfig],
-  );
+    };
 
-  const handleToggle = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const checked = e.target.checked;
-      setConfig((prev) =>
-        prev
-          ? ({
-              ...prev,
-              imageGenerationEnabled: checked,
-            } as unknown as SettingsType)
-          : prev,
-      );
-      await saveConfig('imageGenerationEnabled', checked);
-      if (checked) {
-        toast.success('Image generation enabled. Configure your model below.');
-      }
-    },
-    [setConfig, saveConfig],
-  );
-
-  const modelOptions = models.map((m) => ({ value: m.id, label: m.name }));
+  const handleToggle = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const checked = e.target.checked;
+    setConfig((prev) =>
+      prev
+        ? ({
+            ...prev,
+            imageGenerationEnabled: checked,
+          } as unknown as SettingsType)
+        : prev,
+    );
+    await saveConfig('imageGenerationEnabled', checked);
+    if (checked) {
+      toast.success('Image generation enabled. Configure your model below.');
+    }
+  };
 
   return (
     <SettingsSection
@@ -123,7 +101,7 @@ export default function ImageGenerationSection({
         <button
           type="button"
           className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-control border border-surface-2 hover:bg-surface-2 transition disabled:opacity-60"
-          onClick={() => fetchModels(true)}
+          onClick={handleRefresh}
           disabled={refreshing}
           title="Refresh image generation models from OpenRouter"
         >
@@ -174,7 +152,7 @@ export default function ImageGenerationSection({
               {loadingModels && (
                 <p className="text-xs text-fg/50">Loading models...</p>
               )}
-              {!loadingModels && models.length === 0 && (
+              {!loadingModels && imageGenModels.length === 0 && (
                 <p className="text-xs text-fg/50">
                   No models available — check your API key.
                 </p>

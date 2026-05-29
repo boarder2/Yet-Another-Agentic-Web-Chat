@@ -3,7 +3,11 @@
 import { useRouter } from 'next/navigation';
 import WorkspaceSettingsFields from './WorkspaceSettingsFields';
 import { useEffect, useRef, useState } from 'react';
-import { notifyWorkspaceUpdated } from '@/lib/hooks/useWorkspace';
+import {
+  usePatchWorkspace,
+  useArchiveWorkspace,
+  useDeleteWorkspace,
+} from '@/lib/hooks/api/useWorkspaces';
 
 interface Workspace {
   id: string;
@@ -19,6 +23,10 @@ interface Workspace {
 
 export default function SettingsTab({ workspace }: { workspace: Workspace }) {
   const router = useRouter();
+  const patch = usePatchWorkspace(workspace.id);
+  const archive = useArchiveWorkspace(workspace.id);
+  const del = useDeleteWorkspace(workspace.id);
+
   const [name, setName] = useState(workspace.name);
   const [description, setDescription] = useState(workspace.description ?? '');
   const [autoMemory, setAutoMemory] = useState<boolean>(
@@ -33,9 +41,7 @@ export default function SettingsTab({ workspace }: { workspace: Workspace }) {
   const [deleting, setDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteConfirmName, setDeleteConfirmName] = useState('');
-  const [archiving, setArchiving] = useState(false);
 
-  // Use refs so patch closures always read the latest values without re-creating
   const nameRef = useRef(name);
   const descriptionRef = useRef(description);
   useEffect(() => {
@@ -45,40 +51,30 @@ export default function SettingsTab({ workspace }: { workspace: Workspace }) {
     descriptionRef.current = description;
   }, [description]);
 
-  async function patch(data: Record<string, unknown>) {
-    await fetch(`/api/workspaces/${workspace.id}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    notifyWorkspaceUpdated(workspace.id);
-    router.refresh();
+  function applyPatch(data: Record<string, unknown>) {
+    patch.mutate(data, { onSuccess: () => router.refresh() });
   }
 
-  async function toggleArchive() {
-    setArchiving(true);
+  function toggleArchive() {
     const action = isArchived ? 'unarchive' : 'archive';
-    await fetch(`/api/workspaces/${workspace.id}/${action}`, {
-      method: 'POST',
+    archive.mutate(action, {
+      onSuccess: () => {
+        setIsArchived((v) => !v);
+        router.refresh();
+      },
     });
-    setIsArchived((v) => !v);
-    setArchiving(false);
-    notifyWorkspaceUpdated(workspace.id);
-    router.refresh();
   }
 
-  async function confirmDelete() {
+  function confirmDelete() {
     setDeleting(true);
-    const res = await fetch(`/api/workspaces/${workspace.id}`, {
-      method: 'DELETE',
+    del.mutate(undefined, {
+      onSuccess: () => router.push('/workspaces'),
+      onError: () => {
+        console.error('Failed to delete workspace');
+        setDeleting(false);
+        setShowDeleteConfirm(false);
+      },
     });
-    if (res.ok) {
-      router.push('/workspaces');
-    } else {
-      console.error('Failed to delete workspace');
-      setDeleting(false);
-      setShowDeleteConfirm(false);
-    }
   }
 
   return (
@@ -89,28 +85,28 @@ export default function SettingsTab({ workspace }: { workspace: Workspace }) {
           variant="settings"
           name={name}
           onNameChange={setName}
-          onNameBlur={() => patch({ name: nameRef.current })}
+          onNameBlur={() => applyPatch({ name: nameRef.current })}
           description={description}
           onDescriptionChange={setDescription}
           onDescriptionBlur={() =>
-            patch({ description: descriptionRef.current })
+            applyPatch({ description: descriptionRef.current })
           }
           color={color}
           icon={icon}
           onAppearanceChange={(next) => {
             setColor(next.color);
             setIcon(next.icon);
-            patch({ color: next.color, icon: next.icon });
+            applyPatch({ color: next.color, icon: next.icon });
           }}
           autoMemory={autoMemory}
           onAutoMemoryChange={(enabled) => {
             setAutoMemory(enabled);
-            patch({ autoMemoryEnabled: enabled ? 1 : 0 });
+            applyPatch({ autoMemoryEnabled: enabled ? 1 : 0 });
           }}
           autoAcceptFileEdits={autoAcceptFileEdits}
           onAutoAcceptFileEditsChange={(enabled) => {
             setAutoAcceptFileEdits(enabled);
-            patch({ autoAcceptFileEdits: enabled ? 1 : 0 });
+            applyPatch({ autoAcceptFileEdits: enabled ? 1 : 0 });
           }}
         />
       </section>
@@ -132,11 +128,12 @@ export default function SettingsTab({ workspace }: { workspace: Workspace }) {
               </p>
             </div>
             <button
+              type="button"
               onClick={toggleArchive}
-              disabled={archiving}
+              disabled={archive.isPending}
               className="px-3 py-1.5 rounded-surface border border-surface-2 text-sm hover:bg-surface-2 disabled:opacity-50 transition-colors"
             >
-              {archiving ? '…' : isArchived ? 'Unarchive' : 'Archive'}
+              {archive.isPending ? '…' : isArchived ? 'Unarchive' : 'Archive'}
             </button>
           </div>
           <div className="flex items-center justify-between p-4">
@@ -149,6 +146,7 @@ export default function SettingsTab({ workspace }: { workspace: Workspace }) {
               </p>
             </div>
             <button
+              type="button"
               onClick={() => setShowDeleteConfirm(true)}
               className="px-3 py-1.5 rounded-surface border border-danger text-danger text-sm hover:bg-danger-soft transition-colors"
             >
@@ -173,6 +171,7 @@ export default function SettingsTab({ workspace }: { workspace: Workspace }) {
                 Type <strong>{workspace.name}</strong> to confirm
               </label>
               <input
+                aria-label={`Confirm workspace name: ${workspace.name}`}
                 value={deleteConfirmName}
                 onChange={(e) => setDeleteConfirmName(e.target.value)}
                 className="w-full rounded-surface border border-surface-2 bg-surface px-3 py-2 text-sm focus:outline-none focus:border-accent"
@@ -181,6 +180,7 @@ export default function SettingsTab({ workspace }: { workspace: Workspace }) {
             </div>
             <div className="flex gap-2 justify-end">
               <button
+                type="button"
                 onClick={() => {
                   setShowDeleteConfirm(false);
                   setDeleteConfirmName('');
@@ -190,6 +190,7 @@ export default function SettingsTab({ workspace }: { workspace: Workspace }) {
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={confirmDelete}
                 disabled={deleting || deleteConfirmName !== workspace.name}
                 className="px-4 py-2 rounded-surface bg-danger text-danger-fg text-sm hover:bg-danger disabled:opacity-50 transition-colors"

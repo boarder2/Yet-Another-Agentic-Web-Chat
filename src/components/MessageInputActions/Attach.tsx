@@ -172,6 +172,7 @@ const Attach = ({
                   >
                     <input
                       type="file"
+                      aria-label="Attach files"
                       onChange={handleChange}
                       ref={fileInputRef}
                       accept={
@@ -186,6 +187,7 @@ const Attach = ({
                     <p className="text-xs">Add</p>
                   </button>
                   <button
+                    type="button"
                     onClick={() => {
                       setFiles([]);
                       setFileIds([]);
@@ -231,6 +233,7 @@ const Attach = ({
       >
         <input
           type="file"
+          aria-label="Attach files"
           onChange={handleChange}
           ref={fileInputRef}
           accept={imageCapable ? `${DOC_ACCEPT},${IMAGE_ACCEPT}` : DOC_ACCEPT}

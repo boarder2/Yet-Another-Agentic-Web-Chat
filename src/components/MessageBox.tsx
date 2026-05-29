@@ -195,6 +195,7 @@ const MessageBox = ({
             <div className="ml-[15%]">
               <div className="relative bg-surface-2 rounded-floating px-4 py-3 border-b-2 border-accent overflow-hidden">
                 <button
+                  type="button"
                   onClick={startEditMessage}
                   disabled={loading}
                   className={cn(
@@ -237,6 +238,7 @@ const MessageBox = ({
                 )}
                 {isLongMessage && isCollapsed && (
                   <button
+                    type="button"
                     onClick={() => setIsCollapsed(false)}
                     className="-mx-4 -mb-3 mt-1 w-[calc(100%+2rem)] py-2 bg-surface-2 text-center text-xs font-medium text-accent hover:bg-surface transition-colors"
                     aria-label="Show full message"
@@ -246,6 +248,7 @@ const MessageBox = ({
                 )}
                 {isLongMessage && !isCollapsed && (
                   <button
+                    type="button"
                     onClick={() => setIsCollapsed(true)}
                     className="-mx-4 -mb-3 mt-2 w-[calc(100%+2rem)] py-2 bg-surface-2 text-center text-xs text-fg/50 hover:bg-surface hover:text-accent transition-colors"
                     aria-label="Collapse message"

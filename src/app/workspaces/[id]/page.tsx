@@ -20,7 +20,7 @@ import ChatsTab from '@/components/Workspaces/ChatsTab';
 import InstructionsTab from '@/components/Workspaces/InstructionsTab';
 import SettingsTab from '@/components/Workspaces/SettingsTab';
 import WorkspaceMemoryTab from '@/components/Workspaces/WorkspaceMemoryTab';
-import { useWorkspace } from '@/lib/hooks/useWorkspace';
+import { useWorkspace } from '@/lib/hooks/api/useWorkspaces';
 
 type TabId =
   | 'chats'
@@ -43,7 +43,7 @@ const WorkspaceDetailPage = () => {
   const params = useParams();
   const id = params.id as string;
 
-  const { workspace, loading } = useWorkspace(id);
+  const { data: workspace, isLoading: loading } = useWorkspace(id);
   const [activeTab, setActiveTab] = useState<TabId>('chats');
 
   if (loading) {
@@ -78,6 +78,7 @@ const WorkspaceDetailPage = () => {
             <div className="flex gap-1 overflow-x-auto">
               {TABS.map((tab) => (
                 <button
+                  type="button"
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={cn(

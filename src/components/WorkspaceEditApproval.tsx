@@ -195,6 +195,23 @@ export function WorkspaceEditApproval({
   const [rejectText, setRejectText] = useState('');
   const [showRejectInput, setShowRejectInput] = useState(false);
 
+  const handleDecide = useCallback(
+    (
+      decision: 'accept' | 'accept_always' | 'reject' | 'always_prompt',
+      text?: string,
+    ) => {
+      if (submitted) return;
+      setSubmitted(true);
+      onDecide(approvalId, decision, text);
+      onDismiss?.();
+    },
+    [submitted, approvalId, onDecide, onDismiss],
+  );
+
+  const handleRejectSubmit = useCallback(() => {
+    handleDecide('reject', rejectText.trim() || undefined);
+  }, [handleDecide, rejectText]);
+
   useEffect(() => {
     if (submitted) return;
     const interval = setInterval(() => {
@@ -216,23 +233,6 @@ export function WorkspaceEditApproval({
     const sec = s % 60;
     return `${m}:${sec.toString().padStart(2, '0')}`;
   };
-
-  const handleDecide = useCallback(
-    (
-      decision: 'accept' | 'accept_always' | 'reject' | 'always_prompt',
-      text?: string,
-    ) => {
-      if (submitted) return;
-      setSubmitted(true);
-      onDecide(approvalId, decision, text);
-      onDismiss?.();
-    },
-    [submitted, approvalId, onDecide, onDismiss],
-  );
-
-  const handleRejectSubmit = useCallback(() => {
-    handleDecide('reject', rejectText.trim() || undefined);
-  }, [handleDecide, rejectText]);
 
   if (submitted) return null;
 
@@ -259,6 +259,7 @@ export function WorkspaceEditApproval({
             {formatTime(remainingSeconds)}
           </span>
           <button
+            type="button"
             onClick={() => handleDecide('reject')}
             className="p-1 rounded-control hover:bg-surface-2 transition-colors text-fg/50 hover:text-fg"
             aria-label="Dismiss"
@@ -290,6 +291,7 @@ export function WorkspaceEditApproval({
           <div className="px-5 py-3 border-b border-surface-2">
             <textarea
               autoFocus
+              aria-label="Rejection reason"
               value={rejectText}
               onChange={(e) => setRejectText(e.target.value)}
               onKeyDown={(e) => {
@@ -312,6 +314,7 @@ export function WorkspaceEditApproval({
         {/* Reject */}
         {showRejectInput ? (
           <button
+            type="button"
             onClick={handleRejectSubmit}
             className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-surface bg-danger-soft text-danger hover:bg-danger-soft border border-danger transition-colors"
           >
@@ -320,6 +323,7 @@ export function WorkspaceEditApproval({
           </button>
         ) : (
           <button
+            type="button"
             onClick={() => setShowRejectInput(true)}
             className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-surface bg-surface-2 text-fg/70 hover:text-fg hover:bg-surface-2/80 transition-colors"
           >
@@ -331,6 +335,7 @@ export function WorkspaceEditApproval({
         {/* Always prompt for this file — only when workspace auto-accept is on */}
         {workspaceAutoAccept && (
           <button
+            type="button"
             onClick={() => handleDecide('always_prompt')}
             className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-surface bg-surface-2 text-fg/70 hover:text-fg hover:bg-surface-2/80 transition-colors"
             title="Always ask before editing this file, even when the workspace is set to auto-accept"
@@ -342,6 +347,7 @@ export function WorkspaceEditApproval({
 
         {/* Accept once */}
         <button
+          type="button"
           onClick={() => handleDecide('accept')}
           className="flex items-center gap-1.5 px-5 py-2 text-sm font-medium rounded-surface bg-accent text-accent-fg hover:bg-accent/90 transition-colors"
         >
@@ -351,6 +357,7 @@ export function WorkspaceEditApproval({
 
         {/* Always accept this file */}
         <button
+          type="button"
           onClick={() => handleDecide('accept_always')}
           className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-surface border border-accent/40 text-accent hover:bg-accent/10 transition-colors"
           title="Always accept edits to this file without prompting"

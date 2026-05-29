@@ -15,6 +15,7 @@ export function MobileSettingsNav({
       <div className="flex flex-nowrap gap-2 pb-2">
         {SETTINGS_SECTIONS.map((section) => (
           <button
+            type="button"
             key={section.key}
             onClick={() => onSelect(section.key)}
             className={cn(
@@ -58,6 +59,7 @@ export function DesktopSettingsNav({
             </p>
             {sections.map((section) => (
               <button
+                type="button"
                 key={section.key}
                 onClick={() => onSelect(section.key)}
                 className={cn(

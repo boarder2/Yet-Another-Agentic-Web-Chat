@@ -74,6 +74,7 @@ export default function ModelVisibilitySection({
                   className="border border-surface-2 rounded-surface overflow-hidden"
                 >
                   <button
+                    type="button"
                     onClick={() => onToggleExpand(providerId)}
                     className="w-full p-3 bg-surface hover:bg-surface-2 transition-colors flex items-center justify-between"
                   >
@@ -107,6 +108,7 @@ export default function ModelVisibilitySection({
                     <div className="p-3 bg-surface-2 border-t border-surface-2">
                       <div className="flex justify-end mb-3 space-x-2">
                         <button
+                          type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             onToggleProvider(models, true);
@@ -118,6 +120,7 @@ export default function ModelVisibilitySection({
                           Show All
                         </button>
                         <button
+                          type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             onToggleProvider(models, false);

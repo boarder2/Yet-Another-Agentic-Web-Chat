@@ -9,7 +9,7 @@ User query → API route → `SimplifiedAgent` (LangGraph React Agent) uses tool
 - **Chat Model**: agent reasoning, final answer, streamed output
 - **System Model**: tools and internal chains (URL summarization, query generation, task breakdown)
 
-Stack: Next.js (App Router) + React 19 + Tailwind 4, LangChain/LangGraph, SQLite+Drizzle, SearXNG, Xenova embeddings, optional LangFuse tracing. Config via `config.toml` (copy from `sample.config.toml`). LLM providers: OpenAI, Anthropic, Groq, Ollama, Gemini, DeepSeek, LM Studio.
+Stack: Next.js (App Router) + React 19 + Tailwind 4, TanStack Query (client data fetching), LangChain/LangGraph, SQLite+Drizzle, SearXNG, Xenova embeddings, optional LangFuse tracing. Config via `config.toml` (copy from `sample.config.toml`). LLM providers: OpenAI, Anthropic, Groq, Ollama, Gemini, DeepSeek, LM Studio.
 
 ## Focus Modes
 
@@ -34,6 +34,10 @@ Stack: Next.js (App Router) + React 19 + Tailwind 4, LangChain/LangGraph, SQLite
 - Scope changes to the specific task; follow existing patterns
 - Keep AGENTS.md reflecting the **current** state of the project
 - DB schema changes: edit `src/lib/db/schema.ts` only; run `yarn db:generate` to emit the drizzle migration — never hand-write files in `drizzle/`
+
+## Data Fetching
+
+Client-side server state uses **TanStack Query** (provider in `src/app/providers.tsx`). Don't `fetch` directly in components — use or add a hook in `src/lib/hooks/api/` (e.g. `useChats`, `useWorkspaces`). Hooks call the shared `apiFetch`/`ApiError` helper in `src/lib/api/client.ts` and use query keys from `qk` in `src/lib/api/keys.ts`. Mutations should invalidate the relevant keys.
 
 ## Subsystem Skills
 

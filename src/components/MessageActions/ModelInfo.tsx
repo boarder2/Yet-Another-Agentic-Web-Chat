@@ -39,6 +39,7 @@ const ModelInfoButton: React.FC<ModelInfoButtonProps> = ({ modelStats }) => {
   return (
     <div className="relative">
       <button
+        type="button"
         ref={buttonRef}
         className="p-1 ml-1 rounded-pill hover:bg-surface-2 transition duration-200"
         onClick={() => setShowPopover(!showPopover)}

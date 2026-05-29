@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Cpu,
   ChevronDown,
@@ -14,6 +14,9 @@ import {
   Transition,
 } from '@headlessui/react';
 import { Fragment } from 'react';
+import { useModels } from '@/lib/hooks/api/useModels';
+import { useQueryClient } from '@tanstack/react-query';
+import { qk } from '@/lib/api/keys';
 
 interface ModelOption {
   provider: string;
@@ -41,9 +44,10 @@ const ModelSelector = ({
   showModelName?: boolean;
   role?: 'chat' | 'system';
 }) => {
+  const qc = useQueryClient();
+  const { data: modelsData, isLoading: loading } = useModels();
   const [providerModels, setProviderModels] = useState<ProviderModelMap>({});
   const [providersList, setProvidersList] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
   const [selectedModelDisplay, setSelectedModelDisplay] = useState<string>('');
   const [selectedProviderDisplay, setSelectedProviderDisplay] =
     useState<string>('');
@@ -52,94 +56,50 @@ const ModelSelector = ({
   >({});
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchModels = useCallback(async (forceRefresh = false) => {
-    try {
-      if (forceRefresh) setRefreshing(true);
-      else setLoading(true);
-      const response = await fetch(
-        forceRefresh ? '/api/models?refresh=true' : '/api/models',
-        {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch models: ${response.status}`);
-      }
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data: any = await response.json();
-      const providersData: ProviderModelMap = {};
-
-      // Organize models by provider
-      Object.entries(data.chatModelProviders).forEach(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ([provider, models]: [string, any]) => {
-          const providerDisplayName =
-            provider.charAt(0).toUpperCase() + provider.slice(1);
-          providersData[provider] = {
-            displayName: providerDisplayName,
-            models: [],
-          };
-
-          Object.entries(models).forEach(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            ([modelKey, modelData]: [string, any]) => {
-              providersData[provider].models.push({
-                provider,
-                model: modelKey,
-                displayName: modelData.displayName || modelKey,
-              });
-            },
-          );
-        },
-      );
-
-      // Filter out providers with no models
-      Object.keys(providersData).forEach((provider) => {
-        if (providersData[provider].models.length === 0) {
-          delete providersData[provider];
-        }
-      });
-
-      // Sort providers by name (only those that have models)
-      const sortedProviders = Object.keys(providersData).sort();
-      setProvidersList(sortedProviders);
-      setProviderModels(providersData);
-    } catch (error) {
-      console.error('Error fetching models:', error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
-
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    fetchModels();
-  }, [fetchModels]);
+    if (!modelsData?.chatModelProviders) return;
+    const providersData: ProviderModelMap = {};
 
-  // Derive display text from providerModels + selectedModel without clearing on null
+    Object.entries(modelsData.chatModelProviders).forEach(
+      ([provider, models]) => {
+        const providerDisplayName =
+          provider.charAt(0).toUpperCase() + provider.slice(1);
+        providersData[provider] = {
+          displayName: providerDisplayName,
+          models: [],
+        };
+
+        Object.entries(models).forEach(([modelKey, modelData]) => {
+          providersData[provider].models.push({
+            provider,
+            model: modelKey,
+            displayName: modelData.displayName || modelKey,
+          });
+        });
+      },
+    );
+
+    Object.keys(providersData).forEach((provider) => {
+      if (providersData[provider].models.length === 0)
+        delete providersData[provider];
+    });
+
+    const sortedProviders = Object.keys(providersData).sort();
+    setProvidersList(sortedProviders);
+    setProviderModels(providersData);
+  }, [modelsData]);
   useEffect(() => {
     if (
-      !selectedModel ||
-      !selectedModel.provider ||
-      !selectedModel.model ||
+      !selectedModel?.provider ||
+      !selectedModel?.model ||
       !providerModels ||
       Object.keys(providerModels).length === 0
-    ) {
-      // Do not clear existing display to prevent flicker
+    )
       return;
-    }
 
     const provider = providerModels[selectedModel.provider];
-    if (!provider) {
-      console.warn(
-        `Provider not found: ${selectedModel.provider} available providers: ${JSON.stringify(providerModels)}`,
-      );
-      return;
-    }
+    if (!provider) return;
 
     const currentModel = provider.models.find(
       (option) => option.model === selectedModel.model,
@@ -152,14 +112,9 @@ const ModelSelector = ({
       }));
       setSelectedModelDisplay(currentModel.displayName);
       setSelectedProviderDisplay(provider.displayName);
-    } else {
-      console.warn(
-        `Selected model key not found for provider ${selectedModel.provider}: ${selectedModel.model}`,
-      );
     }
   }, [providerModels, selectedModel]);
 
-  // Expand selected provider once a selection arrives, without collapsing others
   useEffect(() => {
     if (!selectedModel?.provider) return;
     setExpandedProviders((prev) => ({
@@ -167,6 +122,17 @@ const ModelSelector = ({
       [selectedModel.provider]: true,
     }));
   }, [selectedModel?.provider]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    try {
+      await fetch('/api/models?refresh=true');
+      await qc.invalidateQueries({ queryKey: qk.models });
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   const toggleProviderExpanded = (provider: string) => {
     setExpandedProviders((prev) => ({
@@ -176,11 +142,7 @@ const ModelSelector = ({
   };
 
   const handleSelectModel = (option: ModelOption) => {
-    setSelectedModel({
-      provider: option.provider,
-      model: option.model,
-    });
-
+    setSelectedModel({ provider: option.provider, model: option.model });
     setSelectedModelDisplay(option.displayName);
     setSelectedProviderDisplay(
       providerModels[option.provider]?.displayName || option.provider,
@@ -190,7 +152,6 @@ const ModelSelector = ({
   const getDisplayText = () => {
     if (loading) return 'Loading...';
     if (!selectedModel || !selectedModelDisplay) return 'Select Model';
-
     return `${selectedModelDisplay} (${selectedProviderDisplay})`;
   };
 
@@ -208,9 +169,7 @@ const ModelSelector = ({
                 <span
                   className={cn(
                     'ml-2 text-xs font-medium overflow-hidden text-ellipsis whitespace-nowrap',
-                    {
-                      'max-w-44': truncateModelName,
-                    },
+                    { 'max-w-44': truncateModelName },
                   )}
                 >
                   {getDisplayText()}
@@ -257,7 +216,7 @@ const ModelSelector = ({
                     disabled={refreshing || loading}
                     onClick={(e) => {
                       e.stopPropagation();
-                      fetchModels(true);
+                      handleRefresh();
                     }}
                   >
                     {refreshing ? (
@@ -290,7 +249,6 @@ const ModelSelector = ({
                             key={providerKey}
                             className="border-t border-surface-2 first:border-t-0"
                           >
-                            {/* Provider header */}
                             <button
                               type="button"
                               className={cn(
@@ -322,7 +280,6 @@ const ModelSelector = ({
                               />
                             </button>
 
-                            {/* Models list */}
                             {isExpanded && (
                               <div className="pl-6">
                                 {provider.models.map((modelOption) => (
@@ -346,7 +303,6 @@ const ModelSelector = ({
                                         {modelOption.displayName}
                                       </span>
                                     </div>
-                                    {/* Active indicator */}
                                     {selectedModel?.provider ===
                                       modelOption.provider &&
                                       selectedModel?.model ===

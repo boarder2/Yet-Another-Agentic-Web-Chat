@@ -13,6 +13,7 @@ const Copy = ({
 
   return (
     <button
+      type="button"
       onClick={() => {
         const contentToCopy = `${initialMessage}${message.sources && message.sources.length > 0 && `\n\nCitations:\n${message.sources?.map((source, i: number) => `[${i + 1}] ${source.metadata.url}`).join(`\n`)}`}`;
         navigator.clipboard.writeText(contentToCopy);

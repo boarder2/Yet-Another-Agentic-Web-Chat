@@ -5,12 +5,22 @@ import {
   Settings as SettingsIcon,
   ArrowLeft,
 } from 'lucide-react';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { Prompt } from '@/lib/types/prompt';
 import { writeLocalStorage } from '@/lib/hooks/useLocalStorage';
+import { useQueryClient } from '@tanstack/react-query';
+import { useConfig, useSaveConfig } from '@/lib/hooks/api/useConfig';
+import { useModels } from '@/lib/hooks/api/useModels';
+import {
+  useSystemPrompts,
+  useCreateSystemPrompt,
+  useUpdateSystemPrompt,
+  useDeleteSystemPrompt,
+} from '@/lib/hooks/api/useSystemPrompts';
+import { qk } from '@/lib/api/keys';
 
 import { SettingsType, SectionKey } from './types';
 import {
@@ -108,6 +118,18 @@ export default function SettingsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  const queryClient = useQueryClient();
+  const defaultsSavedRef = useRef(false);
+  const isInitializedRef = useRef(false);
+  const { data: configData } = useConfig();
+  const { data: modelsData } = useModels(true);
+  const { data: systemPromptsData } = useSystemPrompts();
+  const { data: methodologiesData } = useSystemPrompts('methodology');
+  const saveConfigMutation = useSaveConfig();
+  const createSystemPromptMutation = useCreateSystemPrompt();
+  const updateSystemPromptMutation = useUpdateSystemPrompt();
+  const deleteSystemPromptMutation = useDeleteSystemPrompt();
+
   const activeSection: SectionKey =
     (searchParams.get('section') as SectionKey) || 'preferences';
 
@@ -120,216 +142,176 @@ export default function SettingsPage() {
     [router, searchParams],
   );
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    const fetchConfig = async () => {
-      const res = await fetch(`/api/config`, {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+    if (!configData || isInitializedRef.current) return;
+    isInitializedRef.current = true;
+    const data = configData as unknown as SettingsType;
 
-      const data = (await res.json()) as SettingsType;
+    setConfig(data);
+    setHiddenModels(data.hiddenModels || []);
 
-      setConfig(data);
+    const chatModelProvidersKeys = Object.keys(data.chatModelProviders || {});
+    const embeddingModelProvidersKeys = Object.keys(
+      data.embeddingModelProviders || {},
+    );
 
-      setHiddenModels(data.hiddenModels || []);
+    const defaultChatModelProvider =
+      chatModelProvidersKeys.length > 0 ? chatModelProvidersKeys[0] : '';
+    const defaultEmbeddingModelProvider =
+      embeddingModelProvidersKeys.length > 0
+        ? embeddingModelProvidersKeys[0]
+        : '';
 
-      const chatModelProvidersKeys = Object.keys(data.chatModelProviders || {});
-      const embeddingModelProvidersKeys = Object.keys(
-        data.embeddingModelProviders || {},
-      );
+    const chatModelProvider =
+      localStorage.getItem('chatModelProvider') ||
+      defaultChatModelProvider ||
+      '';
+    const chatModel =
+      localStorage.getItem('chatModel') ||
+      (data.chatModelProviders &&
+      data.chatModelProviders[chatModelProvider]?.length > 0
+        ? data.chatModelProviders[chatModelProvider][0].name
+        : undefined) ||
+      '';
 
-      const defaultChatModelProvider =
-        chatModelProvidersKeys.length > 0 ? chatModelProvidersKeys[0] : '';
-      const defaultEmbeddingModelProvider =
-        embeddingModelProvidersKeys.length > 0
-          ? embeddingModelProvidersKeys[0]
-          : '';
+    const linkFlag = data.linkSystemToChat ?? true;
+    setLinkSystemToChat(linkFlag);
 
-      const chatModelProvider =
-        localStorage.getItem('chatModelProvider') ||
-        defaultChatModelProvider ||
-        '';
-      const chatModel =
-        localStorage.getItem('chatModel') ||
+    const systemModelProvider = linkFlag
+      ? chatModelProvider
+      : data.selectedSystemModelProvider || defaultChatModelProvider || '';
+    const systemModel = linkFlag
+      ? chatModel
+      : data.selectedSystemModel ||
         (data.chatModelProviders &&
-        data.chatModelProviders[chatModelProvider]?.length > 0
-          ? data.chatModelProviders[chatModelProvider][0].name
+        data.chatModelProviders[systemModelProvider]?.length > 0
+          ? data.chatModelProviders[systemModelProvider][0].name
           : undefined) ||
         '';
 
-      const linkFlag = data.linkSystemToChat ?? true;
-      setLinkSystemToChat(linkFlag);
+    const embeddingModelProvider =
+      data.selectedEmbeddingModelProvider ||
+      defaultEmbeddingModelProvider ||
+      '';
+    const embeddingModel =
+      data.selectedEmbeddingModel ||
+      (data.embeddingModelProviders &&
+        data.embeddingModelProviders[embeddingModelProvider]?.[0].name) ||
+      '';
 
-      const systemModelProvider = linkFlag
-        ? chatModelProvider
-        : data.selectedSystemModelProvider || defaultChatModelProvider || '';
-      const systemModel = linkFlag
-        ? chatModel
-        : data.selectedSystemModel ||
-          (data.chatModelProviders &&
-          data.chatModelProviders[systemModelProvider]?.length > 0
-            ? data.chatModelProviders[systemModelProvider][0].name
-            : undefined) ||
-          '';
+    setSelectedChatModelProvider(chatModelProvider);
+    setSelectedChatModel(chatModel);
+    setSelectedSystemModelProvider(systemModelProvider);
+    setSelectedSystemModel(systemModel);
+    setSelectedEmbeddingModelProvider(embeddingModelProvider);
+    setSelectedEmbeddingModel(embeddingModel);
 
-      const embeddingModelProvider =
-        data.selectedEmbeddingModelProvider ||
-        defaultEmbeddingModelProvider ||
-        '';
-      const embeddingModel =
-        data.selectedEmbeddingModel ||
-        (data.embeddingModelProviders &&
-          data.embeddingModelProviders[embeddingModelProvider]?.[0].name) ||
-        '';
+    localStorage.setItem('systemModelProvider', systemModelProvider);
+    localStorage.setItem('systemModel', systemModel);
+    localStorage.setItem('embeddingModelProvider', embeddingModelProvider);
+    localStorage.setItem('embeddingModel', embeddingModel);
+    localStorage.setItem('linkSystemToChat', linkFlag.toString());
 
-      setSelectedChatModelProvider(chatModelProvider);
-      setSelectedChatModel(chatModel);
-      setSelectedSystemModelProvider(systemModelProvider);
-      setSelectedSystemModel(systemModel);
-      setSelectedEmbeddingModelProvider(embeddingModelProvider);
-      setSelectedEmbeddingModel(embeddingModel);
+    if (
+      (!data.selectedEmbeddingModelProvider || !data.selectedEmbeddingModel) &&
+      !defaultsSavedRef.current
+    ) {
+      defaultsSavedRef.current = true;
+      saveConfigMutation.mutate({
+        ...data,
+        selectedSystemModelProvider: systemModelProvider,
+        selectedSystemModel: systemModel,
+        selectedEmbeddingModelProvider: embeddingModelProvider,
+        selectedEmbeddingModel: embeddingModel,
+        linkSystemToChat: linkFlag,
+      });
+    }
 
-      localStorage.setItem('systemModelProvider', systemModelProvider);
-      localStorage.setItem('systemModel', systemModel);
-      localStorage.setItem('embeddingModelProvider', embeddingModelProvider);
-      localStorage.setItem('embeddingModel', embeddingModel);
-      localStorage.setItem('linkSystemToChat', linkFlag.toString());
+    setChatModels(data.chatModelProviders || {});
+    setEmbeddingModels(data.embeddingModelProviders || {});
 
-      if (
-        !data.selectedEmbeddingModelProvider ||
-        !data.selectedEmbeddingModel
-      ) {
-        fetch('/api/config', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...data,
-            selectedSystemModelProvider: systemModelProvider,
-            selectedSystemModel: systemModel,
-            selectedEmbeddingModelProvider: embeddingModelProvider,
-            selectedEmbeddingModel: embeddingModel,
-            linkSystemToChat: linkFlag,
-          }),
-        }).catch(() => {});
-      }
+    setAutomaticSuggestions(
+      localStorage.getItem('autoSuggestions') !== 'false',
+    );
+    const storedContextWindow = parseInt(
+      localStorage.getItem('contextWindowSize') ?? '32768',
+    );
+    setContextWindowSize(storedContextWindow);
+    setIsCustomContextWindow(
+      !predefinedContextSizes.includes(storedContextWindow),
+    );
 
-      setChatModels(data.chatModelProviders || {});
-      setEmbeddingModels(data.embeddingModelProviders || {});
+    const storedLocation =
+      localStorage.getItem('personalization.location') || '';
+    const storedAbout = localStorage.getItem('personalization.about') || '';
+    setPersonalizationLocation(storedLocation);
+    setPersonalizationAbout(storedAbout);
 
-      setAutomaticSuggestions(
-        localStorage.getItem('autoSuggestions') !== 'false',
-      );
-      const storedContextWindow = parseInt(
-        localStorage.getItem('contextWindowSize') ?? '32768',
-      );
-      setContextWindowSize(storedContextWindow);
-      setIsCustomContextWindow(
-        !predefinedContextSizes.includes(storedContextWindow),
-      );
+    setMemoryEnabled(localStorage.getItem('memoryEnabled') === 'true');
+    setMemoryRetrievalEnabled(
+      localStorage.getItem('memoryRetrievalEnabled') === 'true',
+    );
+    setMemoryAutoDetectionEnabled(
+      localStorage.getItem('memoryAutoDetectionEnabled') === 'true',
+    );
 
-      const storedLocation =
-        localStorage.getItem('personalization.location') || '';
-      const storedAbout = localStorage.getItem('personalization.about') || '';
-      setPersonalizationLocation(storedLocation);
-      setPersonalizationAbout(storedAbout);
+    const duration = data.privateSessionDurationMinutes ?? 1440;
+    setPrivateSessionDurationMinutes(duration);
+    const isPredefined = [5, 15, 30, 60, 480, 1440, 4320, 10080].includes(
+      duration,
+    );
+    setIsCustomPrivateDuration(!isPredefined);
+    if (!isPredefined) {
+      setCustomPrivateDurationInput(String(duration));
+    }
 
-      setMemoryEnabled(localStorage.getItem('memoryEnabled') === 'true');
-      setMemoryRetrievalEnabled(
-        localStorage.getItem('memoryRetrievalEnabled') === 'true',
-      );
-      setMemoryAutoDetectionEnabled(
-        localStorage.getItem('memoryAutoDetectionEnabled') === 'true',
-      );
+    const storedSearchChatModelProvider = localStorage.getItem(
+      'searchChatModelProvider',
+    );
+    const storedSearchChatModel = localStorage.getItem('searchChatModel');
+    if (storedSearchChatModelProvider)
+      setSearchChatModelProvider(storedSearchChatModelProvider);
+    if (storedSearchChatModel) setSearchChatModel(storedSearchChatModel);
 
-      const duration = data.privateSessionDurationMinutes ?? 1440;
-      setPrivateSessionDurationMinutes(duration);
-      const isPredefined = [5, 15, 30, 60, 480, 1440, 4320, 10080].includes(
-        duration,
-      );
-      setIsCustomPrivateDuration(!isPredefined);
-      if (!isPredefined) {
-        setCustomPrivateDurationInput(String(duration));
-      }
+    setIsLoading(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [configData]);
 
-      setIsLoading(false);
-    };
+  useEffect(() => {
+    if (!modelsData) return;
+    setAllModels({
+      chat:
+        (modelsData.chatModelProviders as unknown as Record<
+          string,
+          Record<string, { displayName: string }>
+        >) || {},
+      embedding:
+        (modelsData.embeddingModelProviders as unknown as Record<
+          string,
+          Record<string, { displayName: string }>
+        >) || {},
+    });
+  }, [modelsData]);
 
-    const fetchAllModels = async () => {
-      try {
-        const res = await fetch(`/api/models?include_hidden=true`, {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
+  useEffect(() => {
+    if (!systemPromptsData) return;
+    setUserSystemPrompts(
+      (systemPromptsData as unknown as Prompt[]).filter(
+        (p: Prompt) => !p.readOnly,
+      ),
+    );
+  }, [systemPromptsData]);
 
-        if (res.ok) {
-          const data = await res.json();
-          setAllModels({
-            chat: data.chatModelProviders || {},
-            embedding: data.embeddingModelProviders || {},
-          });
-        }
-      } catch (error) {
-        console.error('Failed to fetch all models:', error);
-      }
-    };
-
-    fetchConfig();
-    fetchAllModels();
-
-    const loadSearchSettings = () => {
-      const storedSearchChatModelProvider = localStorage.getItem(
-        'searchChatModelProvider',
-      );
-      const storedSearchChatModel = localStorage.getItem('searchChatModel');
-
-      if (storedSearchChatModelProvider) {
-        setSearchChatModelProvider(storedSearchChatModelProvider);
-      }
-      if (storedSearchChatModel) {
-        setSearchChatModel(storedSearchChatModel);
-      }
-    };
-
-    loadSearchSettings();
-
-    const fetchSystemPrompts = async () => {
-      setIsLoading(true);
-      try {
-        const response = await fetch('/api/system-prompts');
-        if (response.ok) {
-          const prompts = await response.json();
-          const availablePrompts = prompts.filter((p: Prompt) => !p.readOnly);
-          setUserSystemPrompts(availablePrompts);
-        } else {
-          console.error('Failed to load system prompts.');
-        }
-      } catch (_error) {
-        console.error('Error loading system prompts.');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchSystemPrompts();
-
-    const fetchMethodologies = async () => {
-      try {
-        const response = await fetch('/api/system-prompts?type=methodology');
-        if (response.ok) {
-          const methodologies = await response.json();
-          setUserMethodologies(
-            methodologies.filter((p: Prompt) => !p.readOnly),
-          );
-        }
-      } catch (_error) {
-        console.error('Error loading methodologies.');
-      }
-    };
-
-    fetchMethodologies();
-  }, []);
+  useEffect(() => {
+    if (!methodologiesData) return;
+    setUserMethodologies(
+      (methodologiesData as unknown as Prompt[]).filter(
+        (p: Prompt) => !p.readOnly,
+      ),
+    );
+  }, [methodologiesData]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const saveConfig = async (
     key: string,
@@ -361,11 +343,9 @@ export default function SettingsPage() {
           [configKeyMap[key]]: value,
         } as Partial<SettingsType>;
 
-        await fetch(`/api/config`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(configPayload),
-        });
+        await saveConfigMutation.mutateAsync(
+          configPayload as Record<string, unknown>,
+        );
 
         if (key === 'embeddingModel' || key === 'embeddingModelProvider') {
           fetch('/api/memories/reindex', { method: 'POST' })
@@ -392,17 +372,9 @@ export default function SettingsPage() {
         [key]: value,
       } as SettingsType;
 
-      const response = await fetch(`/api/config`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(updatedConfig),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to update config');
-      }
+      await saveConfigMutation.mutateAsync(
+        updatedConfig as unknown as Record<string, unknown>,
+      );
 
       setConfig(updatedConfig);
 
@@ -410,17 +382,10 @@ export default function SettingsPage() {
         key.toLowerCase().includes('api') ||
         key.toLowerCase().includes('url')
       ) {
-        const res = await fetch(`/api/config`, {
-          headers: {
-            'Content-Type': 'application/json',
-          },
+        const freshConfig = await queryClient.fetchQuery({
+          queryKey: qk.config,
         });
-
-        if (!res.ok) {
-          throw new Error('Failed to fetch updated config');
-        }
-
-        const data = await res.json();
+        const data = (freshConfig ?? {}) as unknown as SettingsType;
 
         setChatModels(data.chatModelProviders || {});
         setEmbeddingModels(data.embeddingModelProviders || {});
@@ -666,7 +631,7 @@ export default function SettingsPage() {
     });
   };
 
-  const handleAddOrUpdateSystemPrompt = async () => {
+  const handleAddOrUpdateSystemPrompt = () => {
     const currentPrompt = editingPrompt || {
       name: newPromptName,
       content: newPromptContent,
@@ -677,73 +642,65 @@ export default function SettingsPage() {
       return;
     }
 
-    const url = editingPrompt
-      ? `/api/system-prompts/${editingPrompt.id}`
-      : '/api/system-prompts';
-    const method = editingPrompt ? 'PUT' : 'POST';
-    const body = JSON.stringify({
-      name: currentPrompt.name,
-      content: currentPrompt.content,
-      type: currentPrompt.type,
-    });
-
-    try {
-      const response = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body,
-      });
-
-      if (response.ok) {
-        const savedPrompt = await response.json();
-        if (editingPrompt) {
-          setUserSystemPrompts(
-            userSystemPrompts.map((p) =>
-              p.id === savedPrompt.id ? savedPrompt : p,
-            ),
-          );
-          setEditingPrompt(null);
-        } else {
-          setUserSystemPrompts([...userSystemPrompts, savedPrompt]);
-          setNewPromptName('');
-          setNewPromptContent('');
-          setNewPromptType('persona');
-          setIsAddingNewPrompt(false);
-        }
-        console.log(`System prompt ${editingPrompt ? 'updated' : 'added'}.`);
-      } else {
-        const errorData = await response.json();
-        console.error(
-          errorData.error ||
-            `Failed to ${editingPrompt ? 'update' : 'add'} prompt.`,
-        );
-      }
-    } catch (_error) {
-      console.error(`Error ${editingPrompt ? 'updating' : 'adding'} prompt.`);
+    if (editingPrompt) {
+      updateSystemPromptMutation.mutate(
+        {
+          id: editingPrompt.id,
+          data: {
+            name: currentPrompt.name,
+            content: currentPrompt.content,
+            type: currentPrompt.type,
+          },
+        },
+        {
+          onSuccess: (saved) => {
+            setUserSystemPrompts(
+              userSystemPrompts.map((p) =>
+                p.id === saved.id ? (saved as unknown as Prompt) : p,
+              ),
+            );
+            setEditingPrompt(null);
+          },
+          onError: () => console.error('Failed to update prompt.'),
+        },
+      );
+    } else {
+      createSystemPromptMutation.mutate(
+        {
+          name: currentPrompt.name,
+          content: currentPrompt.content,
+          type: currentPrompt.type,
+        },
+        {
+          onSuccess: (saved) => {
+            setUserSystemPrompts([
+              ...userSystemPrompts,
+              saved as unknown as Prompt,
+            ]);
+            setNewPromptName('');
+            setNewPromptContent('');
+            setNewPromptType('persona');
+            setIsAddingNewPrompt(false);
+          },
+          onError: () => console.error('Failed to add prompt.'),
+        },
+      );
     }
   };
 
-  const handleDeleteSystemPrompt = async (promptId: string) => {
+  const handleDeleteSystemPrompt = (promptId: string) => {
     if (!confirm('Are you sure you want to delete this prompt?')) return;
-    try {
-      const response = await fetch(`/api/system-prompts/${promptId}`, {
-        method: 'DELETE',
-      });
-      if (response.ok) {
+    deleteSystemPromptMutation.mutate(promptId, {
+      onSuccess: () => {
         setUserSystemPrompts(
           userSystemPrompts.filter((p) => p.id !== promptId),
         );
-        console.log('System prompt deleted.');
-      } else {
-        const errorData = await response.json();
-        console.error(errorData.error || 'Failed to delete prompt.');
-      }
-    } catch (_error) {
-      console.error('Error deleting prompt.');
-    }
+      },
+      onError: () => console.error('Failed to delete prompt.'),
+    });
   };
 
-  const handleAddOrUpdateMethodology = async () => {
+  const handleAddOrUpdateMethodology = () => {
     const currentMethodology = editingMethodology || {
       name: newMethodologyName,
       content: newMethodologyContent,
@@ -753,67 +710,61 @@ export default function SettingsPage() {
       return;
     }
 
-    const url = editingMethodology
-      ? `/api/system-prompts/${editingMethodology.id}`
-      : '/api/system-prompts';
-    const method = editingMethodology ? 'PUT' : 'POST';
-    const body = JSON.stringify({
-      name: currentMethodology.name,
-      content: currentMethodology.content,
-      type: 'methodology',
-    });
-
-    try {
-      const response = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body,
-      });
-
-      if (response.ok) {
-        const saved = await response.json();
-        if (editingMethodology) {
-          setUserMethodologies(
-            userMethodologies.map((m) => (m.id === saved.id ? saved : m)),
-          );
-          setEditingMethodology(null);
-        } else {
-          setUserMethodologies([...userMethodologies, saved]);
-          setNewMethodologyName('');
-          setNewMethodologyContent('');
-          setIsAddingNewMethodology(false);
-        }
-      } else {
-        const errorData = await response.json();
-        console.error(
-          errorData.error ||
-            `Failed to ${editingMethodology ? 'update' : 'add'} methodology.`,
-        );
-      }
-    } catch (_error) {
-      console.error(
-        `Error ${editingMethodology ? 'updating' : 'adding'} methodology.`,
+    if (editingMethodology) {
+      updateSystemPromptMutation.mutate(
+        {
+          id: editingMethodology.id,
+          data: {
+            name: currentMethodology.name,
+            content: currentMethodology.content,
+            type: 'methodology',
+          },
+        },
+        {
+          onSuccess: (saved) => {
+            setUserMethodologies(
+              userMethodologies.map((m) =>
+                m.id === saved.id ? (saved as unknown as Prompt) : m,
+              ),
+            );
+            setEditingMethodology(null);
+          },
+          onError: () => console.error('Failed to update methodology.'),
+        },
+      );
+    } else {
+      createSystemPromptMutation.mutate(
+        {
+          name: currentMethodology.name,
+          content: currentMethodology.content,
+          type: 'methodology',
+        },
+        {
+          onSuccess: (saved) => {
+            setUserMethodologies([
+              ...userMethodologies,
+              saved as unknown as Prompt,
+            ]);
+            setNewMethodologyName('');
+            setNewMethodologyContent('');
+            setIsAddingNewMethodology(false);
+          },
+          onError: () => console.error('Failed to add methodology.'),
+        },
       );
     }
   };
 
-  const handleDeleteMethodology = async (methodologyId: string) => {
+  const handleDeleteMethodology = (methodologyId: string) => {
     if (!confirm('Are you sure you want to delete this methodology?')) return;
-    try {
-      const response = await fetch(`/api/system-prompts/${methodologyId}`, {
-        method: 'DELETE',
-      });
-      if (response.ok) {
+    deleteSystemPromptMutation.mutate(methodologyId, {
+      onSuccess: () => {
         setUserMethodologies(
           userMethodologies.filter((m) => m.id !== methodologyId),
         );
-      } else {
-        const errorData = await response.json();
-        console.error(errorData.error || 'Failed to delete methodology.');
-      }
-    } catch (_error) {
-      console.error('Error deleting methodology.');
-    }
+      },
+      onError: () => console.error('Failed to delete methodology.'),
+    });
   };
 
   return (

@@ -14,6 +14,15 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useWorkspacesList } from '@/lib/hooks/api/useWorkspaces';
+import { useConfig } from '@/lib/hooks/api/useConfig';
+import {
+  useChatsInfinite,
+  useChatSearch,
+  type ChatsFilter,
+  type ChatsPage,
+} from '@/lib/hooks/api/useChats';
+import { useQueryClient, type InfiniteData } from '@tanstack/react-query';
 
 interface Props {
   /** When set, scopes the browser to a single workspace; hides workspace UI. */
@@ -22,154 +31,144 @@ interface Props {
 
 const ChatBrowser = ({ workspaceId }: Props) => {
   const scoped = !!workspaceId;
-  const limit = 50;
+  const qc = useQueryClient();
 
-  const [privateSessionDurationMs, setPrivateSessionDurationMs] = useState(
-    24 * 60 * 60 * 1000,
-  );
+  const { data: activeWorkspaces = [] } = useWorkspacesList(false);
+  const { data: archivedWorkspaces = [] } = useWorkspacesList(true);
+  const { data: configData } = useConfig();
 
-  // Workspace map for chip rendering and filter chip row
-  const [workspaceMap, setWorkspaceMap] = useState<
-    Record<string, WorkspaceMeta>
-  >({});
-  const [workspaceList, setWorkspaceList] = useState<
-    { id: string; name: string; icon: string | null; color: string | null }[]
-  >([]);
-
-  // Multi-select filter state (unscoped only). 'all' is implicit when empty.
   const [selectedWorkspaceFilters, setSelectedWorkspaceFilters] = useState<
     string[]
   >([]);
-
-  // Browse pagination
-  const [chats, setChats] = useState<Chat[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [offset, setOffset] = useState(0);
-  const [hasMore, setHasMore] = useState(true);
-  const [browseTotal, setBrowseTotal] = useState(0);
-  const [browseTotalMessages, setBrowseTotalMessages] = useState(0);
+  const [pinnedOnly, setPinnedOnly] = useState(false);
+  const [scheduledFilter, setScheduledFilter] = useState<
+    'all' | 'scheduled' | 'unscheduled'
+  >('all');
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<Chat[]>([]);
-  const [searchTotalMessages, setSearchTotalMessages] = useState(0);
-  const [isTextSearching, setIsTextSearching] = useState(false);
   const [isLlmSearching, setIsLlmSearching] = useState(false);
   const [searchTerms, setSearchTerms] = useState<string[]>([]);
+  const [llmResults, setLlmResults] = useState<Chat[] | null>(null);
+  const [llmTotalMessages, setLlmTotalMessages] = useState(0);
   const [searchMode, setSearchMode] = useState<'text' | 'llm'>('text');
 
-  // Filters
-  const [pinnedOnly, setPinnedOnly] = useState(false);
-  const [scheduledFilter, setScheduledFilter] = useState<
-    'all' | 'scheduled' | 'unscheduled'
-  >('all');
-
   const isSearchMode = debouncedQuery.trim().length > 0;
-  const displayedChats = isSearchMode ? searchResults : chats;
+
+  const privateSessionDurationMs = useMemo(() => {
+    const minutes = (configData as { privateSessionDurationMinutes?: number })
+      ?.privateSessionDurationMinutes;
+    return typeof minutes === 'number'
+      ? minutes * 60 * 1000
+      : 24 * 60 * 60 * 1000;
+  }, [configData]);
+
+  // Build workspace map for chip rendering
+  const workspaceMap = useMemo(() => {
+    const map: Record<string, WorkspaceMeta> = {};
+    for (const ws of activeWorkspaces) {
+      map[ws.id] = {
+        name: ws.name,
+        icon: ws.icon,
+        color: ws.color,
+        archived: false,
+      };
+    }
+    for (const ws of archivedWorkspaces) {
+      map[ws.id] = {
+        name: ws.name,
+        icon: ws.icon,
+        color: ws.color,
+        archived: true,
+      };
+    }
+    return map;
+  }, [activeWorkspaces, archivedWorkspaces]);
+
+  // Build browse filter from UI state
+  const browseFilter = useMemo((): ChatsFilter => {
+    const f: ChatsFilter = {};
+    if (scoped) {
+      f.workspaceId = workspaceId;
+    } else if (selectedWorkspaceFilters.length > 0) {
+      f.workspaceIds = selectedWorkspaceFilters;
+    }
+    if (pinnedOnly) f.pinned = true;
+    if (scheduledFilter !== 'all') f.scheduled = scheduledFilter;
+    return f;
+  }, [
+    scoped,
+    workspaceId,
+    selectedWorkspaceFilters,
+    pinnedOnly,
+    scheduledFilter,
+  ]);
+
+  // Build search filter from UI state
+  const searchFilter = useMemo((): Omit<
+    ChatsFilter,
+    'pinned' | 'scheduled'
+  > => {
+    if (scoped) return { workspaceId };
+    if (selectedWorkspaceFilters.length > 0)
+      return { workspaceIds: selectedWorkspaceFilters };
+    return {};
+  }, [scoped, workspaceId, selectedWorkspaceFilters]);
+
+  // Infinite browse query
+  const {
+    data: browseData,
+    isLoading: loading,
+    isFetchingNextPage: loadingMore,
+    hasNextPage,
+    fetchNextPage,
+  } = useChatsInfinite(browseFilter);
+
+  const browseChats = useMemo(
+    () => browseData?.pages.flatMap((p) => p.chats) ?? [],
+    [browseData],
+  );
+  const browseTotal = browseData?.pages[0]?.total ?? 0;
+  const browseTotalMessages = browseData?.pages[0]?.totalMessages ?? 0;
+
+  // Text search
+  const { data: textSearchData, isFetching: isTextSearching } = useChatSearch(
+    isSearchMode && searchMode === 'text' ? debouncedQuery : '',
+    searchFilter,
+  );
+
+  // Debounce search query
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedQuery(searchQuery);
+      if (searchMode === 'llm') setSearchMode('text');
+    }, 500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery]);
+
+  // Reset LLM results when query changes
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (searchMode === 'text') setLlmResults(null);
+  }, [debouncedQuery, searchMode]);
+
+  const textSearchResults = textSearchData?.chats ?? [];
+  const textSearchTotalMessages = textSearchData?.totalMessages ?? 0;
+
+  const searchResults =
+    searchMode === 'llm' ? (llmResults ?? []) : textSearchResults;
+  const searchTotalMessages =
+    searchMode === 'llm' ? llmTotalMessages : textSearchTotalMessages;
   const isSearching = isTextSearching || isLlmSearching;
+
+  const displayedChats = isSearchMode ? searchResults : browseChats;
   const totalConversations = isSearchMode ? searchResults.length : browseTotal;
   const totalMessages = isSearchMode
     ? searchTotalMessages
     : browseTotalMessages;
-
-  // Build the workspaceId query fragment given current scope or filter selection.
-  const workspaceQueryFragment = useMemo(() => {
-    if (scoped) return `&workspaceId=${encodeURIComponent(workspaceId!)}`;
-    if (selectedWorkspaceFilters.length === 0) return '';
-    return `&workspaceIds=${encodeURIComponent(selectedWorkspaceFilters.join(','))}`;
-  }, [scoped, workspaceId, selectedWorkspaceFilters]);
-
-  // Fetch workspace list once for filter chips + chip rendering.
-  useEffect(() => {
-    Promise.all([
-      fetch('/api/workspaces').then((r) => r.json()),
-      fetch('/api/workspaces?archived=true').then((r) => r.json()),
-    ])
-      .then(([active, archived]) => {
-        const map: Record<string, WorkspaceMeta> = {};
-        const list: typeof workspaceList = [];
-        for (const ws of active.workspaces ?? []) {
-          map[ws.id] = {
-            name: ws.name,
-            icon: ws.icon,
-            color: ws.color,
-            archived: false,
-          };
-          list.push({
-            id: ws.id,
-            name: ws.name,
-            icon: ws.icon,
-            color: ws.color,
-          });
-        }
-        for (const ws of archived.workspaces ?? []) {
-          map[ws.id] = {
-            name: ws.name,
-            icon: ws.icon,
-            color: ws.color,
-            archived: true,
-          };
-        }
-        setWorkspaceMap(map);
-        setWorkspaceList(list);
-      })
-      .catch(() => {});
-  }, []);
-
-  const fetchPage = async (
-    nextOffset: number,
-    pinFilter?: boolean,
-    schedFilter?: 'all' | 'scheduled' | 'unscheduled',
-  ) => {
-    if (nextOffset === 0) setLoading(true);
-    else setLoadingMore(true);
-
-    const usePinFilter = pinFilter ?? pinnedOnly;
-    const useSchedFilter = schedFilter ?? scheduledFilter;
-    const pinnedQuery = usePinFilter ? '&pinned=1' : '';
-    const scheduledQuery =
-      useSchedFilter === 'scheduled'
-        ? '&scheduled=1'
-        : useSchedFilter === 'unscheduled'
-          ? '&scheduled=0'
-          : '';
-    const res = await fetch(
-      `/api/chats?limit=${limit}&offset=${nextOffset}${pinnedQuery}${scheduledQuery}${workspaceQueryFragment}`,
-    );
-    const data = await res.json();
-    setChats((prev) =>
-      nextOffset === 0 ? data.chats : [...prev, ...data.chats],
-    );
-    setHasMore(data.hasMore);
-    setOffset(nextOffset + data.chats.length);
-    if (typeof data.total === 'number') setBrowseTotal(data.total);
-    if (typeof data.totalMessages === 'number')
-      setBrowseTotalMessages(data.totalMessages);
-    setLoading(false);
-    setLoadingMore(false);
-  };
-
-  // Re-fetch from offset 0 whenever scope or workspace-filter selection changes
-  useEffect(() => {
-    setChats([]);
-    setOffset(0);
-    setHasMore(true);
-    fetchPage(0);
-    fetch('/api/config')
-      .then((r) => r.json())
-      .then((data) => {
-        if (typeof data.privateSessionDurationMinutes === 'number') {
-          setPrivateSessionDurationMs(
-            data.privateSessionDurationMinutes * 60 * 1000,
-          );
-        }
-      })
-      .catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceQueryFragment]);
 
   // Infinite scroll
   useEffect(() => {
@@ -179,8 +178,8 @@ const ChatBrowser = ({ workspaceId }: Props) => {
     if (typeof window !== 'undefined' && 'IntersectionObserver' in window) {
       observer = new IntersectionObserver((entries) => {
         const first = entries[0];
-        if (first.isIntersecting && hasMore && !loading && !loadingMore) {
-          fetchPage(offset);
+        if (first.isIntersecting && hasNextPage && !loading && !loadingMore) {
+          fetchNextPage();
         }
       });
       if (sentinelRef.current) observer.observe(sentinelRef.current);
@@ -194,46 +193,7 @@ const ChatBrowser = ({ workspaceId }: Props) => {
     return () => {
       if (cleanup) cleanup();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasMore, loading, loadingMore, offset, isSearchMode]);
-
-  // Debounce
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedQuery(searchQuery), 500);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
-
-  // Text search
-  useEffect(() => {
-    if (!debouncedQuery.trim()) {
-      setSearchResults([]);
-      setSearchTerms([]);
-      setSearchTotalMessages(0);
-      return;
-    }
-    const doTextSearch = async () => {
-      setIsTextSearching(true);
-      setSearchMode('text');
-      setSearchTerms([]);
-      try {
-        const res = await fetch(
-          `/api/chats?q=${encodeURIComponent(debouncedQuery)}${workspaceQueryFragment}`,
-        );
-        const data = await res.json();
-        setSearchResults(data.chats || []);
-        setSearchTotalMessages(
-          typeof data.totalMessages === 'number' ? data.totalMessages : 0,
-        );
-      } catch (err) {
-        console.error('Text search error:', err);
-        setSearchResults([]);
-        setSearchTotalMessages(0);
-      } finally {
-        setIsTextSearching(false);
-      }
-    };
-    doTextSearch();
-  }, [debouncedQuery, workspaceQueryFragment]);
+  }, [hasNextPage, loading, loadingMore, isSearchMode, fetchNextPage]);
 
   const handleLlmSearch = async () => {
     if (!searchQuery.trim() || isLlmSearching) return;
@@ -261,15 +221,15 @@ const ChatBrowser = ({ workspaceId }: Props) => {
         body: JSON.stringify(body),
       });
       const data = await res.json();
-      setSearchResults(data.chats || []);
+      setLlmResults(data.chats || []);
       setSearchTerms(data.terms || []);
-      setSearchTotalMessages(
+      setLlmTotalMessages(
         typeof data.totalMessages === 'number' ? data.totalMessages : 0,
       );
     } catch (err) {
       console.error('LLM search error:', err);
-      setSearchResults([]);
-      setSearchTotalMessages(0);
+      setLlmResults([]);
+      setLlmTotalMessages(0);
     } finally {
       setIsLlmSearching(false);
     }
@@ -278,19 +238,29 @@ const ChatBrowser = ({ workspaceId }: Props) => {
   const clearSearch = () => {
     setSearchQuery('');
     setDebouncedQuery('');
-    setSearchResults([]);
+    setLlmResults(null);
     setSearchTerms([]);
-    setSearchTotalMessages(0);
+    setLlmTotalMessages(0);
     setSearchMode('text');
   };
 
   const handleDelete = (chatId: string) => {
-    if (isSearchMode) {
-      setSearchResults((prev) => prev.filter((c) => c.id !== chatId));
-    } else {
-      setChats((prev) => prev.filter((c) => c.id !== chatId));
-      setOffset((prev) => Math.max(prev - 1, 0));
-    }
+    // Optimistically remove from all cached infinite pages before refetching
+    qc.setQueriesData<InfiniteData<ChatsPage>>(
+      { queryKey: ['chats', 'infinite'], exact: false },
+      (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          pages: old.pages.map((p) => ({
+            ...p,
+            chats: p.chats.filter((c) => c.id !== chatId),
+          })),
+        };
+      },
+    );
+    qc.invalidateQueries({ queryKey: ['chats', 'infinite'] });
+    qc.invalidateQueries({ queryKey: ['chats', 'search'] });
   };
 
   const toggleWorkspaceFilter = (id: string) => {
@@ -302,9 +272,10 @@ const ChatBrowser = ({ workspaceId }: Props) => {
   return (
     <div>
       {/* Workspace filter chips (unscoped mode only) */}
-      {!scoped && workspaceList.length > 0 && (
+      {!scoped && activeWorkspaces.length > 0 && (
         <div className="flex items-center gap-2 mb-3 overflow-x-auto pb-1">
           <button
+            type="button"
             onClick={() => setSelectedWorkspaceFilters([])}
             className={cn(
               'flex items-center gap-1 px-2.5 py-1 rounded-pill text-xs font-medium border transition-colors whitespace-nowrap',
@@ -315,11 +286,12 @@ const ChatBrowser = ({ workspaceId }: Props) => {
           >
             All
           </button>
-          {workspaceList.map((ws) => {
+          {activeWorkspaces.map((ws) => {
             const c = workspaceColorClasses(ws.color);
             const selected = selectedWorkspaceFilters.includes(ws.id);
             return (
               <button
+                type="button"
                 key={ws.id}
                 onClick={() => toggleWorkspaceFilter(ws.id)}
                 className={cn(
@@ -340,6 +312,7 @@ const ChatBrowser = ({ workspaceId }: Props) => {
             );
           })}
           <button
+            type="button"
             onClick={() => toggleWorkspaceFilter('none')}
             className={cn(
               'flex items-center gap-1 px-2.5 py-1 rounded-pill text-xs font-medium border transition-colors whitespace-nowrap',
@@ -362,6 +335,7 @@ const ChatBrowser = ({ workspaceId }: Props) => {
           />
           <input
             type="text"
+            aria-label="Search chats"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={(e) => {
@@ -372,6 +346,7 @@ const ChatBrowser = ({ workspaceId }: Props) => {
           />
           {searchQuery && (
             <button
+              type="button"
               onClick={clearSearch}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-fg/40 hover:text-fg transition-colors"
               aria-label="Clear search"
@@ -381,6 +356,7 @@ const ChatBrowser = ({ workspaceId }: Props) => {
           )}
         </div>
         <button
+          type="button"
           onClick={handleLlmSearch}
           disabled={!searchQuery.trim() || isLlmSearching}
           title="Search with AI"
@@ -402,14 +378,8 @@ const ChatBrowser = ({ workspaceId }: Props) => {
       {/* Pinned/scheduled chips */}
       <div className="flex items-center gap-2 mb-3">
         <button
-          onClick={() => {
-            const next = !pinnedOnly;
-            setPinnedOnly(next);
-            setChats([]);
-            setOffset(0);
-            setHasMore(true);
-            fetchPage(0, next);
-          }}
+          type="button"
+          onClick={() => setPinnedOnly((v) => !v)}
           className={cn(
             'flex items-center gap-1 px-2.5 py-1 rounded-pill text-xs font-medium border transition-colors',
             pinnedOnly
@@ -421,18 +391,15 @@ const ChatBrowser = ({ workspaceId }: Props) => {
           Pinned
         </button>
         <button
+          type="button"
           onClick={() => {
-            const next: 'all' | 'scheduled' | 'unscheduled' =
-              scheduledFilter === 'all'
+            setScheduledFilter((prev) =>
+              prev === 'all'
                 ? 'scheduled'
-                : scheduledFilter === 'scheduled'
+                : prev === 'scheduled'
                   ? 'unscheduled'
-                  : 'all';
-            setScheduledFilter(next);
-            setChats([]);
-            setOffset(0);
-            setHasMore(true);
-            fetchPage(0, undefined, next);
+                  : 'all',
+            );
           }}
           className={cn(
             'flex items-center gap-1 px-2.5 py-1 rounded-pill text-xs font-medium border transition-colors',
@@ -485,13 +452,13 @@ const ChatBrowser = ({ workspaceId }: Props) => {
         </div>
       )}
 
-      {loading && chats.length === 0 && (
+      {loading && browseChats.length === 0 && (
         <div className="flex flex-row items-center justify-center min-h-[30vh]">
           <LoaderCircle size={32} className="animate-spin text-accent" />
         </div>
       )}
 
-      {!loading && !isSearchMode && chats.length === 0 && (
+      {!loading && !isSearchMode && browseChats.length === 0 && (
         <div className="flex flex-row items-center justify-center min-h-[30vh]">
           <p className="text-fg/70 text-sm">
             {scoped ? 'No chats in this workspace yet.' : 'No chats found.'}

@@ -2,7 +2,7 @@
 
 import { EyeOff, Pin, MoreHorizontal, FileText, FileDown } from 'lucide-react';
 import { Message } from './ChatWindow';
-import { useEffect, useState, Fragment } from 'react';
+import { useEffect, useState, Fragment, useMemo } from 'react';
 import { formatTimeDifference } from '@/lib/utils';
 import DeleteChat from './DeleteChat';
 import {
@@ -12,6 +12,9 @@ import {
   Transition,
 } from '@headlessui/react';
 import { exportAsMarkdown, exportAsPDF } from '@/lib/chatExport';
+import { useConfig } from '@/lib/hooks/api/useConfig';
+import { useQueryClient } from '@tanstack/react-query';
+import { apiFetch } from '@/lib/api/client';
 
 const ChatActions = ({
   chatId,
@@ -28,78 +31,48 @@ const ChatActions = ({
   setPinned?: (pinned: boolean) => void;
   workspaceId?: string;
 }) => {
-  const [title, setTitle] = useState<string>('');
-  const [timeAgo, setTimeAgo] = useState<string>('');
+  const qc = useQueryClient();
+  const { data: configData } = useConfig();
   const [expiresIn, setExpiresIn] = useState<string>('');
+  const [, setTick] = useState(0);
+
+  const title = messages.length > 0 ? messages[0].content : '';
+  const timeAgo =
+    messages.length > 0
+      ? formatTimeDifference(new Date(), messages[0].createdAt)
+      : '';
+
+  const durationMs = useMemo(() => {
+    const minutes = (configData as { privateSessionDurationMinutes?: number })
+      ?.privateSessionDurationMinutes;
+    return typeof minutes === 'number'
+      ? minutes * 60 * 1000
+      : 24 * 60 * 60 * 1000;
+  }, [configData]);
 
   useEffect(() => {
-    if (messages.length > 0) {
-      setTitle(messages[0].content);
-      const newTimeAgo = formatTimeDifference(
-        new Date(),
-        messages[0].createdAt,
-      );
-      setTimeAgo(newTimeAgo);
-    }
-  }, [messages]);
-
-  useEffect(() => {
-    const intervalId = setInterval(() => {
-      if (messages.length > 0) {
-        const newTimeAgo = formatTimeDifference(
-          new Date(),
-          messages[0].createdAt,
-        );
-        setTimeAgo(newTimeAgo);
-      }
-    }, 60000);
-
+    const intervalId = setInterval(() => setTick((t) => t + 1), 60000);
     return () => clearInterval(intervalId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (!isPrivateSession || messages.length === 0) return;
 
-    let durationMs = 24 * 60 * 60 * 1000; // default 24h
-
-    const fetchAndCompute = async () => {
-      try {
-        const res = await fetch('/api/config');
-        if (res.ok) {
-          const data = await res.json();
-          if (typeof data.privateSessionDurationMinutes === 'number') {
-            durationMs = data.privateSessionDurationMinutes * 60 * 1000;
-          }
-        }
-      } catch {
-        // use default
+    const computeExpiry = () => {
+      const createdAt = new Date(messages[0].createdAt).getTime();
+      const expiresAt = createdAt + durationMs;
+      const remaining = expiresAt - Date.now();
+      if (remaining <= 0) {
+        setExpiresIn('expiring soon');
+        return;
       }
-
-      const computeExpiry = () => {
-        const createdAt = new Date(messages[0].createdAt).getTime();
-        const expiresAt = createdAt + durationMs;
-        const remaining = expiresAt - Date.now();
-        if (remaining <= 0) {
-          setExpiresIn('expiring soon');
-          return;
-        }
-        setExpiresIn(formatTimeDifference(new Date(), new Date(expiresAt)));
-      };
-
-      computeExpiry();
-      const id = setInterval(computeExpiry, 60000);
-      return id;
+      setExpiresIn(formatTimeDifference(new Date(), new Date(expiresAt)));
     };
 
-    let intervalId: ReturnType<typeof setInterval> | undefined;
-    fetchAndCompute().then((id) => {
-      intervalId = id;
-    });
-    return () => {
-      if (intervalId) clearInterval(intervalId);
-    };
-  }, [isPrivateSession, messages]);
+    computeExpiry();
+    const id = setInterval(computeExpiry, 60000);
+    return () => clearInterval(id);
+  }, [isPrivateSession, messages, durationMs]);
 
   return (
     <div
@@ -113,17 +86,18 @@ const ChatActions = ({
       )}
 
       <button
+        type="button"
         aria-label={pinned ? 'Unpin chat' : 'Pin chat'}
         onClick={async () => {
           const next = !pinned;
           if (setPinned) setPinned(next);
           try {
-            const res = await fetch(`/api/chats/${chatId}`, {
+            await apiFetch(`/api/chats/${chatId}`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ pinned: next }),
             });
-            if (!res.ok && setPinned) setPinned(!next);
+            qc.invalidateQueries({ queryKey: ['chats', 'infinite'] });
           } catch {
             if (setPinned) setPinned(!next);
           }
@@ -166,6 +140,7 @@ const ChatActions = ({
 
               <div className="flex flex-col gap-1">
                 <button
+                  type="button"
                   className="flex items-center gap-2 px-4 py-2 text-left hover:bg-surface-2 transition-colors rounded-surface font-medium text-sm"
                   onClick={() => exportAsMarkdown(messages, title || '')}
                 >
@@ -173,6 +148,7 @@ const ChatActions = ({
                   Export as Markdown
                 </button>
                 <button
+                  type="button"
                   className="flex items-center gap-2 px-4 py-2 text-left hover:bg-surface-2 transition-colors rounded-surface font-medium text-sm"
                   onClick={() => exportAsPDF(messages, title || '')}
                 >

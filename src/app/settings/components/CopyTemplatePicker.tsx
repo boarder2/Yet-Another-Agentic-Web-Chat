@@ -52,6 +52,7 @@ export default function CopyTemplatePicker() {
         ]}
       />
       <button
+        type="button"
         onClick={handleCopy}
         className={cn(
           'px-3 py-2 text-sm rounded-control border border-surface-2 hover:bg-surface-2 flex items-center gap-1.5',

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
   Popover,
   PopoverButton,
@@ -39,10 +39,16 @@ export default function ContextIndicator({
   );
   const [compactInstructions, setCompactInstructions] = useState('');
 
-  // Sync from prop when it changes externally (e.g. settings page update)
-  useEffect(() => {
+  // Resync from the prop when it changes externally (e.g. settings page update)
+  // while still allowing local user overrides below. Adjusting state during
+  // render is React's recommended alternative to a syncing effect.
+  const [prevContextWindow, setPrevContextWindow] = useState(
+    chatModelContextWindow,
+  );
+  if (chatModelContextWindow !== prevContextWindow) {
+    setPrevContextWindow(chatModelContextWindow);
     setLocalContextWindow(chatModelContextWindow);
-  }, [chatModelContextWindow]);
+  }
 
   const pct =
     localContextWindow > 0
@@ -209,6 +215,7 @@ export default function ContextIndicator({
                 <div className="flex items-center gap-1.5 mt-1.5">
                   <input
                     type="number"
+                    aria-label="Custom context window size"
                     min={512}
                     value={chatCustomValue}
                     placeholder={String(localContextWindow)}
@@ -243,6 +250,7 @@ export default function ContextIndicator({
                 Compaction Instructions
               </p>
               <textarea
+                aria-label="Compaction instructions"
                 value={compactInstructions}
                 onChange={(e) => setCompactInstructions(e.target.value)}
                 placeholder="Optional: specify what the summary should capture (key decisions, preferences, code patterns, etc.)"

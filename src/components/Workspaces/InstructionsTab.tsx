@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { Info } from 'lucide-react';
-
-interface SystemPrompt {
-  id: string;
-  name: string;
-  type?: string;
-}
+import { useWorkspace, usePatchWorkspace } from '@/lib/hooks/api/useWorkspaces';
+import { useSystemPrompts } from '@/lib/hooks/api/useSystemPrompts';
+import {
+  useWorkspaceSystemPrompts,
+  useSaveWorkspaceSystemPromptLinks,
+} from '@/lib/hooks/api/useWorkspaceSystemPrompts';
 
 export default function InstructionsTab({
   workspaceId,
@@ -16,54 +16,40 @@ export default function InstructionsTab({
   workspaceId: string;
   onSummaryChange?: (info: { length: number; linkedCount: number }) => void;
 }) {
+  const { data: workspace } = useWorkspace(workspaceId);
+  const { data: allPrompts = [] } = useSystemPrompts();
+  const { data: linkedIds = [] } = useWorkspaceSystemPrompts(workspaceId);
+  const patch = usePatchWorkspace(workspaceId);
+  const saveLinks = useSaveWorkspaceSystemPromptLinks(workspaceId);
+
   const [instructions, setInstructions] = useState('');
-  const [allPrompts, setAllPrompts] = useState<SystemPrompt[]>([]);
-  const [linkedIds, setLinkedIds] = useState<string[]>([]);
   const [saved, setSaved] = useState(true);
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    Promise.all([
-      fetch(`/api/workspaces/${workspaceId}`).then((r) => r.json()),
-      fetch(`/api/system-prompts`).then((r) => r.json()),
-      fetch(`/api/workspaces/${workspaceId}/system-prompts`).then((r) =>
-        r.json(),
-      ),
-    ]).then(([ws, prompts, links]) => {
-      const text = ws.workspace?.instructions ?? '';
-      setInstructions(text);
-      setAllPrompts(
-        Array.isArray(prompts)
-          ? prompts
-          : (prompts.systemPrompts ?? prompts.prompts ?? []),
-      );
-      const ids = (links.links ?? []).map(
-        (l: { systemPromptId: string }) => l.systemPromptId,
-      );
-      setLinkedIds(ids);
-      onSummaryChange?.({ length: text.length, linkedCount: ids.length });
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId]);
+    if (workspace?.instructions !== undefined) {
+      setInstructions(workspace.instructions ?? '');
+      setSaved(true);
+    }
+  }, [workspace?.instructions]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
-  async function saveInstructions() {
-    await fetch(`/api/workspaces/${workspaceId}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ instructions }),
+  useEffect(() => {
+    onSummaryChange?.({
+      length: instructions.length,
+      linkedCount: linkedIds.length,
     });
-    setSaved(true);
+  }, [instructions.length, linkedIds.length, onSummaryChange]);
+
+  function saveInstructions() {
+    patch.mutate({ instructions }, { onSuccess: () => setSaved(true) });
   }
 
-  async function toggleLink(id: string) {
+  function toggleLink(id: string) {
     const next = linkedIds.includes(id)
       ? linkedIds.filter((x) => x !== id)
       : [...linkedIds, id];
-    setLinkedIds(next);
-    await fetch(`/api/workspaces/${workspaceId}/system-prompts`, {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ ids: next }),
-    });
+    saveLinks.mutate(next);
   }
 
   return (
@@ -71,6 +57,7 @@ export default function InstructionsTab({
       <section className="space-y-2">
         <label className="text-sm font-medium">Workspace instructions</label>
         <textarea
+          aria-label="Workspace instructions"
           value={instructions}
           onChange={(e) => {
             setInstructions(e.target.value);
@@ -84,6 +71,7 @@ export default function InstructionsTab({
             <span className="text-fg/40">Saved</span>
           ) : (
             <button
+              type="button"
               onClick={saveInstructions}
               className="px-3 py-1 rounded-surface bg-accent text-accent-fg hover:opacity-90 transition-opacity"
             >
@@ -111,6 +99,7 @@ export default function InstructionsTab({
               <li key={p.id} className="flex items-center gap-2 p-3">
                 <input
                   type="checkbox"
+                  aria-label={`Link system prompt: ${p.name}`}
                   checked={linkedIds.includes(p.id)}
                   onChange={() => toggleLink(p.id)}
                   className="accent-accent"

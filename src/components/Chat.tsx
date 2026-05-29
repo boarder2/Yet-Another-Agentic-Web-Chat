@@ -182,9 +182,10 @@ const Chat = ({
   const isAtBottomRef = useRef(isAtBottom);
   const manuallyScrolledUpRef = useRef(manuallyScrolledUp);
   const SCROLL_THRESHOLD = 100; // pixels from bottom to consider "at bottom"
-  const [currentMessageId, setCurrentMessageId] = useState<string | undefined>(
-    undefined,
-  );
+  // The in-flight message is the last user message while a response is loading.
+  const currentMessageId = loading
+    ? [...messages].reverse().find((m) => m.role === 'user')?.messageId
+    : undefined;
 
   // Check if user is at bottom of page
   useEffect(() => {
@@ -260,12 +261,14 @@ const Chat = ({
       document.title = `${messages[0].content.substring(0, 30)} - YAAWC`;
     }
 
-    // Always scroll when user sends a message
+    // Always scroll when user sends a message, resetting the scroll-tracking
+    // state that the scroll listeners maintain. These resets are coupled to the
+    // scroll side-effect performed here.
     if (messages[messages.length - 1]?.role === 'user') {
       scroll();
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setIsAtBottom(true); // Reset to true when user sends a message
-      setManuallyScrolledUp(false); // Reset manually scrolled flag when user sends a message
+      setIsAtBottom(true);
+      setManuallyScrolledUp(false);
     }
   }, [messages]);
 
@@ -312,21 +315,6 @@ const Chat = ({
       window.removeEventListener('resize', updateInputStyle);
     };
   }, []);
-
-  // Track the last user messageId when loading starts
-  useEffect(() => {
-    if (loading) {
-      // Find the last user message
-      const lastUserMsg = [...messages]
-        .reverse()
-        .find((m) => m.role === 'user');
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setCurrentMessageId(lastUserMsg?.messageId);
-      //console.log('Set currentMessageId to', lastUserMsg?.messageId, messages);
-    } else {
-      setCurrentMessageId(undefined);
-    }
-  }, [loading, messages]);
 
   // Cancel handler
   const handleCancel = async () => {
@@ -409,6 +397,7 @@ const Chat = ({
         {manuallyScrolledUp && !isAtBottom && (
           <div className="absolute -top-14 right-2 z-10">
             <button
+              type="button"
               onClick={() => {
                 setManuallyScrolledUp(false);
                 setIsAtBottom(true);

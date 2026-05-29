@@ -14,7 +14,15 @@ import {
   Link as LinkIcon,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import {
+  useMemories,
+  useAddMemoryItem,
+  useEditMemoryItem,
+  useDeleteMemoryItem,
+  useDeleteAllMemories,
+  useReindexMemories,
+} from '@/lib/hooks/api/useMemories';
 
 interface Memory {
   id: string;
@@ -53,9 +61,6 @@ const categoryColors: Record<string, string> = {
 };
 
 const Page = () => {
-  const [memories, setMemories] = useState<Memory[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [total, setTotal] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -64,133 +69,66 @@ const Page = () => {
   const [editContent, setEditContent] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [newContent, setNewContent] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isReindexing, setIsReindexing] = useState(false);
   const editInputRef = useRef<HTMLTextAreaElement>(null);
   const newInputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Debounce search
+  const { data, isLoading: loading } = useMemories(null, {
+    q: debouncedQuery || undefined,
+    category: selectedCategory !== 'All' ? selectedCategory : undefined,
+    sort: sortBy,
+    limit: 200,
+  });
+  const memories = (data?.memories ?? []) as Memory[];
+  const total = data?.total ?? 0;
+
+  const addMemory = useAddMemoryItem(null);
+  const editMemory = useEditMemoryItem();
+  const deleteMemory = useDeleteMemoryItem();
+  const deleteAll = useDeleteAllMemories();
+  const reindex = useReindexMemories();
+
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(searchQuery), 500);
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const fetchMemories = useCallback(async () => {
-    setLoading(true);
-    const params = new URLSearchParams();
-    if (debouncedQuery) params.set('q', debouncedQuery);
-    if (selectedCategory !== 'All') params.set('category', selectedCategory);
-    params.set('sort', sortBy);
-    params.set('limit', '200');
-
-    try {
-      const res = await fetch(`/api/memories?${params.toString()}`);
-      const data = await res.json();
-      setMemories(data.data || []);
-      setTotal(data.total || 0);
-    } catch {
-      console.error('Failed to fetch memories');
-    }
-    setLoading(false);
-  }, [debouncedQuery, selectedCategory, sortBy]);
-
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      const params = new URLSearchParams();
-      if (debouncedQuery) params.set('q', debouncedQuery);
-      if (selectedCategory !== 'All') params.set('category', selectedCategory);
-      params.set('sort', sortBy);
-      params.set('limit', '200');
-
-      try {
-        const res = await fetch(`/api/memories?${params.toString()}`);
-        const data = await res.json();
-        setMemories(data.data || []);
-        setTotal(data.total || 0);
-      } catch {
-        console.error('Failed to fetch memories');
-      }
-      setLoading(false);
-    };
-    load();
-  }, [debouncedQuery, selectedCategory, sortBy]);
-
-  const handleAdd = async () => {
-    if (!newContent.trim() || isSubmitting) return;
-    setIsSubmitting(true);
-    try {
-      const res = await fetch('/api/memories', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: newContent.trim() }),
-      });
-      if (res.ok) {
+  const handleAdd = () => {
+    if (!newContent.trim() || addMemory.isPending) return;
+    addMemory.mutate(newContent.trim(), {
+      onSuccess: () => {
         setNewContent('');
         setIsAdding(false);
-        fetchMemories();
-      }
-    } catch {
-      console.error('Failed to add memory');
-    }
-    setIsSubmitting(false);
+      },
+    });
   };
 
-  const handleEdit = async (id: string) => {
-    if (!editContent.trim() || isSubmitting) return;
-    setIsSubmitting(true);
-    try {
-      const res = await fetch(`/api/memories/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: editContent.trim() }),
-      });
-      if (res.ok) {
-        setEditingId(null);
-        fetchMemories();
-      }
-    } catch {
-      console.error('Failed to update memory');
-    }
-    setIsSubmitting(false);
+  const handleEdit = (id: string) => {
+    if (!editContent.trim() || editMemory.isPending) return;
+    editMemory.mutate(
+      { id, content: editContent.trim() },
+      { onSuccess: () => setEditingId(null) },
+    );
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = (id: string) => {
     if (!window.confirm('Delete this memory?')) return;
-    try {
-      await fetch(`/api/memories/${id}`, { method: 'DELETE' });
-      fetchMemories();
-    } catch {
-      console.error('Failed to delete memory');
-    }
+    deleteMemory.mutate(id);
   };
 
-  const handleDeleteAll = async () => {
+  const handleDeleteAll = () => {
     if (!window.confirm('Delete ALL memories? This action cannot be undone.'))
       return;
-    try {
-      await fetch('/api/memories', { method: 'DELETE' });
-      fetchMemories();
-    } catch {
-      console.error('Failed to delete all memories');
-    }
+    deleteAll.mutate(undefined);
   };
 
-  const handleReindex = async () => {
+  const handleReindex = () => {
     if (
       !window.confirm(
         'Re-index all memory embeddings with the current embedding model?',
       )
     )
       return;
-    setIsReindexing(true);
-    try {
-      await fetch('/api/memories/reindex', { method: 'POST' });
-      fetchMemories();
-    } catch {
-      console.error('Failed to reindex memories');
-    }
-    setIsReindexing(false);
+    reindex.mutate(undefined);
   };
 
   const startEditing = (memory: Memory) => {
@@ -208,11 +146,12 @@ const Page = () => {
         actions={
           <>
             <button
+              type="button"
               onClick={handleReindex}
-              disabled={isReindexing}
+              disabled={reindex.isPending}
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-surface bg-surface hover:bg-surface-2 border border-surface-2 transition duration-200 disabled:opacity-50"
             >
-              {isReindexing ? (
+              {reindex.isPending ? (
                 <LoaderCircle size={14} className="animate-spin text-accent" />
               ) : (
                 <RefreshCw size={14} />
@@ -221,8 +160,10 @@ const Page = () => {
             </button>
             {memories.length > 0 && (
               <button
+                type="button"
                 onClick={handleDeleteAll}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-surface text-danger bg-surface hover:bg-danger-soft border border-surface-2 transition duration-200"
+                disabled={deleteAll.isPending}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-surface text-danger bg-surface hover:bg-danger-soft border border-surface-2 transition duration-200 disabled:opacity-50"
               >
                 <Trash2 size={14} />
                 Delete all
@@ -241,6 +182,7 @@ const Page = () => {
           />
           <input
             type="text"
+            aria-label="Search memories"
             placeholder="Search memories..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -248,6 +190,7 @@ const Page = () => {
           />
           {searchQuery && (
             <button
+              type="button"
               onClick={() => setSearchQuery('')}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-fg/40 hover:text-fg"
             >
@@ -286,6 +229,7 @@ const Page = () => {
         <div className="mb-6 p-4 bg-surface rounded-floating border border-surface-2">
           <textarea
             ref={newInputRef}
+            aria-label="New memory content"
             value={newContent}
             onChange={(e) => setNewContent(e.target.value)}
             placeholder="Enter a fact, preference, or instruction to remember..."
@@ -304,6 +248,7 @@ const Page = () => {
           />
           <div className="flex justify-end gap-2 mt-2">
             <button
+              type="button"
               onClick={() => {
                 setIsAdding(false);
                 setNewContent('');
@@ -313,11 +258,12 @@ const Page = () => {
               Cancel
             </button>
             <button
+              type="button"
               onClick={handleAdd}
-              disabled={!newContent.trim() || isSubmitting}
+              disabled={!newContent.trim() || addMemory.isPending}
               className="px-3 py-1.5 text-sm rounded-surface bg-accent text-accent-fg hover:bg-accent/90 transition disabled:opacity-50"
             >
-              {isSubmitting ? (
+              {addMemory.isPending ? (
                 <LoaderCircle size={14} className="animate-spin" />
               ) : (
                 'Save'
@@ -327,6 +273,7 @@ const Page = () => {
         </div>
       ) : (
         <button
+          type="button"
           onClick={() => setIsAdding(true)}
           className="mb-6 flex items-center gap-2 px-4 py-2.5 text-sm rounded-surface bg-surface hover:bg-surface-2 border border-surface-2 border-dashed transition duration-200 w-full justify-center"
         >
@@ -366,6 +313,7 @@ const Page = () => {
                 <div>
                   <textarea
                     ref={editInputRef}
+                    aria-label="Edit memory content"
                     value={editContent}
                     onChange={(e) => setEditContent(e.target.value)}
                     className="w-full bg-transparent text-sm resize-none focus:outline-none min-h-[40px]"
@@ -379,14 +327,16 @@ const Page = () => {
                   />
                   <div className="flex justify-end gap-2 mt-2">
                     <button
+                      type="button"
                       onClick={() => setEditingId(null)}
                       className="px-2.5 py-1 text-xs rounded-control hover:bg-surface-2 transition"
                     >
                       Cancel
                     </button>
                     <button
+                      type="button"
                       onClick={() => handleEdit(memory.id)}
-                      disabled={!editContent.trim() || isSubmitting}
+                      disabled={!editContent.trim() || editMemory.isPending}
                       className="px-2.5 py-1 text-xs rounded-control bg-accent text-accent-fg hover:bg-accent/90 transition disabled:opacity-50"
                     >
                       Save
@@ -404,6 +354,7 @@ const Page = () => {
                     </p>
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition shrink-0">
                       <button
+                        type="button"
                         onClick={() => startEditing(memory)}
                         className="p-1.5 rounded-control hover:bg-surface-2 transition"
                         title="Edit"
@@ -411,6 +362,7 @@ const Page = () => {
                         <Edit3 size={14} />
                       </button>
                       <button
+                        type="button"
                         onClick={() => handleDelete(memory.id)}
                         className="p-1.5 rounded-control hover:bg-danger-soft text-danger transition"
                         title="Delete"

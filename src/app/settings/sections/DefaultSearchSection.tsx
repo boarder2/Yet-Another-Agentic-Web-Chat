@@ -38,6 +38,7 @@ export default function DefaultSearchSection({
             />
             {(searchChatModelProvider || searchChatModel) && (
               <button
+                type="button"
                 onClick={onReset}
                 className="p-1.5 rounded-control hover:bg-surface-2 transition-colors"
                 title="Reset chat model"

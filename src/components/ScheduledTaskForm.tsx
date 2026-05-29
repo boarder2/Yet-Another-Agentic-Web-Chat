@@ -268,6 +268,7 @@ export default function TaskForm({
           <label className="text-sm font-medium text-fg/70">Name</label>
           <input
             type="text"
+            aria-label="Task name"
             value={form.name}
             onChange={(e) => updateField('name', e.target.value)}
             placeholder="Daily AI News Briefing"
@@ -280,6 +281,7 @@ export default function TaskForm({
         <div className="flex flex-col gap-1.5">
           <label className="text-sm font-medium text-fg/70">Prompt</label>
           <textarea
+            aria-label="Task prompt"
             value={form.prompt}
             onChange={(e) => updateField('prompt', e.target.value)}
             placeholder="Summarize the top AI and machine learning news from today..."
@@ -298,6 +300,7 @@ export default function TaskForm({
             <div key={idx} className="flex items-center gap-2">
               <input
                 type="url"
+                aria-label="Source URL"
                 value={url}
                 onChange={(e) =>
                   updateField(
@@ -373,6 +376,7 @@ export default function TaskForm({
                 <span className="text-sm text-fg/60">at minute</span>
                 <input
                   type="number"
+                  aria-label="Minute"
                   min={0}
                   max={59}
                   value={
@@ -393,6 +397,7 @@ export default function TaskForm({
                 <span className="text-sm text-fg/60">at</span>
                 <input
                   type="number"
+                  aria-label="Hour"
                   min={0}
                   max={23}
                   value={
@@ -408,6 +413,7 @@ export default function TaskForm({
                 <span className="text-sm text-fg/60">:</span>
                 <input
                   type="number"
+                  aria-label="Minute"
                   min={0}
                   max={59}
                   value={
@@ -452,6 +458,7 @@ export default function TaskForm({
                 <span className="text-sm text-fg/60">at</span>
                 <input
                   type="number"
+                  aria-label="Hour"
                   min={0}
                   max={23}
                   value={
@@ -467,6 +474,7 @@ export default function TaskForm({
                 <span className="text-sm text-fg/60">:</span>
                 <input
                   type="number"
+                  aria-label="Minute"
                   min={0}
                   max={59}
                   value={
@@ -485,6 +493,7 @@ export default function TaskForm({
             {scheduleKind === 'advanced' && (
               <input
                 type="text"
+                aria-label="Cron expression"
                 value={form.cronExpression}
                 onChange={(e) => {
                   updateField('cronExpression', e.target.value);
@@ -506,6 +515,7 @@ export default function TaskForm({
           </label>
           <input
             type="text"
+            aria-label="Timezone"
             value={form.timezone}
             onChange={(e) => updateField('timezone', e.target.value)}
             placeholder="e.g. America/New_York (leave empty for system timezone)"
@@ -660,6 +670,7 @@ export default function TaskForm({
               {form.retentionMode !== 'disabled' && (
                 <input
                   type="number"
+                  aria-label="Retention value"
                   min={1}
                   value={form.retentionValue ?? 10}
                   onChange={(e) =>
@@ -677,6 +688,8 @@ export default function TaskForm({
           <label className="text-sm font-medium text-fg/70">Enabled</label>
           <button
             type="button"
+            aria-label="Toggle enabled"
+            aria-pressed={form.enabled}
             onClick={() => updateField('enabled', !form.enabled)}
             className={`relative w-11 h-6 rounded-pill transition ${
               form.enabled ? 'bg-accent' : 'bg-surface-2'

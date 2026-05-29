@@ -57,13 +57,16 @@ export default function ModelConfigurator({
     return window.matchMedia('(min-width: 640px)').matches;
   }, [showModelName]);
 
-  // Load persisted selections and ensure defaults (without overriding stored false)
+  // Load persisted selections and ensure defaults (without overriding stored
+  // false). Hydration must happen in an effect rather than via lazy useState
+  // init so the server and client first render match; the synchronous setState
+  // below is intentional and gated by the `hydrated` flag.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     try {
       const chatProvider = localStorage.getItem(STORAGE_KEYS.chatProvider);
       const chat = localStorage.getItem(STORAGE_KEYS.chatModel);
       if (chatProvider && chat) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         setChatModel({ provider: chatProvider, model: chat });
       }
 
@@ -103,12 +106,12 @@ export default function ModelConfigurator({
       linkSystemToChat ? 'true' : 'false',
     );
     if (linkSystemToChat && chatModel) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSystemModel(chatModel);
       localStorage.setItem(STORAGE_KEYS.systemProvider, chatModel.provider);
       localStorage.setItem(STORAGE_KEYS.systemModel, chatModel.model);
     }
   }, [hydrated, linkSystemToChat, chatModel]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleImageCapableChange = (value: boolean) => {
     setImageCapable(value);

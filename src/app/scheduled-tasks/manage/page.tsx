@@ -15,82 +15,41 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
-
-interface Task {
-  id: string;
-  name: string;
-  prompt: string;
-  focusMode: string;
-  cronExpression: string;
-  timezone: string | null;
-  enabled: number;
-  lastRunAt: number | null;
-  lastRunStatus: string | null;
-  lastRunError: string | null;
-  lastRunChatId: string | null;
-  createdAt: number;
-}
+import { useState } from 'react';
+import {
+  useScheduledTasks,
+  usePatchScheduledTask,
+  useDeleteScheduledTask,
+  useRunScheduledTask,
+  type ScheduledTask,
+} from '@/lib/hooks/api/useScheduledTasks';
 
 const Page = () => {
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [runningTaskId, setRunningTaskId] = useState<string | null>(null);
   const router = useRouter();
+  const { data: tasks = [], isLoading: loading } = useScheduledTasks();
+  const patchTask = usePatchScheduledTask();
+  const deleteTask = useDeleteScheduledTask();
+  const runTask = useRunScheduledTask();
+  const [runningTaskId, setRunningTaskId] = useState<string | null>(null);
 
-  const fetchTasks = async () => {
-    try {
-      const res = await fetch('/api/scheduled-tasks');
-      if (res.ok) {
-        const data = await res.json();
-        setTasks(data);
-      }
-    } catch {
-      // Ignore
-    } finally {
-      setLoading(false);
-    }
+  const toggleEnabled = (task: ScheduledTask) => {
+    patchTask.mutate({ id: task.id, data: { enabled: !task.enabled } });
   };
 
-  useEffect(() => {
-    fetchTasks();
-  }, []);
-
-  const toggleEnabled = async (task: Task) => {
-    const newEnabled = task.enabled ? 0 : 1;
-    await fetch(`/api/scheduled-tasks/${task.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled: newEnabled }),
-    });
-    setTasks((prev) =>
-      prev.map((t) => (t.id === task.id ? { ...t, enabled: newEnabled } : t)),
-    );
-  };
-
-  const runNow = async (task: Task) => {
+  const runNow = (task: ScheduledTask) => {
     setRunningTaskId(task.id);
-    try {
-      const res = await fetch(`/api/scheduled-tasks/${task.id}/run`, {
-        method: 'POST',
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.chatId) {
-          router.push(`/c/${data.chatId}`);
-        }
-      }
-    } catch {
-      // Ignore
-    } finally {
-      setRunningTaskId(null);
-    }
+    runTask.mutate(task.id, {
+      onSuccess: (data: unknown) => {
+        const d = data as { chatId?: string } | undefined;
+        if (d?.chatId) router.push(`/c/${d.chatId}`);
+      },
+      onSettled: () => setRunningTaskId(null),
+    });
   };
 
-  const deleteTask = async (task: Task) => {
+  const handleDelete = (task: ScheduledTask) => {
     if (!confirm(`Delete task "${task.name}"?`)) return;
-    await fetch(`/api/scheduled-tasks/${task.id}`, { method: 'DELETE' });
-    setTasks((prev) => prev.filter((t) => t.id !== task.id));
+    deleteTask.mutate(task.id);
   };
 
   return (
@@ -148,7 +107,11 @@ const Page = () => {
                   {task.name}
                 </span>
                 <div className="flex items-center gap-3 text-xs text-fg/60">
-                  <span>{describeCron(task.cronExpression)}</span>
+                  {(task.cronExpression || task.schedule) && (
+                    <span>
+                      {describeCron(task.cronExpression ?? task.schedule ?? '')}
+                    </span>
+                  )}
                   {task.lastRunAt && (
                     <span className="flex items-center gap-1">
                       {task.lastRunStatus === 'success' ? (
@@ -180,6 +143,7 @@ const Page = () => {
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <button
+                  type="button"
                   onClick={() => toggleEnabled(task)}
                   className={`px-3 py-1 rounded-pill text-xs font-medium transition ${
                     task.enabled
@@ -190,6 +154,7 @@ const Page = () => {
                   {task.enabled ? 'Enabled' : 'Disabled'}
                 </button>
                 <button
+                  type="button"
                   onClick={() => runNow(task)}
                   disabled={runningTaskId === task.id}
                   className="p-1.5 rounded-surface hover:bg-surface-2 transition text-fg/60 hover:text-fg disabled:opacity-50"
@@ -205,7 +170,8 @@ const Page = () => {
                   <Pencil size={16} />
                 </Link>
                 <button
-                  onClick={() => deleteTask(task)}
+                  type="button"
+                  onClick={() => handleDelete(task)}
                   className="p-1.5 rounded-surface hover:bg-surface-2 transition text-fg/60 hover:text-danger"
                   title="Delete"
                 >

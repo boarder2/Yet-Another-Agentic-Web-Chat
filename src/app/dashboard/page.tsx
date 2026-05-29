@@ -51,6 +51,7 @@ const EmptyDashboard = ({ onAddWidget }: { onAddWidget: () => void }) => (
 
       <CardFooter className="justify-center">
         <button
+          type="button"
           onClick={onAddWidget}
           className="px-4 py-2 bg-accent text-accent-fg rounded-control hover:bg-accent-700 transition duration-200 flex items-center space-x-2"
         >
@@ -194,6 +195,7 @@ const DashboardPage = () => {
         actions={
           <>
             <button
+              type="button"
               onClick={handleRefreshAll}
               className="p-2 hover:bg-surface-2 rounded-surface transition duration-200"
               title="Refresh All Widgets"
@@ -202,6 +204,7 @@ const DashboardPage = () => {
             </button>
 
             <button
+              type="button"
               onClick={handleToggleProcessingMode}
               className="p-2 hover:bg-surface-2 rounded-surface transition duration-200"
               title={`Switch to ${settings.parallelLoading ? 'Sequential' : 'Parallel'} Processing`}
@@ -214,6 +217,7 @@ const DashboardPage = () => {
             </button>
 
             <button
+              type="button"
               onClick={handleExport}
               className="p-2 hover:bg-surface-2 rounded-surface transition duration-200"
               title="Export Dashboard Configuration"
@@ -222,6 +226,7 @@ const DashboardPage = () => {
             </button>
 
             <button
+              type="button"
               onClick={handleImport}
               className="p-2 hover:bg-surface-2 rounded-surface transition duration-200"
               title="Import Dashboard Configuration"
@@ -230,6 +235,7 @@ const DashboardPage = () => {
             </button>
 
             <button
+              type="button"
               onClick={handleAddWidget}
               className="p-2 bg-accent hover:bg-accent-700 rounded-surface transition duration-200"
               title="Add New Widget"

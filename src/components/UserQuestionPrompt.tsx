@@ -175,6 +175,7 @@ export function UserQuestionPrompt({
             {formatTime(remainingSeconds)}
           </span>
           <button
+            type="button"
             onClick={handleSkip}
             className="p-1 rounded-control hover:bg-surface-2 transition-colors text-fg/50 hover:text-fg"
             aria-label="Skip"
@@ -199,6 +200,7 @@ export function UserQuestionPrompt({
               const isSelected = selectedOptions.has(opt.label);
               return (
                 <button
+                  type="button"
                   key={opt.label}
                   onClick={() => handleOptionToggle(opt.label)}
                   className={`w-full text-left px-4 py-2.5 rounded-surface border transition-colors text-sm ${
@@ -240,6 +242,7 @@ export function UserQuestionPrompt({
           <div className="px-5 py-3 border-b border-surface-2">
             <textarea
               autoFocus
+              aria-label="Your response"
               value={freeformText}
               onChange={(e) => setFreeformText(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -259,6 +262,7 @@ export function UserQuestionPrompt({
       {/* Actions */}
       <div className="flex-shrink-0 flex gap-2 justify-end px-5 py-3 bg-surface border-t border-surface-2">
         <button
+          type="button"
           onClick={handleSkip}
           className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-surface bg-surface-2 text-fg/70 hover:text-fg hover:bg-surface-2/80 transition-colors"
         >
@@ -266,6 +270,7 @@ export function UserQuestionPrompt({
           Skip
         </button>
         <button
+          type="button"
           onClick={handleSubmit}
           disabled={!hasSelection}
           className={`flex items-center gap-1.5 px-5 py-2 text-sm font-medium rounded-surface transition-colors ${

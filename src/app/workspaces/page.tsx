@@ -3,22 +3,16 @@
 import { FolderOpen, Plus, LoaderCircle, Archive } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import PageHeader from '@/components/PageHeader';
 import WorkspaceIcon from '@/components/Workspaces/WorkspaceIcon';
 import WorkspaceSettingsFields from '@/components/Workspaces/WorkspaceSettingsFields';
 import { workspaceColorClasses } from '@/lib/workspaces/appearance';
-
-interface Workspace {
-  id: string;
-  name: string;
-  description: string | null;
-  color: string | null;
-  icon: string | null;
-  archivedAt: string | null;
-  updatedAt: string;
-}
+import {
+  useWorkspacesList,
+  useCreateWorkspace,
+} from '@/lib/hooks/api/useWorkspaces';
 
 interface CreateModalProps {
   onClose: () => void;
@@ -27,47 +21,39 @@ interface CreateModalProps {
 
 const CreateModal = ({ onClose, onCreated }: CreateModalProps) => {
   const router = useRouter();
+  const createWorkspace = useCreateWorkspace();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [color, setColor] = useState<string | null>(null);
   const [icon, setIcon] = useState<string | null>(null);
   const [autoMemory, setAutoMemory] = useState(false);
   const [autoAcceptFileEdits, setAutoAcceptFileEdits] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-    setSubmitting(true);
     setError('');
-    try {
-      const res = await fetch('/api/workspaces', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: name.trim(),
-          description: description.trim() || undefined,
-          color,
-          icon,
-          autoMemoryEnabled: autoMemory ? 1 : 0,
-          autoAcceptFileEdits: autoAcceptFileEdits ? 1 : 0,
-        }),
-      });
-      if (!res.ok) {
-        const j = await res.json();
-        setError(j.error ?? 'Failed to create workspace');
-        setSubmitting(false);
-      } else {
-        const j = await res.json();
-        onCreated();
-        onClose();
-        router.push(`/workspaces/${j.workspace.id}`);
-      }
-    } catch {
-      setError('Failed to create workspace');
-      setSubmitting(false);
-    }
+    createWorkspace.mutate(
+      {
+        name: name.trim(),
+        description: description.trim() || undefined,
+        color: color ?? undefined,
+        icon: icon ?? undefined,
+        autoMemoryEnabled: autoMemory ? 1 : 0,
+        autoAcceptFileEdits: autoAcceptFileEdits ? 1 : 0,
+      },
+      {
+        onSuccess: (data) => {
+          onCreated();
+          onClose();
+          router.push(`/workspaces/${data.workspace.id}`);
+        },
+        onError: (err) => {
+          setError(err.message ?? 'Failed to create workspace');
+        },
+      },
+    );
   };
 
   return (
@@ -103,10 +89,10 @@ const CreateModal = ({ onClose, onCreated }: CreateModalProps) => {
             </button>
             <button
               type="submit"
-              disabled={!name.trim() || submitting}
+              disabled={!name.trim() || createWorkspace.isPending}
               className="px-4 py-2 text-sm rounded-surface bg-accent text-accent-fg hover:bg-accent/90 transition disabled:opacity-50 flex items-center gap-2"
             >
-              {submitting && (
+              {createWorkspace.isPending && (
                 <LoaderCircle size={14} className="animate-spin" />
               )}
               Create
@@ -119,29 +105,10 @@ const CreateModal = ({ onClose, onCreated }: CreateModalProps) => {
 };
 
 const WorkspacesPage = () => {
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [loading, setLoading] = useState(true);
   const [showArchived, setShowArchived] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
 
-  const fetchWorkspaces = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(
-        `/api/workspaces${showArchived ? '?archived=true' : ''}`,
-      );
-      const data = await res.json();
-      setWorkspaces(data.workspaces ?? []);
-    } catch {
-      console.error('Failed to fetch workspaces');
-    }
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    fetchWorkspaces();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showArchived]);
+  const { data: workspaces = [], isLoading } = useWorkspacesList(showArchived);
 
   return (
     <div>
@@ -149,13 +116,14 @@ const WorkspacesPage = () => {
         icon={FolderOpen}
         title="Workspaces"
         subtitle={
-          !loading
+          !isLoading
             ? `${workspaces.length} workspace${workspaces.length !== 1 ? 's' : ''}`
             : undefined
         }
         actions={
           <>
             <button
+              type="button"
               onClick={() => setShowArchived((v) => !v)}
               className={cn(
                 'flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-surface border border-surface-2 transition duration-200',
@@ -168,6 +136,7 @@ const WorkspacesPage = () => {
               {showArchived ? 'Active' : 'Archived'}
             </button>
             <button
+              type="button"
               onClick={() => setShowCreate(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-surface bg-accent text-accent-fg hover:bg-accent/90 transition duration-200"
             >
@@ -178,7 +147,7 @@ const WorkspacesPage = () => {
         }
       />
 
-      {loading ? (
+      {isLoading ? (
         <div className="flex items-center justify-center py-16">
           <LoaderCircle size={24} className="animate-spin text-accent" />
         </div>
@@ -239,7 +208,7 @@ const WorkspacesPage = () => {
       {showCreate && (
         <CreateModal
           onClose={() => setShowCreate(false)}
-          onCreated={fetchWorkspaces}
+          onCreated={() => {}}
         />
       )}
     </div>

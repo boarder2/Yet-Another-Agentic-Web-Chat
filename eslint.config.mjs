@@ -31,6 +31,11 @@ const config = [
           destructuredArrayIgnorePattern: '^_',
         },
       ],
+      // Accessibility checks mirroring Microsoft Edge Tools warnings:
+      // button-type -> require an explicit type on <button> elements
+      'react/button-has-type': 'error',
+      // axe/name-role-value -> interactive controls must have discernible text
+      'jsx-a11y/control-has-associated-label': 'error',
     },
   },
 ];

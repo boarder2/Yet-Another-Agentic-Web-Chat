@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { FolderOpen, LoaderCircle } from 'lucide-react';
-import { useWorkspace } from '@/lib/hooks/useWorkspace';
+import { useWorkspace } from '@/lib/hooks/api/useWorkspaces';
 import { useLocalStorageBoolean } from '@/lib/hooks/useLocalStorage';
 import { cn } from '@/lib/utils';
 import WorkspaceDetailHeader from './WorkspaceDetailHeader';
@@ -16,7 +16,7 @@ export default function WorkspaceShell({
   workspaceId: string;
   children: React.ReactNode;
 }) {
-  const { workspace, loading } = useWorkspace(workspaceId);
+  const { data: workspace, isLoading: loading } = useWorkspace(workspaceId);
   const [sidebarCollapsed, setSidebarCollapsed] = useLocalStorageBoolean(
     'workspaceSidebarCollapsed',
     false,

@@ -95,6 +95,7 @@ export default function MemorySection({
         </div>
 
         <button
+          type="button"
           onClick={() => {
             if (
               window.confirm(

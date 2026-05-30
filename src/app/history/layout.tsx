@@ -1,7 +1,8 @@
 import { Metadata } from 'next';
+import React from 'react';
 
 export const metadata: Metadata = {
-  title: 'Memory - YAAWC',
+  title: 'History - YAAWC',
 };
 
 const Layout = ({ children }: { children: React.ReactNode }) => {

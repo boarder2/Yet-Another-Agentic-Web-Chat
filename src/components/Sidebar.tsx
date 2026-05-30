@@ -2,8 +2,6 @@
 
 import { cn } from '@/lib/utils';
 import {
-  BookOpenText,
-  Brain,
   CalendarClock,
   Ellipsis,
   Home,
@@ -12,7 +10,8 @@ import {
   LayoutDashboard,
   Maximize2,
   Minimize2,
-  FolderOpen,
+  History,
+  Briefcase,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useSelectedLayoutSegments } from 'next/navigation';
@@ -168,10 +167,10 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
       badgeCount: 0,
     },
     {
-      icon: BookOpenText,
-      href: '/library',
-      active: segments.includes('library'),
-      label: 'Library',
+      icon: Briefcase,
+      href: '/workspaces',
+      active: segments.includes('workspaces'),
+      label: 'Workspaces',
       badgeCount: 0,
     },
     {
@@ -182,17 +181,10 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
       badgeCount: scheduledUnread,
     },
     {
-      icon: Brain,
-      href: '/memory',
-      active: segments.includes('memory'),
-      label: 'Memory',
-      badgeCount: 0,
-    },
-    {
-      icon: FolderOpen,
-      href: '/workspaces',
-      active: segments.includes('workspaces'),
-      label: 'Workspaces',
+      icon: History,
+      href: '/history',
+      active: segments.includes('history'),
+      label: 'History',
       badgeCount: 0,
     },
   ];

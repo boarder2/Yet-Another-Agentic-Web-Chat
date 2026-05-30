@@ -108,7 +108,7 @@ export const GET = async (req: Request) => {
       .select({ count: sql<number>`count(*)` })
       .from(messagesTable)
       .innerJoin(chatsTable, eq(messagesTable.chatId, chatsTable.id))
-      .where(whereCondition);
+      .where(and(whereCondition, eq(messagesTable.role, 'user')));
     const totalMessages = Number(totalMessagesRows?.[0]?.count ?? 0);
 
     const rows = await db

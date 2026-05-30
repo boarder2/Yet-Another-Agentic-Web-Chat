@@ -279,7 +279,7 @@ export async function getMessageCounts(
       count: sql<number>`count(*)`,
     })
     .from(messages)
-    .where(inArray(messages.chatId, chatIds))
+    .where(and(inArray(messages.chatId, chatIds), eq(messages.role, 'user')))
     .groupBy(messages.chatId);
   for (const r of rows) counts.set(r.chatId, Number(r.count));
   return counts;

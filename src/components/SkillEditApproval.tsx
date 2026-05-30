@@ -24,16 +24,56 @@ type DiffLine =
   | { type: 'removed'; text: string; lineNo: number }
   | { type: 'added'; text: string; newLineNo: number };
 
+// Cap the LCS table size; beyond this we fall back to a plain
+// all-removed/all-added rendering rather than risk a huge O(n*m) allocation.
+const MAX_DIFF_CELLS = 4_000_000;
+
 function computeDiff(oldStr: string, newStr: string): DiffLine[] {
-  const oldLines = oldStr.split('\n');
-  const newLines = newStr.split('\n');
+  const a = oldStr.split('\n');
+  const b = newStr.split('\n');
+  const n = a.length;
+  const m = b.length;
   const lines: DiffLine[] = [];
-  for (let i = 0; i < oldLines.length; i++) {
-    lines.push({ type: 'removed', text: oldLines[i], lineNo: i + 1 });
+
+  if ((n + 1) * (m + 1) > MAX_DIFF_CELLS) {
+    for (let i = 0; i < n; i++)
+      lines.push({ type: 'removed', text: a[i], lineNo: i + 1 });
+    for (let j = 0; j < m; j++)
+      lines.push({ type: 'added', text: b[j], newLineNo: j + 1 });
+    return lines;
   }
-  for (let i = 0; i < newLines.length; i++) {
-    lines.push({ type: 'added', text: newLines[i], newLineNo: i + 1 });
+
+  // Longest-common-subsequence table over lines, then backtrack to emit
+  // context / removed / added rows.
+  const dp: number[][] = Array.from({ length: n + 1 }, () =>
+    new Array(m + 1).fill(0),
+  );
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i][j] =
+        a[i] === b[j]
+          ? dp[i + 1][j + 1] + 1
+          : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
   }
+
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) {
+      lines.push({ type: 'context', text: a[i], lineNo: i + 1 });
+      i++;
+      j++;
+    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+      lines.push({ type: 'removed', text: a[i], lineNo: i + 1 });
+      i++;
+    } else {
+      lines.push({ type: 'added', text: b[j], newLineNo: j + 1 });
+      j++;
+    }
+  }
+  while (i < n) lines.push({ type: 'removed', text: a[i], lineNo: i++ + 1 });
+  while (j < m) lines.push({ type: 'added', text: b[j], newLineNo: j++ + 1 });
   return lines;
 }
 

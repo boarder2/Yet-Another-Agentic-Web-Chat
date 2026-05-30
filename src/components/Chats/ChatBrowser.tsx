@@ -1,7 +1,7 @@
 // src/components/Chats/ChatBrowser.tsx
 'use client';
 
-import ChatRow, { Chat, WorkspaceMeta } from './ChatRow';
+import ChatRow, { WorkspaceMeta } from './ChatRow';
 import { cn } from '@/lib/utils';
 import { workspaceColorClasses } from '@/lib/workspaces/appearance';
 import WorkspaceIcon from '@/components/Workspaces/WorkspaceIcon';
@@ -19,6 +19,7 @@ import { useConfig } from '@/lib/hooks/api/useConfig';
 import {
   useChatsInfinite,
   useChatSearch,
+  useChatLlmSearch,
   type ChatsFilter,
   type ChatsPage,
 } from '@/lib/hooks/api/useChats';
@@ -49,13 +50,18 @@ const ChatBrowser = ({ workspaceId }: Props) => {
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
-  const [isLlmSearching, setIsLlmSearching] = useState(false);
-  const [searchTerms, setSearchTerms] = useState<string[]>([]);
-  const [llmResults, setLlmResults] = useState<Chat[] | null>(null);
-  const [llmTotalMessages, setLlmTotalMessages] = useState(0);
   const [searchMode, setSearchMode] = useState<'text' | 'llm'>('text');
+  // The query the user committed to an AI search (drives the LLM search query).
+  const [llmQuery, setLlmQuery] = useState('');
 
   const isSearchMode = debouncedQuery.trim().length > 0;
+
+  const chatModel = useMemo(() => {
+    if (typeof window === 'undefined') return null;
+    const provider = localStorage.getItem('chatModelProvider');
+    const model = localStorage.getItem('chatModel');
+    return provider && model ? { provider, model } : null;
+  }, []);
 
   const privateSessionDurationMs = useMemo(() => {
     const minutes = (configData as { privateSessionDurationMinutes?: number })
@@ -139,6 +145,14 @@ const ChatBrowser = ({ workspaceId }: Props) => {
     searchFilter,
   );
 
+  // AI (LLM) search — cached in TanStack Query and invalidated by chat
+  // mutations alongside text search results.
+  const { data: llmData, isFetching: isLlmSearching } = useChatLlmSearch(
+    searchMode === 'llm' ? llmQuery : '',
+    chatModel,
+    searchFilter,
+  );
+
   // Debounce search query
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -149,19 +163,17 @@ const ChatBrowser = ({ workspaceId }: Props) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery]);
 
-  // Reset LLM results when query changes
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (searchMode === 'text') setLlmResults(null);
-  }, [debouncedQuery, searchMode]);
-
   const textSearchResults = textSearchData?.chats ?? [];
   const textSearchTotalMessages = textSearchData?.totalMessages ?? 0;
 
+  const searchTerms = searchMode === 'llm' ? (llmData?.terms ?? []) : [];
+
   const searchResults =
-    searchMode === 'llm' ? (llmResults ?? []) : textSearchResults;
+    searchMode === 'llm' ? (llmData?.chats ?? []) : textSearchResults;
   const searchTotalMessages =
-    searchMode === 'llm' ? llmTotalMessages : textSearchTotalMessages;
+    searchMode === 'llm'
+      ? (llmData?.totalMessages ?? 0)
+      : textSearchTotalMessages;
   const isSearching = isTextSearching || isLlmSearching;
 
   const displayedChats = isSearchMode ? searchResults : browseChats;
@@ -195,52 +207,17 @@ const ChatBrowser = ({ workspaceId }: Props) => {
     };
   }, [hasNextPage, loading, loadingMore, isSearchMode, fetchNextPage]);
 
-  const handleLlmSearch = async () => {
+  const handleLlmSearch = () => {
     if (!searchQuery.trim() || isLlmSearching) return;
-    const provider =
-      typeof window !== 'undefined'
-        ? localStorage.getItem('chatModelProvider')
-        : null;
-    const model =
-      typeof window !== 'undefined' ? localStorage.getItem('chatModel') : null;
-    setIsLlmSearching(true);
     setSearchMode('llm');
-    setSearchTerms([]);
+    setLlmQuery(searchQuery);
     setDebouncedQuery(searchQuery);
-    try {
-      const body: Record<string, unknown> = {
-        query: searchQuery,
-        chatModel: provider && model ? { provider, model } : undefined,
-      };
-      if (scoped) body.workspaceId = workspaceId;
-      else if (selectedWorkspaceFilters.length > 0)
-        body.workspaceIds = selectedWorkspaceFilters;
-      const res = await fetch('/api/chats/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      setLlmResults(data.chats || []);
-      setSearchTerms(data.terms || []);
-      setLlmTotalMessages(
-        typeof data.totalMessages === 'number' ? data.totalMessages : 0,
-      );
-    } catch (err) {
-      console.error('LLM search error:', err);
-      setLlmResults([]);
-      setLlmTotalMessages(0);
-    } finally {
-      setIsLlmSearching(false);
-    }
   };
 
   const clearSearch = () => {
     setSearchQuery('');
     setDebouncedQuery('');
-    setLlmResults(null);
-    setSearchTerms([]);
-    setLlmTotalMessages(0);
+    setLlmQuery('');
     setSearchMode('text');
   };
 

@@ -3,7 +3,11 @@ import { encodeHtmlAttribute } from '@/lib/utils/html';
 import { cleanupCancelToken, registerCancelToken } from '@/lib/cancel-tokens';
 import db from '@/lib/db';
 import { chats, messages as messagesSchema, workspaces } from '@/lib/db/schema';
-import { getChatMessages, getCompactionRows } from '@/lib/db/queries';
+import {
+  getChatMessages,
+  getCompactionRows,
+  sumMessageContentChars,
+} from '@/lib/db/queries';
 import { resolveChatAndEmbedding } from '@/lib/providers/resolveModels';
 import { getFileDetails } from '@/lib/utils/files';
 import {
@@ -582,27 +586,23 @@ const handleEmitterEvents = async (
     try {
       const assistantEstimate = Math.round(recievedMessage.length / 4);
       if (modelStats.firstChatCallInputTokens) {
-        // Accurate path: base = actual measured input for this turn
-        const rows = await getChatMessages(chatId, { includeSystem: true });
-        // System rows appended during this turn sit after the user row.
-        const userRowIdx = rows.findIndex((r) => r.messageId === userMessageId);
-        const newRows = userRowIdx >= 0 ? rows.slice(userRowIdx + 1) : [];
-        const newRowsTokens = newRows.reduce(
-          (s, r) => s + Math.round(((r.content as string) || '').length / 4),
-          0,
-        );
+        // Accurate path: base = actual measured input for this turn. Only the
+        // system rows appended after the user message during this turn are new
+        // relative to that base, so sum just those (in SQL) rather than
+        // re-reading the whole conversation.
+        const newRowsChars = await sumMessageContentChars(chatId, {
+          afterMessageId: userMessageId,
+        });
+        const newRowsTokens = Math.round(newRowsChars / 4);
         projectedNextInputTokens =
           modelStats.firstChatCallInputTokens +
           newRowsTokens +
           assistantEstimate;
       } else {
         // Fallback: estimate from all rows + fixed system-prompt estimate
-        const rows = await getChatMessages(chatId, { includeSystem: true });
+        const fromRowsChars = await sumMessageContentChars(chatId);
         const SYSTEM_PROMPT_ESTIMATE = 3000;
-        const fromRows = rows.reduce(
-          (s, r) => s + Math.round(((r.content as string) || '').length / 4),
-          0,
-        );
+        const fromRows = Math.round(fromRowsChars / 4);
         projectedNextInputTokens =
           fromRows + assistantEstimate + SYSTEM_PROMPT_ESTIMATE;
       }

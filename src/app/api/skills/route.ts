@@ -13,6 +13,7 @@ import {
   MAX_SKILL_DESC_LEN,
   MAX_SKILL_CONTENT_LEN,
 } from '@/lib/skills/validation';
+import { isSystemSkillName } from '@/lib/skills/systemRegistry';
 
 export async function GET(req: Request) {
   try {
@@ -80,6 +81,13 @@ export async function POST(req: Request) {
     }
     if (content.length > MAX_SKILL_CONTENT_LEN) {
       return NextResponse.json({ error: 'content too long' }, { status: 400 });
+    }
+
+    if (isSystemSkillName(name)) {
+      return NextResponse.json(
+        { error: `"${name}" is reserved by a built-in system skill` },
+        { status: 409 },
+      );
     }
 
     // Check uniqueness

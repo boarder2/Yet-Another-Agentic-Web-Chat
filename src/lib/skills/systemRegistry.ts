@@ -85,3 +85,8 @@ export function getSystemSkills(): Skill[] {
 export function clearSystemSkillsCache() {
   fileCache = null;
 }
+
+/** True if `name` is reserved by a built-in system skill. */
+export function isSystemSkillName(name: string): boolean {
+  return getSystemSkills().some((s) => s.name === name);
+}

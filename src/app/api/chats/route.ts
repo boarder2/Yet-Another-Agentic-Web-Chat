@@ -3,11 +3,11 @@ import {
   chats as chatsTable,
   messages as messagesTable,
 } from '@/lib/db/schema';
-import { desc, eq, sql, and, inArray, isNull, isNotNull } from 'drizzle-orm';
+import { desc, eq, sql, and, isNull, isNotNull } from 'drizzle-orm';
 import {
   buildWorkspaceCondition,
-  extractExcerpt,
   getMessageCounts,
+  hydrateSearchHits,
   searchChatsByKeywords,
 } from '@/lib/db/chatSearch';
 
@@ -37,6 +37,7 @@ export const GET = async (req: Request) => {
             .filter(Boolean)
         : undefined;
 
+      // Upper bound on the matched-chat window we score in one pass.
       const SEARCH_CAP = 500;
       const hits = await searchChatsByKeywords({
         keywords: [q],
@@ -47,36 +48,27 @@ export const GET = async (req: Request) => {
         limit: SEARCH_CAP,
       });
 
-      const ids = hits.map((h) => h.chatId);
-      const fullChats = ids.length
-        ? await db.select().from(chatsTable).where(inArray(chatsTable.id, ids))
-        : [];
-      const chatById = new Map(fullChats.map((c) => [c.id, c]));
-      const messageCounts = await getMessageCounts(ids);
+      const { chats: matched, totalMessages } = await hydrateSearchHits(
+        hits,
+        q,
+      );
 
-      const chats = hits
-        .map((h) => {
-          const chat = chatById.get(h.chatId);
-          if (!chat) return null;
-          return {
-            ...chat,
-            matchExcerpt: h.messageContent
-              ? extractExcerpt(h.messageContent, q)
-              : null,
-            messageCount: messageCounts.get(h.chatId) ?? 0,
-          };
-        })
-        .filter((c): c is NonNullable<typeof c> => c !== null)
-        .sort((a, b) => b.createdAt - a.createdAt);
-
-      const totalMessages = chats.reduce((sum, c) => sum + c.messageCount, 0);
+      // Paginate only when the caller explicitly asked for a window
+      // (limit/offset params). The default flat-list search UI sends neither
+      // and expects the full matched set, so return everything (capped) in
+      // that case, with offset/limit available for clients that do page.
+      const paginated = limitParam !== null || offsetParam !== null;
+      const paged = paginated ? matched.slice(offset, offset + limit) : matched;
 
       return Response.json(
         {
-          chats,
-          total: chats.length,
+          chats: paged,
+          total: matched.length,
           totalMessages,
-          hasMore: hits.length >= SEARCH_CAP,
+          ...(paginated ? { limit, offset } : {}),
+          hasMore: paginated
+            ? offset + paged.length < matched.length
+            : matched.length >= SEARCH_CAP,
         },
         { status: 200 },
       );

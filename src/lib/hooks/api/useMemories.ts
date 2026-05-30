@@ -62,7 +62,7 @@ export function useAddMemoryItem(workspaceId?: string | null) {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ content, workspaceId: workspaceId ?? null }),
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['memories'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.memoriesRoot }),
   });
 }
 
@@ -75,7 +75,7 @@ export function useEditMemoryItem() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ content }),
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['memories'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.memoriesRoot }),
   });
 }
 
@@ -84,7 +84,7 @@ export function useDeleteMemoryItem() {
   return useMutation({
     mutationFn: (id: string) =>
       apiFetch(`/api/memories/${id}`, { method: 'DELETE' }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['memories'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.memoriesRoot }),
   });
 }
 
@@ -92,7 +92,7 @@ export function useDeleteAllMemories() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => apiFetch('/api/memories', { method: 'DELETE' }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['memories'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.memoriesRoot }),
   });
 }
 
@@ -100,6 +100,6 @@ export function useReindexMemories() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => apiFetch('/api/memories/reindex', { method: 'POST' }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['memories'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.memoriesRoot }),
   });
 }

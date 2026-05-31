@@ -1,5 +1,5 @@
 import db from '@/lib/db';
-import { messages as messagesSchema } from '@/lib/db/schema';
+import { chats, messages as messagesSchema } from '@/lib/db/schema';
 import { getChatMessages, getCompactionRows } from '@/lib/db/queries';
 import { resolveChatAndEmbedding } from '@/lib/providers/resolveModels';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
@@ -60,6 +60,20 @@ export const POST = async (req: Request) => {
 
     if (!chatId) {
       return Response.json({ error: 'chatId is required' }, { status: 400 });
+    }
+
+    // Refuse compaction while a run is active so we don't compact a partial row
+    const chatRow = await db.query.chats.findFirst({
+      where: eq(chats.id, chatId),
+    });
+    if (chatRow?.activeRunMessageId) {
+      return Response.json(
+        {
+          error:
+            'Cannot compact while a run is in progress. Try again when the current turn completes.',
+        },
+        { status: 409 },
+      );
     }
 
     const messages = await getChatMessages(chatId, { includeSystem: true });

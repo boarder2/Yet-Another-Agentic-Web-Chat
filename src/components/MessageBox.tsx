@@ -262,6 +262,12 @@ const MessageBox = ({
         </div>
       )}
 
+      {message.role === 'assistant' && message.runStatus === 'interrupted' && (
+        <p className="mt-2 text-xs text-fg/50 italic">
+          (run interrupted — server was restarted mid-response)
+        </p>
+      )}
+
       {message.role === 'assistant' && (
         <MessageTabs
           query={history[messageIndex - 1].content}

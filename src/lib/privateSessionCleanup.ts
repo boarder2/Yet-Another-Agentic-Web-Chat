@@ -2,6 +2,7 @@ import db from './db';
 import { chats, messages } from './db/schema';
 import { eq } from 'drizzle-orm';
 import { getPrivateSessionDurationMinutes } from './config';
+import { getRunByChatId } from './runs/runHub';
 
 export async function cleanupExpiredPrivateSessions(): Promise<number> {
   const durationMs = getPrivateSessionDurationMinutes() * 60 * 1000;
@@ -19,6 +20,8 @@ export async function cleanupExpiredPrivateSessions(): Promise<number> {
   });
 
   for (const chat of expired) {
+    // Skip chats whose run is still active — next cron pass will catch them
+    if (getRunByChatId(chat.id)?.status === 'running') continue;
     await db.delete(messages).where(eq(messages.chatId, chat.id));
     await db.delete(chats).where(eq(chats.id, chat.id));
   }

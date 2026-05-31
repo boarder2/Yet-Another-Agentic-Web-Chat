@@ -1,6 +1,4 @@
-import { updateToolCallMarkup } from '@/lib/utils/toolCallMarkup';
-import { encodeHtmlAttribute } from '@/lib/utils/html';
-import { cleanupCancelToken, registerCancelToken } from '@/lib/cancel-tokens';
+import { registerCancelToken } from '@/lib/cancel-tokens';
 import db from '@/lib/db';
 import { chats, messages as messagesSchema, workspaces } from '@/lib/db/schema';
 import { getChatMessages, getCompactionRows } from '@/lib/db/queries';
@@ -16,18 +14,12 @@ import { buildHistoryFromDb } from '@/lib/utils/buildHistory';
 import crypto from 'crypto';
 import { and, eq, gte } from 'drizzle-orm';
 import { EventEmitter } from 'stream';
-import {
-  registerRetrieval,
-  cleanupRun,
-  clearSoftStop,
-} from '@/lib/utils/runControl';
+import { registerRetrieval, clearSoftStop } from '@/lib/utils/runControl';
 import { CachedEmbeddings } from '@/lib/utils/cachedEmbeddings';
 import { retrieveRelevantMemories } from '@/lib/utils/memoryRetrieval';
 import { buildMemorySection } from '@/lib/prompts/memory/memoryContext';
 import { processExtraction } from '@/lib/utils/memoryExtraction';
 import { distillQueryForEmbedding } from '@/lib/utils/queryDistillation';
-import { denyApprovalsForMessage } from '@/lib/sandbox/pendingApprovals';
-import { cancelQuestionsForMessage } from '@/lib/userQuestion/pendingQuestions';
 import { SimplifiedAgent } from '@/lib/search/simplifiedAgent';
 import { buildWorkspaceSystemPromptSuffix } from '@/lib/workspaces/composeSystemPrompt';
 import { workspaceLsTool } from '@/lib/tools/workspace/ls';
@@ -35,11 +27,17 @@ import { workspaceGrepTool } from '@/lib/tools/workspace/grep';
 import { workspaceReadTool } from '@/lib/tools/workspace/read';
 import { workspaceEditTool } from '@/lib/tools/workspace/edit';
 import { workspaceCreateFileTool } from '@/lib/tools/workspace/create';
-import { cancelEditsForMessage } from '@/lib/workspaces/pendingEdits';
-import { cancelEditsForMessage as cancelSkillEditsForMessage } from '@/lib/skills/pendingEdits';
 import { resolveSkillsForChat, getByName } from '@/lib/skills/resolve';
 import { SKILL_TOKEN_SCAN_REGEX } from '@/lib/skills/validation';
 import { persistToolContextRow } from '@/lib/utils/persistToolContext';
+import {
+  startRun,
+  getRun,
+  subscribe,
+  pushEvent,
+  evictByChatId,
+} from '@/lib/runs/runHub';
+import { attachRunHost } from '@/lib/runs/runHost';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -95,573 +93,6 @@ type TokenUsage = {
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
-};
-type ModelStats = {
-  modelName: string; // legacy
-  responseTime?: number;
-  usage?: TokenUsage; // legacy total
-  modelNameChat?: string;
-  modelNameSystem?: string;
-  usageChat?: TokenUsage;
-  usageSystem?: TokenUsage;
-  usedLocation?: boolean;
-  usedPersonalization?: boolean;
-  firstChatCallInputTokens?: number;
-};
-
-const handleEmitterEvents = async (
-  stream: EventEmitter,
-  writer: WritableStreamDefaultWriter,
-  encoder: TextEncoder,
-  aiMessageId: string,
-  chatId: string,
-  startTime: number,
-  userMessageId: string,
-  abortController: AbortController,
-  usedLocation: boolean,
-  usedPersonalization: boolean,
-  memoriesUsed: Array<{ id: string; content: string }> = [],
-) => {
-  let recievedMessage = '';
-  // Map executionId → runId for correlating code_execution_result with the correct ToolCall markup
-  const codeExecutionRunIdMap = new Map<string, string>();
-  // Map questionId → runId for correlating user_question_answered with the correct ToolCall markup
-  const userQuestionRunIdMap = new Map<string, string>();
-  // Accumulated chartId → ChartSpec map for persistence in metadata
-  const chartSpecs: Record<string, unknown> = {};
-  let sources: Record<string, unknown>[] = [];
-  let searchQuery: string | undefined;
-  let searchUrl: string | undefined;
-  let isStreamActive = true;
-  let writerClosed = false;
-
-  // Helper to safely write to the stream; aborts processing if the client has disconnected
-  const safeWrite = (data: string) => {
-    if (!isStreamActive || writerClosed || abortController.signal.aborted)
-      return;
-    writer.write(encoder.encode(data)).catch(() => {
-      if (!isStreamActive) return;
-      isStreamActive = false;
-      if (!abortController.signal.aborted) {
-        console.log('Write failed (client disconnected), aborting processing');
-        abortController.abort();
-      }
-    });
-  };
-
-  const safeClose = () => {
-    if (writerClosed) return;
-    writerClosed = true;
-    writer.close().catch(() => {});
-  };
-
-  // Keep-alive ping mechanism to prevent reverse proxy timeouts
-  const pingInterval = setInterval(() => {
-    if (isStreamActive && !abortController.signal.aborted) {
-      safeWrite(
-        JSON.stringify({
-          type: 'ping',
-          timestamp: Date.now(),
-        }) + '\n',
-      );
-    } else {
-      clearInterval(pingInterval);
-    }
-  }, 30000); // Send ping every 30 seconds
-
-  // Clean up ping interval if request is cancelled
-  abortController.signal.addEventListener('abort', () => {
-    isStreamActive = false;
-    clearInterval(pingInterval);
-    // Auto-deny any pending code execution approvals for this message
-    denyApprovalsForMessage(userMessageId);
-    // Auto-cancel any pending user questions for this message
-    cancelQuestionsForMessage(userMessageId);
-    // Auto-cancel any pending workspace edit approvals for this message
-    cancelEditsForMessage(userMessageId);
-    // Auto-cancel any pending skill edit approvals for this message
-    cancelSkillEditsForMessage(userMessageId);
-  });
-
-  stream.on('data', (data) => {
-    if (!isStreamActive || abortController.signal.aborted) return;
-    const parsedData = JSON.parse(data);
-
-    if (parsedData.type === 'response') {
-      safeWrite(
-        JSON.stringify({
-          type: 'response',
-          data: parsedData.data,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-
-      recievedMessage += parsedData.data;
-    } else if (
-      parsedData.type === 'sources' ||
-      parsedData.type === 'sources_added'
-    ) {
-      // Capture the search query if available
-      if (parsedData.searchQuery) {
-        searchQuery = parsedData.searchQuery;
-      }
-      if (parsedData.searchUrl) {
-        searchUrl = parsedData.searchUrl;
-      }
-
-      safeWrite(
-        JSON.stringify({
-          type: parsedData.type,
-          data: parsedData.data,
-          searchQuery: parsedData.searchQuery,
-          messageId: aiMessageId,
-          searchUrl: searchUrl,
-        }) + '\n',
-      );
-
-      sources = parsedData.data;
-    } else if (
-      parsedData.type === 'tool_call_started' ||
-      parsedData.type === 'tool_call_success' ||
-      parsedData.type === 'tool_call_error'
-    ) {
-      // Forward new granular tool lifecycle events
-      safeWrite(
-        JSON.stringify({
-          type: parsedData.type,
-          data: parsedData.data,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-      if (parsedData.type === 'tool_call_started' && parsedData.data?.content) {
-        // Append initial placeholder markup to message content for persistence
-        recievedMessage += parsedData.data.content;
-      } else if (
-        parsedData.type === 'tool_call_success' ||
-        parsedData.type === 'tool_call_error'
-      ) {
-        // Rewrite existing ToolCall tag with final status (and error if applicable)
-        recievedMessage = updateToolCallMarkup(
-          recievedMessage,
-          parsedData.data.toolCallId,
-          {
-            status: parsedData.data.status,
-            error: parsedData.data.error,
-            extra: parsedData.data.extra,
-          },
-        );
-      }
-    } else if (
-      parsedData.type === 'subagent_started' ||
-      parsedData.type === 'subagent_completed' ||
-      parsedData.type === 'subagent_error' ||
-      parsedData.type === 'subagent_data'
-    ) {
-      // Forward subagent events to client
-      // console.log('API: Forwarding subagent event:', parsedData.type);
-      safeWrite(
-        JSON.stringify({
-          ...parsedData,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-
-      // Update received message for persistence if needed
-      if (parsedData.type === 'subagent_started') {
-        const markup = `<SubagentExecution id="${parsedData.executionId}" name="${encodeHtmlAttribute(parsedData.name ?? '')}" task="${encodeHtmlAttribute(parsedData.task ?? '')}" status="running"></SubagentExecution>\n`;
-        recievedMessage += markup;
-      } else if (parsedData.type === 'subagent_data') {
-        // Persist nested tool call markup inside SubagentExecution tags
-        const nestedEvent = parsedData.data;
-        const executionId = parsedData.subagentId;
-
-        if (
-          nestedEvent?.type === 'tool_call_started' &&
-          nestedEvent.data?.content
-        ) {
-          // Insert ToolCall markup inside the SubagentExecution tag
-          const subagentRegex = new RegExp(
-            `(<SubagentExecution\\s+id="${executionId}"[^>]*>)(.*?)(</SubagentExecution>)`,
-            'gs',
-          );
-          recievedMessage = recievedMessage.replace(
-            subagentRegex,
-            (_match, openTag, content, closeTag) => {
-              return `${openTag}${content}${nestedEvent.data.content}\n${closeTag}`;
-            },
-          );
-        } else if (
-          nestedEvent?.type === 'tool_call_success' &&
-          nestedEvent.data?.toolCallId
-        ) {
-          recievedMessage = updateToolCallMarkup(
-            recievedMessage,
-            nestedEvent.data.toolCallId,
-            { status: 'success' },
-          );
-        } else if (
-          nestedEvent?.type === 'tool_call_error' &&
-          nestedEvent.data?.toolCallId
-        ) {
-          recievedMessage = updateToolCallMarkup(
-            recievedMessage,
-            nestedEvent.data.toolCallId,
-            {
-              status: 'error',
-              error: nestedEvent.data.error,
-            },
-          );
-        }
-      } else if (
-        parsedData.type === 'subagent_completed' ||
-        parsedData.type === 'subagent_error'
-      ) {
-        // Update the SubagentExecution markup in received message
-        const status =
-          parsedData.type === 'subagent_completed' ? 'success' : 'error';
-        const executionId = parsedData.id;
-        const subagentRegex = new RegExp(
-          `<SubagentExecution\\s+id="${executionId}"([^>]*)>(.*?)<\\/SubagentExecution>`,
-          'gs',
-        );
-        recievedMessage = recievedMessage.replace(
-          subagentRegex,
-          (_match, attrs, innerContent) => {
-            let updatedAttrs = attrs
-              .replace(/status="[^"]*"/, `status="${status}"`)
-              .trim();
-            if (!updatedAttrs.includes('status=')) {
-              updatedAttrs += ` status="${status}"`;
-            }
-            if (parsedData.summary && status === 'success') {
-              const escapedSummary = parsedData.summary
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;');
-              updatedAttrs += ` summary="${escapedSummary}"`;
-            }
-            if (parsedData.error && status === 'error') {
-              const escapedError = parsedData.error
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;');
-              updatedAttrs += ` error="${escapedError}"`;
-            }
-            // Preserve inner content (ToolCall markup)
-            return `<SubagentExecution ${updatedAttrs}>${innerContent}</SubagentExecution>`;
-          },
-        );
-      }
-    } else if (parsedData.type === 'chart_spec') {
-      // Accumulate chart specs for persistence; forward to client for live rendering
-      const { chartId, spec } = parsedData.data ?? {};
-      if (chartId && spec) {
-        chartSpecs[chartId] = spec;
-      }
-      safeWrite(
-        JSON.stringify({
-          type: 'chart_spec',
-          data: parsedData.data,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-    } else if (parsedData.type === 'todo_update') {
-      // Forward todo_update event to client (transient UI, not persisted in message)
-      safeWrite(
-        JSON.stringify({
-          type: 'todo_update',
-          data: parsedData.data,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-    } else if (parsedData.type === 'code_execution_pending') {
-      // Correlate this execution with the ToolCall markup's toolCallId
-      // (provided by codeExecutionCorrelation module via markupToolCallId).
-      const runId = parsedData.data?.markupToolCallId;
-      if (runId && parsedData.data?.executionId) {
-        codeExecutionRunIdMap.set(parsedData.data.executionId, runId);
-      }
-      // Forward code execution pending event to client
-      safeWrite(
-        JSON.stringify({
-          type: parsedData.type,
-          data: parsedData.data,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-    } else if (parsedData.type === 'code_execution_result') {
-      // Forward to client
-      safeWrite(
-        JSON.stringify({
-          type: parsedData.type,
-          data: parsedData.data,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-      // Persist result data in ToolCall markup
-      // Look up the correct runId for this execution from the correlation map
-      const tcId =
-        codeExecutionRunIdMap.get(parsedData.data?.executionId) ||
-        parsedData.data?.toolCallId;
-      if (tcId) {
-        const d = parsedData.data;
-        const extra: Record<string, string> = {};
-        if (d.exitCode !== undefined) extra.exitCode = String(d.exitCode);
-        if (d.stdout) extra.stdout = d.stdout.slice(0, 2000);
-        if (d.stderr) extra.stderr = d.stderr.slice(0, 1000);
-        if (d.timedOut) extra.timedOut = 'true';
-        if (d.oomKilled) extra.oomKilled = 'true';
-        if (d.denied) extra.denied = 'true';
-        if (Array.isArray(d.chartIds) && d.chartIds.length > 0)
-          extra.chartIds = d.chartIds.join(',');
-        recievedMessage = updateToolCallMarkup(recievedMessage, tcId, {
-          extra,
-        });
-      }
-    } else if (parsedData.type === 'user_question_pending') {
-      // Correlate this question with the ToolCall markup's toolCallId
-      const runId = parsedData.data?.markupToolCallId;
-      if (runId && parsedData.data?.questionId) {
-        userQuestionRunIdMap.set(parsedData.data.questionId, runId);
-      }
-      // Forward to client
-      safeWrite(
-        JSON.stringify({
-          type: parsedData.type,
-          data: parsedData.data,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-    } else if (parsedData.type === 'user_question_answered') {
-      // Forward to client
-      safeWrite(
-        JSON.stringify({
-          type: parsedData.type,
-          data: parsedData.data,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-      // Persist response in ToolCall markup
-      const tcId =
-        userQuestionRunIdMap.get(parsedData.data?.questionId) ||
-        parsedData.data?.toolCallId;
-      if (tcId) {
-        const d = parsedData.data;
-        const extra: Record<string, string> = {};
-        if (d.selectedOptions?.length)
-          extra.selectedOptions = d.selectedOptions.join(', ');
-        if (d.freeformText) extra.freeformText = d.freeformText.slice(0, 500);
-        if (d.skipped) extra.skipped = 'true';
-        if (d.timedOut) extra.timedOut = 'true';
-        recievedMessage = updateToolCallMarkup(recievedMessage, tcId, {
-          extra,
-        });
-      }
-    } else if (parsedData.type === 'workspace_edit_approval_pending') {
-      // Forward workspace edit/create approval request to client
-      safeWrite(
-        JSON.stringify({
-          type: parsedData.type,
-          data: parsedData.data,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-    } else if (parsedData.type === 'workspace_edit_approval_answered') {
-      // Forward workspace edit/create approval answer to client
-      safeWrite(
-        JSON.stringify({
-          type: parsedData.type,
-          data: parsedData.data,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-    } else if (parsedData.type === 'skill_edit_approval_pending') {
-      safeWrite(
-        JSON.stringify({
-          type: parsedData.type,
-          data: parsedData.data,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-    } else if (parsedData.type === 'skill_edit_approval_answered') {
-      safeWrite(
-        JSON.stringify({
-          type: parsedData.type,
-          data: parsedData.data,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-    } else if (parsedData.type === 'context_grew') {
-      // Forward to client so the context-usage chip can flash an inflation
-      // badge live during the turn.
-      safeWrite(
-        JSON.stringify({
-          type: 'context_grew',
-          kind: parsedData.kind,
-          tokens: parsedData.tokens,
-          totalEstimated: parsedData.totalEstimated,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-    } else if (parsedData.type === 'workspace_file_changed') {
-      safeWrite(
-        JSON.stringify({
-          type: parsedData.type,
-          data: parsedData.data,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-    }
-  });
-
-  let modelStats: ModelStats = {
-    modelName: '',
-  };
-
-  stream.on('progress', (data) => {
-    if (!isStreamActive || abortController.signal.aborted) return;
-    const parsedData = JSON.parse(data);
-    if (parsedData.type === 'progress') {
-      safeWrite(
-        JSON.stringify({
-          type: 'progress',
-          data: parsedData.data,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-    }
-  });
-
-  stream.on('stats', (data) => {
-    if (!isStreamActive || abortController.signal.aborted) return;
-    const parsedData = JSON.parse(data);
-    if (parsedData.type === 'modelStats') {
-      modelStats = {
-        ...parsedData.data,
-        usedLocation,
-        usedPersonalization,
-      };
-      // Forward stats to client for live updates
-      safeWrite(
-        JSON.stringify({
-          type: 'stats',
-          data: modelStats,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-    }
-  });
-
-  stream.on('end', async () => {
-    clearInterval(pingInterval);
-
-    const endTime = Date.now();
-    const duration = endTime - startTime;
-
-    modelStats = {
-      ...modelStats,
-      responseTime: duration,
-      usedLocation,
-      usedPersonalization,
-    };
-
-    // Best-effort projection of next-turn input tokens.
-    //
-    // Preferred path (accurate): use firstChatCallInputTokens (actual measured
-    // input for this turn's first LLM call, which includes system prompt +
-    // all prior history + this turn's user message) as the base, then add the
-    // system rows that were persisted during this turn (not yet in the base)
-    // and the assistant output. This closely approximates what the model will
-    // receive on the next call.
-    //
-    // Fallback: estimate from all persisted rows + a fixed system-prompt
-    // estimate (used when the LLM did not report token counts).
-    let projectedNextInputTokens: number | undefined;
-    try {
-      const assistantEstimate = Math.round(recievedMessage.length / 4);
-      if (modelStats.firstChatCallInputTokens) {
-        // Accurate path: base = actual measured input for this turn
-        const rows = await getChatMessages(chatId, { includeSystem: true });
-        // System rows appended during this turn sit after the user row.
-        const userRowIdx = rows.findIndex((r) => r.messageId === userMessageId);
-        const newRows = userRowIdx >= 0 ? rows.slice(userRowIdx + 1) : [];
-        const newRowsTokens = newRows.reduce(
-          (s, r) => s + Math.round(((r.content as string) || '').length / 4),
-          0,
-        );
-        projectedNextInputTokens =
-          modelStats.firstChatCallInputTokens +
-          newRowsTokens +
-          assistantEstimate;
-      } else {
-        // Fallback: estimate from all rows + fixed system-prompt estimate
-        const rows = await getChatMessages(chatId, { includeSystem: true });
-        const SYSTEM_PROMPT_ESTIMATE = 3000;
-        const fromRows = rows.reduce(
-          (s, r) => s + Math.round(((r.content as string) || '').length / 4),
-          0,
-        );
-        projectedNextInputTokens =
-          fromRows + assistantEstimate + SYSTEM_PROMPT_ESTIMATE;
-      }
-    } catch (err) {
-      console.warn('[messageEnd] projection failed:', err);
-    }
-
-    safeWrite(
-      JSON.stringify({
-        type: 'messageEnd',
-        messageId: aiMessageId,
-        modelStats: modelStats,
-        searchQuery: searchQuery,
-        searchUrl: searchUrl,
-        usedLocation,
-        usedPersonalization,
-        memoriesUsed: memoriesUsed.length > 0 ? memoriesUsed : undefined,
-        projectedNextInputTokens,
-      }) + '\n',
-    );
-    isStreamActive = false;
-    safeClose();
-
-    // Clean up the abort controller reference
-    cleanupCancelToken(userMessageId);
-
-    db.insert(messagesSchema)
-      .values({
-        content: recievedMessage,
-        chatId: chatId,
-        messageId: aiMessageId,
-        role: 'assistant',
-        metadata: JSON.stringify({
-          createdAt: new Date(),
-          ...(sources && sources.length > 0 && { sources }),
-          ...(searchQuery && { searchQuery }),
-          modelStats: modelStats,
-          ...(searchUrl && { searchUrl }),
-          usedLocation,
-          usedPersonalization,
-          ...(memoriesUsed.length > 0 && { memoriesUsed }),
-          ...(Object.keys(chartSpecs).length > 0 && { chartSpecs }),
-        }),
-      })
-      .execute();
-  });
-  stream.on('error', (data) => {
-    clearInterval(pingInterval);
-
-    const parsedData = JSON.parse(data);
-    safeWrite(
-      JSON.stringify({
-        type: 'error',
-        data: parsedData.data,
-      }),
-    );
-    isStreamActive = false;
-    safeClose();
-  });
 };
 
 const handleHistorySave = async (
@@ -731,6 +162,12 @@ const handleHistorySave = async (
     .execute();
 };
 
+const SSE_HEADERS = {
+  'Content-Type': 'text/event-stream',
+  Connection: 'keep-alive',
+  'Cache-Control': 'no-cache, no-transform',
+};
+
 export const POST = async (req: Request) => {
   try {
     const startTime = Date.now();
@@ -747,6 +184,18 @@ export const POST = async (req: Request) => {
         },
         { status: 400 },
       );
+    }
+
+    const humanMessageId =
+      message.messageId ?? crypto.randomBytes(7).toString('hex');
+
+    // Fast-path idempotency: if this messageId already has a live run, re-subscribe
+    const existingRun = getRun(humanMessageId);
+    if (existingRun && existingRun.status === 'running') {
+      const subStream = subscribe(existingRun, 0, req.signal);
+      return new Response(subStream.pipeThrough(new TextEncoderStream()), {
+        headers: SSE_HEADERS,
+      });
     }
 
     let chatLlm: BaseChatModel | undefined;
@@ -767,8 +216,6 @@ export const POST = async (req: Request) => {
       return Response.json({ error: msg }, { status: 400 });
     }
 
-    const humanMessageId =
-      message.messageId ?? crypto.randomBytes(7).toString('hex');
     const aiMessageId = crypto.randomBytes(7).toString('hex');
 
     // System instructions deprecated; only use persona prompts
@@ -778,9 +225,6 @@ export const POST = async (req: Request) => {
     const methodologyInstructions = await getMethodologyInstructions(
       body.selectedMethodologyId ?? null,
     );
-    const responseStream = new TransformStream();
-    const writer = responseStream.writable.getWriter();
-    const encoder = new TextEncoder();
 
     // --- Cancellation logic ---
     const abortController = new AbortController();
@@ -791,35 +235,8 @@ export const POST = async (req: Request) => {
     registerRetrieval(message.messageId, retrievalController);
     clearSoftStop(message.messageId);
 
-    // Detect client disconnection via the request's built-in abort signal
-    req.signal.addEventListener('abort', () => {
-      if (!abortController.signal.aborted) {
-        console.log('Client disconnected, aborting all processing');
-        retrievalController.abort();
-        abortController.abort();
-      }
-    });
-
-    abortController.signal.addEventListener('abort', () => {
-      console.log('Stream aborted, sending cancel event');
-      // Also abort retrieval to stop LangGraph agent processing
-      if (!retrievalController.signal.aborted) {
-        retrievalController.abort();
-      }
-      writer
-        .write(
-          encoder.encode(
-            JSON.stringify({
-              type: 'error',
-              data: 'Request cancelled by user',
-            }),
-          ),
-        )
-        .catch(() => {});
-      writer.close().catch(() => {});
-      cleanupCancelToken(message.messageId);
-      cleanupRun(message.messageId);
-    });
+    // Note: req.signal no longer aborts the run — client disconnect only
+    // removes the subscriber from the fan-out set. Cancel via POST /api/chat/cancel.
 
     // --- Privacy mode: strip personalization/memory server-side ---
     if (body.isPrivate) {
@@ -1068,96 +485,101 @@ export const POST = async (req: Request) => {
     // in `history` via buildHistoryFromDb — no in-flight injection needed.
     handler.setInvokedSkillNames(invokedSkillNames);
 
-    // Pass the abort signal to the search handler
-    // Not awaited since the handler will manage its own lifecycle and emit events as data is processed
-    handler.searchAndAnswer(
-      message.content,
-      history,
-      body.files,
-      body.focusMode,
-      undefined,
-      undefined,
-      body.messageImageIds,
-      workspaceExtraTools.length > 0 ? workspaceExtraTools : undefined,
-    );
-
-    handleEmitterEvents(
-      stream,
-      writer,
-      encoder,
+    // Register run in hub (idempotent — isNew=false if already live)
+    const { run, isNew } = startRun({
+      chatId: message.chatId,
+      messageId: humanMessageId,
       aiMessageId,
-      message.chatId,
-      startTime,
-      message.messageId,
+      emitter: stream,
       abortController,
-      body.userLocation ? body.userLocation.length > 0 : false,
-      body.userProfile ? body.userProfile.length > 0 : false,
-      memoriesUsed,
-    );
+      retrievalController,
+    });
 
-    // Post-response automatic memory extraction (fire-and-forget)
-    // If a workspace is active, only run if autoMemoryEnabled is explicitly ON (=1).
-    const autoMemoryAllowed =
-      body.memoryAutoDetection &&
-      (!resolvedWorkspace || resolvedWorkspace.autoMemoryEnabled === 1);
-    if (autoMemoryAllowed && systemLlm) {
-      const capturedChatId = message.chatId;
-      const capturedWorkspaceId = resolvedWorkspaceId;
-      stream.on('end', () => {
-        // Re-query the chat to get the authoritative workspaceId — handleHistorySave
-        // runs fire-and-forget, so by stream end the row should exist.
-        db.query.chats
-          .findFirst({ where: eq(chats.id, capturedChatId) })
-          .then((chat) => {
-            const wsId = chat?.workspaceId ?? capturedWorkspaceId;
-            return processExtraction(
-              message.content,
-              '', // assistant response text is captured in handleEmitterEvents
-              systemLlm!,
-              embedding,
-              capturedChatId,
-              wsId,
-            );
-          })
-          .then((result) => {
-            if (result.saved > 0 || result.updated > 0) {
-              // Emit memory_updated event if the writer is hopefully still accessible
-              try {
-                const memoryEvent =
-                  JSON.stringify({
-                    type: 'memory_updated',
-                    data: {
-                      saved: result.saved,
-                      updated: result.updated,
-                      memoryIds: result.memories.map((m) => m.id),
-                    },
-                  }) + '\n';
-                writer.write(encoder.encode(memoryEvent)).catch(() => {});
-              } catch {
-                // Writer already closed, log the result
+    if (isNew) {
+      try {
+        // Wire event listeners + insert empty assistant row
+        await attachRunHost({
+          run,
+          startTime,
+          userMessageId: message.messageId,
+          usedLocation: body.userLocation
+            ? body.userLocation.length > 0
+            : false,
+          usedPersonalization: body.userProfile
+            ? body.userProfile.length > 0
+            : false,
+          memoriesUsed,
+        });
+      } catch (err) {
+        // Clean up the dangling run entry before rethrowing
+        evictByChatId(run.chatId);
+        throw err;
+      }
+
+      // Fire agent (not awaited — runs independently until end/error)
+      handler.searchAndAnswer(
+        message.content,
+        history,
+        body.files,
+        body.focusMode,
+        undefined,
+        undefined,
+        body.messageImageIds,
+        workspaceExtraTools.length > 0 ? workspaceExtraTools : undefined,
+      );
+
+      // Post-response automatic memory extraction (fire-and-forget)
+      // If a workspace is active, only run if autoMemoryEnabled is explicitly ON (=1).
+      const autoMemoryAllowed =
+        body.memoryAutoDetection &&
+        (!resolvedWorkspace || resolvedWorkspace.autoMemoryEnabled === 1);
+      if (autoMemoryAllowed && systemLlm) {
+        const capturedChatId = message.chatId;
+        const capturedWorkspaceId = resolvedWorkspaceId;
+        stream.on('end', () => {
+          // Re-query the chat to get the authoritative workspaceId — handleHistorySave
+          // runs fire-and-forget, so by stream end the row should exist.
+          db.query.chats
+            .findFirst({ where: eq(chats.id, capturedChatId) })
+            .then((chat) => {
+              const wsId = chat?.workspaceId ?? capturedWorkspaceId;
+              return processExtraction(
+                message.content,
+                '', // assistant response text is captured in runHost
+                systemLlm!,
+                embedding,
+                capturedChatId,
+                wsId,
+              );
+            })
+            .then((result) => {
+              if (result.saved > 0 || result.updated > 0) {
+                pushEvent(run, {
+                  type: 'memory_updated',
+                  data: {
+                    saved: result.saved,
+                    updated: result.updated,
+                    memoryIds: result.memories.map((m) => m.id),
+                  },
+                });
+              }
+              if (result.blocked > 0) {
                 console.log(
-                  `Memory extraction: ${result.saved} saved, ${result.updated} updated`,
+                  `Memory extraction: ${result.blocked} blocked (sensitive content)`,
                 );
               }
-            }
-            if (result.blocked > 0) {
-              console.log(
-                `Memory extraction: ${result.blocked} blocked (sensitive content)`,
-              );
-            }
-          })
-          .catch((err) => {
-            console.warn('Post-response memory extraction failed:', err);
-          });
-      });
+            })
+            .catch((err) => {
+              console.warn('Post-response memory extraction failed:', err);
+            });
+        });
+      }
     }
 
-    return new Response(responseStream.readable, {
-      headers: {
-        'Content-Type': 'text/event-stream',
-        Connection: 'keep-alive',
-        'Cache-Control': 'no-cache, no-transform',
-      },
+    // Subscribe to the run's event stream and pipe to the HTTP response
+    const subStream = subscribe(run, 0, req.signal);
+    return new Response(subStream.pipeThrough(new TextEncoderStream()), {
+      headers: SSE_HEADERS,
     });
   } catch (err) {
     console.error('An error occurred while processing chat request:', err);

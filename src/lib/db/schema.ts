@@ -59,6 +59,8 @@ export const chats = sqliteTable('chats', {
     .notNull()
     .default(sql`0`),
   workspaceId: text('workspace_id'),
+  activeRunMessageId: text('active_run_message_id'),
+  activeRunStartedAt: integer('active_run_started_at'),
 });
 
 export const memories = sqliteTable('memories', {

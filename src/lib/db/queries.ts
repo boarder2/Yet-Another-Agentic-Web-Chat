@@ -27,3 +27,41 @@ export async function getCompactionRows(chatId: string) {
     orderBy: asc(messagesSchema.id),
   });
 }
+
+/** Insert an empty assistant row at run start so partial content survives a refresh. */
+export async function insertPartialAssistantRow(
+  messageId: string,
+  chatId: string,
+  metadata: Record<string, unknown>,
+): Promise<void> {
+  await db
+    .insert(messagesSchema)
+    .values({
+      content: '',
+      chatId,
+      messageId,
+      role: 'assistant',
+      metadata: JSON.stringify(metadata),
+    })
+    .execute();
+}
+
+/** Update content and/or metadata on an existing assistant row. */
+export async function updateAssistantRow(
+  messageId: string,
+  {
+    content,
+    metadata,
+  }: { content?: string; metadata?: Record<string, unknown> },
+): Promise<void> {
+  const updates: Partial<{ content: string; metadata: string }> = {};
+  if (content !== undefined) updates.content = content;
+  if (metadata !== undefined) updates.metadata = JSON.stringify(metadata);
+  if (Object.keys(updates).length === 0) return;
+
+  await db
+    .update(messagesSchema)
+    .set(updates)
+    .where(eq(messagesSchema.messageId, messageId))
+    .execute();
+}

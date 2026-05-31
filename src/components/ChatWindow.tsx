@@ -16,7 +16,7 @@ import EmptyChat from './EmptyChat';
 import crypto from 'crypto';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
-import { useSearchParams, usePathname } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { getSuggestions } from '@/lib/actions';
 import { SKILL_TOKEN_SCAN_REGEX } from '@/lib/skills/validation';
 import { LoaderCircle, Settings } from 'lucide-react';
@@ -82,6 +82,9 @@ export type Message = {
   images?: ImageAttachment[];
   compaction?: CompactionData;
   invokedSkills?: string[];
+  /** Set when this row was written by an in-flight run. 'interrupted' means the
+   *  server was restarted before the run completed. */
+  runStatus?: 'running' | 'interrupted' | 'cancelled' | 'errored';
 };
 
 export interface File {
@@ -321,7 +324,7 @@ const loadMessages = async (
   setIsPrivateSession?: (isPrivate: boolean) => void,
   setPinned?: (pinned: boolean) => void,
   setSelectedWorkspaceId?: (id: string | null) => void,
-) => {
+): Promise<{ activeRunMessageId?: string }> => {
   const res = await fetch(`/api/chats/${chatId}`, {
     method: 'GET',
     headers: {
@@ -332,7 +335,7 @@ const loadMessages = async (
   if (res.status === 404) {
     setNotFound(true);
     setIsMessagesLoaded(true);
-    return;
+    return {};
   }
 
   const data = await res.json();
@@ -419,6 +422,7 @@ const loadMessages = async (
     setSelectedWorkspaceId(data.chat.workspaceId ?? null);
   }
   setIsMessagesLoaded(true);
+  return { activeRunMessageId: data.chat.activeRunMessageId ?? undefined };
 };
 
 const ChatWindow = ({
@@ -429,7 +433,7 @@ const ChatWindow = ({
   workspaceId?: string;
 }) => {
   const searchParams = useSearchParams();
-  const pathname = usePathname();
+  const router = useRouter();
   const initialMessage = searchParams.get('q');
   const queryClient = useQueryClient();
 
@@ -611,6 +615,324 @@ const ChatWindow = ({
     }
   }, [personalizationAbout, sendPersonalization, setSendPersonalization]);
 
+  const messagesRef = useRef<Message[]>([]);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  // Utility: read a newline-delimited JSON stream and dispatch each object to handler.
+  const readStream = async (
+    reader: ReadableStreamDefaultReader<Uint8Array>,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    handler: (data: Record<string, any>) => Promise<void> | void,
+  ) => {
+    const decoder = new TextDecoder('utf-8');
+    let partialChunk = '';
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      partialChunk += decoder.decode(value, { stream: true });
+      try {
+        const lines = partialChunk.split('\n');
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const json = JSON.parse(line);
+          await handler(json);
+        }
+        partialChunk = '';
+      } catch (_error) {
+        console.warn('Incomplete JSON, waiting for next chunk...');
+      }
+    }
+  };
+
+  // Attach to an already-running run (e.g. after a page refresh).
+  // The partial assistant row is already loaded in `messages`; we replay
+  // the event buffer from the server and tail live events.
+  const attachToRun = async (userMessageId: string) => {
+    const msgs = messagesRef.current;
+    const partialMsg = msgs.find(
+      (m) => m.role === 'assistant' && m.runStatus === 'running',
+    );
+    if (!partialMsg) return; // No running row — might already be interrupted
+
+    const aiMessageId = partialMsg.messageId;
+    const replayCutoffBytes = (partialMsg.content ?? '').length;
+
+    setLoading(true);
+    setGatheringSources([]);
+    setLiveModelStats(null);
+    setAnalysisProgress(null);
+
+    let recievedMessage = partialMsg.content ?? '';
+    let cumulativeResponseBytes = 0;
+    const codeExecutionRunIdMap = new Map<string, string>();
+    const userQuestionRunIdMap = new Map<string, string>();
+
+    let res: Response;
+    try {
+      res = await fetch(
+        `/api/chat/runs/${userMessageId}/stream?from=0&chatId=${chatId}`,
+      );
+    } catch {
+      setLoading(false);
+      return;
+    }
+    if (!res.body) {
+      setLoading(false);
+      return;
+    }
+    const reader = res.body.getReader();
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const attachHandler = async (data: Record<string, any>) => {
+      if (data.type === 'gone') {
+        setLoading(false);
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.messageId === aiMessageId ? { ...m, runStatus: undefined } : m,
+          ),
+        );
+        return;
+      }
+
+      if (data.type === 'error') {
+        toast.error(data.data);
+        setLoading(false);
+        return;
+      }
+
+      if (data.type === 'ping') return;
+
+      if (data.type === 'progress') {
+        setAnalysisProgress(data.data);
+        return;
+      }
+      if (data.type === 'stats') {
+        setLiveModelStats(data.data);
+        return;
+      }
+      if (data.type === 'context_grew') {
+        setLiveContextGrew({
+          kind: data.kind,
+          tokens: data.tokens,
+          totalEstimated: data.totalEstimated,
+          at: Date.now(),
+        });
+        return;
+      }
+
+      if (data.type === 'sources_added') {
+        if (data.searchQuery?.trim()) {
+          setGatheringSources((prev) => {
+            const existingIndex = prev.findIndex(
+              (g) => g.searchQuery === data.searchQuery,
+            );
+            if (existingIndex >= 0) {
+              const updated = [...prev];
+              updated[existingIndex] = {
+                searchQuery: data.searchQuery,
+                sources: [...updated[existingIndex].sources, ...data.data],
+              };
+              return updated;
+            }
+            return [
+              ...prev,
+              { searchQuery: data.searchQuery, sources: data.data },
+            ];
+          });
+        }
+        return;
+      }
+
+      if (data.type === 'sources') {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.messageId === aiMessageId
+              ? {
+                  ...m,
+                  sources: data.data,
+                  searchQuery: data.searchQuery,
+                  searchUrl: data.searchUrl,
+                }
+              : m,
+          ),
+        );
+        return;
+      }
+
+      if (data.type === 'response') {
+        const token: string = data.data ?? '';
+        cumulativeResponseBytes += token.length;
+        if (cumulativeResponseBytes <= replayCutoffBytes) return;
+        recievedMessage += token;
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.messageId === aiMessageId
+              ? { ...m, content: recievedMessage }
+              : m,
+          ),
+        );
+        setScrollTrigger((prev) => prev + 1);
+        return;
+      }
+
+      if (
+        data.type === 'tool_call_started' ||
+        data.type === 'tool_call_success' ||
+        data.type === 'tool_call_error'
+      ) {
+        setMessages((prev) =>
+          prev.map((m) => {
+            if (m.messageId !== aiMessageId) return m;
+            let content = m.content;
+            if (data.type === 'tool_call_started' && data.data?.content) {
+              if (!content.includes(data.data.toolCallId ?? '')) {
+                content += data.data.content;
+              }
+            } else {
+              content = updateToolCallMarkup(content, data.data.toolCallId, {
+                status: data.data.status,
+                error: data.data.error,
+                extra: data.data.extra,
+              });
+            }
+            recievedMessage = content;
+            return { ...m, content };
+          }),
+        );
+        setScrollTrigger((prev) => prev + 1);
+        return;
+      }
+
+      if (
+        data.type === 'subagent_started' ||
+        data.type === 'subagent_completed' ||
+        data.type === 'subagent_error'
+      ) {
+        setMessages((prev) =>
+          prev.map((m) => {
+            if (m.messageId !== aiMessageId) return m;
+            let content = m.content;
+            if (
+              data.type === 'subagent_started' &&
+              !content.includes(`id="${data.executionId}"`)
+            ) {
+              content += `<SubagentExecution id="${data.executionId}" name="${encodeHtmlAttribute(data.name ?? '')}" task="${encodeHtmlAttribute(data.task ?? '')}" status="running"></SubagentExecution>\n`;
+            } else if (
+              data.type === 'subagent_completed' ||
+              data.type === 'subagent_error'
+            ) {
+              const status =
+                data.type === 'subagent_completed' ? 'success' : 'error';
+              const re = new RegExp(
+                `<SubagentExecution\\s+id="${data.id}"([^>]*)>(.*?)<\\/SubagentExecution>`,
+                'gs',
+              );
+              content = content.replace(re, (_m, attrs, inner) => {
+                let a = attrs
+                  .replace(/status="[^"]*"/, `status="${status}"`)
+                  .trim();
+                if (!a.includes('status=')) a += ` status="${status}"`;
+                return `<SubagentExecution ${a}>${inner}</SubagentExecution>`;
+              });
+            }
+            recievedMessage = content;
+            return { ...m, content };
+          }),
+        );
+        setScrollTrigger((prev) => prev + 1);
+        return;
+      }
+
+      if (data.type === 'chart_spec') {
+        const { chartId, spec } = data.data ?? {};
+        if (chartId && spec) {
+          setChartSpecsByMessage((prev) => ({
+            ...prev,
+            [aiMessageId]: { ...(prev[aiMessageId] ?? {}), [chartId]: spec },
+          }));
+        }
+        return;
+      }
+
+      if (data.type === 'todo_update') {
+        setTodoItems(data.data.todos || []);
+        return;
+      }
+
+      if (data.type === 'code_execution_pending') {
+        const runId = data.data?.markupToolCallId;
+        if (runId && data.data?.executionId)
+          codeExecutionRunIdMap.set(data.data.executionId, runId);
+        setPendingExecutions((prev) => ({
+          ...prev,
+          [aiMessageId]: [
+            ...(prev[aiMessageId] ?? []),
+            {
+              executionId: data.data.executionId,
+              code: data.data.code,
+              description: data.data.description,
+              toolCallId: data.data.toolCallId,
+              status: 'pending' as const,
+            },
+          ],
+        }));
+        return;
+      }
+
+      if (data.type === 'user_question_pending') {
+        const runId = data.data?.markupToolCallId;
+        if (runId && data.data?.questionId)
+          userQuestionRunIdMap.set(data.data.questionId, runId);
+        setPendingQuestions((prev) => ({
+          ...prev,
+          [aiMessageId]: [
+            ...(prev[aiMessageId] ?? []),
+            {
+              questionId: data.data.questionId,
+              question: data.data.question,
+              options: data.data.options,
+              multiSelect: data.data.multiSelect,
+              allowFreeformInput: data.data.allowFreeformInput,
+              context: data.data.context,
+              toolCallId: data.data.toolCallId,
+              createdAt: data.data.createdAt,
+              status: 'pending' as const,
+            },
+          ],
+        }));
+        return;
+      }
+
+      if (data.type === 'messageEnd') {
+        setAnalysisProgress(null);
+        setLiveModelStats(null);
+        setLiveContextGrew(null);
+        setTodoItems([]);
+        setMessages((prev) =>
+          prev.map((m) => {
+            if (m.messageId !== aiMessageId) return m;
+            return {
+              ...m,
+              content: recievedMessage,
+              modelStats: data.modelStats ?? null,
+              searchQuery: m.searchQuery || data.searchQuery,
+              searchUrl: m.searchUrl || data.searchUrl,
+              runStatus: undefined, // run finished successfully
+            };
+          }),
+        );
+        setLoading(false);
+        setGatheringSources([]);
+        setScrollTrigger((prev) => prev + 1);
+      }
+    };
+
+    await readStream(reader, attachHandler);
+  };
+
   // One-time mount init: either load an existing chat or establish a fresh
   // chat id. The synchronous setState in the new-chat branch is intentional
   // initialization, not a render-driven update.
@@ -633,7 +955,11 @@ const ChatWindow = ({
         setIsPrivateSession,
         setPinned,
         setSelectedWorkspaceId,
-      );
+      ).then(({ activeRunMessageId } = {}) => {
+        if (activeRunMessageId) {
+          attachToRun(activeRunMessageId);
+        }
+      });
     } else if (!chatId) {
       setNewChatCreated(true);
       setIsMessagesLoaded(true);
@@ -643,82 +969,8 @@ const ChatWindow = ({
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  const messagesRef = useRef<Message[]>([]);
-
-  useEffect(() => {
-    messagesRef.current = messages;
-  }, [messages]);
-
-  // When the user navigates to /?private=1 from /, the pathname doesn't change
-  // so the pathname effect below won't fire. Watch searchParams directly and
-  // reset + activate private mode when the private param appears or disappears.
-  const prevSearchParamsRef = useRef(searchParams);
-  // These two effects reset the chat to a fresh state in response to router
-  // navigation (private-mode query param, or returning to "/"). Resetting state
-  // when the external URL changes is the intended use of setState-in-effect.
-  /* eslint-disable react-hooks/set-state-in-effect */
-  useEffect(() => {
-    if (prevSearchParamsRef.current === searchParams) return;
-    prevSearchParamsRef.current = searchParams;
-
-    // Only act when we're on a new-chat page (root or workspace), not an existing chat
-    if (id || (pathname !== '/' && !workspaceId)) return;
-
-    // Skip when a message is in flight — replaceState drops ?private=1 from
-    // the URL when the chat URL is created, which would otherwise cause a
-    // spurious reset that clears the messages being streamed.
-    if (loading) return;
-
-    const isPriv = searchParams.get('private') === '1';
-    setMessages([]);
-    setFiles([]);
-    setFileIds([]);
-    setPendingImages([]);
-    setNewChatCreated(true);
-    setIsMessagesLoaded(true);
-    setLoading(false);
-    setGatheringSources([]);
-    setTodoItems([]);
-    setPendingExecutions({});
-    setPendingQuestions({});
-    setAnalysisProgress(null);
-    setLiveModelStats(null);
-    setNotFound(false);
-    setIsPrivateSession(isPriv);
-    setChatId(crypto.randomBytes(20).toString('hex'));
-    document.title = 'Chat - YAAWC';
-  }, [searchParams, pathname, id, workspaceId, loading]);
-
-  // Reset to a fresh chat when the user navigates back to "/" (e.g. via the
-  // sidebar "new chat" Link).  window.history.replaceState is used earlier to
-  // update the URL to /c/chatId without unmounting the component; usePathname()
-  // reflects that change, so when Next.js Link navigates to "/" the pathname
-  // switches from /c/… back to / and this effect fires.
-  const prevPathnameRef = useRef(pathname);
-  useEffect(() => {
-    if (prevPathnameRef.current !== pathname && pathname === '/' && !id) {
-      setMessages([]);
-      setFiles([]);
-      setFileIds([]);
-      setPendingImages([]);
-      setNewChatCreated(true);
-      setIsMessagesLoaded(true);
-      setLoading(false);
-      setGatheringSources([]);
-      setTodoItems([]);
-      setPendingExecutions({});
-      setPendingQuestions({});
-      setAnalysisProgress(null);
-      setLiveModelStats(null);
-      setNotFound(false);
-      setIsPrivateSession(searchParams.get('private') === '1');
-      setChatId(crypto.randomBytes(20).toString('hex'));
-      document.title = 'Chat - YAAWC';
-    }
-    prevPathnameRef.current = pathname;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname, id]);
-  /* eslint-enable react-hooks/set-state-in-effect */
+  // Remount is now safe (runs persist independently in the RunHub) so the
+  // old replaceState hack and both reset effects are no longer needed.
 
   const isReady = isMessagesLoaded && isConfigReady;
 
@@ -878,7 +1130,7 @@ const ChatWindow = ({
       const newUrl = workspaceId
         ? `/workspaces/${workspaceId}/c/${chatId}`
         : `/c/${chatId}`;
-      window.history.replaceState({}, '', newUrl);
+      router.replace(newUrl);
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1874,29 +2126,7 @@ const ChatWindow = ({
 
     if (!res.body) throw new Error('No response body');
 
-    const reader = res.body?.getReader();
-    const decoder = new TextDecoder('utf-8');
-
-    let partialChunk = '';
-
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-
-      partialChunk += decoder.decode(value, { stream: true });
-
-      try {
-        const messages = partialChunk.split('\n');
-        for (const msg of messages) {
-          if (!msg.trim()) continue;
-          const json = JSON.parse(msg);
-          messageHandler(json);
-        }
-        partialChunk = '';
-      } catch (_error) {
-        console.warn('Incomplete JSON, waiting for next chunk...');
-      }
-    }
+    await readStream(res.body.getReader(), messageHandler);
   };
 
   const rewrite = (messageId: string) => {

@@ -63,7 +63,6 @@ Begin researching your assigned task now.`,
       'url_fetch',
       'image_search',
       'image_analysis',
-      'youtube_transcript',
       'pdf_loader',
     ],
     useSystemModel: false, // Needs strong reasoning

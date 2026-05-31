@@ -11,6 +11,9 @@ import { simpleWebSearchTool } from './simpleWebSearchTool';
 import { fileSearchTool } from './fileSearchTool';
 import { imageSearchTool } from './imageSearchTool';
 import { urlFetchTool } from './urlFetchTool';
+// youtubeTranscriptTool is intentionally NOT added to any tool array below.
+// It is disabled because YouTube transcript retrieval no longer works; the
+// implementation is kept so it can be revived later. See youtubeTranscriptTool.ts.
 import { youtubeTranscriptTool } from './youtubeTranscriptTool';
 import { pdfLoaderTool } from './pdfLoaderTool';
 import { deepResearchTool } from './deepResearchTool';
@@ -54,7 +57,6 @@ export const allAgentTools = [
   imageSearchTool,
   imageAnalysisTool,
   imageGenerationTool,
-  youtubeTranscriptTool,
   pdfLoaderTool,
   deepResearchTool,
   todoListTool,
@@ -69,7 +71,6 @@ export const webSearchTools = [
   urlFetchTool,
   imageSearchTool,
   imageAnalysisTool,
-  youtubeTranscriptTool,
   pdfLoaderTool,
   deepResearchTool,
   todoListTool,

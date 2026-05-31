@@ -22,7 +22,6 @@ Token usage is forwarded back to your run, so each call is roughly the cost of a
 - `web_search` — open web search
 - `url_fetch` — retrieve full page contents
 - `image_search` / `image_analysis`
-- `youtube_transcript`
 - `pdf_loader`
 
 It does **not** have: `code_execution`, `ask_user`, `create_chart`, `file_search`, `deep_research` itself (no recursion), or access to your local files/uploads. If the task depends on any of those, extract what's needed yourself first and inline the relevant data into the `task` string.

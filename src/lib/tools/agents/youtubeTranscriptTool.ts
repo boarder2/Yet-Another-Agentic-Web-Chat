@@ -14,7 +14,16 @@ const YoutubeTranscriptToolSchema = z.object({
 /**
  * YoutubeTranscriptTool - Retrieves the transcript of a YouTube video
  *
- * Responsibilities:
+ * ⚠️ DISABLED: This tool is intentionally NOT wired into the agent's available
+ * tools (see `src/lib/tools/agents/index.ts`). YouTube transcript retrieval no
+ * longer works reliably — the underlying loader/`youtubei.js` dependency fails
+ * against YouTube's current endpoints, so the tool would only error out. We keep
+ * the implementation here (and the `youtubei.js` dependency commented out in
+ * package.json) so it can be revived if/when a dependable transcript solution
+ * appears. Until then it must stay out of the agent's tool set — the agent
+ * should not be handed a tool that doesn't work.
+ *
+ * Responsibilities (when enabled):
  * 1. Extract video ID from the provided URL
  * 2. Fetch the transcript using YouTube API
  * 3. Return the transcript as a string

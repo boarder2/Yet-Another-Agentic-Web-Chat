@@ -30,10 +30,6 @@ const AVAILABLE_TOOLS = [
     description: 'Analyze and describe image content',
   },
   {
-    name: 'youtube_transcript',
-    description: 'Extract transcripts from YouTube videos',
-  },
-  {
     name: 'pdf_loader',
     description: 'Load and extract content from PDF files',
   },

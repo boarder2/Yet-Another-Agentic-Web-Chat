@@ -324,6 +324,7 @@ const loadMessages = async (
   setIsPrivateSession?: (isPrivate: boolean) => void,
   setPinned?: (pinned: boolean) => void,
   setSelectedWorkspaceId?: (id: string | null) => void,
+  setLoading?: (loading: boolean) => void,
 ): Promise<{ activeRunMessageId?: string; workspaceId?: string | null }> => {
   const res = await fetch(`/api/chats/${chatId}`, {
     method: 'GET',
@@ -395,6 +396,20 @@ const loadMessages = async (
   }
 
   setMessages(finalMessages);
+
+  // If a run is still active (e.g. we just remounted onto /c/[chatId] right
+  // after firing off the first message), flip loading on in the same batch as
+  // setMessages. attachToRun does this too, but it runs a microtask later — by
+  // then the partial assistant row has already rendered its "completed" footer
+  // (rewrite/images/videos/related), causing a visible flicker before loading
+  // hides it again. Gate on the same condition attachToRun uses (a running
+  // assistant row present) so the two never disagree and leave loading stuck.
+  const hasRunningAssistantRow = finalMessages.some(
+    (m) => m.role === 'assistant' && m.runStatus === 'running',
+  );
+  if (setLoading && data.chat.activeRunMessageId && hasRunningAssistantRow) {
+    setLoading(true);
+  }
 
   console.debug(new Date(), 'app:messages_loaded');
 
@@ -968,6 +983,7 @@ const ChatWindow = ({
         setIsPrivateSession,
         setPinned,
         setSelectedWorkspaceId,
+        setLoading,
       ).then(({ activeRunMessageId, workspaceId: chatWorkspaceId } = {}) => {
         // If a workspace chat was opened on the non-workspace /c/[chatId] route
         // (e.g. a direct deep-link), route to the real workspace URL so it
@@ -1170,11 +1186,20 @@ const ChatWindow = ({
 
     setPendingImages([]);
 
-    // If this is a new chat (no chatId in URL), replace the URL to include the new chatId
+    // If this is a new chat (no chatId in URL), replace the URL to include the
+    // new chatId. Use history.replaceState rather than router.replace: a real
+    // route navigation would unmount this streaming ChatWindow and mount a
+    // fresh one (different page component + key) that reloads from the DB,
+    // making the chat content visibly disappear and re-render mid-stream. Next
+    // syncs usePathname/useSearchParams from history.replaceState, so the URL
+    // updates in place while this instance keeps streaming uninterrupted.
     if (messages.length <= 1) {
       const wsId = workspaceId ?? selectedWorkspaceId;
       const newUrl = wsId ? `/workspaces/${wsId}/c/${chatId}` : `/c/${chatId}`;
-      router.replace(newUrl);
+      window.history.replaceState(null, '', newUrl);
+      // loadMessages normally sets the tab title on mount; since we no longer
+      // remount, set it here for the freshly-titled chat.
+      document.title = message;
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

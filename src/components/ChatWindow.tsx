@@ -324,7 +324,7 @@ const loadMessages = async (
   setIsPrivateSession?: (isPrivate: boolean) => void,
   setPinned?: (pinned: boolean) => void,
   setSelectedWorkspaceId?: (id: string | null) => void,
-): Promise<{ activeRunMessageId?: string }> => {
+): Promise<{ activeRunMessageId?: string; workspaceId?: string | null }> => {
   const res = await fetch(`/api/chats/${chatId}`, {
     method: 'GET',
     headers: {
@@ -422,8 +422,21 @@ const loadMessages = async (
     setSelectedWorkspaceId(data.chat.workspaceId ?? null);
   }
   setIsMessagesLoaded(true);
-  return { activeRunMessageId: data.chat.activeRunMessageId ?? undefined };
+  return {
+    activeRunMessageId: data.chat.activeRunMessageId ?? undefined,
+    workspaceId: data.chat.workspaceId ?? null,
+  };
 };
+
+// Carries the first message across the home → workspace navigation. When a new
+// chat is started from a non-workspace route with a workspace selected, the
+// home instance stashes the send here and routes to the workspace's /c/new
+// page; the shell-wrapped instance there picks it up and performs the actual
+// send, so the chat mounts inside the workspace shell with no bare-chat flash.
+let pendingWorkspaceFirstSend: {
+  message: string;
+  images?: ImageAttachment[];
+} | null = null;
 
 const ChatWindow = ({
   id,
@@ -955,7 +968,14 @@ const ChatWindow = ({
         setIsPrivateSession,
         setPinned,
         setSelectedWorkspaceId,
-      ).then(({ activeRunMessageId } = {}) => {
+      ).then(({ activeRunMessageId, workspaceId: chatWorkspaceId } = {}) => {
+        // If a workspace chat was opened on the non-workspace /c/[chatId] route
+        // (e.g. a direct deep-link), route to the real workspace URL so it
+        // mounts under the workspace layout instead of rendering bare.
+        if (!workspaceId && chatWorkspaceId) {
+          router.replace(`/workspaces/${chatWorkspaceId}/c/${chatId}`);
+          return;
+        }
         if (activeRunMessageId) {
           attachToRun(activeRunMessageId);
         }
@@ -1059,6 +1079,31 @@ const ChatWindow = ({
       return;
     }
 
+    // New chat started on a non-workspace route with a workspace selected: hand
+    // the first message off to the workspace's /c/new page so the chat mounts
+    // inside the workspace shell immediately (avoids a bare-chat flash before
+    // redirecting). The shell-wrapped instance owns the run end-to-end.
+    const targetWorkspaceId = workspaceId ?? selectedWorkspaceId;
+    if (
+      messages.length === 0 &&
+      !workspaceId &&
+      targetWorkspaceId &&
+      !options?.editMode &&
+      !options?.messageId
+    ) {
+      const deferredImages =
+        options?.images !== undefined
+          ? options.images.length > 0
+            ? options.images
+            : undefined
+          : pendingImages.length > 0
+            ? [...pendingImages]
+            : undefined;
+      pendingWorkspaceFirstSend = { message, images: deferredImages };
+      router.replace(`/workspaces/${targetWorkspaceId}/c/new`);
+      return;
+    }
+
     setLoading(true);
     setGatheringSources([]); // Reset gathering sources for new conversation
     setLiveModelStats(null);
@@ -1127,9 +1172,8 @@ const ChatWindow = ({
 
     // If this is a new chat (no chatId in URL), replace the URL to include the new chatId
     if (messages.length <= 1) {
-      const newUrl = workspaceId
-        ? `/workspaces/${workspaceId}/c/${chatId}`
-        : `/c/${chatId}`;
+      const wsId = workspaceId ?? selectedWorkspaceId;
+      const newUrl = wsId ? `/workspaces/${wsId}/c/${chatId}` : `/c/${chatId}`;
       router.replace(newUrl);
     }
 
@@ -2208,6 +2252,23 @@ const ChatWindow = ({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isConfigReady, isReady, initialMessage]);
+
+  // Pick up a first message handed off from the home route (see
+  // pendingWorkspaceFirstSend) once this shell-wrapped /c/new instance is ready.
+  useEffect(() => {
+    if (isReady && isConfigReady && pendingWorkspaceFirstSend) {
+      const pending = pendingWorkspaceFirstSend;
+      pendingWorkspaceFirstSend = null;
+      // One-shot auto-send of the handed-off message, mirroring the initial
+      // query effect above.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      sendMessage(
+        pending.message,
+        pending.images ? { images: pending.images } : undefined,
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConfigReady, isReady]);
 
   // Build a flat chartId → spec map for ChartSpecContext (must be before any early returns)
   const flatChartSpecs = useMemo(() => {

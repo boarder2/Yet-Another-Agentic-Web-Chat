@@ -5,14 +5,7 @@ import {
 } from '@/lib/config';
 import { getAvailableChatModelProviders } from '@/lib/providers';
 import { removeThinkingBlocks } from '@/lib/utils/contentUtils';
-import {
-  extractExcerpt,
-  getMessageCounts,
-  searchChatsByKeywords,
-} from '@/lib/db/chatSearch';
-import db from '@/lib/db';
-import { chats as chatsTable } from '@/lib/db/schema';
-import { inArray } from 'drizzle-orm';
+import { hydrateSearchHits, searchChatsByKeywords } from '@/lib/db/chatSearch';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { StringOutputParser } from '@langchain/core/output_parsers';
 import { PromptTemplate } from '@langchain/core/prompts';
@@ -113,32 +106,9 @@ export const POST = async (req: Request) => {
       limit: 200,
     });
 
-    const ids = hits.map((h) => h.chatId);
-    const fullChats = ids.length
-      ? await db.select().from(chatsTable).where(inArray(chatsTable.id, ids))
-      : [];
-    const chatById = new Map(fullChats.map((c) => [c.id, c]));
-
-    const countMap = await getMessageCounts(ids);
-
-    const combinedChats = hits
-      .map((h) => {
-        const chat = chatById.get(h.chatId);
-        if (!chat) return null;
-        return {
-          ...chat,
-          matchExcerpt: h.messageContent
-            ? extractExcerpt(h.messageContent, searchTerms)
-            : null,
-          messageCount: countMap.get(h.chatId) ?? 0,
-        };
-      })
-      .filter((c): c is NonNullable<typeof c> => c !== null)
-      .sort((a, b) => b.createdAt - a.createdAt);
-
-    const totalMessages = combinedChats.reduce(
-      (sum, c) => sum + c.messageCount,
-      0,
+    const { chats: combinedChats, totalMessages } = await hydrateSearchHits(
+      hits,
+      searchTerms,
     );
 
     return Response.json(

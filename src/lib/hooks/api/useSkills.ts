@@ -44,7 +44,7 @@ export function useCreateSkill() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(data),
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['skills'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.skillsRoot }),
   });
 }
 
@@ -63,7 +63,7 @@ export function useUpdateSkill() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(data),
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['skills'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.skillsRoot }),
   });
 }
 
@@ -72,7 +72,7 @@ export function useDeleteSkill() {
   return useMutation({
     mutationFn: (id: string) =>
       apiFetch(`/api/skills/${id}`, { method: 'DELETE' }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['skills'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.skillsRoot }),
   });
 }
 
@@ -85,6 +85,6 @@ export function useToggleSkill() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ enabled }),
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['skills'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.skillsRoot }),
   });
 }

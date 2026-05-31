@@ -1,13 +1,13 @@
-// src/app/library/page.tsx
+// src/app/history/page.tsx
 'use client';
 
 import ChatBrowser from '@/components/Chats/ChatBrowser';
 import PageHeader from '@/components/PageHeader';
-import { BookOpenText } from 'lucide-react';
+import { History } from 'lucide-react';
 
 const Page = () => (
   <div>
-    <PageHeader icon={BookOpenText} title="Library" />
+    <PageHeader icon={History} title="History" />
     <ChatBrowser />
   </div>
 );

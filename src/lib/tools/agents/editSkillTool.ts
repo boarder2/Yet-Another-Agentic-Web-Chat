@@ -16,6 +16,7 @@ import {
   SKILL_NAME_REGEX,
   SKILL_NAME_DESCRIPTION,
 } from '@/lib/skills/validation';
+import { isSystemSkillName } from '@/lib/skills/systemRegistry';
 
 const EditSkillSchema = z.object({
   action: z
@@ -109,6 +110,18 @@ export const editSkillTool = tool(
               new ToolMessage({
                 content:
                   'Error: description and content are required for create.',
+                tool_call_id: toolCallId,
+              }),
+            ],
+          },
+        });
+      }
+      if (isSystemSkillName(name)) {
+        return new Command({
+          update: {
+            messages: [
+              new ToolMessage({
+                content: `Error: "${name}" is reserved by a built-in system skill and cannot be created as a user skill.`,
                 tool_call_id: toolCallId,
               }),
             ],

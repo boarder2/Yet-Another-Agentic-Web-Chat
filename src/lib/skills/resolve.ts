@@ -39,7 +39,11 @@ export async function resolveSkillsForChat(
       disableModelInvocation: r.disableModelInvocation,
     }));
 
-  // Build merged set: user beats system, workspace beats global
+  // Build merged set: workspace beats global, but neither may override a
+  // system skill — system names are reserved so a stray DB row (created
+  // before the create-time guards, or by an older client) can never replace
+  // trusted built-in skills like chart-creation / code-execution.
+  const systemNames = new Set(systemSkills.map((s) => s.name));
   const merged = new Map<string, Skill>();
 
   // Start with system skills
@@ -47,23 +51,25 @@ export async function resolveSkillsForChat(
     merged.set(s.name, s);
   }
 
-  // Global user skills override system
+  // Global user skills (skip any that collide with a system skill)
   for (const s of enabledUserSkills.filter((s) => !s.workspaceId)) {
-    if (merged.has(s.name)) {
+    if (systemNames.has(s.name)) {
       console.warn(
-        `[skills] User skill "${s.name}" shadows system skill with same name`,
+        `[skills] User skill "${s.name}" ignored: name is reserved by a system skill`,
       );
+      continue;
     }
     merged.set(s.name, s);
   }
 
-  // Workspace user skills override global/system
+  // Workspace user skills override global, but still never system
   if (workspaceId) {
     for (const s of enabledUserSkills.filter((s) => s.workspaceId)) {
-      if (merged.has(s.name)) {
+      if (systemNames.has(s.name)) {
         console.warn(
-          `[skills] Workspace skill "${s.name}" (workspace=${workspaceId}) shadows existing skill`,
+          `[skills] Workspace skill "${s.name}" (workspace=${workspaceId}) ignored: name is reserved by a system skill`,
         );
+        continue;
       }
       merged.set(s.name, s);
     }

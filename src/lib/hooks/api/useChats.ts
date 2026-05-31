@@ -76,3 +76,39 @@ export function useChatSearch(
     enabled: q.trim().length > 0,
   });
 }
+
+export interface LlmSearchResult {
+  chats: Chat[];
+  terms: string[];
+  total: number;
+  totalMessages: number;
+}
+
+export function useChatLlmSearch(
+  query: string,
+  chatModel: { provider: string; model: string } | null,
+  filter: Omit<ChatsFilter, 'pinned' | 'scheduled'> = {},
+) {
+  // Keyed under the shared 'chats','search' prefix so chat mutations
+  // (delete/rename) invalidate it alongside text search results.
+  const key = ['chats', 'search', 'llm', query, filter] as const;
+  return useQuery({
+    queryKey: key,
+    queryFn: () => {
+      const body: Record<string, unknown> = {
+        query,
+        chatModel: chatModel ?? undefined,
+      };
+      if (filter.workspaceId) body.workspaceId = filter.workspaceId;
+      else if (filter.workspaceIds?.length)
+        body.workspaceIds = filter.workspaceIds;
+      return apiFetch<LlmSearchResult>('/api/chats/search', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    },
+    enabled: query.trim().length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
+}

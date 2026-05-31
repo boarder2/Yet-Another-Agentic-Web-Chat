@@ -1,45 +1,20 @@
-type PendingApproval = {
-  resolve: (result: { approved: boolean; reason?: string }) => void;
-  timeout: NodeJS.Timeout;
-  messageId?: string;
-  createdAt: number;
-};
+import { createApprovalStore } from '@/lib/approvals/createApprovalStore';
 
-const globalSandbox = globalThis as typeof globalThis & {
-  __codeExecutionPendingApprovals?: Map<string, PendingApproval>;
-};
+type SandboxApprovalResponse = { approved: boolean; reason?: string };
 
-const pending =
-  globalSandbox.__codeExecutionPendingApprovals ??
-  (globalSandbox.__codeExecutionPendingApprovals = new Map<
-    string,
-    PendingApproval
-  >());
+const store = createApprovalStore<SandboxApprovalResponse>({
+  globalKey: '__codeExecutionPendingApprovals',
+  defaultTimeoutMs: 300_000,
+  timedOutValue: { approved: false },
+  label: 'Code execution',
+});
 
 export function waitForApproval(
   executionId: string,
-  timeoutMs: number = 300_000,
+  timeoutMs?: number,
   messageId?: string,
-): Promise<{ approved: boolean; reason?: string }> {
-  return new Promise((resolve) => {
-    if (pending.size > 100) {
-      console.warn(
-        `Code execution approval map has ${pending.size} live entries; check for orphaned approvals.`,
-      );
-    }
-
-    const timeout = setTimeout(() => {
-      pending.delete(executionId);
-      resolve({ approved: false });
-    }, timeoutMs);
-
-    pending.set(executionId, {
-      resolve,
-      timeout,
-      messageId,
-      createdAt: Date.now(),
-    });
-  });
+): Promise<SandboxApprovalResponse> {
+  return store.waitFor(executionId, timeoutMs, messageId);
 }
 
 export function resolveApproval(
@@ -47,13 +22,7 @@ export function resolveApproval(
   approved: boolean,
   reason?: string,
 ): boolean {
-  const entry = pending.get(executionId);
-  if (!entry) return false;
-
-  clearTimeout(entry.timeout);
-  pending.delete(executionId);
-  entry.resolve({ approved, reason });
-  return true;
+  return store.resolve(executionId, { approved, reason });
 }
 
 /**
@@ -62,19 +31,9 @@ export function resolveApproval(
  * to prevent orphaned 5-minute waits.
  */
 export function denyApprovalsForMessage(messageId: string): void {
-  for (const [id, entry] of pending) {
-    if (entry.messageId === messageId) {
-      clearTimeout(entry.timeout);
-      pending.delete(id);
-      entry.resolve({ approved: false });
-    }
-  }
+  store.cancelForMessage(messageId);
 }
 
 export function cleanupAllApprovals(): void {
-  for (const [id, entry] of pending) {
-    clearTimeout(entry.timeout);
-    entry.resolve({ approved: false });
-    pending.delete(id);
-  }
+  store.cleanupAll();
 }

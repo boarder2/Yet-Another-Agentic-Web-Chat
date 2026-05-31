@@ -369,7 +369,7 @@ Policies are applied independently to two groups:
 - **Regular chats** — global policy under `[GENERAL.RETENTION] CHATS_MODE` / `CHATS_VALUE` (disabled by default)
 - **Scheduled-task runs** — global policy under `[GENERAL.RETENTION] SCHEDULED_RUNS_MODE` / `SCHEDULED_RUNS_VALUE` (disabled by default); individual scheduled tasks may override the global policy with their own mode/value
 - **Private sessions** — deleted on their own expiry schedule (see [Private Sessions](#private-sessions))
-- **Pinning** — individual chats can be pinned from the library to exempt them from all retention policies
+- **Pinning** — individual chats can be pinned from the History page to exempt them from all retention policies
 
 Configure from the Settings page under "Retention", or via `[GENERAL.RETENTION]` in `config.toml`. Cleanup runs on a background cron alongside the private-session cleanup job.
 

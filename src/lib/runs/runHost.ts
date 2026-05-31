@@ -3,7 +3,7 @@ import { encodeHtmlAttribute } from '@/lib/utils/html';
 import {
   insertPartialAssistantRow,
   updateAssistantRow,
-  getChatMessages,
+  sumMessageContentChars,
 } from '@/lib/db/queries';
 import { pushEvent, terminateRun, type Run } from './runHub';
 import { denyApprovalsForMessage } from '@/lib/sandbox/pendingApprovals';
@@ -474,24 +474,23 @@ export async function attachRunHost(params: {
     try {
       const assistantEstimate = Math.round(recievedMessage.length / 4);
       if (modelStats.firstChatCallInputTokens) {
-        const rows = await getChatMessages(chatId, { includeSystem: true });
-        const userRowIdx = rows.findIndex((r) => r.messageId === userMessageId);
-        const newRows = userRowIdx >= 0 ? rows.slice(userRowIdx + 1) : [];
-        const newRowsTokens = newRows.reduce(
-          (s, r) => s + Math.round(((r.content as string) || '').length / 4),
-          0,
-        );
+        // Accurate path: base = actual measured input for this turn. Only the
+        // system rows appended after the user message during this turn are new
+        // relative to that base, so sum just those (in SQL) rather than
+        // re-reading the whole conversation.
+        const newRowsChars = await sumMessageContentChars(chatId, {
+          afterMessageId: userMessageId,
+        });
+        const newRowsTokens = Math.round(newRowsChars / 4);
         projectedNextInputTokens =
           modelStats.firstChatCallInputTokens +
           newRowsTokens +
           assistantEstimate;
       } else {
-        const rows = await getChatMessages(chatId, { includeSystem: true });
+        // Fallback: estimate from all rows + fixed system-prompt estimate
+        const fromRowsChars = await sumMessageContentChars(chatId);
         const SYSTEM_PROMPT_ESTIMATE = 3000;
-        const fromRows = rows.reduce(
-          (s, r) => s + Math.round(((r.content as string) || '').length / 4),
-          0,
-        );
+        const fromRows = Math.round(fromRowsChars / 4);
         projectedNextInputTokens =
           fromRows + assistantEstimate + SYSTEM_PROMPT_ESTIMATE;
       }

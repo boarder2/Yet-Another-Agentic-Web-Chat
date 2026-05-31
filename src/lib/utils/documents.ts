@@ -4,7 +4,7 @@ import {
   writeCachedRecord,
 } from '@/lib/utils/webCache';
 import { CheerioWebBaseLoader } from '@langchain/community/document_loaders/web/cheerio';
-import { YoutubeLoader } from '@langchain/community/document_loaders/web/youtube';
+// import { YoutubeLoader } from '@langchain/community/document_loaders/web/youtube';
 import { Document } from '@langchain/core/documents';
 import { Readability } from '@mozilla/readability';
 import { JSDOM } from 'jsdom';
@@ -104,60 +104,60 @@ export const retrievePdfDoc = async (url: string): Promise<Document | null> => {
   return null;
 };
 
-export const retrieveYoutubeTranscript = async (
-  url: string,
-): Promise<Document | null> => {
-  try {
-    console.log(
-      '[retrieveYoutubeTranscript] Retrieving YouTube transcript for URL:',
-      url,
-    );
-    const cached = await loadCachedRecord(url + '_youtube');
-    if (cached) {
-      console.log(
-        '[retrieveYoutubeTranscript] Typed content found in cache for URL:',
-        url,
-      );
-      return new Document({
-        pageContent: cached.pageContent || '',
-        metadata: {
-          title: cached.title || '',
-          url: cached.url,
-          ...cached.metadata,
-        },
-      });
-    }
+// export const retrieveYoutubeTranscript = async (
+//   url: string,
+// ): Promise<Document | null> => {
+//   try {
+//     console.log(
+//       '[retrieveYoutubeTranscript] Retrieving YouTube transcript for URL:',
+//       url,
+//     );
+//     const cached = await loadCachedRecord(url + '_youtube');
+//     if (cached) {
+//       console.log(
+//         '[retrieveYoutubeTranscript] Typed content found in cache for URL:',
+//         url,
+//       );
+//       return new Document({
+//         pageContent: cached.pageContent || '',
+//         metadata: {
+//           title: cached.title || '',
+//           url: cached.url,
+//           ...cached.metadata,
+//         },
+//       });
+//     }
 
-    const transcriptLoader = YoutubeLoader.createFromUrl(url, {
-      language: getSearchLocale().language,
-      addVideoInfo: true,
-    });
-    const transcript = await transcriptLoader.load();
-    console.log(
-      '[retrieveYoutubeTranscript] YouTube transcript retrieved successfully:',
-      transcript,
-    );
-    if (transcript.length > 0) {
-      transcript[0].metadata.url = url;
-      transcript[0].metadata.title =
-        transcript[0].metadata.title || 'YouTube Video Transcript';
-      transcript[0].metadata.source =
-        transcript[0].metadata.source || undefined;
-      // Write to cache
-      await writeCachedRecord(url + '_youtube', transcript[0]);
-      return transcript[0];
-    }
-  } catch (error) {
-    console.error('Error retrieving YouTube transcript:', error);
-  }
-  return null;
-};
+//     const transcriptLoader = YoutubeLoader.createFromUrl(url, {
+//       language: getSearchLocale().language,
+//       addVideoInfo: true,
+//     });
+//     const transcript = await transcriptLoader.load();
+//     console.log(
+//       '[retrieveYoutubeTranscript] YouTube transcript retrieved successfully:',
+//       transcript,
+//     );
+//     if (transcript.length > 0) {
+//       transcript[0].metadata.url = url;
+//       transcript[0].metadata.title =
+//         transcript[0].metadata.title || 'YouTube Video Transcript';
+//       transcript[0].metadata.source =
+//         transcript[0].metadata.source || undefined;
+//       // Write to cache
+//       await writeCachedRecord(url + '_youtube', transcript[0]);
+//       return transcript[0];
+//     }
+//   } catch (error) {
+//     console.error('Error retrieving YouTube transcript:', error);
+//   }
+//   return null;
+// };
 
 export const retrieveTypedContentFunc = async (
   url: string,
 ): Promise<Document | null> => {
   if (url.includes('youtube.com/watch') || url.includes('youtu.be/')) {
-    return await retrieveYoutubeTranscript(url);
+    // return await retrieveYoutubeTranscript(url);
   } else if (url.endsWith('.pdf')) {
     return await retrievePdfDoc(url);
   }

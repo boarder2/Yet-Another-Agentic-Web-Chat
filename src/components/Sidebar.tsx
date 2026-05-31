@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useSelectedLayoutSegments } from 'next/navigation';
-import React, { Fragment, useEffect, useState, type ReactNode } from 'react';
+import React, { Fragment, useEffect, useRef, type ReactNode } from 'react';
 import {
   Popover,
   PopoverButton,
@@ -23,6 +23,10 @@ import {
   Transition,
 } from '@headlessui/react';
 import Layout, { setWideWidth, useWideWidth } from './Layout';
+import { useActiveRuns } from '@/lib/hooks/api/useActiveRuns';
+import { useScheduledRunsUnread } from '@/lib/hooks/api/useScheduledTasks';
+import { qk } from '@/lib/api/keys';
+import { useQueryClient } from '@tanstack/react-query';
 
 const VerticalIconContainer = ({ children }: { children: ReactNode }) => {
   return (
@@ -117,37 +121,59 @@ const MoreMenu = ({ links }: { links: NavLink[] }) => {
 
 const Sidebar = ({ children }: { children: React.ReactNode }) => {
   const segments = useSelectedLayoutSegments();
-  const [scheduledUnread, setScheduledUnread] = useState(0);
+  const qc = useQueryClient();
 
+  // Scheduled badge: shared TanStack query (polls + refetches on focus/mount).
+  const { data: scheduledUnread = 0 } = useScheduledRunsUnread();
+
+  // Mark-seen flows dispatch this with an authoritative count; write it
+  // straight into the cache so the badge updates without a round-trip,
+  // falling back to a refetch when no count is provided.
   useEffect(() => {
-    let cancelled = false;
-    const fetchCount = async () => {
-      try {
-        const r = await fetch('/api/scheduled-tasks/runs/unread');
-        if (!r.ok) return;
-        const { count } = await r.json();
-        if (!cancelled) setScheduledUnread(count);
-      } catch {
-        // Ignore
-      }
-    };
-    fetchCount();
-    const interval = setInterval(fetchCount, 30_000);
-    const onFocus = () => fetchCount();
-    const onCustom = (e: Event) => {
+    const onScheduled = (e: Event) => {
       const c = (e as CustomEvent).detail?.count;
-      if (typeof c === 'number') setScheduledUnread(c);
-      else fetchCount();
+      if (typeof c === 'number')
+        qc.setQueryData(qk.scheduledRunsUnread, { count: c });
+      else qc.invalidateQueries({ queryKey: qk.scheduledRunsUnread });
     };
-    window.addEventListener('focus', onFocus);
-    window.addEventListener('scheduled-runs-unread-changed', onCustom);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-      window.removeEventListener('focus', onFocus);
-      window.removeEventListener('scheduled-runs-unread-changed', onCustom);
+    window.addEventListener('scheduled-runs-unread-changed', onScheduled);
+    return () =>
+      window.removeEventListener('scheduled-runs-unread-changed', onScheduled);
+  }, [qc]);
+
+  // History badge: driven by useActiveRuns (single shared polling loop).
+  const { data: activeRunsData } = useActiveRuns();
+  const prevActiveChatIds = useRef<Set<string>>(new Set());
+
+  // Detect completions and invalidate the chats list when runs transition out.
+  useEffect(() => {
+    if (!activeRunsData) return;
+
+    const currentIds = new Set(activeRunsData.active.map((r) => r.chatId));
+    const prev = prevActiveChatIds.current;
+    const hasTransitions =
+      [...prev].some((id) => !currentIds.has(id)) ||
+      activeRunsData.stale.length > 0;
+
+    if (hasTransitions) {
+      qc.invalidateQueries({ queryKey: qk.chatsInfiniteRoot });
+    }
+
+    prevActiveChatIds.current = currentIds;
+  }, [activeRunsData, qc]);
+
+  // On open-chat seen event, trigger an immediate activeRuns refetch so the
+  // badge reflects the updated unreadCount without waiting for the next poll.
+  useEffect(() => {
+    const onHistory = () => {
+      qc.invalidateQueries({ queryKey: ['active-runs'] });
     };
-  }, []);
+    window.addEventListener('history-runs-unread-changed', onHistory);
+    return () =>
+      window.removeEventListener('history-runs-unread-changed', onHistory);
+  }, [qc]);
+
+  const historyUnread = activeRunsData?.unreadCount ?? 0;
 
   const navLinks = [
     {
@@ -185,7 +211,7 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
       href: '/history',
       active: segments.includes('history'),
       label: 'History',
-      badgeCount: 0,
+      badgeCount: historyUnread,
     },
   ];
 

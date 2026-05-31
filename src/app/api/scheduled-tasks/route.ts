@@ -1,8 +1,8 @@
 import { NextRequest } from 'next/server';
 import { validateCronExpression } from 'cron';
 import db from '@/lib/db';
-import { scheduledTasks } from '@/lib/db/schema';
-import { desc } from 'drizzle-orm';
+import { chats, scheduledTasks } from '@/lib/db/schema';
+import { and, desc, isNotNull } from 'drizzle-orm';
 import { registerTask } from '@/lib/scheduledTasks/scheduler';
 
 export const runtime = 'nodejs';
@@ -12,7 +12,22 @@ export async function GET() {
     .select()
     .from(scheduledTasks)
     .orderBy(desc(scheduledTasks.createdAt));
-  return Response.json(rows);
+
+  // A task is running if one of its run chats still has the in-progress marker.
+  const runningRows = await db
+    .selectDistinct({ taskId: chats.scheduledTaskId })
+    .from(chats)
+    .where(
+      and(
+        isNotNull(chats.scheduledTaskId),
+        isNotNull(chats.activeRunMessageId),
+      ),
+    );
+  const runningIds = new Set(runningRows.map((r) => r.taskId));
+
+  return Response.json(
+    rows.map((row) => ({ ...row, running: runningIds.has(row.id) })),
+  );
 }
 
 export async function POST(req: NextRequest) {

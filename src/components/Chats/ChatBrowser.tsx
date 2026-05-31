@@ -23,7 +23,9 @@ import {
   type ChatsFilter,
   type ChatsPage,
 } from '@/lib/hooks/api/useChats';
+import { qk } from '@/lib/api/keys';
 import { useQueryClient, type InfiniteData } from '@tanstack/react-query';
+import { useActiveRuns } from '@/lib/hooks/api/useActiveRuns';
 
 interface Props {
   /** When set, scopes the browser to a single workspace; hides workspace UI. */
@@ -33,6 +35,15 @@ interface Props {
 const ChatBrowser = ({ workspaceId }: Props) => {
   const scoped = !!workspaceId;
   const qc = useQueryClient();
+
+  const { data: activeRunsData } = useActiveRuns();
+  const activeRunMap = useMemo(() => {
+    const m = new Map<string, { messageId: string; startedAt: number }>();
+    for (const r of activeRunsData?.active ?? []) {
+      m.set(r.chatId, { messageId: r.messageId, startedAt: r.startedAt });
+    }
+    return m;
+  }, [activeRunsData]);
 
   const { data: activeWorkspaces = [] } = useWorkspacesList(false);
   const { data: archivedWorkspaces = [] } = useWorkspacesList(true);
@@ -224,7 +235,7 @@ const ChatBrowser = ({ workspaceId }: Props) => {
   const handleDelete = (chatId: string) => {
     // Optimistically remove from all cached infinite pages before refetching
     qc.setQueriesData<InfiniteData<ChatsPage>>(
-      { queryKey: ['chats', 'infinite'], exact: false },
+      { queryKey: qk.chatsInfiniteRoot, exact: false },
       (old) => {
         if (!old) return old;
         return {
@@ -236,8 +247,8 @@ const ChatBrowser = ({ workspaceId }: Props) => {
         };
       },
     );
-    qc.invalidateQueries({ queryKey: ['chats', 'infinite'] });
-    qc.invalidateQueries({ queryKey: ['chats', 'search'] });
+    qc.invalidateQueries({ queryKey: qk.chatsInfiniteRoot });
+    qc.invalidateQueries({ queryKey: qk.chatSearchRoot });
   };
 
   const toggleWorkspaceFilter = (id: string) => {
@@ -451,28 +462,39 @@ const ChatBrowser = ({ workspaceId }: Props) => {
 
       {displayedChats.length > 0 && (
         <div className="flex flex-col pb-20 lg:pb-2">
-          {displayedChats.map((chat, i) => (
-            <ChatRow
-              key={chat.id}
-              chat={chat}
-              isLast={i === displayedChats.length - 1}
-              isSearchMode={isSearchMode}
-              searchTerms={
-                searchTerms.length > 0 ? searchTerms : [debouncedQuery]
-              }
-              hideWorkspaceChip={scoped}
-              scopedWorkspaceId={
-                scoped ? workspaceId : (chat.workspaceId ?? undefined)
-              }
-              workspace={
-                chat.workspaceId
-                  ? (workspaceMap[chat.workspaceId] ?? null)
-                  : null
-              }
-              privateSessionDurationMs={privateSessionDurationMs}
-              onDelete={handleDelete}
-            />
-          ))}
+          {displayedChats.map((chat, i) => {
+            const activeRun = activeRunMap.get(chat.id);
+            // Merge in-progress state from the shared poll into the row.
+            const enrichedChat = activeRun
+              ? {
+                  ...chat,
+                  activeRunMessageId: activeRun.messageId,
+                  activeRunStartedAt: activeRun.startedAt,
+                }
+              : chat;
+            return (
+              <ChatRow
+                key={chat.id}
+                chat={enrichedChat}
+                isLast={i === displayedChats.length - 1}
+                isSearchMode={isSearchMode}
+                searchTerms={
+                  searchTerms.length > 0 ? searchTerms : [debouncedQuery]
+                }
+                hideWorkspaceChip={scoped}
+                scopedWorkspaceId={
+                  scoped ? workspaceId : (chat.workspaceId ?? undefined)
+                }
+                workspace={
+                  chat.workspaceId
+                    ? (workspaceMap[chat.workspaceId] ?? null)
+                    : null
+                }
+                privateSessionDurationMs={privateSessionDurationMs}
+                onDelete={handleDelete}
+              />
+            );
+          })}
           {loadingMore && !isSearchMode && (
             <div className="flex flex-row items-center justify-center py-4">
               <LoaderCircle size={24} className="animate-spin text-accent" />

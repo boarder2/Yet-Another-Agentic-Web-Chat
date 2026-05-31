@@ -1,7 +1,6 @@
-export interface ChatFilters {
-  workspaceId?: string | null;
-  page?: number;
-}
+import type { ChatsFilter } from '@/lib/hooks/api/useChats';
+
+type ChatsSearchFilter = Omit<ChatsFilter, 'pinned' | 'scheduled'>;
 
 // Namespace roots — scoped key factories build on these so reads and
 // invalidations share a single source of truth.
@@ -28,7 +27,16 @@ export const qk = {
     [...MEMORIES_NS, { workspaceId }] as const,
   scheduledTasks: ['scheduled-tasks'] as const,
   scheduledRuns: ['scheduled-task-runs'] as const,
-  chats: (filters: ChatFilters) => ['chats', filters] as const,
-  chatSearch: (q: string, ws?: string) => ['chats', 'search', q, ws] as const,
+  scheduledRunsUnread: ['scheduled-task-runs', 'unread'] as const,
+  chatsRoot: ['chats'] as const,
+  chatsInfiniteRoot: ['chats', 'infinite'] as const,
+  chatsInfinite: (filter: ChatsFilter) =>
+    ['chats', 'infinite', filter] as const,
+  chatSearchRoot: ['chats', 'search'] as const,
+  chatSearch: (q: string, filter: ChatsSearchFilter) =>
+    ['chats', 'search', q, filter] as const,
+  chatLlmSearch: (query: string, filter: ChatsSearchFilter) =>
+    ['chats', 'search', 'llm', query, filter] as const,
   message: (id: string) => ['messages', id] as const,
+  activeRuns: ['active-runs'] as const,
 };

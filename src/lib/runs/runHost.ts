@@ -14,7 +14,7 @@ import { cleanupCancelToken } from '@/lib/cancel-tokens';
 import { cleanupRun } from '@/lib/utils/runControl';
 import db from '@/lib/db';
 import { chats } from '@/lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 
 type TokenUsage = {
   input_tokens: number;
@@ -64,12 +64,18 @@ export async function attachRunHost(params: {
     runStatus: 'running',
   });
 
-  // Write chat markers so a freshly-mounted ChatWindow knows a run is live
+  // Write chat markers so a freshly-mounted ChatWindow knows a run is live.
+  // Reset lastRunViewed to 0: a new run produces a result the user has not yet
+  // seen, so the thread is unread until either it completes while subscribed
+  // (terminate sets it back to 1) or it is opened after finishing. Without this
+  // a stale 1 from opening the chat before submitting would survive the
+  // COALESCE in terminate and suppress the unread badge.
   await db
     .update(chats)
     .set({
       activeRunMessageId: run.messageId,
       activeRunStartedAt: run.startedAt,
+      lastRunViewed: 0,
     })
     .where(eq(chats.id, chatId))
     .execute();
@@ -135,12 +141,21 @@ export async function attachRunHost(params: {
     } catch (err) {
       console.warn('[runHost] terminal flush failed:', err);
     }
+    // Capture subscriber count before terminateRun clears them.
+    const hadSubscriber = run.subscribers.size > 0;
     terminateRun(run, status);
     cleanupCancelToken(userMessageId);
     cleanupRun(userMessageId);
-    // Clear chat markers now that the run is done
+    // Clear chat markers and record terminal state.
+    // Use COALESCE for lastRunViewed so a concurrent markSeen(=1) write is
+    // not overwritten; only defaults to 0 when the column is still NULL.
     db.update(chats)
-      .set({ activeRunMessageId: null, activeRunStartedAt: null })
+      .set({
+        activeRunMessageId: null,
+        activeRunStartedAt: null,
+        lastRunStatus: status,
+        lastRunViewed: hadSubscriber ? 1 : sql`COALESCE(last_run_viewed, 0)`,
+      })
       .where(eq(chats.id, chatId))
       .execute()
       .catch((err: unknown) =>

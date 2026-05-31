@@ -76,7 +76,12 @@ async function bootSweep(): Promise<void> {
     if (staleChats.length > 0) {
       await db
         .update(chats)
-        .set({ activeRunMessageId: null, activeRunStartedAt: null })
+        .set({
+          activeRunMessageId: null,
+          activeRunStartedAt: null,
+          lastRunStatus: 'interrupted',
+          lastRunViewed: 0,
+        })
         .where(isNotNull(chats.activeRunMessageId))
         .execute();
 

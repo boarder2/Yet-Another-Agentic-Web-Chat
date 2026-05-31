@@ -15,6 +15,7 @@ import { exportAsMarkdown, exportAsPDF } from '@/lib/chatExport';
 import { useConfig } from '@/lib/hooks/api/useConfig';
 import { useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api/client';
+import { qk } from '@/lib/api/keys';
 
 const ChatActions = ({
   chatId,
@@ -97,7 +98,7 @@ const ChatActions = ({
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ pinned: next }),
             });
-            qc.invalidateQueries({ queryKey: ['chats', 'infinite'] });
+            qc.invalidateQueries({ queryKey: qk.chatsInfiniteRoot });
           } catch {
             if (setPinned) setPinned(!next);
           }

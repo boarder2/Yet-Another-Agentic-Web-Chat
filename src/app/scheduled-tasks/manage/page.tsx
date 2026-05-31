@@ -97,89 +97,104 @@ const Page = () => {
 
       {!loading && tasks.length > 0 && (
         <div className="flex flex-col pb-20 lg:pb-2">
-          {tasks.map((task, i) => (
-            <div
-              className={`flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 py-5 ${i !== tasks.length - 1 ? 'border-b border-surface-2' : ''}`}
-              key={task.id}
-            >
-              <div className="flex flex-col gap-1 min-w-0 flex-1">
-                <span className="font-medium text-lg truncate">
-                  {task.name}
-                </span>
-                <div className="flex items-center gap-3 text-xs text-fg/60">
-                  {(task.cronExpression || task.schedule) && (
-                    <span>
-                      {describeCron(task.cronExpression ?? task.schedule ?? '')}
-                    </span>
-                  )}
-                  {task.lastRunAt && (
-                    <span className="flex items-center gap-1">
-                      {task.lastRunStatus === 'success' ? (
-                        <CheckCircle size={12} className="text-success" />
-                      ) : task.lastRunStatus === 'error' ? (
-                        <XCircle size={12} className="text-danger" />
-                      ) : null}
-                      Last run{' '}
-                      {formatTimeDifference(
-                        new Date(),
-                        new Date(task.lastRunAt),
-                      )}{' '}
-                      ago
-                    </span>
-                  )}
-                  {task.lastRunChatId ? (
-                    <Link
-                      href={`/c/${task.lastRunChatId}`}
-                      className="text-xs text-accent hover:underline"
-                    >
-                      Open last run
-                    </Link>
-                  ) : task.lastRunAt ? (
-                    <span className="text-xs text-fg/40 italic">
-                      Chat no longer available
-                    </span>
-                  ) : null}
+          {tasks.map((task, i) => {
+            const isRunning = task.running || runningTaskId === task.id;
+            return (
+              <div
+                className={`flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 py-5 ${i !== tasks.length - 1 ? 'border-b border-surface-2' : ''}`}
+                key={task.id}
+              >
+                <div className="flex flex-col gap-1 min-w-0 flex-1">
+                  <span className="font-medium text-lg truncate">
+                    {task.name}
+                  </span>
+                  <div className="flex items-center gap-3 text-xs text-fg/60">
+                    {isRunning && (
+                      <span className="flex items-center gap-1 text-accent">
+                        <LoaderCircle size={12} className="animate-spin" />
+                        Running…
+                      </span>
+                    )}
+                    {(task.cronExpression || task.schedule) && (
+                      <span>
+                        {describeCron(
+                          task.cronExpression ?? task.schedule ?? '',
+                        )}
+                      </span>
+                    )}
+                    {task.lastRunAt && (
+                      <span className="flex items-center gap-1">
+                        {task.lastRunStatus === 'success' ? (
+                          <CheckCircle size={12} className="text-success" />
+                        ) : task.lastRunStatus === 'error' ? (
+                          <XCircle size={12} className="text-danger" />
+                        ) : null}
+                        Last run{' '}
+                        {formatTimeDifference(
+                          new Date(),
+                          new Date(task.lastRunAt),
+                        )}{' '}
+                        ago
+                      </span>
+                    )}
+                    {task.lastRunChatId ? (
+                      <Link
+                        href={`/c/${task.lastRunChatId}`}
+                        className="text-xs text-accent hover:underline"
+                      >
+                        Open last run
+                      </Link>
+                    ) : task.lastRunAt ? (
+                      <span className="text-xs text-fg/40 italic">
+                        Chat no longer available
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => toggleEnabled(task)}
+                    className={`px-3 py-1 rounded-pill text-xs font-medium transition ${
+                      task.enabled
+                        ? 'bg-success-soft text-success dark:text-success border border-success'
+                        : 'bg-surface-2 text-fg/50 border border-surface-2'
+                    }`}
+                  >
+                    {task.enabled ? 'Enabled' : 'Disabled'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => runNow(task)}
+                    disabled={isRunning}
+                    className="p-1.5 rounded-surface hover:bg-surface-2 transition text-fg/60 hover:text-fg disabled:opacity-50"
+                    title="Run now"
+                  >
+                    {isRunning ? (
+                      <LoaderCircle size={16} className="animate-spin" />
+                    ) : (
+                      <Play size={16} />
+                    )}
+                  </button>
+                  <Link
+                    href={`/scheduled-tasks/manage/${task.id}/edit`}
+                    className="p-1.5 rounded-surface hover:bg-surface-2 transition text-fg/60 hover:text-fg"
+                    title="Edit"
+                  >
+                    <Pencil size={16} />
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(task)}
+                    className="p-1.5 rounded-surface hover:bg-surface-2 transition text-fg/60 hover:text-danger"
+                    title="Delete"
+                  >
+                    <Trash2 size={16} />
+                  </button>
                 </div>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => toggleEnabled(task)}
-                  className={`px-3 py-1 rounded-pill text-xs font-medium transition ${
-                    task.enabled
-                      ? 'bg-success-soft text-success dark:text-success border border-success'
-                      : 'bg-surface-2 text-fg/50 border border-surface-2'
-                  }`}
-                >
-                  {task.enabled ? 'Enabled' : 'Disabled'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => runNow(task)}
-                  disabled={runningTaskId === task.id}
-                  className="p-1.5 rounded-surface hover:bg-surface-2 transition text-fg/60 hover:text-fg disabled:opacity-50"
-                  title="Run now"
-                >
-                  <Play size={16} />
-                </button>
-                <Link
-                  href={`/scheduled-tasks/manage/${task.id}/edit`}
-                  className="p-1.5 rounded-surface hover:bg-surface-2 transition text-fg/60 hover:text-fg"
-                  title="Edit"
-                >
-                  <Pencil size={16} />
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => handleDelete(task)}
-                  className="p-1.5 rounded-surface hover:bg-surface-2 transition text-fg/60 hover:text-danger"
-                  title="Delete"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

@@ -12,6 +12,8 @@ import { ArrowLeft, CalendarClock, Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { qk } from '@/lib/api/keys';
 
 interface TaskFormData {
   name: string;
@@ -44,6 +46,7 @@ export default function TaskForm({
   initialData?: TaskFormData;
 }) {
   const router = useRouter();
+  const qc = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [systemPrompts, setSystemPrompts] = useState<SystemPrompt[]>([]);
@@ -219,6 +222,8 @@ export default function TaskForm({
         return;
       }
 
+      // Bust the cached task list so the manage page reflects the save.
+      qc.invalidateQueries({ queryKey: qk.scheduledTasks });
       router.push('/scheduled-tasks/manage');
     } catch {
       setError('Failed to save task');

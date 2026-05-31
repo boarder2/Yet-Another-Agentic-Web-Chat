@@ -16,6 +16,7 @@ import EmptyChat from './EmptyChat';
 import crypto from 'crypto';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
+import { qk } from '@/lib/api/keys';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { getSuggestions } from '@/lib/actions';
 import { SKILL_TOKEN_SCAN_REGEX } from '@/lib/skills/validation';
@@ -649,6 +650,19 @@ const ChatWindow = ({
     messagesRef.current = messages;
   }, [messages]);
 
+  // Aborts the in-flight run/attach stream fetch. On unmount we abort it so the
+  // server-side subscriber is dropped immediately: run completion then sees no
+  // live subscriber and correctly leaves the thread unread. Without this the
+  // reader loop keeps the request open after navigation, making the run look
+  // "still watched" and marking it read.
+  const streamAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      streamAbortRef.current?.abort();
+    };
+  }, []);
+
   // Utility: read a newline-delimited JSON stream and dispatch each object to handler.
   const readStream = async (
     reader: ReadableStreamDefaultReader<Uint8Array>,
@@ -658,7 +672,16 @@ const ChatWindow = ({
     const decoder = new TextDecoder('utf-8');
     let partialChunk = '';
     while (true) {
-      const { value, done } = await reader.read();
+      let value: Uint8Array | undefined;
+      let done: boolean;
+      try {
+        ({ value, done } = await reader.read());
+      } catch (err) {
+        // Aborted on unmount/navigation — stop quietly; the run continues
+        // server-side and the unread state is settled at completion.
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        throw err;
+      }
       if (done) break;
       partialChunk += decoder.decode(value, { stream: true });
       try {
@@ -698,10 +721,15 @@ const ChatWindow = ({
     const codeExecutionRunIdMap = new Map<string, string>();
     const userQuestionRunIdMap = new Map<string, string>();
 
+    streamAbortRef.current?.abort();
+    const abortController = new AbortController();
+    streamAbortRef.current = abortController;
+
     let res: Response;
     try {
       res = await fetch(
         `/api/chat/runs/${userMessageId}/stream?from=0&chatId=${chatId}`,
+        { signal: abortController.signal },
       );
     } catch {
       setLoading(false);
@@ -1200,6 +1228,10 @@ const ChatWindow = ({
       // loadMessages normally sets the tab title on mount; since we no longer
       // remount, set it here for the freshly-titled chat.
       document.title = message;
+      // The chat row is created server-side on this first message; invalidate
+      // the cached chat lists so history/sidebar show it instead of waiting out
+      // the default staleTime.
+      queryClient.invalidateQueries({ queryKey: qk.chatsRoot });
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2185,13 +2217,25 @@ const ChatWindow = ({
       payload.invokedSkills = msgInvokedSkills;
     }
 
-    const res = await fetch('/api/chat', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
+    streamAbortRef.current?.abort();
+    const abortController = new AbortController();
+    streamAbortRef.current = abortController;
+
+    let res: Response;
+    try {
+      res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+        signal: abortController.signal,
+      });
+    } catch (err) {
+      // Aborted on unmount/navigation — run continues server-side.
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      throw err;
+    }
 
     if (!res.body) throw new Error('No response body');
 

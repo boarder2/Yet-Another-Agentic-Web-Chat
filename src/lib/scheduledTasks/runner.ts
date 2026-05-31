@@ -67,7 +67,10 @@ export async function runScheduledTask(
         sourceUrls.map((u: string) => `- ${u}`).join('\n');
     }
 
-    // 6. Insert chat row
+    // 6. Insert chat row. Mark it in-progress with the same activeRunMessageId/
+    // activeRunStartedAt markers interactive runs use so the scheduled-tasks
+    // list can show "running" and the unread badge stays suppressed until the
+    // run finishes (badge queries require activeRunMessageId IS NULL).
     await db
       .insert(chats)
       .values({
@@ -79,6 +82,8 @@ export async function runScheduledTask(
         isPrivate: 0,
         scheduledTaskId: task.id,
         scheduledRunViewed: 0,
+        activeRunMessageId: userMessageId,
+        activeRunStartedAt: Date.now(),
       })
       .execute();
 
@@ -208,7 +213,15 @@ export async function runScheduledTask(
       })
       .execute();
 
-    // 12. Update task
+    // 12. Clear in-progress markers — the run is complete, so the chat is now
+    // an unread finished run (scheduledRunViewed stays 0 until viewed).
+    await db
+      .update(chats)
+      .set({ activeRunMessageId: null, activeRunStartedAt: null })
+      .where(eq(chats.id, chatId))
+      .execute();
+
+    // 13. Update task
     await db
       .update(scheduledTasks)
       .set({
@@ -226,7 +239,7 @@ export async function runScheduledTask(
     const errorMsg =
       err instanceof Error ? err.message : 'Unknown error during task run';
 
-    // 13. Insert synthetic error message
+    // Insert synthetic error message
     try {
       await db
         .insert(messagesSchema)
@@ -237,6 +250,19 @@ export async function runScheduledTask(
           role: 'assistant',
           metadata: JSON.stringify({ createdAt: new Date() }),
         })
+        .execute();
+    } catch {
+      // Best-effort
+    }
+
+    // Clear in-progress markers so the run no longer shows as running and the
+    // failed run can surface as unread. No-ops if the chat row was never
+    // inserted (e.g. model resolution failed before step 6).
+    try {
+      await db
+        .update(chats)
+        .set({ activeRunMessageId: null, activeRunStartedAt: null })
+        .where(eq(chats.id, chatId))
         .execute();
     } catch {
       // Best-effort

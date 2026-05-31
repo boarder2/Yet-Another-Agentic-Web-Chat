@@ -2,6 +2,7 @@
 
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api/client';
+import { qk } from '@/lib/api/keys';
 
 export interface Chat {
   id: string;
@@ -12,6 +13,10 @@ export interface Chat {
   pinned?: number;
   scheduledAt?: string | null;
   focusMode: string;
+  activeRunMessageId?: string | null;
+  activeRunStartedAt?: number | null;
+  lastRunStatus?: 'completed' | 'errored' | 'cancelled' | 'interrupted' | null;
+  lastRunViewed?: number | null;
 }
 
 export interface ChatsPage {
@@ -44,7 +49,7 @@ function buildChatsUrl(offset: number, filter: ChatsFilter): string {
 }
 
 export function useChatsInfinite(filter: ChatsFilter = {}) {
-  const key = ['chats', 'infinite', filter] as const;
+  const key = qk.chatsInfinite(filter);
   return useInfiniteQuery({
     queryKey: key,
     queryFn: ({ pageParam = 0 }: { pageParam: number }) =>
@@ -61,7 +66,7 @@ export function useChatSearch(
   q: string,
   filter: Omit<ChatsFilter, 'pinned' | 'scheduled'> = {},
 ) {
-  const key = ['chats', 'search', q, filter] as const;
+  const key = qk.chatSearch(q, filter);
   return useQuery({
     queryKey: key,
     queryFn: () => {
@@ -91,7 +96,7 @@ export function useChatLlmSearch(
 ) {
   // Keyed under the shared 'chats','search' prefix so chat mutations
   // (delete/rename) invalidate it alongside text search results.
-  const key = ['chats', 'search', 'llm', query, filter] as const;
+  const key = qk.chatLlmSearch(query, filter);
   return useQuery({
     queryKey: key,
     queryFn: () => {

@@ -61,6 +61,10 @@ export const chats = sqliteTable('chats', {
   workspaceId: text('workspace_id'),
   activeRunMessageId: text('active_run_message_id'),
   activeRunStartedAt: integer('active_run_started_at'),
+  lastRunStatus: text('last_run_status', {
+    enum: ['completed', 'errored', 'cancelled', 'interrupted'],
+  }),
+  lastRunViewed: integer('last_run_viewed'),
 });
 
 export const memories = sqliteTable('memories', {

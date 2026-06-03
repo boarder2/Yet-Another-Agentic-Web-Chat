@@ -1,5 +1,6 @@
-import db from '@/lib/db';
+import db, { sqlite } from '@/lib/db';
 import { chats, scheduledTasks } from '@/lib/db/schema';
+import { deleteCheckpoint } from '@/lib/runs/checkpointer';
 import { and, eq, isNull, isNotNull, desc, sql, inArray } from 'drizzle-orm';
 import {
   getChatRetentionPolicy,
@@ -158,6 +159,49 @@ export async function runRetentionCleanup(): Promise<RetentionSummary> {
   const { deleted: regular } = await purgeByPolicy(globalChatPolicy, null);
   summary.regularChatsDeleted = regular;
   console.log(`[retention] regular-chats: deleted ${regular}`);
+
+  // Phase 4: run_events + LangGraph checkpoint GC.
+  // - Orphaned run_events: a message regenerate deletes message rows but not
+  //   run_events (which key on the user messageId, not a message FK).
+  // - Orphaned checkpoints: any thread_id not pinned by chats.activeRunThreadId
+  //   (completed/errored runs delete their own checkpoint; this catches leaks
+  //   from crashes or non-clean exits).
+  try {
+    const orphanEvents = sqlite
+      .prepare(
+        `DELETE FROM run_events WHERE message_id NOT IN (SELECT messageId FROM messages)`,
+      )
+      .run();
+    if (orphanEvents.changes > 0) {
+      console.log(
+        `[retention] run_events: deleted ${orphanEvents.changes} orphan(s)`,
+      );
+    }
+  } catch (err) {
+    console.warn('[retention] run_events GC failed:', err);
+  }
+
+  try {
+    const pinnedRows = sqlite
+      .prepare(
+        `SELECT active_run_thread_id AS t FROM chats WHERE active_run_thread_id IS NOT NULL`,
+      )
+      .all() as Array<{ t: string }>;
+    const pinned = new Set(pinnedRows.map((r) => r.t));
+    const threadRows = sqlite
+      .prepare(`SELECT DISTINCT thread_id AS t FROM checkpoints`)
+      .all() as Array<{ t: string }>;
+    let gc = 0;
+    for (const { t } of threadRows) {
+      if (!pinned.has(t)) {
+        await deleteCheckpoint(t).catch(() => {});
+        gc += 1;
+      }
+    }
+    if (gc > 0) console.log(`[retention] checkpoints: deleted ${gc} unpinned`);
+  } catch (err) {
+    console.warn('[retention] checkpoint GC failed:', err);
+  }
 
   console.log('[retention] summary:', summary);
   return summary;

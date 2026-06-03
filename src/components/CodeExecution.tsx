@@ -14,7 +14,7 @@ export type PendingExecution = {
   code: string;
   description?: string;
   toolCallId?: string;
-  status: 'pending' | 'approved' | 'denied' | 'completed';
+  status: 'pending' | 'approved' | 'denied' | 'completed' | 'cancelled';
   result?: {
     stdout?: string;
     stderr?: string;
@@ -53,10 +53,13 @@ export function CodeExecutionApproval({
     setActionTaken(true);
     if (onActionTaken) onActionTaken(executionId, approved);
     try {
-      await fetch('/api/sandbox/approve', {
+      await fetch('/api/chat/runs/resume', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ executionId, approved, reason }),
+        body: JSON.stringify({
+          approvalId: executionId,
+          response: { approved, reason },
+        }),
       });
     } catch (err) {
       console.error('Failed to send approval:', err);

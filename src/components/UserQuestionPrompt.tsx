@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { HelpCircle, X, Send, SkipForward } from 'lucide-react';
 
 export type PendingQuestion = {
@@ -11,8 +11,7 @@ export type PendingQuestion = {
   allowFreeformInput?: boolean;
   context?: string;
   toolCallId?: string;
-  createdAt?: number;
-  status: 'pending' | 'answered' | 'skipped' | 'timed_out';
+  status: 'pending' | 'answered' | 'skipped' | 'timed_out' | 'cancelled';
   response?: {
     selectedOptions?: string[];
     freeformText?: string;
@@ -26,7 +25,6 @@ export function UserQuestionPrompt({
   multiSelect = false,
   allowFreeformInput = true,
   context,
-  createdAt,
   onSubmit,
   onSkip,
   onDismiss,
@@ -39,7 +37,6 @@ export function UserQuestionPrompt({
   multiSelect?: boolean;
   allowFreeformInput?: boolean;
   context?: string;
-  createdAt?: number;
   onSubmit: (
     questionId: string,
     response: { selectedOptions?: string[]; freeformText?: string },
@@ -55,38 +52,7 @@ export function UserQuestionPrompt({
   const [freeformText, setFreeformText] = useState('');
   const [submitted, setSubmitted] = useState(false);
 
-  // Countdown timer (15 minutes from backend createdAt)
-  const TIMEOUT_MS = 15 * 60 * 1000;
-  const [remainingSeconds, setRemainingSeconds] = useState(() => {
-    if (createdAt) {
-      const elapsed = Date.now() - createdAt;
-      return Math.max(0, Math.floor((TIMEOUT_MS - elapsed) / 1000));
-    }
-    return 15 * 60;
-  });
-
-  useEffect(() => {
-    if (submitted) return;
-    const interval = setInterval(() => {
-      setRemainingSeconds((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          onSkip(questionId);
-          onDismiss?.();
-          setSubmitted(true);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [submitted, onSkip, questionId, onDismiss]);
-
-  const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m}:${s.toString().padStart(2, '0')}`;
-  };
+  // No countdown timer — with interrupt-based flow, runs persist indefinitely until user responds.
 
   const handleOptionToggle = useCallback(
     (label: string) => {
@@ -171,9 +137,7 @@ export function UserQuestionPrompt({
           )}
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-fg/40 font-mono tabular-nums">
-            {formatTime(remainingSeconds)}
-          </span>
+          <span className="text-xs text-fg/40">Waiting on input</span>
           <button
             type="button"
             onClick={handleSkip}

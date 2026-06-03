@@ -5,6 +5,7 @@ import {
   sqliteTable,
   primaryKey,
   uniqueIndex,
+  index,
 } from 'drizzle-orm/sqlite-core';
 
 export const messages = sqliteTable('messages', {
@@ -61,8 +62,13 @@ export const chats = sqliteTable('chats', {
   workspaceId: text('workspace_id'),
   activeRunMessageId: text('active_run_message_id'),
   activeRunStartedAt: integer('active_run_started_at'),
+  activeRunStatus: text('active_run_status', {
+    enum: ['running', 'awaiting_user'],
+  }),
+  activeRunThreadId: text('active_run_thread_id'),
+  activeRunConfigSnapshot: text('active_run_config_snapshot', { mode: 'json' }),
   lastRunStatus: text('last_run_status', {
-    enum: ['completed', 'errored', 'cancelled', 'interrupted'],
+    enum: ['completed', 'errored', 'cancelled', 'interrupted', 'awaiting_user'],
   }),
   lastRunViewed: integer('last_run_viewed'),
 });
@@ -198,6 +204,63 @@ export const workspaceFiles = sqliteTable(
       t.workspaceId,
       t.name,
     ),
+  }),
+);
+
+export const approvalRequests = sqliteTable(
+  'approval_requests',
+  {
+    id: text('id').primaryKey(),
+    chatId: text('chat_id')
+      .notNull()
+      .references(() => chats.id, { onDelete: 'cascade' }),
+    messageId: text('message_id').notNull(),
+    threadId: text('thread_id').notNull(),
+    toolCallId: text('tool_call_id').notNull(),
+    engineInterruptId: text('engine_interrupt_id'),
+    toolKind: text('tool_kind', {
+      enum: [
+        'ask_user',
+        'code_execution',
+        'workspace_edit',
+        'workspace_create',
+        'skill_edit',
+      ],
+    }).notNull(),
+    workspaceId: text('workspace_id'),
+    payload: text('payload', { mode: 'json' }).notNull(),
+    snapshot: text('snapshot', { mode: 'json' }),
+    createdAt: integer('created_at').notNull(),
+    resolvedAt: integer('resolved_at'),
+    resolutionKind: text('resolution_kind', {
+      enum: ['user', 'cancelled', 'interrupted', 'stale_snapshot'],
+    }),
+    response: text('response', { mode: 'json' }),
+  },
+  (t) => ({
+    byMessage: index('approvals_message_idx').on(t.messageId),
+    byPending: index('approvals_pending_idx').on(t.resolvedAt),
+    byChat: index('approvals_chat_idx').on(t.chatId),
+  }),
+);
+
+export const runEvents = sqliteTable(
+  'run_events',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    chatId: text('chat_id')
+      .notNull()
+      .references(() => chats.id, { onDelete: 'cascade' }),
+    messageId: text('message_id').notNull(),
+    seq: integer('seq').notNull(),
+    type: text('type').notNull(),
+    data: text('data', { mode: 'json' }).notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => ({
+    byMessage: index('run_events_message_idx').on(t.messageId),
+    bySeq: index('run_events_seq_idx').on(t.messageId, t.seq),
+    byChat: index('run_events_chat_idx').on(t.chatId),
   }),
 );
 

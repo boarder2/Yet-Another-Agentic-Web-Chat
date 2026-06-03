@@ -9,6 +9,11 @@ import { eq, isNotNull } from 'drizzle-orm';
 import { runScheduledTask } from './runner';
 import { runRetentionCleanup } from '@/lib/retention/cleanup';
 import { gcRuns } from '@/lib/runs/runHub';
+import {
+  initLanggraphCheckpointer,
+  deleteCheckpoint,
+} from '@/lib/runs/checkpointer';
+import { markOpenApprovalsInterrupted } from '@/lib/runs/runHost';
 
 type Registry = {
   jobs: Map<string, CronJob>;
@@ -35,6 +40,9 @@ export async function initScheduler() {
   reg.jobs.clear();
   reg.privateCleanupJob?.stop();
   reg.privateCleanupJob = undefined;
+
+  // Initialize LangGraph checkpointer (idempotent setup of checkpoint tables)
+  initLanggraphCheckpointer();
 
   // Boot sweep: clear stale run markers from a previous server process
   await bootSweep();
@@ -63,32 +71,57 @@ export async function initScheduler() {
 
 /**
  * On server start, clear any stale run markers left by a previous process.
- * Rewrites runStatus='running' to 'interrupted' in assistant message metadata.
+ * - `awaiting_user` runs: preserved (checkpoint persisted, lazily reconstructed on subscribe/resume).
+ * - `running` (or missing activeRunStatus): marked interrupted, checkpoint deleted.
  */
 async function bootSweep(): Promise<void> {
   try {
-    // Clear stale activeRunMessageId markers on chats
-    const staleChats = await db
-      .select({ id: chats.id, activeRunMessageId: chats.activeRunMessageId })
+    const allActive = await db
+      .select({
+        id: chats.id,
+        activeRunMessageId: chats.activeRunMessageId,
+        activeRunStatus: chats.activeRunStatus,
+        activeRunThreadId: chats.activeRunThreadId,
+      })
       .from(chats)
       .where(isNotNull(chats.activeRunMessageId));
 
-    if (staleChats.length > 0) {
-      await db
-        .update(chats)
-        .set({
-          activeRunMessageId: null,
-          activeRunStartedAt: null,
-          lastRunStatus: 'interrupted',
-          lastRunViewed: 0,
-        })
-        .where(isNotNull(chats.activeRunMessageId))
-        .execute();
+    if (allActive.length === 0) return;
 
-      // Rewrite runStatus='running' → 'interrupted' for any assistant row in
-      // those chats. activeRunMessageId stores the human msg ID (hub key), so
-      // we query all messages for the chat and patch any with runStatus='running'.
-      for (const chat of staleChats) {
+    const toInterrupt = allActive.filter(
+      (c) => c.activeRunStatus !== 'awaiting_user',
+    );
+    const awaitingCount = allActive.length - toInterrupt.length;
+
+    if (toInterrupt.length > 0) {
+      for (const chat of toInterrupt) {
+        await db
+          .update(chats)
+          .set({
+            activeRunMessageId: null,
+            activeRunStartedAt: null,
+            activeRunStatus: null,
+            activeRunThreadId: null,
+            activeRunConfigSnapshot: null,
+            lastRunStatus: 'interrupted',
+            lastRunViewed: 0,
+          })
+          .where(eq(chats.id, chat.id))
+          .execute();
+
+        if (chat.activeRunMessageId) {
+          await markOpenApprovalsInterrupted(chat.activeRunMessageId).catch(
+            (e: unknown) =>
+              console.warn('[bootSweep] markInterrupted failed:', e),
+          );
+        }
+        if (chat.activeRunThreadId) {
+          await deleteCheckpoint(chat.activeRunThreadId).catch((e: unknown) =>
+            console.warn('[bootSweep] deleteCheckpoint failed:', e),
+          );
+        }
+
+        // Rewrite runStatus='running' → 'interrupted' in message metadata
         const msgRows = await db.query.messages.findMany({
           where: eq(messagesSchema.chatId, chat.id),
         });
@@ -111,11 +144,11 @@ async function bootSweep(): Promise<void> {
           }
         }
       }
-
-      console.log(
-        `[bootSweep] cleared ${staleChats.length} stale run marker(s)`,
-      );
     }
+
+    console.log(
+      `[bootSweep] cleared ${toInterrupt.length} stale run(s), preserved ${awaitingCount} awaiting_user run(s)`,
+    );
   } catch (err) {
     console.error('[bootSweep] failed:', err);
   }

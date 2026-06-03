@@ -29,3 +29,20 @@ export function popCallbackRunId(question: string): string | undefined {
   if (queue.length === 0) questionRunIdQueues.delete(question);
   return runId;
 }
+
+/**
+ * Remove a runId from every queue. Called when a tool that pushed a
+ * correlation entry finishes WITHOUT interrupting (normal completion or a
+ * non-interrupt error). The push happens speculatively in handleToolStart
+ * before the tool runs; if the tool never reaches interrupt() (e.g. an early
+ * validation error), its entry would otherwise linger and a later interrupt
+ * for the same key would pop the stale runId, mis-targeting the markup widget.
+ */
+export function dropCallbackRunId(runId: string): void {
+  for (const [key, queue] of questionRunIdQueues) {
+    const idx = queue.indexOf(runId);
+    if (idx === -1) continue;
+    queue.splice(idx, 1);
+    if (queue.length === 0) questionRunIdQueues.delete(key);
+  }
+}

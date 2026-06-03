@@ -2,13 +2,10 @@ import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { RunnableConfig } from '@langchain/core/runnables';
 import { ToolMessage } from '@langchain/core/messages';
-import { Command } from '@langchain/langgraph';
-import crypto from 'crypto';
+import { Command, interrupt } from '@langchain/langgraph';
 import { isSoftStop } from '@/lib/utils/runControl';
 import { getFileByName, createFile } from '@/lib/workspaces/files';
 import { hasNulByte, validateFilename } from '@/lib/workspaces/paths';
-import { waitForApprovalResponse } from '@/lib/workspaces/pendingEdits';
-import { popCallbackRunId } from '@/lib/userQuestion/questionCorrelation';
 import { getWorkspace } from '@/lib/workspaces/service';
 import db from '@/lib/db';
 import { workspaceFiles } from '@/lib/db/schema';
@@ -81,13 +78,13 @@ export function workspaceCreateFileTool(opts: {
         return err('not_editable', `Invalid filename: ${String(e)}`);
       }
 
-      // 2. NUL-byte sniff on proposed content
+      // 2. NUL-byte sniff
       const bytes = Buffer.from(input.content, 'utf8');
       if (hasNulByte(bytes)) {
         return err('not_editable', 'Content contains binary data.');
       }
 
-      // 4. Diff-size cap: treat as all-additions
+      // 3. Line cap
       const lineCount = input.content.split('\n').length;
       if (lineCount > 350) {
         return err(
@@ -96,7 +93,7 @@ export function workspaceCreateFileTool(opts: {
         );
       }
 
-      // 5. Existence check
+      // 4. Existence check
       const existing = await getFileByName(opts.workspaceId, input.file).catch(
         () => null,
       );
@@ -104,63 +101,38 @@ export function workspaceCreateFileTool(opts: {
         return err('file_exists', 'Use `workspace_edit` instead.');
       }
 
-      // 6. Approval gate
+      // 5. Approval gate
       const ws = await getWorkspace(opts.workspaceId);
       const workspaceAutoAccept = ws?.autoAcceptFileEdits === 1;
-
-      // For create, no fileRow yet — per-file override will be applied after creation
       const shouldPrompt = !workspaceAutoAccept;
 
       if (shouldPrompt) {
-        const approvalId = crypto.randomUUID();
-        const markupToolCallId = popCallbackRunId(input.file);
+        const snapshot = { workspaceAutoAccept };
 
-        opts.emitter.emit(
-          'data',
-          JSON.stringify({
-            type: 'workspace_edit_approval_pending',
-            data: {
-              approvalId,
-              toolCallId,
-              markupToolCallId,
-              action: 'create',
-              workspaceId: opts.workspaceId,
-              file: input.file,
-              content: input.content,
-              workspaceAutoAccept,
-              fileAutoAccept: null,
-              createdAt: Date.now(),
-            },
-          }),
-        );
+        const response: unknown = interrupt({
+          kind: 'workspace_create',
+          toolCallId,
+          markupKey: input.file,
+          payload: {
+            action: 'create',
+            workspaceId: opts.workspaceId,
+            file: input.file,
+            content: input.content,
+            workspaceAutoAccept,
+            fileAutoAccept: null,
+            createdAt: Date.now(),
+          },
+          snapshot,
+        });
 
-        const response = await waitForApprovalResponse(
-          approvalId,
-          15 * 60 * 1000,
-          opts.messageId,
-        );
-
-        opts.emitter.emit(
-          'data',
-          JSON.stringify({
-            type: 'workspace_edit_approval_answered',
-            data: {
-              approvalId,
-              toolCallId,
-              decision: response.timedOut ? 'reject' : response.decision,
-              freeformText: response.freeformText,
-            },
-          }),
-        );
-
-        if (response.timedOut) {
+        if (response && (response as Record<string, unknown>).__cancelled) {
           return new Command({
             update: {
               messages: [
                 new ToolMessage({
                   content: JSON.stringify({
-                    error: 'rejected_by_user',
-                    hint: 'User did not respond in time.',
+                    error: 'cancelled_by_user',
+                    hint: 'User cancelled.',
                   }),
                   tool_call_id: toolCallId,
                 }),
@@ -169,12 +141,27 @@ export function workspaceCreateFileTool(opts: {
           });
         }
 
+        // Stale discriminator: a file with this name now exists (created while
+        // awaiting approval). Surface it so the agent inspects + edits instead.
+        if (response && (response as Record<string, unknown>).__stale) {
+          const reason = (response as { reason?: string }).reason;
+          return err(
+            'stale_state',
+            `${reason ?? 'A file with this name now exists.'} Use \`workspace_read\` to inspect it, then \`workspace_edit\` if a change is still needed.`,
+          );
+        }
+
+        const createResponse = response as {
+          decision: 'accept' | 'accept_always' | 'reject' | 'always_prompt';
+          freeformText?: string;
+        };
+
         if (
-          response.decision === 'reject' ||
-          response.decision === 'always_prompt'
+          createResponse.decision === 'reject' ||
+          createResponse.decision === 'always_prompt'
         ) {
-          const msg = response.freeformText
-            ? `User rejected the file creation: "${response.freeformText}"`
+          const msg = createResponse.freeformText
+            ? `User rejected the file creation: "${createResponse.freeformText}"`
             : 'User rejected the file creation.';
           return new Command({
             update: {
@@ -191,10 +178,8 @@ export function workspaceCreateFileTool(opts: {
           });
         }
 
-        // accept_always: we'll set the flag after creating the file below
-        const shouldSetAutoAccept = response.decision === 'accept_always';
+        const shouldSetAutoAccept = createResponse.decision === 'accept_always';
 
-        // 7. Create file
         const row = await createFile({
           workspaceId: opts.workspaceId,
           name: input.file,

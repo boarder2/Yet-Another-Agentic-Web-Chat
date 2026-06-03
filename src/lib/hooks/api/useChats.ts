@@ -15,7 +15,14 @@ export interface Chat {
   focusMode: string;
   activeRunMessageId?: string | null;
   activeRunStartedAt?: number | null;
-  lastRunStatus?: 'completed' | 'errored' | 'cancelled' | 'interrupted' | null;
+  activeRunStatus?: 'running' | 'awaiting_user' | null;
+  lastRunStatus?:
+    | 'completed'
+    | 'errored'
+    | 'cancelled'
+    | 'interrupted'
+    | 'awaiting_user'
+    | null;
   lastRunViewed?: number | null;
 }
 

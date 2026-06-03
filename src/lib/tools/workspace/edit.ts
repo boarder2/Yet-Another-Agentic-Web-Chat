@@ -2,14 +2,11 @@ import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { RunnableConfig } from '@langchain/core/runnables';
 import { ToolMessage } from '@langchain/core/messages';
-import { Command } from '@langchain/langgraph';
-import crypto from 'crypto';
+import { Command, interrupt } from '@langchain/langgraph';
 import { isSoftStop } from '@/lib/utils/runControl';
 import { getFileByName, replaceFile } from '@/lib/workspaces/files';
 import { getText } from '@/lib/workspaces/extract';
 import { hasNulByte, blobPath } from '@/lib/workspaces/paths';
-import { waitForApprovalResponse } from '@/lib/workspaces/pendingEdits';
-import { popCallbackRunId } from '@/lib/userQuestion/questionCorrelation';
 import { getWorkspace } from '@/lib/workspaces/service';
 import db from '@/lib/db';
 import { workspaceFiles } from '@/lib/db/schema';
@@ -110,16 +107,14 @@ export function workspaceEditTool(opts: {
         return err('not_editable', 'This file type is not editable.');
       }
 
-      // 4. Load text
+      // 3. Load text
       const text = await getText(fileRow.sha256, fileRow.mime);
       if (text === null) {
         return err('not_editable', 'This file type is not editable.');
       }
 
-      // 5. Apply edit
+      // 4. Validate edit
       const { oldString, newString, replaceAll } = input;
-
-      // Count occurrences
       let occurrences = 0;
       let idx = text.indexOf(oldString);
       while (idx !== -1) {
@@ -133,22 +128,18 @@ export function workspaceEditTool(opts: {
           "Read the file with `workspace_read`; the snippet doesn't match the current contents.",
         );
       }
-
       if (!replaceAll && occurrences > 1) {
         return err(
           'not_unique',
           `Found ${occurrences} occurrences. Pass \`replaceAll: true\` or expand the snippet to be unique.`,
         );
       }
-
       if (replaceAll && occurrences > 100) {
         return err(
           'too_many_replacements',
           'Make a smaller change: narrow `oldString` so it matches fewer occurrences, or split into multiple edits.',
         );
       }
-
-      // 6. Diff-size cap (added + removed lines)
       const lineDiff = diffLineCount(
         oldString,
         newString,
@@ -161,69 +152,50 @@ export function workspaceEditTool(opts: {
         );
       }
 
-      // 7. Approval gate
+      // 5. Approval gate
       const ws = await getWorkspace(opts.workspaceId);
       const workspaceAutoAccept = ws?.autoAcceptFileEdits === 1;
       const fileAutoAccept = fileRow.autoAcceptEdits; // null | 0 | 1
-
-      // Resolution: per-file wins over workspace
       const shouldPrompt =
         fileAutoAccept !== null ? fileAutoAccept === 0 : !workspaceAutoAccept;
 
       if (shouldPrompt) {
-        const approvalId = crypto.randomUUID();
-        const markupToolCallId = popCallbackRunId(input.file);
+        // Capture stale-state snapshot for resume validation
+        const snapshot = {
+          workspaceAutoAccept,
+          fileAutoAccept,
+          existingFileSha: fileRow.sha256,
+        };
 
-        opts.emitter.emit(
-          'data',
-          JSON.stringify({
-            type: 'workspace_edit_approval_pending',
-            data: {
-              approvalId,
-              toolCallId,
-              markupToolCallId,
-              action: 'edit',
-              workspaceId: opts.workspaceId,
-              fileId: fileRow.id,
-              file: fileRow.name,
-              oldString,
-              newString,
-              replaceAll,
-              occurrences,
-              workspaceAutoAccept,
-              fileAutoAccept,
-              createdAt: Date.now(),
-            },
-          }),
-        );
+        const response: unknown = interrupt({
+          kind: 'workspace_edit',
+          toolCallId,
+          markupKey: input.file,
+          payload: {
+            action: 'edit',
+            workspaceId: opts.workspaceId,
+            fileId: fileRow.id,
+            file: fileRow.name,
+            oldString,
+            newString,
+            replaceAll,
+            occurrences,
+            workspaceAutoAccept,
+            fileAutoAccept,
+            createdAt: Date.now(),
+          },
+          snapshot,
+        });
 
-        const response = await waitForApprovalResponse(
-          approvalId,
-          15 * 60 * 1000,
-          opts.messageId,
-        );
-
-        opts.emitter.emit(
-          'data',
-          JSON.stringify({
-            type: 'workspace_edit_approval_answered',
-            data: {
-              approvalId,
-              toolCallId,
-              decision: response.timedOut ? 'reject' : response.decision,
-              freeformText: response.freeformText,
-            },
-          }),
-        );
-
-        if (response.timedOut) {
+        // Cancellation discriminator
+        if (response && (response as Record<string, unknown>).__cancelled) {
           return new Command({
             update: {
               messages: [
                 new ToolMessage({
                   content: JSON.stringify({
-                    error: 'rejected_by_user',
-                    hint: 'User did not respond in time.',
+                    error: 'cancelled_by_user',
+                    hint: 'User cancelled.',
                   }),
                   tool_call_id: toolCallId,
                 }),
@@ -232,7 +204,22 @@ export function workspaceEditTool(opts: {
           });
         }
 
-        if (response.decision === 'accept_always') {
+        // Stale discriminator: the file changed while awaiting approval, so the
+        // approved diff no longer applies. Surface it so the agent re-reads + retries.
+        if (response && (response as Record<string, unknown>).__stale) {
+          const reason = (response as { reason?: string }).reason;
+          return err(
+            'stale_state',
+            `${reason ?? 'The file changed since this edit was proposed.'} Re-read it with \`workspace_read\` and propose the edit again.`,
+          );
+        }
+
+        const editResponse = response as {
+          decision: 'accept' | 'accept_always' | 'reject' | 'always_prompt';
+          freeformText?: string;
+        };
+
+        if (editResponse.decision === 'accept_always') {
           await db
             .update(workspaceFiles)
             .set({ autoAcceptEdits: 1 })
@@ -240,17 +227,17 @@ export function workspaceEditTool(opts: {
         }
 
         if (
-          response.decision === 'reject' ||
-          response.decision === 'always_prompt'
+          editResponse.decision === 'reject' ||
+          editResponse.decision === 'always_prompt'
         ) {
-          if (response.decision === 'always_prompt') {
+          if (editResponse.decision === 'always_prompt') {
             await db
               .update(workspaceFiles)
               .set({ autoAcceptEdits: 0 })
               .where(eq(workspaceFiles.id, fileRow.id));
           }
-          const msg = response.freeformText
-            ? `User rejected the edit: "${response.freeformText}"`
+          const msg = editResponse.freeformText
+            ? `User rejected the edit: "${editResponse.freeformText}"`
             : 'User rejected the edit.';
           return new Command({
             update: {
@@ -268,7 +255,7 @@ export function workspaceEditTool(opts: {
         }
       }
 
-      // 8. Persist edit
+      // 6. Persist edit
       const newText = replaceAll
         ? text.split(oldString).join(newString)
         : text.replace(oldString, newString);

@@ -1,6 +1,11 @@
 import type { EventEmitter } from 'stream';
 
-export type RunStatus = 'running' | 'completed' | 'errored' | 'cancelled';
+export type RunStatus =
+  | 'running'
+  | 'awaiting_user'
+  | 'completed'
+  | 'errored'
+  | 'cancelled';
 
 export type SeqEvent = {
   seq: number;
@@ -18,6 +23,7 @@ export type Run = {
   chatId: string;
   messageId: string; // user message ID (run key)
   aiMessageId: string; // assistant message ID
+  threadId: string; // LangGraph thread_id = `${messageId}:${startedAt}`
   status: RunStatus;
   emitter: EventEmitter;
   eventLog: SeqEvent[];
@@ -29,6 +35,9 @@ export type Run = {
   endedAt?: number;
   bufferTruncatedFrom?: number;
   ttlTimer?: ReturnType<typeof setTimeout>;
+  // Seeded from persisted messages.content on lazy reconstruction so
+  // post-resume tokens append rather than overwrite.
+  recievedMessage: string;
 };
 
 type Registry = {
@@ -42,6 +51,7 @@ declare global {
 
 const BUFFER_MAX_EVENTS = 5000;
 const RUN_TTL_MS = 60_000;
+const AWAITING_USER_IDLE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 function getRegistry(): Registry {
   if (!globalThis.__runHub) {
@@ -57,6 +67,7 @@ export function startRun(params: {
   chatId: string;
   messageId: string;
   aiMessageId: string;
+  threadId: string;
   emitter: EventEmitter;
   abortController: AbortController;
   retrievalController: AbortController;
@@ -71,6 +82,7 @@ export function startRun(params: {
     chatId: params.chatId,
     messageId: params.messageId,
     aiMessageId: params.aiMessageId,
+    threadId: params.threadId,
     status: 'running',
     emitter: params.emitter,
     eventLog: [],
@@ -79,6 +91,7 @@ export function startRun(params: {
     retrievalController: params.retrievalController,
     seq: 0,
     startedAt: Date.now(),
+    recievedMessage: '',
   };
 
   reg.byMessageId.set(params.messageId, run);
@@ -95,11 +108,37 @@ export function getRunByChatId(chatId: string): Run | undefined {
   return getRegistry().byChatId.get(chatId);
 }
 
+export function setRunStatus(run: Run, status: RunStatus): void {
+  run.status = status;
+}
+
+// Optional sink for persisting events (registered by runHost). Kept as a hook
+// so runHub stays free of DB dependencies.
+let eventPersister: ((run: Run, seqEvent: SeqEvent) => void) | null = null;
+export function setEventPersister(
+  fn: ((run: Run, seqEvent: SeqEvent) => void) | null,
+): void {
+  eventPersister = fn;
+}
+
+/**
+ * Push an event into the run's eventLog and broadcast to all subscribers.
+ * Allowed for both 'running' and 'awaiting_user' states.
+ */
 export function pushEvent(run: Run, ev: Record<string, unknown>): void {
-  if (run.status !== 'running') return;
+  if (run.status !== 'running' && run.status !== 'awaiting_user') return;
 
   const seqEvent: SeqEvent = { seq: ++run.seq, ev };
   run.eventLog.push(seqEvent);
+
+  // Persist milestone events for cross-restart reconstruction (filtered in the sink).
+  if (eventPersister) {
+    try {
+      eventPersister(run, seqEvent);
+    } catch {
+      // persistence is best-effort; never block the live stream
+    }
+  }
 
   // Buffer cap enforcement: drop oldest events if over limit
   if (run.eventLog.length > BUFFER_MAX_EVENTS) {
@@ -131,9 +170,9 @@ export function pushEvent(run: Run, ev: Record<string, unknown>): void {
 
 export function terminateRun(
   run: Run,
-  status: Exclude<RunStatus, 'running'>,
+  status: Exclude<RunStatus, 'running' | 'awaiting_user'>,
 ): void {
-  if (run.status !== 'running') return;
+  if (run.status !== 'running' && run.status !== 'awaiting_user') return;
   run.status = status;
   run.endedAt = Date.now();
 
@@ -152,6 +191,40 @@ export function terminateRun(
   run.ttlTimer = setTimeout(() => {
     _evictRun(run);
   }, RUN_TTL_MS);
+}
+
+/**
+ * Pause a run at an interrupt. Subscribers stay connected; the run stays
+ * in the hub. An idle eviction timer is scheduled to reclaim memory if no
+ * one subscribes for 30 minutes.
+ */
+export function pauseRun(run: Run): void {
+  if (run.status !== 'running') return;
+  run.status = 'awaiting_user';
+  _scheduleIdleEviction(run);
+}
+
+function _scheduleIdleEviction(run: Run): void {
+  if (run.ttlTimer !== undefined) clearTimeout(run.ttlTimer);
+  run.ttlTimer = setTimeout(() => {
+    if (run.subscribers.size === 0) {
+      _evictRun(run);
+    } else {
+      // Subscribers active — delay eviction check by another cycle
+      _scheduleIdleEviction(run);
+    }
+  }, AWAITING_USER_IDLE_TTL_MS);
+}
+
+/**
+ * Register a reconstructed awaiting_user Run from DB. Used by lazy
+ * reconstruction so it lands in the hub with the right state.
+ */
+export function registerReconstructedRun(run: Run): void {
+  const reg = getRegistry();
+  reg.byMessageId.set(run.messageId, run);
+  reg.byChatId.set(run.chatId, run);
+  _scheduleIdleEviction(run);
 }
 
 function _removeSubscriber(sub: Subscriber): void {
@@ -181,7 +254,7 @@ export function evictByChatId(chatId: string): void {
 
   if (run.ttlTimer !== undefined) clearTimeout(run.ttlTimer);
 
-  if (run.status === 'running') {
+  if (run.status === 'running' || run.status === 'awaiting_user') {
     run.status = 'cancelled';
     for (const [, sub] of run.subscribers) {
       _removeSubscriber(sub);
@@ -204,6 +277,7 @@ export function gcRuns(): void {
   for (const [, run] of reg.byMessageId) {
     if (
       run.status !== 'running' &&
+      run.status !== 'awaiting_user' &&
       run.endedAt !== undefined &&
       now - run.endedAt > RUN_TTL_MS
     ) {
@@ -243,8 +317,19 @@ export function subscribe(
         }
       }
 
-      // If already terminal, close after replay
-      if (run.status !== 'running') {
+      // Mark the boundary between buffered replay and live events. A
+      // reconnecting client seeds its content from the persisted message (which
+      // already reflects every replayed event), so it must skip replayed tokens
+      // and only append the live ones that follow. Without this signal it cannot
+      // tell the two apart and drops post-resume tokens equal to the seeded length.
+      try {
+        controller.enqueue(JSON.stringify({ type: 'replay_complete' }) + '\n');
+      } catch {
+        return;
+      }
+
+      // If already terminal (not running or awaiting_user), close after replay
+      if (run.status !== 'running' && run.status !== 'awaiting_user') {
         controller.close();
         return;
       }

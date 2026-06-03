@@ -3,6 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { updateToolCallMarkup } from '@/lib/utils/toolCallMarkup';
 import { encodeHtmlAttribute } from '@/lib/utils/html';
+import {
+  applySubagentNestedToolCall,
+  applySubagentResponseToken,
+  applySubagentStatus,
+} from '@/lib/utils/subagentMarkup';
 import { ChartSpecContext } from '@/lib/chart/ChartSpecContext';
 import { ChartSpec, ChartSpecSchema } from '@/lib/chart/chartSpec';
 import { Document } from '@langchain/core/documents';
@@ -326,7 +331,12 @@ const loadMessages = async (
   setPinned?: (pinned: boolean) => void,
   setSelectedWorkspaceId?: (id: string | null) => void,
   setLoading?: (loading: boolean) => void,
-): Promise<{ activeRunMessageId?: string; workspaceId?: string | null }> => {
+): Promise<{
+  activeRunMessageId?: string;
+  activeRunStatus?: string | null;
+  workspaceId?: string | null;
+  loadedMessages?: Message[];
+}> => {
   const res = await fetch(`/api/chats/${chatId}`, {
     method: 'GET',
     headers: {
@@ -440,7 +450,9 @@ const loadMessages = async (
   setIsMessagesLoaded(true);
   return {
     activeRunMessageId: data.chat.activeRunMessageId ?? undefined,
+    activeRunStatus: data.chat.activeRunStatus ?? null,
     workspaceId: data.chat.workspaceId ?? null,
+    loadedMessages: finalMessages,
   };
 };
 
@@ -496,6 +508,14 @@ const ChatWindow = ({
   }, []);
 
   const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    console.warn(
+      '[DBG loading changed] =>',
+      loading,
+      '\n',
+      new Error().stack?.split('\n').slice(1, 6).join('\n'),
+    );
+  }, [loading]);
   const [scrollTrigger, setScrollTrigger] = useState(0);
   const [analysisProgress, setAnalysisProgress] = useState<{
     message: string;
@@ -570,6 +590,21 @@ const ChatWindow = ({
   const [isPrivateSession, setIsPrivateSession] = useState(
     () => searchParams.get('private') === '1',
   );
+
+  // On a brand-new chat the private toggle navigates by flipping the ?private=
+  // query param. useState's initializer only runs on mount, so sync the state
+  // from the URL on those navigations. Restrict to before the first send: an
+  // existing chat (id set) gets its flag from the DB via loadMessages, and once
+  // a message is sent the URL is replaced without the param (see history
+  // .replaceState below), which must not clear an active private session.
+  const privateParam = searchParams.get('private') === '1';
+  const [prevPrivateParam, setPrevPrivateParam] = useState(privateParam);
+  if (privateParam !== prevPrivateParam) {
+    setPrevPrivateParam(privateParam);
+    if (id === undefined && messages.length === 0) {
+      setIsPrivateSession(privateParam);
+    }
+  }
 
   const [pinned, setPinned] = useState(false);
 
@@ -656,6 +691,12 @@ const ChatWindow = ({
   // reader loop keeps the request open after navigation, making the run look
   // "still watched" and marking it read.
   const streamAbortRef = useRef<AbortController | null>(null);
+  // The active run's user message id (run key). Tracked so resume-submit
+  // handlers can re-attach to the stream after answering an approval — needed
+  // when the run was reconstructed (server restart / hub eviction) and no live
+  // subscription exists, otherwise the resumed response never streams to the
+  // client and the Stop button never appears.
+  const activeRunMessageIdRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     return () => {
@@ -698,26 +739,57 @@ const ChatWindow = ({
     }
   };
 
+  // Load enabled user skills for slash-command invocation
+  const refreshEnabledSkills = useCallback(() => {
+    const params = new URLSearchParams();
+    params.set('enabled', 'true');
+    if (selectedWorkspaceId) params.set('workspaceId', selectedWorkspaceId);
+    fetch(`/api/skills?${params}`)
+      .then((r) => r.json())
+      .then((rows: Array<{ name: string; description: string }>) => {
+        setEnabledUserSkillNames(new Set(rows.map((r) => r.name)));
+        setEnabledSkillsForAutocomplete(
+          rows.map((r) => ({ name: r.name, description: r.description })),
+        );
+      })
+      .catch(() => {});
+  }, [selectedWorkspaceId]);
+
   // Attach to an already-running run (e.g. after a page refresh).
   // The partial assistant row is already loaded in `messages`; we replay
   // the event buffer from the server and tail live events.
-  const attachToRun = async (userMessageId: string) => {
-    const msgs = messagesRef.current;
+  const attachToRun = async (
+    userMessageId: string,
+    loadedMessages?: Message[],
+  ) => {
+    activeRunMessageIdRef.current = userMessageId;
+    const msgs = loadedMessages ?? messagesRef.current;
     const partialMsg = msgs.find(
       (m) => m.role === 'assistant' && m.runStatus === 'running',
     );
+    console.warn('[DBG attachToRun] entry', {
+      userMessageId,
+      msgsLen: msgs.length,
+      hasPartial: !!partialMsg,
+      partialId: partialMsg?.messageId,
+    });
     if (!partialMsg) return; // No running row — might already be interrupted
 
     const aiMessageId = partialMsg.messageId;
-    const replayCutoffBytes = (partialMsg.content ?? '').length;
 
     setLoading(true);
+    console.warn('[DBG attachToRun] setLoading(true)');
     setGatheringSources([]);
     setLiveModelStats(null);
     setAnalysisProgress(null);
 
     let recievedMessage = partialMsg.content ?? '';
-    let cumulativeResponseBytes = 0;
+    // Events replayed from the server buffer are already baked into the
+    // persisted content seeded above. Stay in replay mode until the server's
+    // `replay_complete` sentinel, then append only the live (post-resume)
+    // tokens. Without this, post-resume answer tokens were dropped up to the
+    // seeded content length, losing the start of a resumed answer.
+    let inReplay = true;
     const codeExecutionRunIdMap = new Map<string, string>();
     const userQuestionRunIdMap = new Map<string, string>();
 
@@ -743,6 +815,9 @@ const ChatWindow = ({
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const attachHandler = async (data: Record<string, any>) => {
+      if (data.type === 'gone' || data.type === 'messageEnd') {
+        console.warn('[DBG attachHandler] loading-off event:', data.type);
+      }
       if (data.type === 'gone') {
         setLoading(false);
         setMessages((prev) =>
@@ -760,6 +835,11 @@ const ChatWindow = ({
       }
 
       if (data.type === 'ping') return;
+
+      if (data.type === 'replay_complete') {
+        inReplay = false;
+        return;
+      }
 
       if (data.type === 'progress') {
         setAnalysisProgress(data.data);
@@ -819,9 +899,8 @@ const ChatWindow = ({
       }
 
       if (data.type === 'response') {
+        if (inReplay) return;
         const token: string = data.data ?? '';
-        cumulativeResponseBytes += token.length;
-        if (cumulativeResponseBytes <= replayCutoffBytes) return;
         recievedMessage += token;
         setMessages((prev) =>
           prev.map((m) =>
@@ -882,22 +961,55 @@ const ChatWindow = ({
             ) {
               const status =
                 data.type === 'subagent_completed' ? 'success' : 'error';
-              const re = new RegExp(
-                `<SubagentExecution\\s+id="${data.id}"([^>]*)>(.*?)<\\/SubagentExecution>`,
-                'gs',
+              content = applySubagentStatus(
+                content,
+                data.id,
+                status,
+                data.summary,
+                data.error,
               );
-              content = content.replace(re, (_m, attrs, inner) => {
-                let a = attrs
-                  .replace(/status="[^"]*"/, `status="${status}"`)
-                  .trim();
-                if (!a.includes('status=')) a += ` status="${status}"`;
-                return `<SubagentExecution ${a}>${inner}</SubagentExecution>`;
-              });
             }
             recievedMessage = content;
             return { ...m, content };
           }),
         );
+        setScrollTrigger((prev) => prev + 1);
+        return;
+      }
+
+      // Nested subagent events (tool calls + streamed response tokens). The
+      // live-stream handler nests these inside the SubagentExecution widget;
+      // the reconnect path must do the same or the subagent's tool calls render
+      // outside the widget after returning to a backgrounded run. Transforms are
+      // idempotent so replayed/seeded markup is not duplicated.
+      if (data.type === 'subagent_data') {
+        const nestedEvent = data.data;
+        const executionId = data.subagentId;
+        const transform = (content: string): string => {
+          if (nestedEvent?.type === 'response') {
+            return applySubagentResponseToken(
+              content,
+              executionId,
+              nestedEvent.data || '',
+            );
+          }
+          if (nestedEvent?.type?.startsWith('tool_call')) {
+            return applySubagentNestedToolCall(
+              content,
+              executionId,
+              nestedEvent,
+            );
+          }
+          return content;
+        };
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.messageId === aiMessageId
+              ? { ...m, content: transform(m.content) }
+              : m,
+          ),
+        );
+        recievedMessage = transform(recievedMessage);
         setScrollTrigger((prev) => prev + 1);
         return;
       }
@@ -919,46 +1031,418 @@ const ChatWindow = ({
       }
 
       if (data.type === 'code_execution_pending') {
+        // Replayed/persisted pending events carry approvalId, not executionId.
+        const executionId = data.data?.approvalId ?? data.data?.executionId;
         const runId = data.data?.markupToolCallId;
-        if (runId && data.data?.executionId)
-          codeExecutionRunIdMap.set(data.data.executionId, runId);
+        if (runId && executionId) codeExecutionRunIdMap.set(executionId, runId);
+        // The result event carries only toolCallId, so key the map on it too.
+        if (runId && data.data?.toolCallId)
+          codeExecutionRunIdMap.set(data.data.toolCallId, runId);
+        setPendingExecutions((prev) => {
+          const existing = prev[aiMessageId] ?? [];
+          // Dedup against the /api/approvals/pending fetch path (same executionId).
+          if (existing.some((e) => e.executionId === executionId)) return prev;
+          return {
+            ...prev,
+            [aiMessageId]: [
+              ...existing,
+              {
+                executionId,
+                code: data.data.code,
+                description: data.data.description,
+                toolCallId: data.data.toolCallId,
+                status: 'pending' as const,
+              },
+            ],
+          };
+        });
+        return;
+      }
+
+      if (data.type === 'code_execution_answered') {
+        const answeredExecId = data.data?.approvalId ?? data.data?.executionId;
+        const approved = (data.data?.response as Record<string, unknown>)
+          ?.approved;
+        if (answeredExecId) {
+          setPendingExecutions((prev) => {
+            const updated: Record<string, PendingExecution[]> = {};
+            for (const [msgId, executions] of Object.entries(prev)) {
+              updated[msgId] = executions.map((e) =>
+                e.executionId === answeredExecId
+                  ? {
+                      ...e,
+                      status: (approved === false ? 'denied' : 'approved') as
+                        | 'approved'
+                        | 'denied',
+                    }
+                  : e,
+              );
+            }
+            return updated;
+          });
+        }
+        return;
+      }
+
+      if (data.type === 'code_execution_result') {
         setPendingExecutions((prev) => ({
           ...prev,
-          [aiMessageId]: [
-            ...(prev[aiMessageId] ?? []),
-            {
-              executionId: data.data.executionId,
-              code: data.data.code,
-              description: data.data.description,
-              toolCallId: data.data.toolCallId,
-              status: 'pending' as const,
-            },
-          ],
+          [aiMessageId]: (prev[aiMessageId] ?? []).map((execution) =>
+            (data.data.executionId &&
+              execution.executionId === data.data.executionId) ||
+            (data.data.toolCallId &&
+              execution.toolCallId === data.data.toolCallId)
+              ? {
+                  ...execution,
+                  status: (data.data.denied ? 'denied' : 'completed') as
+                    | 'denied'
+                    | 'completed',
+                  result: data.data,
+                }
+              : execution,
+          ),
+        }));
+        const tcId =
+          codeExecutionRunIdMap.get(data.data.executionId) ||
+          codeExecutionRunIdMap.get(data.data.toolCallId) ||
+          data.data.toolCallId;
+        if (tcId) {
+          const d = data.data;
+          const extra: Record<string, string> = {};
+          if (d.exitCode !== undefined) extra.exitCode = String(d.exitCode);
+          if (d.stdout) extra.stdout = d.stdout.slice(0, 2000);
+          if (d.stderr) extra.stderr = d.stderr.slice(0, 1000);
+          if (d.timedOut) extra.timedOut = 'true';
+          if (d.oomKilled) extra.oomKilled = 'true';
+          if (d.denied) extra.denied = 'true';
+          if (Array.isArray(d.chartIds) && d.chartIds.length > 0)
+            extra.chartIds = d.chartIds.join(',');
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.messageId === aiMessageId
+                ? {
+                    ...message,
+                    content: updateToolCallMarkup(message.content, tcId, {
+                      extra,
+                    }),
+                  }
+                : message,
+            ),
+          );
+          recievedMessage = updateToolCallMarkup(recievedMessage, tcId, {
+            extra,
+          });
+        }
+        setScrollTrigger((prev) => prev + 1);
+        return;
+      }
+
+      if (
+        data.type === 'user_question_pending' ||
+        data.type === 'ask_user_pending'
+      ) {
+        // Replayed/persisted pending events carry approvalId, not questionId.
+        const questionId = data.data?.approvalId ?? data.data?.questionId;
+        const runId = data.data?.markupToolCallId;
+        if (runId && questionId) userQuestionRunIdMap.set(questionId, runId);
+        if (runId && data.data?.toolCallId)
+          userQuestionRunIdMap.set(data.data.toolCallId, runId);
+        setPendingQuestions((prev) => {
+          const existing = prev[aiMessageId] ?? [];
+          // Dedup against the /api/approvals/pending fetch path (same questionId).
+          if (existing.some((q) => q.questionId === questionId)) return prev;
+          return {
+            ...prev,
+            [aiMessageId]: [
+              ...existing,
+              {
+                questionId,
+                question: data.data.question,
+                options: data.data.options,
+                multiSelect: data.data.multiSelect,
+                allowFreeformInput: data.data.allowFreeformInput,
+                context: data.data.context,
+                toolCallId: data.data.toolCallId,
+                createdAt: data.data.createdAt,
+                status: 'pending' as const,
+              },
+            ],
+          };
+        });
+        return;
+      }
+
+      if (
+        data.type === 'user_question_answered' ||
+        data.type === 'ask_user_answered'
+      ) {
+        const answeredId = data.data?.approvalId ?? data.data?.questionId;
+        setPendingQuestions((prev) => ({
+          ...prev,
+          [aiMessageId]: (prev[aiMessageId] ?? []).map((q) =>
+            q.questionId === answeredId
+              ? {
+                  ...q,
+                  status: (data.data.timedOut
+                    ? 'timed_out'
+                    : data.data.skipped
+                      ? 'skipped'
+                      : 'answered') as 'answered' | 'skipped' | 'timed_out',
+                  response: data.data,
+                }
+              : q,
+          ),
+        }));
+        const tcId =
+          userQuestionRunIdMap.get(answeredId) ||
+          userQuestionRunIdMap.get(data.data.toolCallId) ||
+          data.data.toolCallId;
+        if (tcId) {
+          const d = data.data;
+          const extra: Record<string, string> = {};
+          if (d.selectedOptions?.length)
+            extra.selectedOptions = d.selectedOptions.join(', ');
+          if (d.freeformText) extra.freeformText = d.freeformText.slice(0, 500);
+          if (d.timedOut) extra.timedOut = 'true';
+          if (d.skipped) extra.skipped = 'true';
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.messageId === aiMessageId
+                ? {
+                    ...message,
+                    content: updateToolCallMarkup(message.content, tcId, {
+                      extra,
+                    }),
+                  }
+                : message,
+            ),
+          );
+          recievedMessage = updateToolCallMarkup(recievedMessage, tcId, {
+            extra,
+          });
+        }
+        return;
+      }
+
+      if (
+        data.type === 'workspace_edit_approval_pending' ||
+        data.type === 'workspace_edit_pending' ||
+        data.type === 'workspace_create_pending'
+      ) {
+        setPendingEditApprovals((prev) => {
+          const existing = prev[aiMessageId] ?? [];
+          if (existing.some((a) => a.approvalId === data.data.approvalId))
+            return prev;
+          return {
+            ...prev,
+            [aiMessageId]: [
+              ...existing,
+              {
+                approvalId: data.data.approvalId,
+                toolCallId: data.data.toolCallId,
+                action: data.data.action,
+                workspaceId: data.data.workspaceId,
+                fileId: data.data.fileId,
+                file: data.data.file,
+                oldString: data.data.oldString,
+                newString: data.data.newString,
+                content: data.data.content,
+                replaceAll: data.data.replaceAll,
+                occurrences: data.data.occurrences,
+                workspaceAutoAccept: data.data.workspaceAutoAccept,
+                fileAutoAccept: data.data.fileAutoAccept,
+                createdAt: data.data.createdAt,
+                status: 'pending' as const,
+              },
+            ],
+          };
+        });
+        return;
+      }
+
+      if (
+        data.type === 'workspace_edit_approval_answered' ||
+        data.type === 'workspace_edit_answered' ||
+        data.type === 'workspace_create_answered'
+      ) {
+        setPendingEditApprovals((prev) => ({
+          ...prev,
+          [aiMessageId]: (prev[aiMessageId] ?? []).map((a) =>
+            a.approvalId === data.data.approvalId
+              ? {
+                  ...a,
+                  status: (data.data.decision === 'reject' ||
+                  data.data.decision === 'always_prompt'
+                    ? 'rejected'
+                    : 'accepted') as 'accepted' | 'rejected',
+                }
+              : a,
+          ),
         }));
         return;
       }
 
-      if (data.type === 'user_question_pending') {
-        const runId = data.data?.markupToolCallId;
-        if (runId && data.data?.questionId)
-          userQuestionRunIdMap.set(data.data.questionId, runId);
-        setPendingQuestions((prev) => ({
+      if (data.type === 'workspace_file_changed') {
+        queryClient.invalidateQueries({
+          queryKey: ['workspaces', data.data.workspaceId],
+        });
+        return;
+      }
+
+      if (
+        data.type === 'skill_edit_approval_pending' ||
+        data.type === 'skill_edit_pending'
+      ) {
+        setPendingSkillEditApprovals((prev) => {
+          const existing = prev[aiMessageId] ?? [];
+          if (existing.some((a) => a.approvalId === data.data.approvalId))
+            return prev;
+          return {
+            ...prev,
+            [aiMessageId]: [
+              ...existing,
+              {
+                approvalId: data.data.approvalId,
+                toolCallId: data.data.toolCallId,
+                action: data.data.action,
+                name: data.data.name,
+                oldDescription: data.data.oldDescription,
+                newDescription: data.data.newDescription,
+                oldContent: data.data.oldContent,
+                newContent: data.data.newContent,
+                scope: data.data.scope,
+                workspaceId: data.data.workspaceId,
+                skillId: data.data.skillId,
+                createdAt: data.data.createdAt,
+                status: 'pending' as const,
+              },
+            ],
+          };
+        });
+        return;
+      }
+
+      if (
+        data.type === 'skill_edit_approval_answered' ||
+        data.type === 'skill_edit_answered'
+      ) {
+        setPendingSkillEditApprovals((prev) => ({
           ...prev,
-          [aiMessageId]: [
-            ...(prev[aiMessageId] ?? []),
-            {
-              questionId: data.data.questionId,
-              question: data.data.question,
-              options: data.data.options,
-              multiSelect: data.data.multiSelect,
-              allowFreeformInput: data.data.allowFreeformInput,
-              context: data.data.context,
-              toolCallId: data.data.toolCallId,
-              createdAt: data.data.createdAt,
-              status: 'pending' as const,
-            },
-          ],
+          [aiMessageId]: (prev[aiMessageId] ?? []).map((a) =>
+            a.approvalId === data.data.approvalId
+              ? {
+                  ...a,
+                  status: (data.data.decision === 'reject'
+                    ? 'rejected'
+                    : 'accepted') as 'accepted' | 'rejected',
+                }
+              : a,
+          ),
         }));
+        if (
+          data.data.decision !== 'reject' &&
+          data.data.decision !== 'always_prompt' &&
+          !data.data.timedOut
+        ) {
+          refreshEnabledSkills();
+        }
+        return;
+      }
+
+      if (data.type?.endsWith('_stale')) {
+        const approvalId = data.data?.approvalId as string | undefined;
+        const reason = data.data?.reason as string | undefined;
+        toast.error(
+          reason
+            ? `${reason} The assistant will re-check and try again.`
+            : 'The target changed while awaiting approval; the assistant will re-check and try again.',
+        );
+        if (approvalId) {
+          setPendingEditApprovals((prev) => {
+            const updated: Record<string, PendingEditApproval[]> = {};
+            for (const [msgId, items] of Object.entries(prev)) {
+              updated[msgId] = items.map((a) =>
+                a.approvalId === approvalId
+                  ? { ...a, status: 'cancelled' as const }
+                  : a,
+              );
+            }
+            return updated;
+          });
+          setPendingSkillEditApprovals((prev) => {
+            const updated: Record<string, PendingSkillEditApproval[]> = {};
+            for (const [msgId, items] of Object.entries(prev)) {
+              updated[msgId] = items.map((a) =>
+                a.approvalId === approvalId
+                  ? { ...a, status: 'cancelled' as const }
+                  : a,
+              );
+            }
+            return updated;
+          });
+          setPendingQuestions((prev) => {
+            const updated: Record<string, PendingQuestion[]> = {};
+            for (const [msgId, items] of Object.entries(prev)) {
+              updated[msgId] = items.map((q) =>
+                q.questionId === approvalId
+                  ? { ...q, status: 'cancelled' as const }
+                  : q,
+              );
+            }
+            return updated;
+          });
+        }
+        return;
+      }
+
+      if (data.type?.endsWith('_cancelled') && !data.type.endsWith('_stale')) {
+        const cancelledApprovalId = data.data?.approvalId as string | undefined;
+        if (cancelledApprovalId) {
+          setPendingQuestions((prev) => {
+            const updated: Record<string, PendingQuestion[]> = {};
+            for (const [msgId, items] of Object.entries(prev)) {
+              updated[msgId] = items.map((q) =>
+                q.questionId === cancelledApprovalId
+                  ? { ...q, status: 'cancelled' as const }
+                  : q,
+              );
+            }
+            return updated;
+          });
+          setPendingExecutions((prev) => {
+            const updated: Record<string, PendingExecution[]> = {};
+            for (const [msgId, items] of Object.entries(prev)) {
+              updated[msgId] = items.map((e) =>
+                e.executionId === cancelledApprovalId
+                  ? { ...e, status: 'cancelled' as const }
+                  : e,
+              );
+            }
+            return updated;
+          });
+          setPendingEditApprovals((prev) => {
+            const updated: Record<string, PendingEditApproval[]> = {};
+            for (const [msgId, items] of Object.entries(prev)) {
+              updated[msgId] = items.map((a) =>
+                a.approvalId === cancelledApprovalId
+                  ? { ...a, status: 'cancelled' as const }
+                  : a,
+              );
+            }
+            return updated;
+          });
+          setPendingSkillEditApprovals((prev) => {
+            const updated: Record<string, PendingSkillEditApproval[]> = {};
+            for (const [msgId, items] of Object.entries(prev)) {
+              updated[msgId] = items.map((a) =>
+                a.approvalId === cancelledApprovalId
+                  ? { ...a, status: 'cancelled' as const }
+                  : a,
+              );
+            }
+            return updated;
+          });
+        }
         return;
       }
 
@@ -987,6 +1471,30 @@ const ChatWindow = ({
     };
 
     await readStream(reader, attachHandler);
+    console.warn('[DBG attachToRun] readStream returned (stream closed)');
+  };
+
+  // Re-subscribe to the active run after answering an approval. Needed when the
+  // run was reconstructed (server restart / hub eviction): no live SSE
+  // subscription exists, so without this the resumed response never streams to
+  // the client and the Stop button never appears. Re-marks the run's assistant
+  // row as running (a prior `gone` cleared it) and re-opens the stream.
+  const reattachToActiveRun = () => {
+    const runMsgId = activeRunMessageIdRef.current;
+    if (!runMsgId) return;
+    let lastAssistantIdx = -1;
+    for (let i = messagesRef.current.length - 1; i >= 0; i--) {
+      if (messagesRef.current[i].role === 'assistant') {
+        lastAssistantIdx = i;
+        break;
+      }
+    }
+    if (lastAssistantIdx === -1) return;
+    const msgs = messagesRef.current.map((m, i) =>
+      i === lastAssistantIdx ? { ...m, runStatus: 'running' as const } : m,
+    );
+    setMessages(msgs);
+    attachToRun(runMsgId, msgs);
   };
 
   // One-time mount init: either load an existing chat or establish a fresh
@@ -1012,18 +1520,188 @@ const ChatWindow = ({
         setPinned,
         setSelectedWorkspaceId,
         setLoading,
-      ).then(({ activeRunMessageId, workspaceId: chatWorkspaceId } = {}) => {
-        // If a workspace chat was opened on the non-workspace /c/[chatId] route
-        // (e.g. a direct deep-link), route to the real workspace URL so it
-        // mounts under the workspace layout instead of rendering bare.
-        if (!workspaceId && chatWorkspaceId) {
-          router.replace(`/workspaces/${chatWorkspaceId}/c/${chatId}`);
-          return;
-        }
-        if (activeRunMessageId) {
-          attachToRun(activeRunMessageId);
-        }
-      });
+      ).then(
+        ({
+          activeRunMessageId,
+          activeRunStatus,
+          workspaceId: chatWorkspaceId,
+          loadedMessages,
+        } = {}) => {
+          // If a workspace chat was opened on the non-workspace /c/[chatId] route
+          // (e.g. a direct deep-link), route to the real workspace URL so it
+          // mounts under the workspace layout instead of rendering bare.
+          if (!workspaceId && chatWorkspaceId) {
+            router.replace(`/workspaces/${chatWorkspaceId}/c/${chatId}`);
+            return;
+          }
+          if (activeRunMessageId) {
+            attachToRun(activeRunMessageId, loadedMessages);
+          }
+          // For awaiting_user runs: directly fetch pending approvals from DB so the
+          // input prompts are restored even if the SSE stream is gone (server restart).
+          if (activeRunStatus === 'awaiting_user' && chatId) {
+            fetch(`/api/approvals/pending?chatId=${chatId}`)
+              .then((r) => r.json())
+              .then(
+                (data: {
+                  pending?: Array<{
+                    approvalId: string;
+                    messageId: string;
+                    toolKind: string;
+                    payload: Record<string, unknown>;
+                  }>;
+                }) => {
+                  if (!data.pending?.length) return;
+                  // Bucket key MUST match the SSE-replay path (attachToRun keys
+                  // by the running assistant message id, not the user message id
+                  // that approval records carry). Using a different key would put
+                  // the same approvals in a second bucket, defeating the
+                  // questionId dedup below and double-counting the queue.
+                  const runningAssistantId = (loadedMessages ?? []).find(
+                    (m) => m.role === 'assistant' && m.runStatus === 'running',
+                  )?.messageId;
+                  for (const approval of data.pending) {
+                    const key = runningAssistantId ?? approval.messageId;
+                    const p = approval.payload;
+                    if (approval.toolKind === 'ask_user') {
+                      setPendingQuestions((prev) => {
+                        // Skip if already populated (e.g. from SSE replay)
+                        const existing = prev[key] ?? [];
+                        if (
+                          existing.some(
+                            (q) => q.questionId === approval.approvalId,
+                          )
+                        )
+                          return prev;
+                        return {
+                          ...prev,
+                          [key]: [
+                            ...existing,
+                            {
+                              questionId: approval.approvalId,
+                              question: p.question as string,
+                              options: p.options as
+                                | { label: string; description?: string }[]
+                                | undefined,
+                              multiSelect: p.multiSelect as boolean | undefined,
+                              allowFreeformInput: p.allowFreeformInput as
+                                | boolean
+                                | undefined,
+                              context: p.context as string | undefined,
+                              toolCallId: p.toolCallId as string | undefined,
+                              createdAt: p.createdAt as number | undefined,
+                              status: 'pending' as const,
+                            },
+                          ],
+                        };
+                      });
+                    } else if (approval.toolKind === 'code_execution') {
+                      setPendingExecutions((prev) => {
+                        const existing = prev[key] ?? [];
+                        if (
+                          existing.some(
+                            (e) => e.executionId === approval.approvalId,
+                          )
+                        )
+                          return prev;
+                        return {
+                          ...prev,
+                          [key]: [
+                            ...existing,
+                            {
+                              executionId: approval.approvalId,
+                              code: p.code as string,
+                              description: p.description as string | undefined,
+                              toolCallId: p.toolCallId as string | undefined,
+                              status: 'pending' as const,
+                            },
+                          ],
+                        };
+                      });
+                    } else if (
+                      approval.toolKind === 'workspace_edit' ||
+                      approval.toolKind === 'workspace_create'
+                    ) {
+                      setPendingEditApprovals((prev) => {
+                        const existing = prev[key] ?? [];
+                        if (
+                          existing.some(
+                            (e) => e.approvalId === approval.approvalId,
+                          )
+                        )
+                          return prev;
+                        return {
+                          ...prev,
+                          [key]: [
+                            ...existing,
+                            {
+                              approvalId: approval.approvalId,
+                              toolCallId: p.toolCallId as string | undefined,
+                              action: p.action as 'edit' | 'create',
+                              workspaceId: p.workspaceId as string,
+                              fileId: p.fileId as string | undefined,
+                              file: p.file as string,
+                              oldString: p.oldString as string | undefined,
+                              newString: p.newString as string | undefined,
+                              content: p.content as string | undefined,
+                              replaceAll: p.replaceAll as boolean | undefined,
+                              occurrences: p.occurrences as number | undefined,
+                              workspaceAutoAccept:
+                                p.workspaceAutoAccept as boolean,
+                              fileAutoAccept: p.fileAutoAccept as number | null,
+                              createdAt: p.createdAt as number | undefined,
+                              status: 'pending' as const,
+                            },
+                          ],
+                        };
+                      });
+                    } else if (approval.toolKind === 'skill_edit') {
+                      setPendingSkillEditApprovals((prev) => {
+                        const existing = prev[key] ?? [];
+                        if (
+                          existing.some(
+                            (e) => e.approvalId === approval.approvalId,
+                          )
+                        )
+                          return prev;
+                        return {
+                          ...prev,
+                          [key]: [
+                            ...existing,
+                            {
+                              approvalId: approval.approvalId,
+                              toolCallId: p.toolCallId as string | undefined,
+                              action: p.action as
+                                | 'create'
+                                | 'update'
+                                | 'delete',
+                              name: p.name as string,
+                              oldDescription: p.oldDescription as string,
+                              newDescription: p.newDescription as string,
+                              oldContent: p.oldContent as string,
+                              newContent: p.newContent as string,
+                              scope: p.scope as 'global' | 'workspace',
+                              workspaceId: p.workspaceId as
+                                | string
+                                | null
+                                | undefined,
+                              skillId: p.skillId as string | undefined,
+                              createdAt: p.createdAt as number | undefined,
+                              status: 'pending' as const,
+                            },
+                          ],
+                        };
+                      });
+                    }
+                  }
+                },
+              )
+              .catch(() => {
+                // Non-critical: pending prompts can be restored from SSE replay
+              });
+          }
+        },
+      );
     } else if (!chatId) {
       setNewChatCreated(true);
       setIsMessagesLoaded(true);
@@ -1068,22 +1746,6 @@ const ChatWindow = ({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMessagesLoaded]);
-
-  // Load enabled user skills for slash-command invocation
-  const refreshEnabledSkills = useCallback(() => {
-    const params = new URLSearchParams();
-    params.set('enabled', 'true');
-    if (selectedWorkspaceId) params.set('workspaceId', selectedWorkspaceId);
-    fetch(`/api/skills?${params}`)
-      .then((r) => r.json())
-      .then((rows: Array<{ name: string; description: string }>) => {
-        setEnabledUserSkillNames(new Set(rows.map((r) => r.name)));
-        setEnabledSkillsForAutocomplete(
-          rows.map((r) => ({ name: r.name, description: r.description })),
-        );
-      })
-      .catch(() => {});
-  }, [selectedWorkspaceId]);
 
   useEffect(() => {
     refreshEnabledSkills();
@@ -1239,6 +1901,65 @@ const ChatWindow = ({
       if (data.type === 'error') {
         toast.error(data.data);
         setLoading(false);
+        // The run is terminal (errored/cancelled) — dismiss any open approval
+        // prompts so they don't linger on this or other attached tabs.
+        setPendingQuestions({});
+        setPendingExecutions({});
+        setPendingEditApprovals({});
+        setPendingSkillEditApprovals({});
+        return;
+      }
+
+      // Per-tool *_cancelled events close the specific modal on all tabs
+      // when the user clicks Stop while a run is paused at an interrupt.
+      if (data.type?.endsWith('_cancelled') && !data.type.endsWith('_stale')) {
+        const cancelledApprovalId = data.data?.approvalId as string | undefined;
+        if (cancelledApprovalId) {
+          setPendingQuestions((prev) => {
+            const updated: Record<string, PendingQuestion[]> = {};
+            for (const [msgId, items] of Object.entries(prev)) {
+              updated[msgId] = items.map((q) =>
+                q.questionId === cancelledApprovalId
+                  ? { ...q, status: 'cancelled' as const }
+                  : q,
+              );
+            }
+            return updated;
+          });
+          setPendingExecutions((prev) => {
+            const updated: Record<string, PendingExecution[]> = {};
+            for (const [msgId, items] of Object.entries(prev)) {
+              updated[msgId] = items.map((e) =>
+                e.executionId === cancelledApprovalId
+                  ? { ...e, status: 'cancelled' as const }
+                  : e,
+              );
+            }
+            return updated;
+          });
+          setPendingEditApprovals((prev) => {
+            const updated: Record<string, PendingEditApproval[]> = {};
+            for (const [msgId, items] of Object.entries(prev)) {
+              updated[msgId] = items.map((a) =>
+                a.approvalId === cancelledApprovalId
+                  ? { ...a, status: 'cancelled' as const }
+                  : a,
+              );
+            }
+            return updated;
+          });
+          setPendingSkillEditApprovals((prev) => {
+            const updated: Record<string, PendingSkillEditApproval[]> = {};
+            for (const [msgId, items] of Object.entries(prev)) {
+              updated[msgId] = items.map((a) =>
+                a.approvalId === cancelledApprovalId
+                  ? { ...a, status: 'cancelled' as const }
+                  : a,
+              );
+            }
+            return updated;
+          });
+        }
         return;
       }
 
@@ -1435,190 +2156,30 @@ const ChatWindow = ({
       if (data.type === 'subagent_data') {
         const nestedEvent = data.data;
         const executionId = data.subagentId;
-
-        // Handle response tokens - accumulate into responseText attribute
-        if (nestedEvent.type === 'response') {
-          const token = nestedEvent.data || '';
-          console.log('ChatWindow: Subagent response token:', {
-            executionId,
-            tokenLength: token.length,
-            token: token.substring(0, 50),
-          });
-          setMessages((prev) =>
-            prev.map((message) => {
-              if (message.messageId === data.messageId) {
-                const subagentRegex = new RegExp(
-                  `<SubagentExecution\\s+id="${executionId}"([^>]*)>`,
-                  'g',
-                );
-
-                const updatedContent = message.content.replace(
-                  subagentRegex,
-                  (match, attrs) => {
-                    // Extract existing responseText
-                    const responseMatch = attrs.match(/responseText="([^"]*)"/);
-                    let existingText = '';
-                    if (responseMatch) {
-                      existingText = responseMatch[1]
-                        .replace(/&quot;/g, '"')
-                        .replace(/&lt;/g, '<')
-                        .replace(/&gt;/g, '>')
-                        .replace(/&amp;/g, '&');
-                    }
-
-                    // Append new token
-                    const newText = existingText + token;
-                    const escapedText = newText
-                      .replace(/&/g, '&amp;')
-                      .replace(/</g, '&lt;')
-                      .replace(/>/g, '&gt;')
-                      .replace(/"/g, '&quot;');
-
-                    // Update or add responseText attribute
-                    let updatedAttrs = attrs.replace(
-                      /responseText="[^"]*"/,
-                      `responseText="${escapedText}"`,
-                    );
-                    if (!updatedAttrs.includes('responseText=')) {
-                      updatedAttrs += ` responseText="${escapedText}"`;
-                    }
-
-                    console.log('ChatWindow: Updated responseText attr:', {
-                      executionId,
-                      textLength: newText.length,
-                      escapedLength: escapedText.length,
-                    });
-
-                    return `<SubagentExecution id="${executionId}"${updatedAttrs}>`;
-                  },
-                );
-
-                return { ...message, content: updatedContent };
-              }
-              return message;
-            }),
-          );
-          return;
-        }
-
-        // Only process tool call events beyond this point
-        if (!nestedEvent.type || !nestedEvent.type.startsWith('tool_call')) {
-          return;
-        }
-
-        console.log('ChatWindow: Subagent tool call:', nestedEvent);
-
-        // Convert tool call event to ToolCall markup
-        let toolCallMarkup = '';
-        if (
-          nestedEvent.type === 'tool_call_started' &&
-          nestedEvent.data?.content
-        ) {
-          toolCallMarkup = nestedEvent.data.content;
-        } else if (
-          nestedEvent.type === 'tool_call_success' &&
-          nestedEvent.data?.toolCallId
-        ) {
-          // Success event will update existing ToolCall, handle in next block
-          setMessages((prev) =>
-            prev.map((message) => {
-              if (message.messageId === data.messageId) {
-                // Update existing ToolCall status
-                const toolCallRegex = new RegExp(
-                  `<ToolCall([^>]*toolCallId="${nestedEvent.data.toolCallId}"[^>]*)>`,
-                  'g',
-                );
-                const updatedContent = message.content.replace(
-                  toolCallRegex,
-                  (match, attrs) => {
-                    let updated = attrs.replace(
-                      /status="[^"]*"/,
-                      'status="success"',
-                    );
-                    if (!updated.includes('status=')) {
-                      updated += ' status="success"';
-                    }
-                    return `<ToolCall${updated}>`;
-                  },
-                );
-                return { ...message, content: updatedContent };
-              }
-              return message;
-            }),
-          );
-          return;
-        } else if (
-          nestedEvent.type === 'tool_call_error' &&
-          nestedEvent.data?.toolCallId
-        ) {
-          // Error event will update existing ToolCall
-          setMessages((prev) =>
-            prev.map((message) => {
-              if (message.messageId === data.messageId) {
-                const toolCallRegex = new RegExp(
-                  `<ToolCall([^>]*toolCallId="${nestedEvent.data.toolCallId}"[^>]*)>`,
-                  'g',
-                );
-                const updatedContent = message.content.replace(
-                  toolCallRegex,
-                  (match, attrs) => {
-                    let updated = attrs.replace(
-                      /status="[^"]*"/,
-                      'status="error"',
-                    );
-                    if (!updated.includes('status=')) {
-                      updated += ' status="error"';
-                    }
-                    if (nestedEvent.data.error) {
-                      const escapedError = nestedEvent.data.error
-                        .replace(/&/g, '&amp;')
-                        .replace(/</g, '&lt;')
-                        .replace(/>/g, '&gt;')
-                        .replace(/"/g, '&quot;');
-                      updated += ` error="${escapedError}"`;
-                    }
-                    return `<ToolCall${updated}>`;
-                  },
-                );
-                return { ...message, content: updatedContent };
-              }
-              return message;
-            }),
-          );
-          return;
-        }
-
-        if (!toolCallMarkup) {
-          return;
-        }
-
-        // Insert ToolCall markup inside SubagentExecution
+        const transform = (content: string): string => {
+          if (nestedEvent?.type === 'response') {
+            return applySubagentResponseToken(
+              content,
+              executionId,
+              nestedEvent.data || '',
+            );
+          }
+          if (nestedEvent?.type?.startsWith('tool_call')) {
+            return applySubagentNestedToolCall(
+              content,
+              executionId,
+              nestedEvent,
+            );
+          }
+          return content;
+        };
         setMessages((prev) =>
-          prev.map((message) => {
-            if (message.messageId === data.messageId) {
-              // Use a more permissive regex that can match existing nested content
-              const subagentRegex = new RegExp(
-                `(<SubagentExecution\\s+id="${executionId}"[^>]*>)(.*?)(</SubagentExecution>)`,
-                'gs',
-              );
-
-              const updatedContent = message.content.replace(
-                subagentRegex,
-                (match, openTag, content, closeTag) => {
-                  console.log(
-                    'ChatWindow: Inserting ToolCall, existing content length:',
-                    content.length,
-                  );
-                  return `${openTag}${content}${toolCallMarkup}\n${closeTag}`;
-                },
-              );
-
-              return { ...message, content: updatedContent };
-            }
-            return message;
-          }),
+          prev.map((message) =>
+            message.messageId === data.messageId
+              ? { ...message, content: transform(message.content) }
+              : message,
+          ),
         );
-
         setScrollTrigger((prev) => prev + 1);
         return;
       }
@@ -1628,93 +2189,32 @@ const ChatWindow = ({
         data.type === 'subagent_completed' ||
         data.type === 'subagent_error'
       ) {
-        console.log('ChatWindow: Subagent ended:', data.type, data);
         const status = data.type === 'subagent_completed' ? 'success' : 'error';
         const executionId = data.id;
 
         setMessages((prev) =>
-          prev.map((message) => {
-            if (message.messageId === data.messageId) {
-              // Find and update the specific SubagentExecution tag
-              const subagentRegex = new RegExp(
-                `<SubagentExecution\\s+id="${executionId}"([^>]*)>(.*?)<\\/SubagentExecution>`,
-                'gs',
-              );
-
-              const updatedContent = message.content.replace(
-                subagentRegex,
-                (match, attrs, innerContent) => {
-                  // Update attributes
-                  let updatedAttrs = attrs
-                    .replace(/status="[^"]*"/, `status="${status}"`)
-                    .trim();
-
-                  if (!updatedAttrs.includes('status=')) {
-                    updatedAttrs += ` status="${status}"`;
-                  }
-
-                  if (data.summary && status === 'success') {
-                    // Escape HTML entities in summary
-                    const escapedSummary = data.summary
-                      .replace(/&/g, '&amp;')
-                      .replace(/</g, '&lt;')
-                      .replace(/>/g, '&gt;')
-                      .replace(/"/g, '&quot;');
-                    updatedAttrs += ` summary="${escapedSummary}"`;
-                  }
-
-                  if (data.error && status === 'error') {
-                    const escapedError = data.error
-                      .replace(/&/g, '&amp;')
-                      .replace(/</g, '&lt;')
-                      .replace(/>/g, '&gt;')
-                      .replace(/"/g, '&quot;');
-                    updatedAttrs += ` error="${escapedError}"`;
-                  }
-
-                  // Preserve inner content (ToolCall markup)
-                  return `<SubagentExecution ${updatedAttrs}>${innerContent}</SubagentExecution>`;
-                },
-              );
-
-              return { ...message, content: updatedContent };
-            }
-            return message;
-          }),
+          prev.map((message) =>
+            message.messageId === data.messageId
+              ? {
+                  ...message,
+                  content: applySubagentStatus(
+                    message.content,
+                    executionId,
+                    status,
+                    data.summary,
+                    data.error,
+                  ),
+                }
+              : message,
+          ),
         );
 
-        // Update recievedMessage as well
-        const subagentRegexForPersistence = new RegExp(
-          `<SubagentExecution\\s+id="${executionId}"([^>]*)>(.*?)<\\/SubagentExecution>`,
-          'gs',
-        );
-        recievedMessage = recievedMessage.replace(
-          subagentRegexForPersistence,
-          (match, attrs, innerContent) => {
-            let updatedAttrs = attrs
-              .replace(/status="[^"]*"/, `status="${status}"`)
-              .trim();
-            if (!updatedAttrs.includes('status=')) {
-              updatedAttrs += ` status="${status}"`;
-            }
-            if (data.summary && status === 'success') {
-              const escapedSummary = data.summary
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;');
-              updatedAttrs += ` summary="${escapedSummary}"`;
-            }
-            if (data.error && status === 'error') {
-              const escapedError = data.error
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;');
-              updatedAttrs += ` error="${escapedError}"`;
-            }
-            return `<SubagentExecution ${updatedAttrs}>${innerContent}</SubagentExecution>`;
-          },
+        recievedMessage = applySubagentStatus(
+          recievedMessage,
+          executionId,
+          status,
+          data.summary,
+          data.error,
         );
 
         setScrollTrigger((prev) => prev + 1);
@@ -1722,18 +2222,23 @@ const ChatWindow = ({
       }
 
       if (data.type === 'code_execution_pending') {
-        // Correlate this execution with the ToolCall markup's toolCallId
-        // (provided by codeExecutionCorrelation module via markupToolCallId).
+        // executionId is the approvalId in the interrupt-based flow
+        const executionId = data.data?.approvalId ?? data.data?.executionId;
         const runId = data.data?.markupToolCallId;
-        if (runId && data.data?.executionId) {
-          codeExecutionRunIdMap.set(data.data.executionId, runId);
+        if (runId && executionId) {
+          codeExecutionRunIdMap.set(executionId, runId);
+        }
+        // The completion event (code_execution_result) carries only toolCallId,
+        // not the approvalId, so also key the markup correlation on toolCallId.
+        if (runId && data.data?.toolCallId) {
+          codeExecutionRunIdMap.set(data.data.toolCallId, runId);
         }
         setPendingExecutions((prev) => ({
           ...prev,
           [data.messageId]: [
             ...(prev[data.messageId] ?? []),
             {
-              executionId: data.data.executionId,
+              executionId,
               code: data.data.code,
               description: data.data.description,
               toolCallId: data.data.toolCallId,
@@ -1745,11 +2250,91 @@ const ChatWindow = ({
         return;
       }
 
+      if (data.type === 'code_execution_answered') {
+        // Multi-tab: close the approval modal when another tab already answered.
+        // The approvalId doubles as the executionId in the interrupt-based flow.
+        const answeredExecId = data.data?.approvalId ?? data.data?.executionId;
+        const approved = (data.data?.response as Record<string, unknown>)
+          ?.approved;
+        if (answeredExecId) {
+          setPendingExecutions((prev) => {
+            const updated: Record<string, PendingExecution[]> = {};
+            for (const [msgId, executions] of Object.entries(prev)) {
+              updated[msgId] = executions.map((e) =>
+                e.executionId === answeredExecId
+                  ? {
+                      ...e,
+                      status: (approved === false ? 'denied' : 'approved') as
+                        | 'approved'
+                        | 'denied',
+                    }
+                  : e,
+              );
+            }
+            return updated;
+          });
+        }
+        return;
+      }
+
+      // Stale-snapshot events: the resume endpoint detected that external state
+      // changed while paused (file sha / skill content). The run continues — the
+      // agent re-checks and retries on its own — so close the affected modal and
+      // let the user know what happened.
+      if (data.type?.endsWith('_stale')) {
+        const approvalId = data.data?.approvalId as string | undefined;
+        const reason = data.data?.reason as string | undefined;
+        toast.error(
+          reason
+            ? `${reason} The assistant will re-check and try again.`
+            : 'The target changed while awaiting approval; the assistant will re-check and try again.',
+        );
+        if (approvalId) {
+          setPendingEditApprovals((prev) => {
+            const updated: Record<string, PendingEditApproval[]> = {};
+            for (const [msgId, items] of Object.entries(prev)) {
+              updated[msgId] = items.map((a) =>
+                a.approvalId === approvalId
+                  ? { ...a, status: 'cancelled' as const }
+                  : a,
+              );
+            }
+            return updated;
+          });
+          setPendingSkillEditApprovals((prev) => {
+            const updated: Record<string, PendingSkillEditApproval[]> = {};
+            for (const [msgId, items] of Object.entries(prev)) {
+              updated[msgId] = items.map((a) =>
+                a.approvalId === approvalId
+                  ? { ...a, status: 'cancelled' as const }
+                  : a,
+              );
+            }
+            return updated;
+          });
+          setPendingQuestions((prev) => {
+            const updated: Record<string, PendingQuestion[]> = {};
+            for (const [msgId, items] of Object.entries(prev)) {
+              updated[msgId] = items.map((q) =>
+                q.questionId === approvalId
+                  ? { ...q, status: 'cancelled' as const }
+                  : q,
+              );
+            }
+            return updated;
+          });
+        }
+        return;
+      }
+
       if (data.type === 'code_execution_result') {
         setPendingExecutions((prev) => ({
           ...prev,
           [data.messageId]: (prev[data.messageId] ?? []).map((execution) =>
-            execution.executionId === data.data.executionId
+            (data.data.executionId &&
+              execution.executionId === data.data.executionId) ||
+            (data.data.toolCallId &&
+              execution.toolCallId === data.data.toolCallId)
               ? {
                   ...execution,
                   status: (data.data.denied ? 'denied' : 'completed') as
@@ -1764,6 +2349,7 @@ const ChatWindow = ({
         // Look up the correct runId for this execution from the correlation map
         const tcId =
           codeExecutionRunIdMap.get(data.data.executionId) ||
+          codeExecutionRunIdMap.get(data.data.toolCallId) ||
           data.data.toolCallId;
         if (tcId) {
           const d = data.data;
@@ -1795,17 +2381,22 @@ const ChatWindow = ({
         return;
       }
 
-      if (data.type === 'user_question_pending') {
+      if (
+        data.type === 'user_question_pending' ||
+        data.type === 'ask_user_pending'
+      ) {
         const runId = data.data?.markupToolCallId;
-        if (runId && data.data?.questionId) {
-          userQuestionRunIdMap.set(data.data.questionId, runId);
+        // New interrupt-based flow uses approvalId; legacy flow used questionId
+        const questionId = data.data?.approvalId ?? data.data?.questionId;
+        if (runId && questionId) {
+          userQuestionRunIdMap.set(questionId, runId);
         }
         setPendingQuestions((prev) => ({
           ...prev,
           [data.messageId]: [
             ...(prev[data.messageId] ?? []),
             {
-              questionId: data.data.questionId,
+              questionId,
               question: data.data.question,
               options: data.data.options,
               multiSelect: data.data.multiSelect,
@@ -1821,11 +2412,15 @@ const ChatWindow = ({
         return;
       }
 
-      if (data.type === 'user_question_answered') {
+      if (
+        data.type === 'user_question_answered' ||
+        data.type === 'ask_user_answered'
+      ) {
+        const answeredId = data.data?.approvalId ?? data.data?.questionId;
         setPendingQuestions((prev) => ({
           ...prev,
           [data.messageId]: (prev[data.messageId] ?? []).map((q) =>
-            q.questionId === data.data.questionId
+            q.questionId === answeredId
               ? {
                   ...q,
                   status: (data.data.timedOut
@@ -1839,8 +2434,7 @@ const ChatWindow = ({
           ),
         }));
         const tcId =
-          userQuestionRunIdMap.get(data.data.questionId) ||
-          data.data.toolCallId;
+          userQuestionRunIdMap.get(answeredId) || data.data.toolCallId;
         if (tcId) {
           const d = data.data;
           const extra: Record<string, string> = {};
@@ -1891,7 +2485,11 @@ const ChatWindow = ({
         return;
       }
 
-      if (data.type === 'workspace_edit_approval_pending') {
+      if (
+        data.type === 'workspace_edit_approval_pending' ||
+        data.type === 'workspace_edit_pending' ||
+        data.type === 'workspace_create_pending'
+      ) {
         setPendingEditApprovals((prev) => ({
           ...prev,
           [data.messageId]: [
@@ -1919,7 +2517,11 @@ const ChatWindow = ({
         return;
       }
 
-      if (data.type === 'workspace_edit_approval_answered') {
+      if (
+        data.type === 'workspace_edit_approval_answered' ||
+        data.type === 'workspace_edit_answered' ||
+        data.type === 'workspace_create_answered'
+      ) {
         setPendingEditApprovals((prev) => ({
           ...prev,
           [data.messageId]: (prev[data.messageId] ?? []).map((a) =>
@@ -1944,7 +2546,10 @@ const ChatWindow = ({
         return;
       }
 
-      if (data.type === 'skill_edit_approval_pending') {
+      if (
+        data.type === 'skill_edit_approval_pending' ||
+        data.type === 'skill_edit_pending'
+      ) {
         setPendingSkillEditApprovals((prev) => ({
           ...prev,
           [data.messageId]: [
@@ -1970,7 +2575,10 @@ const ChatWindow = ({
         return;
       }
 
-      if (data.type === 'skill_edit_approval_answered') {
+      if (
+        data.type === 'skill_edit_approval_answered' ||
+        data.type === 'skill_edit_answered'
+      ) {
         setPendingSkillEditApprovals((prev) => ({
           ...prev,
           [data.messageId]: (prev[data.messageId] ?? []).map((a) =>
@@ -2580,12 +3188,16 @@ const ChatWindow = ({
                       return updated;
                     });
                     try {
-                      const res = await fetch('/api/chat/answer', {
+                      const res = await fetch('/api/chat/runs/resume', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ questionId, ...response }),
+                        body: JSON.stringify({
+                          approvalId: questionId,
+                          response,
+                        }),
                       });
                       if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                      reattachToActiveRun();
                     } catch {
                       toast.error(
                         'Failed to send answer. The agent will continue on its own.',
@@ -2605,12 +3217,16 @@ const ChatWindow = ({
                       return updated;
                     });
                     try {
-                      const res = await fetch('/api/chat/answer', {
+                      const res = await fetch('/api/chat/runs/resume', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ questionId, skipped: true }),
+                        body: JSON.stringify({
+                          approvalId: questionId,
+                          response: { skipped: true },
+                        }),
                       });
                       if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                      reattachToActiveRun();
                     } catch {
                       toast.error(
                         'Failed to skip question. The agent will continue on its own.',
@@ -2644,34 +3260,17 @@ const ChatWindow = ({
                       }
                       return updated;
                     });
-                    // Find the workspaceId for this approval
-                    let workspaceId: string | undefined;
-                    for (const approvals of Object.values(
-                      pendingEditApprovals,
-                    )) {
-                      const found = approvals.find(
-                        (a) => a.approvalId === approvalId,
-                      );
-                      if (found) {
-                        workspaceId = found.workspaceId;
-                        break;
-                      }
-                    }
-                    if (!workspaceId) return;
                     try {
-                      const res = await fetch(
-                        `/api/workspaces/${workspaceId}/file-edit-approval`,
-                        {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            approvalId,
-                            decision,
-                            freeformText,
-                          }),
-                        },
-                      );
+                      const res = await fetch('/api/chat/runs/resume', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          approvalId,
+                          response: { decision, freeformText },
+                        }),
+                      });
                       if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                      reattachToActiveRun();
                     } catch {
                       toast.error(
                         'Failed to send edit decision. The agent will continue on its own.',
@@ -2704,16 +3303,16 @@ const ChatWindow = ({
                       return updated;
                     });
                     try {
-                      const res = await fetch('/api/skills/pending-edit', {
+                      const res = await fetch('/api/chat/runs/resume', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                           approvalId,
-                          decision,
-                          freeformText,
+                          response: { decision, freeformText },
                         }),
                       });
                       if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                      reattachToActiveRun();
                     } catch {
                       toast.error(
                         'Failed to send skill edit decision. The agent will continue on its own.',

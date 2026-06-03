@@ -1161,7 +1161,14 @@
   dependencies:
     groq-sdk "^1.1.2"
 
-"@langchain/langgraph-checkpoint@^1.0.1", "@langchain/langgraph-checkpoint@^1.0.2":
+"@langchain/langgraph-checkpoint-sqlite@^1.0.1":
+  version "1.0.1"
+  resolved "https://registry.yarnpkg.com/@langchain/langgraph-checkpoint-sqlite/-/langgraph-checkpoint-sqlite-1.0.1.tgz#fce20064d8eb6f9fe1d42e300b7866210e9255d8"
+  integrity sha512-zGKqa4QpKMi2ntffoGVrkpDg5cnYtXYoFphyhTquZv+ys+sFxwfQTzf4dQu21TwCC1IpVDmYsPifJueKb1ARdQ==
+  dependencies:
+    better-sqlite3 "^12.6.0"
+
+"@langchain/langgraph-checkpoint@^1.0.1", "@langchain/langgraph-checkpoint@^1.0.2", "@langchain/langgraph-checkpoint@^1.0.3":
   version "1.0.3"
   resolved "https://registry.yarnpkg.com/@langchain/langgraph-checkpoint/-/langgraph-checkpoint-1.0.3.tgz#ac608d820806644a49fe8a6908f97539b012dbb9"
   integrity sha512-lzamDsWxD/25zIVeEO7Xv38Rq1BCZUQYWx0V6zewHf4LpjzzyxB5N9aZcwdsl+SvHRJASGCnvLleqD9dp3afxg==
@@ -2442,7 +2449,7 @@ bcrypt-pbkdf@^1.0.2:
   dependencies:
     tweetnacl "^0.14.3"
 
-better-sqlite3@^12.6.2:
+better-sqlite3@^12.6.0, better-sqlite3@^12.6.2:
   version "12.10.0"
   resolved "https://registry.yarnpkg.com/better-sqlite3/-/better-sqlite3-12.10.0.tgz#bde622d14a18008583a53bc53501ae98f1a12221"
   integrity sha512-CyzaZRQKyHkB2ZInfTTl2nvT33EbDpjkLEbE8/Zck3Ll6O0qqvuGdrJ45HgtH+HykRg88ITY3AdreBGN70aBSQ==

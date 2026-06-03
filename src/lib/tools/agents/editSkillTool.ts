@@ -2,10 +2,8 @@ import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { RunnableConfig } from '@langchain/core/runnables';
 import { ToolMessage } from '@langchain/core/messages';
-import { Command } from '@langchain/langgraph';
-import crypto from 'crypto';
+import { Command, interrupt } from '@langchain/langgraph';
 import { isSoftStop } from '@/lib/utils/runControl';
-import { waitForApprovalResponse } from '@/lib/skills/pendingEdits';
 import {
   createUserSkill,
   updateUserSkill,
@@ -17,6 +15,7 @@ import {
   SKILL_NAME_DESCRIPTION,
 } from '@/lib/skills/validation';
 import { isSystemSkillName } from '@/lib/skills/systemRegistry';
+import { createHash } from 'crypto';
 
 const EditSkillSchema = z.object({
   action: z
@@ -52,13 +51,13 @@ const EditSkillSchema = z.object({
 export const editSkillTool = tool(
   async (input: z.infer<typeof EditSkillSchema>, config?: RunnableConfig) => {
     const messageId = config?.configurable?.messageId as string | undefined;
-    const emitter = config?.configurable?.emitter;
     const workspaceId = config?.configurable?.workspaceId as
       | string
       | null
       | undefined;
     const interactiveSession =
       config?.configurable?.interactiveSession === true;
+    const emitter = config?.configurable?.emitter;
     const toolCallId =
       (config as unknown as { toolCall?: { id?: string } })?.toolCall?.id ??
       'edit_skill';
@@ -101,7 +100,13 @@ export const editSkillTool = tool(
     const effectiveWorkspaceId =
       scope === 'workspace' ? (workspaceId ?? null) : null;
 
-    // For create, description and content are required
+    // Look up the existing skill for every action. Update/delete require it to
+    // exist; create requires it to NOT exist. Fetching it unconditionally also
+    // lets the staleness snapshot below record the true state at proposal time
+    // (a create-path that skips this would always record existingSkillExists:
+    // false, falsely tripping the resume-time guard for already-present skills).
+    const existingSkill = await getUserSkillByName(name, effectiveWorkspaceId);
+
     if (action === 'create') {
       if (!description || !content) {
         return new Command({
@@ -128,19 +133,12 @@ export const editSkillTool = tool(
           },
         });
       }
-    }
-
-    // Fetch existing skill if update/delete
-    let existingSkill: Awaited<ReturnType<typeof getUserSkillByName>> =
-      undefined as unknown as Awaited<ReturnType<typeof getUserSkillByName>>;
-    if (action === 'update' || action === 'delete') {
-      existingSkill = await getUserSkillByName(name, effectiveWorkspaceId);
-      if (!existingSkill) {
+      if (existingSkill) {
         return new Command({
           update: {
             messages: [
               new ToolMessage({
-                content: `Error: No user skill named "${name}" found in the ${scope ?? 'global'} scope.`,
+                content: `Error: A skill named "${name}" already exists in the ${scope ?? 'global'} scope. Use action "update" to modify it.`,
                 tool_call_id: toolCallId,
               }),
             ],
@@ -149,7 +147,18 @@ export const editSkillTool = tool(
       }
     }
 
-    const approvalId = crypto.randomUUID();
+    if ((action === 'update' || action === 'delete') && !existingSkill) {
+      return new Command({
+        update: {
+          messages: [
+            new ToolMessage({
+              content: `Error: No user skill named "${name}" found in the ${scope ?? 'global'} scope.`,
+              tool_call_id: toolCallId,
+            }),
+          ],
+        },
+      });
+    }
 
     // Build diff payload
     const oldContent =
@@ -168,52 +177,71 @@ export const editSkillTool = tool(
         ? false
         : (disableModelInvocation ?? oldDisableModelInvocation);
 
-    emitter.emit(
-      'data',
-      JSON.stringify({
-        type: 'skill_edit_approval_pending',
-        data: {
-          approvalId,
-          toolCallId,
-          action,
-          name,
-          oldDescription,
-          newDescription,
-          oldContent,
-          newContent,
-          scope: scope ?? 'global',
-          workspaceId: effectiveWorkspaceId,
-          skillId: existingSkill?.id,
-          disableModelInvocation: newDisableModelInvocation,
-          createdAt: Date.now(),
+    // Stale-state snapshot for resume validation
+    const snapshot = {
+      existingSkillContentHash: oldContent
+        ? createHash('sha256').update(oldContent).digest('hex')
+        : null,
+      existingSkillExists: !!existingSkill,
+    };
+
+    const response: unknown = interrupt({
+      kind: 'skill_edit',
+      toolCallId,
+      markupKey: name,
+      payload: {
+        action,
+        name,
+        oldDescription,
+        newDescription,
+        oldContent,
+        newContent,
+        scope: scope ?? 'global',
+        workspaceId: effectiveWorkspaceId,
+        skillId: existingSkill?.id,
+        disableModelInvocation: newDisableModelInvocation,
+        createdAt: Date.now(),
+      },
+      snapshot,
+    });
+
+    // Cancellation discriminator
+    if (response && (response as Record<string, unknown>).__cancelled) {
+      return new Command({
+        update: {
+          messages: [
+            new ToolMessage({
+              content: 'Skill edit cancelled by user.',
+              tool_call_id: toolCallId,
+            }),
+          ],
         },
-        messageId,
-      }),
-    );
+      });
+    }
 
-    const result = await waitForApprovalResponse(
-      approvalId,
-      900_000,
-      messageId,
-    );
+    // Stale discriminator: the skill changed while awaiting approval, so the
+    // approved diff no longer applies. Surface it so the agent re-reads + retries.
+    if (response && (response as Record<string, unknown>).__stale) {
+      const reason = (response as { reason?: string }).reason;
+      return new Command({
+        update: {
+          messages: [
+            new ToolMessage({
+              content: `${reason ?? 'The skill changed since this edit was proposed.'} Re-read it with \`read_skill\` and propose the change again.`,
+              tool_call_id: toolCallId,
+            }),
+          ],
+        },
+      });
+    }
 
-    if (result.timedOut || result.decision === 'reject') {
-      const reason = result.freeformText
-        ? `: ${result.freeformText}`
-        : result.timedOut
-          ? ' (timed out)'
-          : '';
-      emitter.emit(
-        'data',
-        JSON.stringify({
-          type: 'skill_edit_approval_answered',
-          data: {
-            approvalId,
-            decision: result.decision,
-            timedOut: result.timedOut,
-          },
-        }),
-      );
+    const result = response as {
+      decision: 'accept' | 'reject';
+      freeformText?: string;
+    };
+
+    if (result.decision === 'reject') {
+      const reason = result.freeformText ? `: ${result.freeformText}` : '';
       return new Command({
         update: {
           messages: [
@@ -249,14 +277,6 @@ export const editSkillTool = tool(
       } else if (action === 'delete' && existingSkill) {
         await deleteUserSkill(existingSkill.id);
       }
-
-      emitter.emit(
-        'data',
-        JSON.stringify({
-          type: 'skill_edit_approval_answered',
-          data: { approvalId, decision: result.decision },
-        }),
-      );
 
       return new Command({
         update: {

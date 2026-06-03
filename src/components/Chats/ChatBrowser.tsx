@@ -38,9 +38,20 @@ const ChatBrowser = ({ workspaceId }: Props) => {
 
   const { data: activeRunsData } = useActiveRuns();
   const activeRunMap = useMemo(() => {
-    const m = new Map<string, { messageId: string; startedAt: number }>();
+    const m = new Map<
+      string,
+      {
+        messageId: string;
+        startedAt: number;
+        status: 'running' | 'awaiting_user';
+      }
+    >();
     for (const r of activeRunsData?.active ?? []) {
-      m.set(r.chatId, { messageId: r.messageId, startedAt: r.startedAt });
+      m.set(r.chatId, {
+        messageId: r.messageId,
+        startedAt: r.startedAt,
+        status: r.status,
+      });
     }
     return m;
   }, [activeRunsData]);
@@ -470,6 +481,7 @@ const ChatBrowser = ({ workspaceId }: Props) => {
                   ...chat,
                   activeRunMessageId: activeRun.messageId,
                   activeRunStartedAt: activeRun.startedAt,
+                  activeRunStatus: activeRun.status,
                 }
               : chat;
             return (

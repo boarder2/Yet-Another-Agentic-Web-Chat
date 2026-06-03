@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { BookOpen, X, Check, Ban } from 'lucide-react';
 
 export type PendingSkillEditApproval = {
@@ -15,8 +15,7 @@ export type PendingSkillEditApproval = {
   scope: 'global' | 'workspace';
   workspaceId?: string | null;
   skillId?: string;
-  createdAt?: number;
-  status: 'pending' | 'accepted' | 'rejected';
+  status: 'pending' | 'accepted' | 'rejected' | 'cancelled';
 };
 
 type DiffLine =
@@ -142,7 +141,6 @@ export function SkillEditApproval({
   oldContent,
   newContent,
   scope,
-  createdAt,
   onDecide,
   onDismiss,
 }: {
@@ -154,7 +152,6 @@ export function SkillEditApproval({
   oldContent: string;
   newContent: string;
   scope: 'global' | 'workspace';
-  createdAt?: number;
   onDecide: (
     approvalId: string,
     decision: 'accept' | 'reject',
@@ -162,14 +159,7 @@ export function SkillEditApproval({
   ) => void;
   onDismiss?: () => void;
 }) {
-  const TIMEOUT_MS = 15 * 60 * 1000;
-  const [remainingSeconds, setRemainingSeconds] = useState(() => {
-    if (createdAt) {
-      const elapsed = Date.now() - createdAt;
-      return Math.max(0, Math.floor((TIMEOUT_MS - elapsed) / 1000));
-    }
-    return 15 * 60;
-  });
+  // No countdown timer — with interrupt-based flow, runs persist until user responds.
   const [submitted, setSubmitted] = useState(false);
   const [rejectText, setRejectText] = useState('');
   const [showRejectInput, setShowRejectInput] = useState(false);
@@ -187,28 +177,6 @@ export function SkillEditApproval({
   const handleRejectSubmit = useCallback(() => {
     handleDecide('reject', rejectText.trim() || undefined);
   }, [handleDecide, rejectText]);
-
-  useEffect(() => {
-    if (submitted) return;
-    const interval = setInterval(() => {
-      setRemainingSeconds((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          handleDecide('reject');
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [submitted]);
-
-  const formatTime = (s: number) => {
-    const m = Math.floor(s / 60);
-    const sec = s % 60;
-    return `${m}:${sec.toString().padStart(2, '0')}`;
-  };
 
   if (submitted) return null;
 
@@ -238,9 +206,7 @@ export function SkillEditApproval({
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-fg/40 font-mono tabular-nums">
-            {formatTime(remainingSeconds)}
-          </span>
+          <span className="text-xs text-fg/40">Waiting on input</span>
           <button
             type="button"
             onClick={() => handleDecide('reject')}

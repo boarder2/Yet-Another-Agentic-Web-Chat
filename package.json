@@ -33,6 +33,8 @@
     "@langchain/google-genai": "^2.1.18",
     "@langchain/groq": "^1.1.0",
     "@langchain/langgraph": "^1.1.4",
+    "@langchain/langgraph-checkpoint": "^1.0.3",
+    "@langchain/langgraph-checkpoint-sqlite": "^1.0.1",
     "@langchain/ollama": "^1.2.2",
     "@langchain/openai": "^1.2.7",
     "@langchain/textsplitters": "^1.0.1",

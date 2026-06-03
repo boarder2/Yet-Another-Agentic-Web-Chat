@@ -190,8 +190,15 @@ export const POST = async (req: Request) => {
       message.messageId ?? crypto.randomBytes(7).toString('hex');
 
     // Fast-path idempotency: if this messageId already has a live run, re-subscribe
+    // instead of starting a duplicate. Covers both an in-flight run and one paused
+    // at an interrupt (awaiting_user) — a resubmit of the same message must not
+    // orphan the paused checkpoint/approvals by overwriting the run.
     const existingRun = getRun(humanMessageId);
-    if (existingRun && existingRun.status === 'running') {
+    if (
+      existingRun &&
+      (existingRun.status === 'running' ||
+        existingRun.status === 'awaiting_user')
+    ) {
       const subStream = subscribe(existingRun, 0, req.signal);
       return new Response(subStream.pipeThrough(new TextEncoderStream()), {
         headers: SSE_HEADERS,
@@ -484,12 +491,21 @@ export const POST = async (req: Request) => {
     // themselves were already persisted as system rows above and now live
     // in `history` via buildHistoryFromDb — no in-flight injection needed.
     handler.setInvokedSkillNames(invokedSkillNames);
+    // Store model refs so the agent can build a config snapshot for resume.
+    handler.setModelRefs(body.chatModel!, body.systemModel);
+
+    // Build a stable thread_id for LangGraph checkpointing: messageId:startedAt
+    // Using startedAt avoids collisions on regenerate/retry of the same user message.
+    const runStartedAt = Date.now();
+    const threadId = `${humanMessageId}:${runStartedAt}`;
+    handler.setThreadId(threadId);
 
     // Register run in hub (idempotent — isNew=false if already live)
     const { run, isNew } = startRun({
       chatId: message.chatId,
       messageId: humanMessageId,
       aiMessageId,
+      threadId,
       emitter: stream,
       abortController,
       retrievalController,
@@ -498,6 +514,10 @@ export const POST = async (req: Request) => {
     if (isNew) {
       try {
         // Wire event listeners + insert empty assistant row
+        const configSnapshot = handler.buildConfigSnapshot(
+          body.focusMode,
+          body.files ?? [],
+        );
         await attachRunHost({
           run,
           startTime,
@@ -509,6 +529,7 @@ export const POST = async (req: Request) => {
             ? body.userProfile.length > 0
             : false,
           memoriesUsed,
+          configSnapshot,
         });
       } catch (err) {
         // Clean up the dangling run entry before rethrowing

@@ -19,8 +19,16 @@ import {
 //   getLangfuseHandler,
 // } from '@/lib/tracing/langfuse';
 import { encodeHtmlAttribute, encodeBase64 } from '@/lib/utils/html';
-import { pushCallbackRunId } from '@/lib/sandbox/codeExecutionCorrelation';
-import { pushCallbackRunId as pushQuestionCallbackRunId } from '@/lib/userQuestion/questionCorrelation';
+import {
+  pushCallbackRunId,
+  dropCallbackRunId as dropCodeCallbackRunId,
+} from '@/lib/sandbox/codeExecutionCorrelation';
+import {
+  pushCallbackRunId as pushQuestionCallbackRunId,
+  dropCallbackRunId as dropQuestionCallbackRunId,
+} from '@/lib/userQuestion/questionCorrelation';
+import { getLanggraphCheckpointer } from '@/lib/runs/checkpointer';
+import { isGraphInterrupt } from '@langchain/langgraph';
 import { isSoftStop } from '@/lib/utils/runControl';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { BaseMessage, HumanMessage } from '@langchain/core/messages';
@@ -159,6 +167,17 @@ export class SimplifiedAgent {
   private workspaceSuffix: string;
   private firstChatCallInputTokens = 0;
   private aiMessageId?: string;
+  private threadId?: string;
+  private chatModelRef?: {
+    provider: string;
+    name: string;
+    contextWindowSize?: number;
+  };
+  private systemModelRef?: {
+    provider: string;
+    name: string;
+    contextWindowSize?: number;
+  } | null;
 
   constructor(
     chatLlm: BaseChatModel,
@@ -210,6 +229,51 @@ export class SimplifiedAgent {
 
   public setInvokedSkillNames(names: Set<string> | Iterable<string>) {
     this.invokedSkillNames = new Set(names);
+  }
+
+  public setThreadId(threadId: string) {
+    this.threadId = threadId;
+  }
+
+  public setModelRefs(
+    chatModelRef: {
+      provider: string;
+      name: string;
+      contextWindowSize?: number;
+    },
+    systemModelRef?: {
+      provider: string;
+      name: string;
+      contextWindowSize?: number;
+    } | null,
+  ) {
+    this.chatModelRef = chatModelRef;
+    this.systemModelRef = systemModelRef;
+  }
+
+  /** Returns serializable config state for DB persistence (for resume after restart). */
+  public buildConfigSnapshot(
+    focusMode: string,
+    fileIds: string[],
+  ): Record<string, unknown> {
+    return {
+      chatModelRef: this.chatModelRef,
+      systemModelRef: this.systemModelRef,
+      focusMode,
+      fileIds,
+      personaInstructions: this.personaInstructions,
+      methodologyInstructions: this.methodologyInstructions,
+      userLocation: this.userLocation,
+      userProfile: this.userProfile,
+      workspaceId: this.workspaceId,
+      isPrivate: this.isPrivate,
+      chatId: this.chatId,
+      messageId: this.messageId,
+      aiMessageId: this.aiMessageId,
+      interactiveSession: this.interactiveSession,
+      workspaceSuffix: this.workspaceSuffix,
+      memoryEnabled: this.memoryEnabled,
+    };
   }
 
   private emitResponse(text: string) {
@@ -323,12 +387,19 @@ export class SimplifiedAgent {
         );
 
     try {
-      // Create the React agent with custom state
+      // Attach the LangGraph checkpointer only for top-level interactive runs
+      // (those that set a thread_id). Non-interactive contexts — scheduled tasks
+      // and subagents — gate out every interrupting tool, so a checkpointer there
+      // only writes checkpoints that are never resumed nor cleaned up.
       const agent = createAgent({
         model: this.chatLlm,
         tools: allTools,
         stateSchema: SimplifiedAgentState,
         systemPrompt: enhancedSystemPrompt,
+        checkpointer:
+          this.interactiveSession && this.threadId
+            ? getLanggraphCheckpointer()
+            : undefined,
       });
 
       console.log(
@@ -608,7 +679,7 @@ export class SimplifiedAgent {
       // Configure the agent run
       const config: RunnableConfig = {
         configurable: {
-          thread_id: `simplified_agent_${Date.now()}`,
+          thread_id: this.threadId ?? `simplified_agent_${Date.now()}`,
           llm: this.chatLlm,
           systemLlm: this.systemLlm,
           embeddings: this.embeddings,
@@ -848,6 +919,23 @@ export class SimplifiedAgent {
                       typeof inputObj.file === 'string'
                     ) {
                       extraAttr += ` query="${encodeHtmlAttribute(inputObj.file.slice(0, TOOL_ARG_MAX_LENGTH))}"`;
+                      // Correlate filename → callback runId so the interrupt's
+                      // *_pending event carries the chip's markupToolCallId and
+                      // the chip can be closed to success on resume (markupKey =
+                      // input.file in workspace edit/create tools).
+                      pushQuestionCallbackRunId(inputObj.file, runId);
+                    }
+                  }
+                  // For skill edits, correlate skill name → callback runId
+                  // (markupKey = input.name in editSkillTool) so the chip closes.
+                  if (
+                    type === 'edit_skill' &&
+                    input &&
+                    typeof input === 'object'
+                  ) {
+                    const inputObj = input as Record<string, unknown>;
+                    if (typeof inputObj.name === 'string') {
+                      pushQuestionCallbackRunId(inputObj.name, runId);
                     }
                   }
                 } catch (_attrErr) {
@@ -882,6 +970,15 @@ export class SimplifiedAgent {
 
               // Skip if the tool was never registered (e.g. filtered out as a child-graph call)
               if (!toolName) return;
+
+              // Reaching here means the tool finished without interrupting (the
+              // interrupt path is the isGraphInterrupt branch in handleToolError),
+              // so any correlation entry it pushed speculatively in handleToolStart
+              // is stale. Drop it; otherwise a later interrupt for the same key
+              // (e.g. an edit_skill create that early-errors, then an update) would
+              // pop this dead runId and target the wrong markup widget.
+              dropQuestionCallbackRunId(runId);
+              dropCodeCallbackRunId(runId);
 
               // Skip generic tool events for tools with specialized inline rendering
               if (
@@ -979,6 +1076,14 @@ export class SimplifiedAgent {
               }
             },
             handleToolError: (err, runId, parentRunId, tags) => {
+              // LangGraph interrupts propagate as errors through the callback system — they
+              // are not actual tool failures. Skip the error event so the widget stays "running"
+              // rather than showing the raw interrupt payload as an error message.
+              if (isGraphInterrupt(err)) {
+                if (toolCalls[runId]) delete toolCalls[runId];
+                return;
+              }
+
               console.error('SimplifiedAgent: Tool error:', {
                 error: err,
                 runId,
@@ -990,6 +1095,15 @@ export class SimplifiedAgent {
 
               // Skip if the tool was never registered (e.g. filtered out as a child-graph call)
               if (!toolName) return;
+
+              // Reaching here means the tool finished without interrupting (the
+              // interrupt path is the isGraphInterrupt branch in handleToolError),
+              // so any correlation entry it pushed speculatively in handleToolStart
+              // is stale. Drop it; otherwise a later interrupt for the same key
+              // (e.g. an edit_skill create that early-errors, then an update) would
+              // pop this dead runId and target the wrong markup widget.
+              dropQuestionCallbackRunId(runId);
+              dropCodeCallbackRunId(runId);
 
               // Skip generic tool events for tools with specialized inline rendering
               if (
@@ -1346,6 +1460,41 @@ export class SimplifiedAgent {
             }
           }
         }
+
+        // After the stream loop ends normally, check for pending LangGraph interrupts.
+        // When interrupt() is called inside a tool, LangGraph pauses the graph and writes
+        // a checkpoint; the stream ends cleanly but tasks[*].interrupts is populated.
+        if (!this.signal.aborted && this.threadId) {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const agentState = await (agent as any).getState({
+              configurable: { thread_id: this.threadId },
+            });
+            const pendingInterrupts = (agentState?.tasks ?? []).flatMap(
+              (t: { interrupts?: unknown[] }) => t.interrupts ?? [],
+            );
+            if (pendingInterrupts.length > 0) {
+              // runHost listens for 'interrupts' and handles DB persistence + status transition
+              this.emitter.emit(
+                'interrupts',
+                JSON.stringify(pendingInterrupts),
+              );
+              if (toolLlmUsageHandler) {
+                this.emitter.removeListener(
+                  'tool_llm_usage',
+                  toolLlmUsageHandler,
+                );
+              }
+              if (skillRunId) cleanupSkillsForRun(skillRunId);
+              return; // Do NOT emit 'end' — run is now paused at an interrupt
+            }
+          } catch (stateErr) {
+            console.warn(
+              '[simplifiedAgent] interrupt state check failed:',
+              stateErr,
+            );
+          }
+        }
       } catch (err: unknown) {
         if (
           this.retrievalSignal &&
@@ -1537,6 +1686,355 @@ ${url ? `<url>${url}</url>` : ''}
       }
 
       this.emitter.emit('end');
+    }
+  }
+
+  /**
+   * Resume a paused run from a LangGraph checkpoint.
+   * Called by the resume endpoint after an interrupt is answered.
+   */
+  async doResume(
+    focusMode: string,
+    fileIds: string[],
+    resumeArg: unknown,
+  ): Promise<void> {
+    const toolLlmUsageHandler: ((data: string) => void) | null = null;
+    let skillRunId: string | null = null;
+
+    try {
+      const runId = `run_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      skillRunId = runId;
+      setRunContext(runId, {
+        chatId: this.chatId ?? '',
+        parentMessageId: this.aiMessageId ?? '',
+        skills: this.resolvedSkills,
+      });
+
+      // Reconstruct workspace tools so the resumed agent can execute workspace_edit etc.
+      // These tools are normally injected by route.ts as extraTools, but doResume creates
+      // a fresh agent that has no knowledge of the original route's context.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const resumeExtraTools: any[] = [];
+      if (this.workspaceId) {
+        const [
+          { workspaceLsTool },
+          { workspaceGrepTool },
+          { workspaceReadTool },
+          { workspaceEditTool },
+          { workspaceCreateFileTool },
+        ] = await Promise.all([
+          import('@/lib/tools/workspace/ls'),
+          import('@/lib/tools/workspace/grep'),
+          import('@/lib/tools/workspace/read'),
+          import('@/lib/tools/workspace/edit'),
+          import('@/lib/tools/workspace/create'),
+        ]);
+        resumeExtraTools.push(
+          workspaceLsTool(this.workspaceId),
+          workspaceGrepTool(this.workspaceId),
+          workspaceReadTool({
+            workspaceId: this.workspaceId,
+            visionCapable: false,
+          }),
+          workspaceEditTool({
+            workspaceId: this.workspaceId,
+            emitter: this.emitter,
+            interactiveSession: this.interactiveSession,
+            messageId: this.messageId ?? '',
+          }),
+          workspaceCreateFileTool({
+            workspaceId: this.workspaceId,
+            emitter: this.emitter,
+            interactiveSession: this.interactiveSession,
+            messageId: this.messageId ?? '',
+          }),
+        );
+      }
+
+      const agent = await this.initializeAgent(
+        focusMode,
+        fileIds,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        resumeExtraTools.length > 0 ? resumeExtraTools : undefined,
+      );
+
+      const config: RunnableConfig = {
+        configurable: {
+          thread_id: this.threadId ?? '',
+          llm: this.chatLlm,
+          systemLlm: this.systemLlm,
+          embeddings: this.embeddings,
+          fileIds,
+          personaInstructions: this.personaInstructions,
+          focusMode,
+          emitter: this.emitter,
+          firefoxAIDetected: false,
+          messageId: this.messageId,
+          runId,
+          retrievalSignal: this.retrievalSignal,
+          userLocation: this.userLocation,
+          userProfile: this.userProfile,
+          chatId: this.chatId,
+          workspaceId: this.workspaceId,
+          interactiveSession: this.interactiveSession,
+          isPrivate: this.isPrivate,
+        },
+        recursionLimit: 150,
+        signal: this.retrievalSignal,
+      };
+
+      const { Command } = await import('@langchain/langgraph');
+
+      // Track active tool call run IDs so handleToolEnd can update the right widget.
+      const resumeToolCalls = new Map<string, string>();
+      // On resume LangGraph re-runs EVERY interrupted tool node from scratch (one
+      // per pending interrupt), not just the one being answered. Each already has a
+      // markup widget from the original run, so emitting tool_call_started for them
+      // would create duplicates (and the un-answered ones, which re-interrupt, would
+      // leave an orphaned spinner). Identify those re-invocations by the LLM
+      // tool_call_id, which is stable across replays (the callback runId is not).
+      // handleToolStart receives it as its 8th arg (config.toolCall.id); the pending
+      // interrupts expose the same id at interrupt.value.toolCallId.
+      const reinvokedToolCallIds = new Set<string>();
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const preState = await (agent as any).getState({
+          configurable: { thread_id: this.threadId ?? '' },
+        });
+        for (const task of preState?.tasks ?? []) {
+          for (const intr of (task as { interrupts?: unknown[] }).interrupts ??
+            []) {
+            const id = (intr as { value?: { toolCallId?: string } })?.value
+              ?.toolCallId;
+            if (id) reinvokedToolCallIds.add(id);
+          }
+        }
+      } catch (preStateErr) {
+        console.warn(
+          '[simplifiedAgent] resume pre-state interrupt scan failed:',
+          preStateErr,
+        );
+      }
+      // cbRunIds of the re-invoked interrupted tools, recorded as they start so
+      // handleToolEnd/handleToolError can recognize them by runId.
+      const resumedToolRunIds = new Set<string>();
+
+      const eventStream = agent.streamEvents(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        new Command({ resume: resumeArg }) as any,
+        {
+          ...config,
+          version: 'v2',
+          callbacks: [
+            {
+              handleToolStart: (
+                _tool: unknown,
+                input: unknown,
+                cbRunId: string,
+                _parentRunId?: string,
+                _tags?: string[],
+                _metadata?: Record<string, unknown>,
+                runName?: string,
+                llmToolCallId?: string,
+              ) => {
+                const toolName =
+                  runName ||
+                  (_tool as { name?: string } | undefined)?.name ||
+                  '';
+                if (!toolName) return;
+                // Skip the re-invocations of the interrupted tools, matched by
+                // their stable LLM tool_call_id. Their widgets already exist from
+                // the original run; emitting another tool_call_started would
+                // duplicate them (and orphan the un-answered ones' spinners).
+                if (llmToolCallId && reinvokedToolCallIds.has(llmToolCallId)) {
+                  resumedToolRunIds.add(cbRunId);
+                  resumeToolCalls.set(cbRunId, toolName);
+                  return;
+                }
+                if (
+                  toolName === 'deep_research' ||
+                  toolName === 'todo_list' ||
+                  toolName === 'create_chart'
+                )
+                  return;
+                resumeToolCalls.set(cbRunId, toolName);
+
+                const TOOL_ARG_MAX_LENGTH = 350;
+                let extraAttr = '';
+                try {
+                  let parsed = input;
+                  if (typeof input === 'string') {
+                    const t = input.trim();
+                    if (t.startsWith('{') && t.endsWith('}'))
+                      parsed = JSON.parse(t);
+                  }
+                  if (parsed && typeof parsed === 'object') {
+                    const obj = parsed as Record<string, unknown>;
+                    if (typeof obj.query === 'string')
+                      extraAttr += ` query="${encodeHtmlAttribute(obj.query.slice(0, TOOL_ARG_MAX_LENGTH))}"`;
+                    if (
+                      toolName === 'read_skill' &&
+                      typeof obj.name === 'string'
+                    )
+                      extraAttr += ` query="${encodeHtmlAttribute(obj.name.slice(0, TOOL_ARG_MAX_LENGTH))}"`;
+                    if (Array.isArray(obj.urls))
+                      extraAttr += ` count="${obj.urls.length}"`;
+                    if (typeof obj.url === 'string')
+                      extraAttr += ` url="${encodeHtmlAttribute(obj.url.slice(0, TOOL_ARG_MAX_LENGTH))}"`;
+                    if (typeof obj.pdfUrl === 'string')
+                      extraAttr += ` url="${encodeHtmlAttribute(obj.pdfUrl.slice(0, TOOL_ARG_MAX_LENGTH))}"`;
+                    if (typeof obj.content === 'string' && !obj.query)
+                      extraAttr += ` query="${encodeHtmlAttribute(obj.content.slice(0, TOOL_ARG_MAX_LENGTH))}"`;
+                    if (toolName === 'code_execution') {
+                      if (typeof obj.code === 'string') {
+                        extraAttr += ` code="${encodeBase64(obj.code)}"`;
+                        pushCallbackRunId(obj.code, cbRunId);
+                      }
+                      if (typeof obj.description === 'string')
+                        extraAttr += ` description="${encodeHtmlAttribute(obj.description.slice(0, 100))}"`;
+                    }
+                    if (toolName === 'ask_user') {
+                      if (typeof obj.question === 'string') {
+                        extraAttr += ` query="${encodeHtmlAttribute(obj.question.slice(0, 200))}"`;
+                        pushQuestionCallbackRunId(obj.question, cbRunId);
+                      }
+                      if (typeof obj.context === 'string')
+                        extraAttr += ` context="${encodeHtmlAttribute(obj.context.slice(0, 200))}"`;
+                    }
+                    if (
+                      (toolName === 'workspace_edit' ||
+                        toolName === 'workspace_create_file') &&
+                      typeof obj.file === 'string'
+                    ) {
+                      extraAttr += ` query="${encodeHtmlAttribute(obj.file.slice(0, TOOL_ARG_MAX_LENGTH))}"`;
+                      pushQuestionCallbackRunId(obj.file, cbRunId);
+                    }
+                    if (
+                      toolName === 'edit_skill' &&
+                      typeof obj.name === 'string'
+                    )
+                      pushQuestionCallbackRunId(obj.name, cbRunId);
+                    if (
+                      toolName === 'workspace_read' &&
+                      typeof obj.file === 'string'
+                    )
+                      extraAttr += ` query="${encodeHtmlAttribute(obj.file.slice(0, TOOL_ARG_MAX_LENGTH))}"`;
+                    if (
+                      toolName === 'workspace_grep' &&
+                      typeof obj.pattern === 'string'
+                    )
+                      extraAttr += ` query="${encodeHtmlAttribute(obj.pattern.slice(0, TOOL_ARG_MAX_LENGTH))}"`;
+                  }
+                } catch {
+                  // ignore attribute extraction errors
+                }
+                this.emitter.emit(
+                  'data',
+                  JSON.stringify({
+                    type: 'tool_call_started',
+                    data: {
+                      content: `<ToolCall type="${encodeHtmlAttribute(toolName)}" status="running" toolCallId="${encodeHtmlAttribute(cbRunId)}"${extraAttr}></ToolCall>`,
+                      toolCallId: cbRunId,
+                      status: 'running',
+                    },
+                  }),
+                );
+              },
+              handleToolEnd: (_output: unknown, cbRunId: string) => {
+                const name = resumeToolCalls.get(cbRunId);
+                if (!name) return;
+                resumeToolCalls.delete(cbRunId);
+                // Finished without interrupting → drop any stale correlation
+                // entry so a later same-key interrupt doesn't pop this dead id.
+                dropQuestionCallbackRunId(cbRunId);
+                dropCodeCallbackRunId(cbRunId);
+                // resumeRun already emitted tool_call_success for the resumed tools
+                if (resumedToolRunIds.has(cbRunId)) return;
+                this.emitter.emit(
+                  'data',
+                  JSON.stringify({
+                    type: 'tool_call_success',
+                    data: { toolCallId: cbRunId, status: 'success' },
+                  }),
+                );
+              },
+              handleToolError: (err: unknown, cbRunId: string) => {
+                if (isGraphInterrupt(err)) {
+                  resumeToolCalls.delete(cbRunId);
+                  return;
+                }
+                const name = resumeToolCalls.get(cbRunId);
+                if (!name) return;
+                resumeToolCalls.delete(cbRunId);
+                dropQuestionCallbackRunId(cbRunId);
+                dropCodeCallbackRunId(cbRunId);
+                if (resumedToolRunIds.has(cbRunId)) return;
+                const msg =
+                  (err instanceof Error ? err.message : String(err)) ||
+                  'Unknown tool error';
+                this.emitter.emit(
+                  'data',
+                  JSON.stringify({
+                    type: 'tool_call_error',
+                    data: {
+                      toolCallId: cbRunId,
+                      status: 'error',
+                      error: msg.substring(0, 500),
+                    },
+                  }),
+                );
+              },
+            },
+          ],
+        },
+      );
+
+      for await (const event of eventStream) {
+        if (this.signal.aborted) break;
+
+        if (event.event === 'on_chat_model_stream' && event.data?.chunk) {
+          const chunk = event.data.chunk;
+          const textContent = extractTextContent(chunk.content);
+          if (textContent) this.emitResponse(textContent);
+        }
+      }
+
+      // Check for further interrupts after resume stream
+      if (!this.signal.aborted && this.threadId) {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const agentState = await (agent as any).getState({
+            configurable: { thread_id: this.threadId },
+          });
+          const pendingInterrupts = (agentState?.tasks ?? []).flatMap(
+            (t: { interrupts?: unknown[] }) => t.interrupts ?? [],
+          );
+          if (pendingInterrupts.length > 0) {
+            this.emitter.emit('interrupts', JSON.stringify(pendingInterrupts));
+            if (skillRunId) cleanupSkillsForRun(skillRunId);
+            return;
+          }
+        } catch (stateErr) {
+          console.warn(
+            '[simplifiedAgent] resume interrupt state check failed:',
+            stateErr,
+          );
+        }
+      }
+
+      if (skillRunId) cleanupSkillsForRun(skillRunId);
+      this.emitter.emit('end');
+    } catch (error: unknown) {
+      if (toolLlmUsageHandler) {
+        this.emitter.removeListener('tool_llm_usage', toolLlmUsageHandler);
+      }
+      if (skillRunId) cleanupSkillsForRun(skillRunId);
+      console.error('[SimplifiedAgent] doResume error:', error);
+      this.emitter.emit('error', JSON.stringify({ data: String(error) }));
     }
   }
 

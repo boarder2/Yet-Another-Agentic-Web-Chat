@@ -8,12 +8,15 @@ export interface ActiveRun {
   chatId: string;
   messageId: string;
   startedAt: number;
+  status: 'running' | 'awaiting_user';
+  chatTitle?: string;
 }
 
 export interface ActiveRunsData {
   active: ActiveRun[];
   stale: string[];
   unreadCount: number;
+  awaitingAttentionCount: number;
 }
 
 export function useActiveRuns() {

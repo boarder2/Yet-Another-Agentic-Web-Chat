@@ -8,6 +8,7 @@ import {
   CalendarClock,
   ClockIcon,
   EyeOff,
+  Hand,
   LoaderCircle,
   MessageSquare,
   OctagonX,
@@ -31,7 +32,14 @@ export interface Chat {
   messageCount?: number;
   activeRunMessageId?: string | null;
   activeRunStartedAt?: number | null;
-  lastRunStatus?: 'completed' | 'errored' | 'cancelled' | 'interrupted' | null;
+  activeRunStatus?: 'running' | 'awaiting_user' | null;
+  lastRunStatus?:
+    | 'completed'
+    | 'errored'
+    | 'cancelled'
+    | 'interrupted'
+    | 'awaiting_user'
+    | null;
   lastRunViewed?: number | null;
 }
 
@@ -126,9 +134,12 @@ const ChatRow = ({
   const markSeen = useMarkChatSeen();
   const stopClickedRef = useRef(false);
 
-  const isInProgress = !!chat.activeRunMessageId;
+  const isAwaitingUser = chat.activeRunStatus === 'awaiting_user';
+  const isInProgress = !!chat.activeRunMessageId && !isAwaitingUser;
   const isUnviewed =
-    !isInProgress && chat.lastRunViewed === 0 && chat.lastRunStatus != null;
+    !chat.activeRunMessageId &&
+    chat.lastRunViewed === 0 &&
+    chat.lastRunStatus != null;
 
   const startedAt = chat.activeRunStartedAt ?? 0;
 
@@ -182,7 +193,12 @@ const ChatRow = ({
       )}
       <div className="flex flex-row items-center justify-between w-full">
         <div className="flex flex-row items-center gap-2 flex-wrap">
-          {isInProgress ? (
+          {isAwaitingUser ? (
+            <div className="flex items-center gap-2 text-warning">
+              <Hand size={14} className="animate-pulse" />
+              <span className="text-xs">Needs input</span>
+            </div>
+          ) : isInProgress ? (
             <div className="flex items-center gap-2 text-fg/70">
               <LoaderCircle size={14} className="animate-spin text-accent" />
               <span className="text-xs">
@@ -261,7 +277,7 @@ const ChatRow = ({
           className="flex items-center gap-2"
           onClick={(e) => e.stopPropagation()}
         >
-          {isInProgress && (
+          {(isInProgress || isAwaitingUser) && (
             <button
               type="button"
               onClick={handleStop}

@@ -174,6 +174,7 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
   }, [qc]);
 
   const historyUnread = activeRunsData?.unreadCount ?? 0;
+  const awaitingAttentionCount = activeRunsData?.awaitingAttentionCount ?? 0;
 
   const navLinks = [
     {
@@ -234,11 +235,24 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
                   )}
                 >
                   <link.icon />
-                  {link.badgeCount > 0 && (
+                  {link.label === 'History' && awaitingAttentionCount > 0 ? (
+                    <span className="absolute top-0.5 right-0.5 flex gap-0.5">
+                      <span className="min-w-[18px] h-[18px] flex items-center justify-center rounded-pill bg-warning text-warning-fg text-[10px] font-bold leading-none px-1">
+                        {awaitingAttentionCount > 99
+                          ? '99+'
+                          : awaitingAttentionCount}
+                      </span>
+                      {historyUnread > 0 && (
+                        <span className="min-w-[18px] h-[18px] flex items-center justify-center rounded-pill bg-accent text-accent-fg text-[10px] font-bold leading-none px-1">
+                          {historyUnread > 99 ? '99+' : historyUnread}
+                        </span>
+                      )}
+                    </span>
+                  ) : link.badgeCount > 0 ? (
                     <span className="absolute top-0.5 right-2 min-w-[18px] h-[18px] flex items-center justify-center rounded-pill bg-accent text-accent-fg text-[10px] font-bold leading-none px-1">
                       {link.badgeCount > 99 ? '99+' : link.badgeCount}
                     </span>
-                  )}
+                  ) : null}
                   {link.active && (
                     <div className="absolute right-0 -mr-2 h-full w-1 rounded-l-surface bg-accent" />
                   )}

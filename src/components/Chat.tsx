@@ -461,7 +461,6 @@ const Chat = ({
               multiSelect={current.multiSelect}
               allowFreeformInput={current.allowFreeformInput}
               context={current.context}
-              createdAt={current.createdAt}
               onSubmit={onQuestionAnswer}
               onSkip={onQuestionSkip}
               onDismiss={() => {
@@ -494,7 +493,6 @@ const Chat = ({
               replaceAll={current.replaceAll}
               occurrences={current.occurrences}
               workspaceAutoAccept={current.workspaceAutoAccept}
-              createdAt={current.createdAt}
               onDecide={onEditDecide}
               onDismiss={() => {
                 setTimeout(() => {
@@ -524,7 +522,6 @@ const Chat = ({
               oldContent={current.oldContent}
               newContent={current.newContent}
               scope={current.scope}
-              createdAt={current.createdAt}
               onDecide={onSkillEditDecide}
               onDismiss={() => {
                 setTimeout(() => {

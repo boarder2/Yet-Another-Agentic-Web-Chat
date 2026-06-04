@@ -508,14 +508,6 @@ const ChatWindow = ({
   }, []);
 
   const [loading, setLoading] = useState(false);
-  useEffect(() => {
-    console.warn(
-      '[DBG loading changed] =>',
-      loading,
-      '\n',
-      new Error().stack?.split('\n').slice(1, 6).join('\n'),
-    );
-  }, [loading]);
   const [scrollTrigger, setScrollTrigger] = useState(0);
   const [analysisProgress, setAnalysisProgress] = useState<{
     message: string;
@@ -767,18 +759,11 @@ const ChatWindow = ({
     const partialMsg = msgs.find(
       (m) => m.role === 'assistant' && m.runStatus === 'running',
     );
-    console.warn('[DBG attachToRun] entry', {
-      userMessageId,
-      msgsLen: msgs.length,
-      hasPartial: !!partialMsg,
-      partialId: partialMsg?.messageId,
-    });
     if (!partialMsg) return; // No running row — might already be interrupted
 
     const aiMessageId = partialMsg.messageId;
 
     setLoading(true);
-    console.warn('[DBG attachToRun] setLoading(true)');
     setGatheringSources([]);
     setLiveModelStats(null);
     setAnalysisProgress(null);
@@ -804,9 +789,15 @@ const ChatWindow = ({
         { signal: abortController.signal },
       );
     } catch {
+      // A superseding attach (e.g. StrictMode double-invoke or a rapid
+      // re-subscribe) or an unmount aborted this fetch. The newer attach now
+      // owns the loading state, so don't clear it here — doing so would leave
+      // the resumed run streaming with no Stop button or loading indicators.
+      if (abortController.signal.aborted) return;
       setLoading(false);
       return;
     }
+    if (abortController.signal.aborted) return;
     if (!res.body) {
       setLoading(false);
       return;
@@ -815,9 +806,6 @@ const ChatWindow = ({
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const attachHandler = async (data: Record<string, any>) => {
-      if (data.type === 'gone' || data.type === 'messageEnd') {
-        console.warn('[DBG attachHandler] loading-off event:', data.type);
-      }
       if (data.type === 'gone') {
         setLoading(false);
         setMessages((prev) =>
@@ -1471,7 +1459,6 @@ const ChatWindow = ({
     };
 
     await readStream(reader, attachHandler);
-    console.warn('[DBG attachToRun] readStream returned (stream closed)');
   };
 
   // Re-subscribe to the active run after answering an approval. Needed when the

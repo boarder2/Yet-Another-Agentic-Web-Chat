@@ -116,6 +116,14 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
   // the ChatWindow, so it shouldn't drive the sidebar's in-progress flare.
   const cIndex = segments.indexOf('c');
   const currentChatId = cIndex >= 0 ? segments[cIndex + 1] : undefined;
+
+  // Navigating into/out of a chat changes which run is excluded from the
+  // in-progress flare above. Refetch immediately so a run we just backgrounded
+  // (or returned to) is reflected at once instead of waiting for the next poll.
+  useEffect(() => {
+    qc.invalidateQueries({ queryKey: qk.activeRuns });
+  }, [currentChatId, qc]);
+
   const runningCount = (activeRunsData?.active ?? []).filter(
     (r) => r.status === 'running' && r.chatId !== currentChatId,
   ).length;

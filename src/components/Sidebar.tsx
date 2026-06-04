@@ -3,8 +3,6 @@
 import { cn } from '@/lib/utils';
 import {
   CalendarClock,
-  Ellipsis,
-  Home,
   SquarePen,
   Settings,
   LayoutDashboard,
@@ -12,16 +10,11 @@ import {
   Minimize2,
   History,
   Briefcase,
+  MessageSquare,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useSelectedLayoutSegments } from 'next/navigation';
-import React, { Fragment, useEffect, useRef, type ReactNode } from 'react';
-import {
-  Popover,
-  PopoverButton,
-  PopoverPanel,
-  Transition,
-} from '@headlessui/react';
+import React, { useEffect, useRef, type ReactNode } from 'react';
 import Layout, { setWideWidth, useWideWidth } from './Layout';
 import { useActiveRuns } from '@/lib/hooks/api/useActiveRuns';
 import { useScheduledRunsUnread } from '@/lib/hooks/api/useScheduledTasks';
@@ -58,64 +51,6 @@ const WidthToggle = () => {
     >
       {wide ? <Minimize2 /> : <Maximize2 />}
     </button>
-  );
-};
-
-interface NavLink {
-  icon: React.ComponentType<{ size?: number }>;
-  href: string;
-  active: boolean;
-  label: string;
-  badgeCount: number;
-}
-
-const MoreMenu = ({ links }: { links: NavLink[] }) => {
-  const hasActive = links.some((l) => l.active);
-
-  return (
-    <Popover className="relative">
-      <PopoverButton
-        className={cn(
-          'relative flex flex-col items-center space-y-1 text-center w-full',
-          hasActive ? 'text-fg' : 'text-fg/70',
-        )}
-      >
-        {hasActive && (
-          <div className="absolute top-0 -mt-4 h-1 w-full rounded-b-surface bg-accent" />
-        )}
-        <Ellipsis size={20} />
-        <p className="text-xs">More</p>
-      </PopoverButton>
-      <Transition
-        as={Fragment}
-        enter="transition ease-out duration-200"
-        enterFrom="opacity-0 translate-y-1"
-        enterTo="opacity-100 translate-y-0"
-        leave="transition ease-in duration-150"
-        leaveFrom="opacity-100 translate-y-0"
-        leaveTo="opacity-0 translate-y-1"
-      >
-        <PopoverPanel className="absolute right-0 z-20 w-48 transform bottom-full mb-2">
-          <div className="overflow-hidden rounded-surface shadow-raised ring-1 ring-surface-2 bg-surface">
-            <div className="p-1.5">
-              {links.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className={cn(
-                    'flex items-center gap-2.5 p-2.5 rounded-control hover:bg-surface-2',
-                    link.active ? 'text-accent' : 'text-fg/70',
-                  )}
-                >
-                  <link.icon size={18} />
-                  <span className="text-sm">{link.label}</span>
-                </Link>
-              ))}
-            </div>
-          </div>
-        </PopoverPanel>
-      </Transition>
-    </Popover>
   );
 };
 
@@ -176,14 +111,30 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
   const historyUnread = activeRunsData?.unreadCount ?? 0;
   const awaitingAttentionCount = activeRunsData?.awaitingAttentionCount ?? 0;
 
+  // The chat currently open (if any): segments look like ['c', id] or
+  // ['workspaces', wsId, 'c', id]. A run for this chat is already visible in
+  // the ChatWindow, so it shouldn't drive the sidebar's in-progress flare.
+  const cIndex = segments.indexOf('c');
+  const currentChatId = cIndex >= 0 ? segments[cIndex + 1] : undefined;
+  const runningCount = (activeRunsData?.active ?? []).filter(
+    (r) => r.status === 'running' && r.chatId !== currentChatId,
+  ).length;
+  // Finished/awaiting badges take precedence; the in-progress flare only shows
+  // when nothing finished is competing for the History icon's corner slot.
+  const historyInProgress =
+    awaitingAttentionCount === 0 && historyUnread === 0 && runningCount > 0;
+
   const navLinks = [
     {
-      icon: Home,
+      // Highlights while you're in a chat thread (or on the new-chat screen);
+      // tapping it returns to / and starts a fresh chat. On mobile this is also
+      // the primary new-chat entry point (there's no separate New button there).
+      icon: MessageSquare,
       href: '/',
       active:
         (segments.length === 0 || segments.includes('c')) &&
         !segments.includes('workspaces'),
-      label: 'Home',
+      label: 'Chat',
       badgeCount: 0,
     },
     {
@@ -252,6 +203,11 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
                     <span className="absolute top-0.5 right-2 min-w-[18px] h-[18px] flex items-center justify-center rounded-pill bg-accent text-accent-fg text-[10px] font-bold leading-none px-1">
                       {link.badgeCount > 99 ? '99+' : link.badgeCount}
                     </span>
+                  ) : link.label === 'History' && historyInProgress ? (
+                    <span className="absolute top-0 right-1 flex h-4 w-4 items-center justify-center animate-badge-pop">
+                      <span className="absolute inline-flex h-full w-full rounded-pill bg-accent/50 animate-ping" />
+                      <span className="relative inline-flex h-2 w-2 rounded-pill bg-accent" />
+                    </span>
                   ) : null}
                   {link.active && (
                     <div className="absolute right-0 -mr-2 h-full w-1 rounded-l-surface bg-accent" />
@@ -275,43 +231,36 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
       </div>
 
       <div className="fixed bottom-0 w-full z-50 flex flex-row items-center gap-x-6 bg-bg px-4 py-4 shadow-resting lg:hidden">
-        {(() => {
-          const primaryLabels = new Set(['Home', 'Dashboard', 'Scheduled']);
-          const primaryLinks = navLinks.filter((l) =>
-            primaryLabels.has(l.label),
-          );
-          const overflowLinks = navLinks.filter(
-            (l) => !primaryLabels.has(l.label),
-          );
-          return (
-            <>
-              {primaryLinks.map((link, i) => (
-                <Link
-                  href={link.href}
-                  key={i}
-                  className={cn(
-                    'relative flex flex-col items-center space-y-1 text-center w-full',
-                    link.active ? 'text-fg' : 'text-fg/70',
-                  )}
-                >
-                  {link.active && (
-                    <div className="absolute top-0 -mt-4 h-1 w-full rounded-b-surface bg-accent" />
-                  )}
-                  <div className="relative">
-                    <link.icon />
-                    {link.badgeCount > 0 && (
-                      <span className="absolute -top-1.5 -right-2.5 min-w-[16px] h-[16px] flex items-center justify-center rounded-pill bg-accent text-accent-fg text-[9px] font-bold leading-none px-0.5">
-                        {link.badgeCount > 99 ? '99+' : link.badgeCount}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs">{link.label}</p>
-                </Link>
-              ))}
-              <MoreMenu links={overflowLinks} />
-            </>
-          );
-        })()}
+        {/* Every destination directly, no overflow menu. The leading Chat item
+            doubles as the new-chat tap target (no separate New button here). */}
+        {navLinks.map((link, i) => (
+          <Link
+            href={link.href}
+            key={i}
+            className={cn(
+              'relative flex flex-col items-center space-y-1 text-center w-full',
+              link.active ? 'text-fg' : 'text-fg/70',
+            )}
+          >
+            {link.active && (
+              <div className="absolute top-0 -mt-4 h-1 w-full rounded-b-surface bg-accent" />
+            )}
+            <div className="relative">
+              <link.icon />
+              {link.label === 'History' && historyInProgress ? (
+                <span className="absolute -top-1 -right-2 flex h-3.5 w-3.5 items-center justify-center animate-badge-pop">
+                  <span className="absolute inline-flex h-full w-full rounded-pill bg-accent/50 animate-ping" />
+                  <span className="relative inline-flex h-2 w-2 rounded-pill bg-accent" />
+                </span>
+              ) : link.badgeCount > 0 ? (
+                <span className="absolute -top-1.5 -right-2.5 min-w-[16px] h-[16px] flex items-center justify-center rounded-pill bg-accent text-accent-fg text-[9px] font-bold leading-none px-0.5">
+                  {link.badgeCount > 99 ? '99+' : link.badgeCount}
+                </span>
+              ) : null}
+            </div>
+            <p className="text-xs">{link.label}</p>
+          </Link>
+        ))}
       </div>
 
       <Layout>{children}</Layout>

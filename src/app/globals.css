@@ -177,6 +177,20 @@
   .animate-badge-pop {
     animation: badge-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
+
+  @keyframes indeterminate {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(250%);
+    }
+  }
+
+  .animate-indeterminate {
+    width: 40%;
+    animation: indeterminate 1.4s ease-in-out infinite alternate;
+  }
 }
 
 @media screen and (-webkit-min-device-pixel-ratio: 0) {

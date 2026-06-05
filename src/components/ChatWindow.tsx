@@ -22,6 +22,7 @@ import crypto from 'crypto';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { qk } from '@/lib/api/keys';
+import type { ActiveRunsData } from '@/lib/hooks/api/useActiveRuns';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { getSuggestions } from '@/lib/actions';
 import { SKILL_TOKEN_SCAN_REGEX } from '@/lib/skills/validation';
@@ -1883,11 +1884,41 @@ const ChatWindow = ({
       queryClient.invalidateQueries({ queryKey: qk.chatsRoot });
     }
 
+    // Optimistically register this run in the active-runs cache. While this
+    // chat stays open the entry is the foreground run and is filtered out of
+    // the sidebar's in-progress flare; the moment the user navigates away it
+    // becomes a backgrounded run, so seeding it here lets the flare surface
+    // immediately instead of waiting for the next poll/refetch round-trip.
+    queryClient.setQueryData<ActiveRunsData>(qk.activeRuns, (old) => {
+      const base = old ?? {
+        active: [],
+        stale: [],
+        unreadCount: 0,
+        awaitingAttentionCount: 0,
+      };
+      if (base.active.some((r) => r.chatId === chatId)) return base;
+      return {
+        ...base,
+        active: [
+          ...base.active,
+          {
+            chatId: chatId!,
+            messageId,
+            startedAt: Date.now(),
+            status: 'running' as const,
+          },
+        ],
+      };
+    });
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const messageHandler = async (data: Record<string, any>) => {
       if (data.type === 'error') {
         toast.error(data.data);
         setLoading(false);
+        // The run is terminal (errored/cancelled) — drop the optimistic
+        // active-runs entry so a finished run can't linger as a false flare.
+        queryClient.invalidateQueries({ queryKey: qk.activeRuns });
         // The run is terminal (errored/cancelled) — dismiss any open approval
         // prompts so they don't linger on this or other attached tabs.
         setPendingQuestions({});
@@ -2697,6 +2728,10 @@ const ChatWindow = ({
         setGatheringSources([]); // Clear gathering sources when message is complete
         setLiveModelStats(null);
         setScrollTrigger((prev) => prev + 1);
+        // Run finished — reconcile the active-runs cache so the optimistic
+        // entry seeded at send time clears immediately (otherwise navigating
+        // away right after completion could flash a stale in-progress flare).
+        queryClient.invalidateQueries({ queryKey: qk.activeRuns });
 
         const lastMsg = messagesRef.current[messagesRef.current.length - 1];
 

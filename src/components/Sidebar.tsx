@@ -13,7 +13,7 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useSelectedLayoutSegments } from 'next/navigation';
+import { usePathname, useSelectedLayoutSegments } from 'next/navigation';
 import React, { useEffect, useRef, type ReactNode } from 'react';
 import Layout, { setWideWidth, useWideWidth } from './Layout';
 import { useActiveRuns } from '@/lib/hooks/api/useActiveRuns';
@@ -32,6 +32,46 @@ const NewChatButton = () => (
     <SquarePen />
   </Link>
 );
+
+// A single rounded pill that can carry up to two counts: an "attention"
+// (warning) segment and an "unread" (accent) segment, joined seamlessly so
+// they read as one badge instead of two floating circles. Either segment is
+// omitted when its count is 0.
+const SplitPill = ({
+  attention,
+  unread,
+  size = 18,
+}: {
+  attention: number;
+  unread: number;
+  size?: number;
+}) => {
+  if (attention <= 0 && unread <= 0) return null;
+  const fmt = (n: number) => (n > 99 ? '99+' : n);
+  return (
+    <span
+      className="flex overflow-hidden rounded-pill text-[10px] font-bold leading-none"
+      style={{ height: size }}
+    >
+      {attention > 0 && (
+        <span
+          className="flex items-center justify-center bg-warning text-warning-fg px-1"
+          style={{ minWidth: size }}
+        >
+          {fmt(attention)}
+        </span>
+      )}
+      {unread > 0 && (
+        <span
+          className="flex items-center justify-center bg-accent text-accent-fg px-1"
+          style={{ minWidth: size }}
+        >
+          {fmt(unread)}
+        </span>
+      )}
+    </span>
+  );
+};
 
 const WidthToggle = () => {
   const segments = useSelectedLayoutSegments();
@@ -111,11 +151,15 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
   const historyUnread = activeRunsData?.unreadCount ?? 0;
   const awaitingAttentionCount = activeRunsData?.awaitingAttentionCount ?? 0;
 
-  // The chat currently open (if any): segments look like ['c', id] or
-  // ['workspaces', wsId, 'c', id]. A run for this chat is already visible in
+  // The chat currently open (if any). A run for this chat is already visible in
   // the ChatWindow, so it shouldn't drive the sidebar's in-progress flare.
-  const cIndex = segments.indexOf('c');
-  const currentChatId = cIndex >= 0 ? segments[cIndex + 1] : undefined;
+  // Derive from the pathname rather than layout segments: a freshly-started
+  // chat swaps its URL in via history.replaceState (ChatWindow avoids a remount
+  // mid-stream), which usePathname reflects but useSelectedLayoutSegments does
+  // not — so segments would still read the root and wrongly flare the chat
+  // you're actively watching. Matches /c/<id> and /workspaces/<ws>/c/<id>.
+  const pathname = usePathname();
+  const currentChatId = pathname?.match(/\/c\/([^/?#]+)/)?.[1];
 
   // Navigating into/out of a chat changes which run is excluded from the
   // in-progress flare above. Refetch immediately so a run we just backgrounded
@@ -127,10 +171,11 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
   const runningCount = (activeRunsData?.active ?? []).filter(
     (r) => r.status === 'running' && r.chatId !== currentChatId,
   ).length;
-  // Finished/awaiting badges take precedence; the in-progress flare only shows
-  // when nothing finished is competing for the History icon's corner slot.
-  const historyInProgress =
-    awaitingAttentionCount === 0 && historyUnread === 0 && runningCount > 0;
+  // A genuinely in-progress background run should always surface its indicator.
+  // The flare renders as a bar beneath the History icon while the unread/awaiting
+  // counts sit in the corner, so the two no longer compete for one slot and can
+  // show together — don't suppress in-progress just because something is unread.
+  const historyInProgress = runningCount > 0;
 
   const navLinks = [
     {
@@ -193,28 +238,26 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
                     link.active ? 'text-fg' : 'text-fg/70',
                   )}
                 >
-                  <link.icon />
-                  {link.label === 'History' && awaitingAttentionCount > 0 ? (
-                    <span className="absolute top-0.5 right-0.5 flex gap-0.5">
-                      <span className="min-w-[18px] h-[18px] flex items-center justify-center rounded-pill bg-warning text-warning-fg text-[10px] font-bold leading-none px-1">
-                        {awaitingAttentionCount > 99
-                          ? '99+'
-                          : awaitingAttentionCount}
+                  {link.label === 'History' && historyInProgress ? (
+                    <span className="flex flex-col items-center gap-1">
+                      <link.icon />
+                      <span className="relative w-10 h-1.5 overflow-hidden rounded-pill bg-surface-2">
+                        <span className="absolute inset-y-0 left-0 bg-accent animate-indeterminate" />
                       </span>
-                      {historyUnread > 0 && (
-                        <span className="min-w-[18px] h-[18px] flex items-center justify-center rounded-pill bg-accent text-accent-fg text-[10px] font-bold leading-none px-1">
-                          {historyUnread > 99 ? '99+' : historyUnread}
-                        </span>
-                      )}
+                    </span>
+                  ) : (
+                    <link.icon />
+                  )}
+                  {link.label === 'History' && awaitingAttentionCount > 0 ? (
+                    <span className="absolute top-0.5 right-0.5">
+                      <SplitPill
+                        attention={awaitingAttentionCount}
+                        unread={historyUnread}
+                      />
                     </span>
                   ) : link.badgeCount > 0 ? (
                     <span className="absolute top-0.5 right-2 min-w-[18px] h-[18px] flex items-center justify-center rounded-pill bg-accent text-accent-fg text-[10px] font-bold leading-none px-1">
                       {link.badgeCount > 99 ? '99+' : link.badgeCount}
-                    </span>
-                  ) : link.label === 'History' && historyInProgress ? (
-                    <span className="absolute top-0 right-1 flex h-4 w-4 items-center justify-center animate-badge-pop">
-                      <span className="absolute inline-flex h-full w-full rounded-pill bg-accent/50 animate-ping" />
-                      <span className="relative inline-flex h-2 w-2 rounded-pill bg-accent" />
                     </span>
                   ) : null}
                   {link.active && (
@@ -255,10 +298,13 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
             )}
             <div className="relative">
               <link.icon />
-              {link.label === 'History' && historyInProgress ? (
-                <span className="absolute -top-1 -right-2 flex h-3.5 w-3.5 items-center justify-center animate-badge-pop">
-                  <span className="absolute inline-flex h-full w-full rounded-pill bg-accent/50 animate-ping" />
-                  <span className="relative inline-flex h-2 w-2 rounded-pill bg-accent" />
+              {link.label === 'History' && awaitingAttentionCount > 0 ? (
+                <span className="absolute -top-1.5 -right-2.5">
+                  <SplitPill
+                    attention={awaitingAttentionCount}
+                    unread={historyUnread}
+                    size={16}
+                  />
                 </span>
               ) : link.badgeCount > 0 ? (
                 <span className="absolute -top-1.5 -right-2.5 min-w-[16px] h-[16px] flex items-center justify-center rounded-pill bg-accent text-accent-fg text-[9px] font-bold leading-none px-0.5">
@@ -266,6 +312,11 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
                 </span>
               ) : null}
             </div>
+            {link.label === 'History' && historyInProgress && (
+              <span className="relative w-10 h-1.5 overflow-hidden rounded-pill bg-surface-2 block">
+                <span className="absolute inset-y-0 left-0 bg-accent animate-indeterminate" />
+              </span>
+            )}
             <p className="text-xs">{link.label}</p>
           </Link>
         ))}

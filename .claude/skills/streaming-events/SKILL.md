@@ -5,7 +5,7 @@ description: Use when working on tool-call lifecycle events, todo updates, subag
 
 # Streaming Events System
 
-The `SimplifiedAgent` emits granular lifecycle events for tool execution, todo updates, and subagent activity so the UI can reflect real-time status.
+The `SimplifiedAgent` emits granular lifecycle events for tool execution, todo updates, subagent activity, and interrupt/approval flows so the UI can reflect real-time status. Milestone events (see below) are persisted to the `run_events` table (`runEventsPersistence.ts`) so paused (backgrounded) chats can be fully reconstructed on resume.
 
 ## Tool Call Lifecycle Events
 
@@ -14,6 +14,12 @@ The `SimplifiedAgent` emits granular lifecycle events for tool execution, todo u
 | `tool_call_started` | Immediately when a tool run begins (LangChain `handleToolStart`) | `{ data: { content: "<ToolCall … status=\"running\" toolCallId=\"RUN_ID\" …></ToolCall>", toolCallId, status: "running" } }` | Appends a ToolCall widget with spinner                                                                         |
 | `tool_call_success` | On successful completion (`handleToolEnd`)                       | `{ data: { toolCallId, status: "success", extra?: { [k: string]: string } } }`                                               | Replaces the widget status icon with green check; merges any `extra` attributes into existing `<ToolCall>` tag |
 | `tool_call_error`   | On exception (`handleToolError`)                                 | `{ data: { toolCallId, status: "error", error: "message" } }`                                                                | Replaces spinner with red X and shows error text                                                               |
+
+**Skipped tools** — `deep_research`, `todo_list`, and `create_chart` never emit generic lifecycle events; they have specialized inline rendering. System-source `read_skill` invocations are also silently suppressed.
+
+**Interrupt handling** — LangGraph interrupts propagate as errors through `handleToolError`. They are detected via `isGraphInterrupt(err)` and silently dropped (no `tool_call_error` emitted); the widget stays "running". After the stream loop ends, the agent calls `agent.getState()` to collect pending interrupts and emits them on the `'interrupts'` emitter channel (not `'data'`). `runHost` handles the `'interrupts'` event to persist approvals and transition the run to `awaiting_user` status.
+
+**Resume path** — `doResume()` reconstructs a fresh agent from the LangGraph checkpoint and streams a `Command({ resume: resumeArg })`. Re-invoked interrupted tools (already have markup widgets from the original run) are identified by stable LLM `tool_call_id` and suppressed in `handleToolStart` to avoid duplicate chips. New tools spawned post-resume emit the full lifecycle normally.
 
 ## Todo List Events
 
@@ -29,23 +35,69 @@ The `todo_list` tool emits `todo_update` events for research progress tracking. 
 - Transient: the widget clears when the response completes (not persisted in message content)
 - Only used for thorough/complex research, not simple queries
 
+## Subagent Events
+
+Emitted by `SubagentExecutor` (`src/lib/search/subagents/executor.ts`):
+
+| Event Type           | Payload                                                                 | UI Behavior                                                   |
+| -------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `subagent_started`   | `{ executionId, name, task, status: "running" }`                        | Appends `<SubagentExecution …>` markup to in-progress message |
+| `subagent_data`      | `{ executionId, data }` — streaming tokens from the subagent's response | Nested inside the `SubagentExecution` widget display          |
+| `subagent_completed` | `{ executionId, … }`                                                    | Updates widget `status` to `"success"`                        |
+| `subagent_error`     | `{ executionId, … }`                                                    | Updates widget `status` to `"error"`                          |
+
+## Approval / Interrupt Events (Persistent Sessions)
+
+These events are emitted by tools that interrupt the LangGraph run for user approval. All `*_pending` events are persisted as milestones so they can be replayed on resume. The frontend also handles an `*_answered` companion event to update UI state.
+
+| Event Type Family                                                                                             | Tool Origin                                      | UI Element                  |
+| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ | --------------------------- |
+| `code_execution_pending` / `code_execution_answered` / `code_execution_result`                                | `code_execution` tool                            | Code approval / result chip |
+| `user_question_pending` / `ask_user_pending` / `user_question_answered` / `ask_user_answered`                 | `ask_user` tool                                  | Question widget             |
+| `workspace_edit_approval_pending` / `workspace_edit_pending` / `workspace_create_pending` + `*_answered`      | `workspace_edit` / `workspace_create_file` tools | File diff approval card     |
+| `skill_edit_approval_pending` / `skill_edit_pending` + `skill_edit_approval_answered` / `skill_edit_answered` | `edit_skill` tool                                | Skill diff approval card    |
+
+`runHost.ts` emits `*_pending` events on first observation (using `kind_pending` pattern at line ~192). The frontend deduplicates these against the `/api/approvals/pending` fetch path using `approvalId`.
+
+## Other Milestone Events
+
+| Event Type                          | Emitted By                                       | UI Behavior                                                                                             |
+| ----------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| `sources_added`                     | `SimplifiedAgent` (during stream)                | Populates in-progress sources panel grouped by `searchQuery`                                            |
+| `sources`                           | `SimplifiedAgent` (on completion)                | Sets final sources on the finished assistant message                                                    |
+| `chart_spec`                        | `createChartTool` / `codeExecutionTool`          | Renders a chart widget keyed by `chartId` in the message                                                |
+| `workspace_file_changed`            | `workspace_edit` / `workspace_create_file` tools | Invalidates TanStack Query for the affected workspace                                                   |
+| `replay_complete`                   | `runHub.ts` (after replaying persisted events)   | Sentinel that tells `ChatWindow` to stop filtering tokens during replay and start appending live tokens |
+| `modelStats` (on `'stats'` channel) | `SimplifiedAgent.emitModelStats()`               | Updates live token usage display                                                                        |
+| `context_grew`                      | `runHost.ts`                                     | Shows context-grew indicator                                                                            |
+| `response`                          | `SimplifiedAgent.emitResponse()`                 | Streams assistant text tokens to the in-progress message                                                |
+
 ## Implementation Details
 
 ### Backend (Event Emission)
 
-- Emission logic lives in `simplifiedAgent.ts` where callbacks (`handleToolStart`, `handleToolEnd`, `handleToolError`) serialize events to the streaming emitter.
-- The API layer (`/src/app/api/chat/route.ts`) transparently forwards these event types to the client with the active assistant `messageId`.
+- Emission logic lives in `src/lib/search/simplifiedAgent.ts`. Callbacks (`handleToolStart`, `handleToolEnd`, `handleToolError`) are registered on each `agent.streamEvents()` call — once in `searchAndAnswer()` and once in `doResume()`. Both paths emit identical event shapes.
+- `modelStats` events are emitted on the `'stats'` emitter channel (not `'data'`), with `type: 'modelStats'` in the payload body.
+- After the stream loop, the agent state is checked for pending LangGraph interrupts; if found, they are emitted on the `'interrupts'` channel and `'end'` is suppressed.
+- Milestone events are buffered and persisted via `src/lib/runs/runEventsPersistence.ts` for run reconstruction after server restart or eviction.
 
 ### Frontend (Event Handling)
 
-The frontend (`ChatWindow.tsx`) handles:
+`ChatWindow.tsx` handles:
 
-- `tool_call_started`: appends the received `<ToolCall …>` markup to the in-progress assistant message.
-- `tool_call_success` / `tool_call_error`: regex-rewrites the existing `<ToolCall … toolCallId="RUN_ID" …>` tag, updating `status`, adding `error` (if present) and merging any key/value pairs under `extra` (e.g. `{ videoId }`) as attributes.
+- `tool_call_started`: appends the received `<ToolCall …>` markup to the in-progress assistant message (deduped by `toolCallId`).
+- `tool_call_success` / `tool_call_error`: calls `updateToolCallMarkup()` to rewrite the existing tag, updating `status`, adding `error` (if present) and merging any key/value pairs under `extra` as attributes.
+- `replay_complete`: clears the `inReplay` flag so that subsequent `response` tokens are appended to the live message rather than filtered. This is needed because on resume, the backend first replays all persisted milestone events and pre-seeds message content from the DB, so incoming token events must be suppressed during replay to avoid duplication.
 
 ### Markdown Rendering
 
-The `ToolCall` component (`MarkdownRenderer.tsx`) accepts `status` + `error` attributes and renders:
+The `ToolCall` component (`src/components/MarkdownRenderer.tsx`) accepts many attributes:
+
+- Core: `type`, `status` (`running` | `success` | `error`), `toolCallId`, `query`, `url`, `count`, `videoId`, `imageId`, `error`
+- Code execution: `code` (base64), `description`, `exitCode`, `stdout`, `stderr`, `timedOut`, `oomKilled`, `denied`
+- Ask user: `selectedOptions`, `freeformText`, `skipped`
+
+Renders:
 
 - `running`: inline spinner
 - `success`: green check
@@ -53,11 +105,12 @@ The `ToolCall` component (`MarkdownRenderer.tsx`) accepts `status` + `error` att
 
 ## Markup Mutation
 
-A shared helper (`updateToolCallMarkup` in `src/lib/utils/toolCallMarkup.ts`) is used by both backend and frontend to guarantee identical attribute mutation logic.
+A shared helper (`updateToolCallMarkup` in `src/lib/utils/toolCallMarkup.ts`) is used by both `ChatWindow.tsx` and the backend to guarantee identical attribute mutation logic. `code`, `stdout`, and `stderr` attributes are base64-encoded (not HTML-entity escaped) to avoid breaking the markdown parser.
 
 ## Notes & Constraints
 
-- Tool attributes (`query`, `count`, `url`) are lightly extracted on start and truncated to avoid large payloads.
-- `toolCallId` is the LangChain run ID ensuring uniqueness across concurrent tool executions.
-- For persistence, the start markup is appended to the stored assistant message content; on `tool_call_success` / `tool_call_error` the backend rewrites the original `<ToolCall …>` tag in the accumulated message with the final `status` (and `error` attribute if present).
-- A synthetic Firefox AI detection event is represented as a single `tool_call_started` with `status="success"` and `type="firefoxAI"` (no actual external tool execution).
+- Tool attributes (`query`, `count`, `url`) are lightly extracted on start and truncated to `TOOL_ARG_MAX_LENGTH = 350` to avoid large payloads.
+- `toolCallId` is the LangChain callback `runId`, ensuring uniqueness across concurrent tool executions.
+- For persistence, the start markup is appended to the stored assistant message content; on `tool_call_success` / `tool_call_error` the backend rewrites the original `<ToolCall …>` tag with the final `status` (and `error` attribute if present).
+- A synthetic Firefox AI detection event is a single `tool_call_started` with `status="success"` and `type="firefoxAI"` (no actual external tool execution). Emitted before the first LangGraph event in `searchAndAnswer()`.
+- `run-ID attribution` sets (`deepResearchRunIds`, `parentToolsNodeRunIds`, `activeAgentLlmRunIds`) guard against child `SimplifiedAgent` events (from `deep_research` subagents) leaking into the parent's tool-call and token streams, since LangChain's `AsyncLocalStorage` propagates parent callbacks into nested tool executions.

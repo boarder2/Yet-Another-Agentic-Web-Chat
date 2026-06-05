@@ -33,6 +33,7 @@ Stack: Next.js (App Router) + React 19 + Tailwind 4, TanStack Query (client data
 - Ask before adding dependencies
 - Scope changes to the specific task; follow existing patterns
 - Keep AGENTS.md reflecting the **current** state of the project
+- Keep the skills in `.claude/skills/**` up to date as the application changes — when a change affects a subsystem documented by a skill (see Subsystem Skills), update that skill's `SKILL.md` in the same change so it stays accurate
 - DB schema changes: edit `src/lib/db/schema.ts` only; run `yarn db:generate` to emit the drizzle migration — never hand-write files in `drizzle/`
 
 ## Data Fetching

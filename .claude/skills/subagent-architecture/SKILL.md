@@ -17,7 +17,7 @@ The main `SimplifiedAgent` has access to a `deep_research` tool that it can invo
 
 1. **Deep Research** (`deep_research`)
    - Purpose: Focused investigation of a specific, narrow aspect of a larger question
-   - Tools: `web_search`, `url_fetch`, `image_search`, `pdf_loader`
+   - Tools: `web_search`, `url_fetch`, `image_search`, `image_analysis`, `pdf_loader`
    - Model: Chat Model (needs reasoning capability)
    - Invoked by: Main agent via `deep_research` tool
    - **Key Principle**: Each call should research ONE specific aspect, not try to answer the entire user question
@@ -60,6 +60,9 @@ User Query → SimplifiedAgent (with all tools including deep_research)
   - LangGraph tool wrapping SubagentExecutor
   - Returns documents and summary via Command pattern
   - Prevents recursion: subagent's allowedTools excludes `deep_research`
+  - On success, persists findings via `persistFromToolConfig` (kind: `deep_research`)
+  - Forwards subagent token usage (chat + system) to parent as `tool_llm_usage` events
+  - Tool description instructs the agent to call `read_skill("deep-research")` before first use
 
 - **SubagentExecutor** (`src/lib/search/subagents/executor.ts`)
   - Wraps SimplifiedAgent with subagent-specific configuration
@@ -72,6 +75,13 @@ User Query → SimplifiedAgent (with all tools including deep_research)
   - Subagent configurations (system prompt, allowed tools, model selection)
   - Currently defines only `deep_research`
 
+- **Subagent Markup Utilities** (`src/lib/utils/subagentMarkup.ts`)
+  - Pure string transforms for mutating `<SubagentExecution>` markup embedded in assistant message content
+  - `applySubagentNestedToolCall`: inserts/updates nested ToolCall markup (idempotent)
+  - `applySubagentResponseToken`: accumulates streaming response tokens into `responseText` attribute
+  - `applySubagentStatus`: applies terminal status (success/error) with summary/error attributes
+  - Shared by the live streaming handler and reconnect/replay handler in ChatWindow to keep both paths consistent
+
 ## Execution Flow
 
 1. Main agent receives query and begins research with standard tools
@@ -80,12 +90,15 @@ User Query → SimplifiedAgent (with all tools including deep_research)
 4. `deepResearchTool` creates a `SubagentExecutor` with the `deep_research` definition
 5. SubagentExecutor spawns a child `SimplifiedAgent` with:
    - Isolated EventEmitter (forwards events to parent as `subagent_data`)
-   - Filtered tools (web_search, url_fetch, image_search, pdf_loader — no deep_research)
+   - Filtered tools (web_search, url_fetch, image_search, image_analysis, pdf_loader — no deep_research)
    - Limited context (last 5 messages)
    - Chat Model for reasoning
 6. Child agent researches independently and streams tool events
-7. Results (documents + summary) return to the main agent via Command pattern
-8. Main agent integrates findings into its final response
+7. SubagentExecutor captures token usage from isolated emitter's `stats` event and returns it in the `SubagentExecution` result
+8. On success, `deepResearchTool` persists the summary via `persistFromToolConfig` (kind: `deep_research`)
+9. Token usage (chat + system split) is forwarded to the parent emitter as `tool_llm_usage` events
+10. Results (documents + summary) return to the main agent via Command pattern
+11. Main agent integrates findings into its final response
 
 ## UI Integration
 
@@ -111,7 +124,13 @@ Streaming events:
 The deep_research subagent has a whitelist of allowed tools enforced at execution time:
 
 ```typescript
-allowedTools: ['web_search', 'url_fetch', 'image_search', 'pdf_loader'];
+allowedTools: [
+  'web_search',
+  'url_fetch',
+  'image_search',
+  'image_analysis',
+  'pdf_loader',
+];
 ```
 
 Tools are filtered in `SubagentExecutor.getFilteredTools()` before passing to SimplifiedAgent. The `deep_research` tool itself is excluded, preventing recursive subagent spawning.

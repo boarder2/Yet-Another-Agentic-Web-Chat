@@ -58,8 +58,13 @@ export const chatHistorySearchTool = tool(
           }
         }
 
+        const chatUrl = row.workspaceId
+          ? `/workspaces/${row.workspaceId}/c/${row.chatId}`
+          : `/c/${row.chatId}`;
+
         output += `\n### ${row.chatTitle || '(untitled)'}\n`;
         output += `- chatId: \`${row.chatId}\`\n`;
+        output += `- path (relative, use verbatim in markdown links): ${chatUrl}\n`;
         output += `- chatDate: ${chatDate}\n`;
         output += `- score: ${row.score}\n`;
         output += `- matchedKeywords: ${row.matchedKeywords.length ? row.matchedKeywords.join(', ') : '(none)'}\n`;

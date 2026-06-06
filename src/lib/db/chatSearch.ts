@@ -109,6 +109,7 @@ export interface ChatSearchRow {
   chatId: string;
   chatTitle: string;
   chatCreatedAt: number;
+  workspaceId: string | null;
   messageId: number | null;
   messageRole: string | null;
   messageContent: string | null;
@@ -188,6 +189,7 @@ export async function searchChatsByKeywords(
       chatId: chats.id,
       chatTitle: chats.title,
       chatCreatedAt: chats.createdAt,
+      workspaceId: chats.workspaceId,
       messageId: messages.id,
       messageRole: messages.role,
       messageContent: messages.content,
@@ -208,6 +210,7 @@ export async function searchChatsByKeywords(
       chatId: row.chatId,
       chatTitle: row.chatTitle,
       chatCreatedAt: row.chatCreatedAt,
+      workspaceId: row.workspaceId,
       messageId: row.messageId,
       messageRole: row.messageRole,
       messageContent: row.messageContent,

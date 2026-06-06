@@ -926,8 +926,30 @@ const MarkdownRenderer = ({
             }
           }
 
+          // Rewrite absolute URLs pointing to internal chat paths so the LLM
+          // can't accidentally anchor them to a hallucinated domain.
+          const href = props.href ?? '';
+          let resolvedHref = href;
+          try {
+            const parsed = new URL(href);
+            if (
+              /^\/(workspaces\/[^/]+\/)?c\/[a-f0-9]+\/?$/.test(parsed.pathname)
+            ) {
+              resolvedHref = parsed.pathname;
+            }
+          } catch {
+            // href is already relative — leave it alone
+          }
+
           // Default link behavior
-          return <a {...props} target="_blank" rel="noopener noreferrer" />;
+          return (
+            <a
+              {...props}
+              href={resolvedHref}
+              target="_blank"
+              rel="noopener noreferrer"
+            />
+          );
         },
       },
       // Prevent rendering of certain HTML elements for security

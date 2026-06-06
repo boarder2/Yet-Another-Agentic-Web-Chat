@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Cpu, Link } from 'lucide-react';
+import { Cpu, Link, SlidersHorizontal } from 'lucide-react';
 import {
   Dialog,
   DialogPanel,
+  Popover,
+  PopoverButton,
+  PopoverPanel,
   Transition,
   TransitionChild,
 } from '@headlessui/react';
@@ -13,11 +16,25 @@ import { cn } from '@/lib/utils';
 import {
   useLocalStorageBoolean,
   useLocalStorageString,
+  useLocalStorageJSON,
   writeLocalStorage,
 } from '@/lib/hooks/useLocalStorage';
-import { SELECTION_KEYS } from '@/lib/models/presets';
+import { useModels } from '@/lib/hooks/api/useModels';
+import {
+  PRESETS_KEY,
+  SELECTION_KEYS,
+  type ModelPreset,
+  type ModelPresetList,
+  applyPresetToStorage,
+  findMatchingPreset,
+  isPresetAvailable,
+} from '@/lib/models/presets';
+import { toast } from 'sonner';
+import PresetOption from './PresetOption';
 
 type SelectedModel = { provider: string; model: string } | null;
+
+const EMPTY_PRESETS: ModelPresetList = [];
 
 export default function ModelConfigurator({
   showModelName,
@@ -53,6 +70,20 @@ export default function ModelConfigurator({
     SELECTION_KEYS.imageCapable,
     false,
   );
+  const [contextWindowSizeStr] = useLocalStorageString(
+    SELECTION_KEYS.contextWindowSize,
+    '32768',
+  );
+  const [presets] = useLocalStorageJSON<ModelPresetList>(
+    PRESETS_KEY,
+    EMPTY_PRESETS,
+  );
+
+  const { data: modelsData } = useModels();
+  const chatProviders = (modelsData?.chatModelProviders ?? {}) as Record<
+    string,
+    Record<string, { displayName: string }>
+  >;
 
   // Prevent post-mount effects from using pre-hydration default values
   const [hydrated, setHydrated] = useState(false);
@@ -150,28 +181,123 @@ export default function ModelConfigurator({
     return `Chat: ${chatModelKey} (${chatProvider})`;
   }, [computedShowName, chatModelKey, chatProvider]);
 
+  const matchingPreset = useMemo(() => {
+    const cwParsed = parseInt(contextWindowSizeStr, 10);
+    return findMatchingPreset(presets, {
+      chatProvider,
+      chatModel: chatModelKey,
+      systemProvider,
+      systemModel: systemModelKey,
+      imageCapable,
+      contextWindowSize: isNaN(cwParsed) ? 32768 : cwParsed,
+    });
+  }, [
+    presets,
+    chatProvider,
+    chatModelKey,
+    systemProvider,
+    systemModelKey,
+    imageCapable,
+    contextWindowSizeStr,
+  ]);
+
+  const applyPreset = (preset: ModelPreset, close: () => void) => {
+    applyPresetToStorage(preset);
+    toast.success(`Applied preset "${preset.name}"`);
+    close();
+  };
+
+  const hasPresets = presets.length > 0;
+
+  const buttonInner = (
+    <>
+      <Cpu size={18} />
+      {computedShowName && (
+        <span
+          className={cn(
+            'ml-2 text-xs font-medium overflow-hidden text-ellipsis whitespace-nowrap',
+            {
+              'max-w-44': truncateModelName,
+            },
+          )}
+        >
+          {mainButtonText}
+        </span>
+      )}
+    </>
+  );
+
+  const buttonClass =
+    'p-1 group flex items-center text-fg/50 rounded-floating hover:bg-surface-2 active:scale-95 transition duration-200 hover:text-fg';
+
   return (
     <>
-      <button
-        type="button"
-        className="p-1 group flex text-fg/50 rounded-floating hover:bg-surface-2 active:scale-95 transition duration-200 hover:text-fg"
-        onClick={() => setOpen(true)}
-        aria-label="Configure models"
-      >
-        <Cpu size={18} />
-        {computedShowName && (
-          <span
-            className={cn(
-              'ml-2 text-xs font-medium overflow-hidden text-ellipsis whitespace-nowrap',
-              {
-                'max-w-44': truncateModelName,
-              },
-            )}
-          >
-            {mainButtonText}
-          </span>
-        )}
-      </button>
+      {hasPresets ? (
+        <Popover className="relative">
+          {({ close }) => (
+            <>
+              <PopoverButton
+                type="button"
+                className={buttonClass}
+                aria-label="Choose model preset"
+              >
+                {buttonInner}
+              </PopoverButton>
+
+              <Transition
+                as={Fragment}
+                enter="transition ease-out duration-100"
+                enterFrom="opacity-0 scale-95"
+                enterTo="opacity-100 scale-100"
+                leave="transition ease-in duration-75"
+                leaveFrom="opacity-100 scale-100"
+                leaveTo="opacity-0 scale-95"
+              >
+                <PopoverPanel className="absolute right-0 bottom-full z-50 mb-2 w-72 rounded-floating bg-surface border border-surface-2 shadow-floating overflow-hidden">
+                  <div className="px-3 py-2 border-b border-surface-2">
+                    <span className="text-xs font-semibold text-fg/80">
+                      Model Presets
+                    </span>
+                  </div>
+                  <div className="max-h-64 overflow-y-auto">
+                    {presets.map((preset) => (
+                      <PresetOption
+                        key={preset.id}
+                        preset={preset}
+                        isActive={matchingPreset?.id === preset.id}
+                        available={isPresetAvailable(preset, chatProviders)}
+                        onClick={() => applyPreset(preset, close)}
+                      />
+                    ))}
+                  </div>
+                  <div className="border-t border-surface-2 px-3 py-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        close();
+                        setOpen(true);
+                      }}
+                      className="flex items-center gap-1.5 text-xs text-fg/60 hover:text-fg transition-colors duration-150"
+                    >
+                      <SlidersHorizontal size={12} />
+                      Configure models…
+                    </button>
+                  </div>
+                </PopoverPanel>
+              </Transition>
+            </>
+          )}
+        </Popover>
+      ) : (
+        <button
+          type="button"
+          className={buttonClass}
+          onClick={() => setOpen(true)}
+          aria-label="Configure models"
+        >
+          {buttonInner}
+        </button>
+      )}
 
       <Transition show={open} as={Fragment}>
         <Dialog onClose={() => setOpen(false)} className="relative z-50">

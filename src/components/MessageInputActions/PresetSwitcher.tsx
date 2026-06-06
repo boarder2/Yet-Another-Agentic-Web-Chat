@@ -1,13 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import {
-  ChevronDown,
-  Eye,
-  ExternalLink,
-  AlertTriangle,
-  BookMarked,
-} from 'lucide-react';
+import { ChevronDown, ExternalLink, BookMarked } from 'lucide-react';
 import {
   Popover,
   PopoverButton,
@@ -36,9 +30,9 @@ import {
   applyPresetToStorage,
   captureCurrentSelection,
   isPresetAvailable,
-  presetSummary,
 } from '@/lib/models/presets';
 import { useModels } from '@/lib/hooks/api/useModels';
+import PresetOption from './PresetOption';
 
 const EMPTY_PRESETS: ModelPresetList = [];
 
@@ -197,50 +191,15 @@ export default function PresetSwitcher({
                         one.
                       </div>
                     ) : (
-                      presets.map((preset) => {
-                        const isActive = matchingPreset?.id === preset.id;
-                        const available = isPresetAvailable(
-                          preset,
-                          chatProviders,
-                        );
-                        return (
-                          <button
-                            key={preset.id}
-                            type="button"
-                            onClick={() => applyPreset(preset, close)}
-                            className="w-full text-left pl-2 pr-3 py-2.5 flex items-start gap-2 hover:bg-surface-2 transition-colors duration-100"
-                          >
-                            <span
-                              className={cn(
-                                'w-1 self-stretch rounded-full shrink-0 transition-colors duration-150',
-                                isActive ? 'bg-accent' : 'bg-transparent',
-                              )}
-                            />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-xs font-medium text-fg truncate">
-                                  {preset.name}
-                                </span>
-                                {!available && (
-                                  <span className="flex items-center gap-0.5 text-[10px] text-warning bg-warning-soft px-1 py-0.5 rounded-control shrink-0">
-                                    <AlertTriangle size={10} />
-                                    unavailable
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-[10px] text-fg/50 mt-0.5 truncate">
-                                {presetSummary(preset)}
-                              </p>
-                            </div>
-                            {preset.imageCapable && (
-                              <Eye
-                                size={12}
-                                className="text-fg/40 mt-0.5 shrink-0"
-                              />
-                            )}
-                          </button>
-                        );
-                      })
+                      presets.map((preset) => (
+                        <PresetOption
+                          key={preset.id}
+                          preset={preset}
+                          isActive={matchingPreset?.id === preset.id}
+                          available={isPresetAvailable(preset, chatProviders)}
+                          onClick={() => applyPreset(preset, close)}
+                        />
+                      ))
                     )}
                   </div>
 
@@ -262,12 +221,12 @@ export default function PresetSwitcher({
                               setNameInput('');
                             }
                           }}
-                          className="flex-1 text-xs bg-bg border border-surface-2 rounded-control px-2 py-1 text-fg outline-none focus:border-accent"
+                          className="flex-1 min-w-0 text-xs bg-bg border border-surface-2 rounded-control px-2 py-1 text-fg outline-none focus:border-accent"
                         />
                         <button
                           type="button"
                           onClick={() => saveNewPreset(close)}
-                          className="text-xs px-2 py-1 rounded-control bg-accent text-accent-fg hover:bg-accent-700 transition-colors duration-150"
+                          className="shrink-0 text-xs px-2 py-1 rounded-control bg-accent text-accent-fg hover:bg-accent-700 transition-colors duration-150"
                         >
                           Save
                         </button>
@@ -277,7 +236,7 @@ export default function PresetSwitcher({
                             setNamingPreset(false);
                             setNameInput('');
                           }}
-                          className="text-xs px-2 py-1 rounded-control bg-surface-2 text-fg/70 hover:bg-surface-2/80 transition-colors duration-150"
+                          className="shrink-0 text-xs px-2 py-1 rounded-control bg-surface-2 text-fg/70 hover:bg-surface-2/80 transition-colors duration-150"
                         >
                           Cancel
                         </button>

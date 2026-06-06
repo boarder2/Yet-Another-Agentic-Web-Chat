@@ -2,6 +2,11 @@ import Image from 'next/image';
 import { ArrowRight, ArrowUp, LoaderCircle, Square, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
+import {
+  useLocalStorageString,
+  writeLocalStorage,
+} from '@/lib/hooks/useLocalStorage';
+import { SELECTION_KEYS } from '@/lib/models/presets';
 import { File, ImageAttachment } from './ChatWindow';
 import Attach from './MessageInputActions/Attach';
 import ContextIndicator from './MessageInputActions/ContextIndicator';
@@ -86,6 +91,10 @@ const MessageInput = ({
 }) => {
   const [message, setMessage] = useState(initialMessage || '');
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [contextWindowSizeStr] = useLocalStorageString(
+    SELECTION_KEYS.contextWindowSize,
+    '32768',
+  );
   const [skillSuggestions, setSkillSuggestions] = useState<
     Array<{ name: string; description: string }>
   >([]);
@@ -435,17 +444,15 @@ const MessageInput = ({
             )}
             {estimatedUsage !== undefined && onCompact && (
               <ContextIndicator
-                chatModelContextWindow={parseInt(
-                  typeof window !== 'undefined'
-                    ? localStorage.getItem('contextWindowSize') || '32768'
-                    : '32768',
-                  10,
-                )}
+                chatModelContextWindow={parseInt(contextWindowSizeStr, 10)}
                 estimatedUsage={estimatedUsage}
                 messageCount={messageCount ?? 0}
                 onCompact={onCompact}
                 onChatContextSizeChange={(size) => {
-                  localStorage.setItem('contextWindowSize', String(size));
+                  writeLocalStorage(
+                    SELECTION_KEYS.contextWindowSize,
+                    String(size),
+                  );
                 }}
                 compacting={compacting}
               />

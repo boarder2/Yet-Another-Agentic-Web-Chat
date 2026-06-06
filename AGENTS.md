@@ -20,7 +20,7 @@ Stack: Next.js (App Router) + React 19 + Tailwind 4, TanStack Query (client data
 
 ## Settings
 
-`config.toml` holds API keys, DB, search, similarity. Settings page also exposes Chat Model, System Model (`systemModelProvider`, `systemModel` in localStorage), and Link System to Chat toggle (`linkSystemToChat`, default ON).
+`config.toml` holds API keys, DB, search, similarity. Settings page also exposes Chat Model, System Model (`systemModelProvider`, `systemModel` in localStorage), and Link System to Chat toggle (`linkSystemToChat`, default ON). **Model Presets** (`modelPresets` in localStorage) let users save named bundles of chat+system provider/model, vision, and context window — accessible from the chat `ModelConfigurator` dialog (quick switcher) and Settings → Model Presets (full CRUD). No DB or server changes.
 
 ## Conventions
 

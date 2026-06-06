@@ -95,6 +95,7 @@ Want to know more about the architecture? See [docs/architecture/README.md](docs
 | **Interactive Questions**   | The agent can pause mid-research to ask clarifying questions with single/multi-select options or freeform input                                                                             |
 | **Model Visibility**        | Admins can hide models from the UI to prevent accidental usage                                                                                                                              |
 | **Dual Model Architecture** | Separate Chat and System models, linkable or independent                                                                                                                                    |
+| **Model Presets**           | Save named bundles of chat/system models, vision, and context window, then switch between them from the chat input or Settings                                                              |
 
 ## Focus Modes
 

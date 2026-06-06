@@ -37,12 +37,14 @@ const ModelSelector = ({
   truncateModelName = true,
   showModelName = true,
   role = 'chat',
+  panelPosition = 'above',
 }: {
   selectedModel: { provider: string; model: string } | null;
   setSelectedModel: (model: { provider: string; model: string }) => void;
   truncateModelName?: boolean;
   showModelName?: boolean;
   role?: 'chat' | 'system';
+  panelPosition?: 'above' | 'below';
 }) => {
   const qc = useQueryClient();
   const { data: modelsData, isLoading: loading } = useModels();
@@ -194,7 +196,14 @@ const ModelSelector = ({
             leaveFrom="opacity-100 translate-y-0"
             leaveTo="opacity-0 translate-y-1"
           >
-            <PopoverPanel className="absolute z-10 w-72 transform bottom-full mb-2">
+            <PopoverPanel
+              className={cn(
+                'absolute z-10 w-72 transform',
+                panelPosition === 'below'
+                  ? 'top-full mt-1'
+                  : 'bottom-full mb-2',
+              )}
+            >
               <div className="overflow-hidden rounded-surface shadow-raised bg-surface border border-surface-2 divide-y divide-surface-2">
                 <div className="px-4 py-3 flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">

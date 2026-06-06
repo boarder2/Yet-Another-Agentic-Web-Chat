@@ -8,19 +8,16 @@ import {
 } from '@headlessui/react';
 import { Fragment } from 'react';
 import ModelSelector from './ModelSelector';
+import PresetSwitcher from './PresetSwitcher';
 import { cn } from '@/lib/utils';
-import { useLocalStorageBoolean } from '@/lib/hooks/useLocalStorage';
+import {
+  useLocalStorageBoolean,
+  useLocalStorageString,
+  writeLocalStorage,
+} from '@/lib/hooks/useLocalStorage';
+import { SELECTION_KEYS } from '@/lib/models/presets';
 
 type SelectedModel = { provider: string; model: string } | null;
-
-const STORAGE_KEYS = {
-  chatProvider: 'chatModelProvider',
-  chatModel: 'chatModel',
-  systemProvider: 'systemModelProvider',
-  systemModel: 'systemModel',
-  link: 'linkSystemToChat',
-  imageCapable: 'imageCapable',
-} as const;
 
 export default function ModelConfigurator({
   showModelName,
@@ -30,25 +27,45 @@ export default function ModelConfigurator({
   truncateModelName?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  // Initialize from localStorage (default ON when absent)
-  const [linkSystemToChat, setLinkSystemToChat] = useState<boolean>(() => {
-    try {
-      if (typeof window === 'undefined') return true;
-      const stored = localStorage.getItem(STORAGE_KEYS.link);
-      return stored === null ? true : stored === 'true';
-    } catch {
-      return true;
-    }
-  });
+
+  // Reactive localStorage reads — updates immediately when presets apply
+  const [chatProvider, setChatProvider] = useLocalStorageString(
+    SELECTION_KEYS.chatProvider,
+    '',
+  );
+  const [chatModelKey, setChatModelKey] = useLocalStorageString(
+    SELECTION_KEYS.chatModel,
+    '',
+  );
+  const [systemProvider, setSystemProvider] = useLocalStorageString(
+    SELECTION_KEYS.systemProvider,
+    '',
+  );
+  const [systemModelKey, setSystemModelKey] = useLocalStorageString(
+    SELECTION_KEYS.systemModel,
+    '',
+  );
+  const [linkSystemToChat, setLinkSystemToChat] = useLocalStorageBoolean(
+    SELECTION_KEYS.link,
+    true,
+  );
   const [imageCapable, setImageCapable] = useLocalStorageBoolean(
-    STORAGE_KEYS.imageCapable,
+    SELECTION_KEYS.imageCapable,
     false,
   );
 
   // Prevent post-mount effects from using pre-hydration default values
   const [hydrated, setHydrated] = useState(false);
-  const [chatModel, setChatModel] = useState<SelectedModel>(null);
-  const [systemModel, setSystemModel] = useState<SelectedModel>(null);
+
+  const chatModel: SelectedModel =
+    chatProvider && chatModelKey
+      ? { provider: chatProvider, model: chatModelKey }
+      : null;
+
+  const systemModel: SelectedModel =
+    systemProvider && systemModelKey
+      ? { provider: systemProvider, model: systemModelKey }
+      : null;
 
   // Responsive default for showing model text on the main button
   const computedShowName = useMemo(() => {
@@ -57,38 +74,35 @@ export default function ModelConfigurator({
     return window.matchMedia('(min-width: 640px)').matches;
   }, [showModelName]);
 
-  // Load persisted selections and ensure defaults (without overriding stored
-  // false). Hydration must happen in an effect rather than via lazy useState
-  // init so the server and client first render match; the synchronous setState
-  // below is intentional and gated by the `hydrated` flag.
+  // Hydrate defaults once on mount without conflicting with SSR
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     try {
-      const chatProvider = localStorage.getItem(STORAGE_KEYS.chatProvider);
-      const chat = localStorage.getItem(STORAGE_KEYS.chatModel);
-      if (chatProvider && chat) {
-        setChatModel({ provider: chatProvider, model: chat });
-      }
-
-      const linkStored = localStorage.getItem(STORAGE_KEYS.link);
+      const linkStored = localStorage.getItem(SELECTION_KEYS.link);
       if (linkStored === null) {
-        // Ensure the default is written once for new users (state already initialized)
-        localStorage.setItem(STORAGE_KEYS.link, 'true');
+        // Write default ON for new users; the reactive hook will pick it up
+        writeLocalStorage(SELECTION_KEYS.link, 'true');
       }
 
-      const systemProvider = localStorage.getItem(STORAGE_KEYS.systemProvider);
-      const system = localStorage.getItem(STORAGE_KEYS.systemModel);
-      if (systemProvider && system) {
-        setSystemModel({ provider: systemProvider, model: system });
-      } else if (
-        (linkStored === null || linkStored === 'true') &&
-        chatProvider &&
-        chat
+      const storedChatProvider = localStorage.getItem(
+        SELECTION_KEYS.chatProvider,
+      );
+      const storedChat = localStorage.getItem(SELECTION_KEYS.chatModel);
+      const storedSystemProvider = localStorage.getItem(
+        SELECTION_KEYS.systemProvider,
+      );
+      const storedSystem = localStorage.getItem(SELECTION_KEYS.systemModel);
+      const isLinked = linkStored === null ? true : linkStored === 'true';
+
+      if (
+        (!storedSystemProvider || !storedSystem) &&
+        isLinked &&
+        storedChatProvider &&
+        storedChat
       ) {
-        // Mirror chat if linking and no explicit system set
-        setSystemModel({ provider: chatProvider, model: chat });
-        localStorage.setItem(STORAGE_KEYS.systemProvider, chatProvider);
-        localStorage.setItem(STORAGE_KEYS.systemModel, chat);
+        // Mirror chat → system for new users who haven't set system explicitly
+        writeLocalStorage(SELECTION_KEYS.systemProvider, storedChatProvider);
+        writeLocalStorage(SELECTION_KEYS.systemModel, storedChat);
       }
 
       setHydrated(true);
@@ -100,48 +114,41 @@ export default function ModelConfigurator({
 
   // When linking is enabled, mirror system to chat (after hydration)
   useEffect(() => {
-    if (!hydrated) return; // avoid running with pre-hydration default
-    localStorage.setItem(
-      STORAGE_KEYS.link,
-      linkSystemToChat ? 'true' : 'false',
-    );
-    if (linkSystemToChat && chatModel) {
-      setSystemModel(chatModel);
-      localStorage.setItem(STORAGE_KEYS.systemProvider, chatModel.provider);
-      localStorage.setItem(STORAGE_KEYS.systemModel, chatModel.model);
+    if (!hydrated) return;
+    if (linkSystemToChat && chatProvider && chatModelKey) {
+      setSystemProvider(chatProvider);
+      setSystemModelKey(chatModelKey);
     }
-  }, [hydrated, linkSystemToChat, chatModel]);
+  }, [
+    hydrated,
+    linkSystemToChat,
+    chatProvider,
+    chatModelKey,
+    setSystemProvider,
+    setSystemModelKey,
+  ]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  const handleImageCapableChange = (value: boolean) => {
-    setImageCapable(value);
-  };
-
   const handleSelectChat = (m: { provider: string; model: string }) => {
-    setChatModel(m);
-    localStorage.setItem(STORAGE_KEYS.chatProvider, m.provider);
-    localStorage.setItem(STORAGE_KEYS.chatModel, m.model);
+    setChatProvider(m.provider);
+    setChatModelKey(m.model);
     if (linkSystemToChat) {
-      setSystemModel(m);
-      localStorage.setItem(STORAGE_KEYS.systemProvider, m.provider);
-      localStorage.setItem(STORAGE_KEYS.systemModel, m.model);
+      setSystemProvider(m.provider);
+      setSystemModelKey(m.model);
     }
   };
 
   const handleSelectSystem = (m: { provider: string; model: string }) => {
-    if (linkSystemToChat) return; // disabled while linked
-    setSystemModel(m);
-    localStorage.setItem(STORAGE_KEYS.systemProvider, m.provider);
-    localStorage.setItem(STORAGE_KEYS.systemModel, m.model);
+    if (linkSystemToChat) return;
+    setSystemProvider(m.provider);
+    setSystemModelKey(m.model);
   };
 
   const mainButtonText = useMemo(() => {
     if (!computedShowName) return null;
-    if (!chatModel) return 'Loading...';
-    // The ModelSelector derives a displayName via providers list; we only have the key here.
-    // To keep it simple and consistent, show provider/model keys. The dialog shows friendly names.
-    return `Chat: ${chatModel.model} (${chatModel.provider})`;
-  }, [computedShowName, chatModel]);
+    if (!chatModelKey) return 'Loading...';
+    return `Chat: ${chatModelKey} (${chatProvider})`;
+  }, [computedShowName, chatModelKey, chatProvider]);
 
   return (
     <>
@@ -164,7 +171,6 @@ export default function ModelConfigurator({
             {mainButtonText}
           </span>
         )}
-        {/* <ChevronDown size={16} className="transition-transform" /> */}
       </button>
 
       <Transition show={open} as={Fragment}>
@@ -202,6 +208,9 @@ export default function ModelConfigurator({
                   </p>
                 </div>
                 <div className="p-5 space-y-4">
+                  {/* Preset switcher */}
+                  <PresetSwitcher currentChatModel={chatModel} />
+
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-fg/80">
                       Link System to Chat
@@ -240,9 +249,7 @@ export default function ModelConfigurator({
                         aria-label="Vision capable"
                         className="sr-only peer"
                         checked={imageCapable}
-                        onChange={(e) =>
-                          handleImageCapableChange(e.target.checked)
-                        }
+                        onChange={(e) => setImageCapable(e.target.checked)}
                       />
                       <div className="w-10 h-5 bg-surface-2 rounded-pill peer peer-checked:bg-accent transition-colors relative">
                         <div
@@ -299,7 +306,7 @@ export default function ModelConfigurator({
                 <div className="px-5 py-3 border-t border-surface-2 flex justify-end gap-2">
                   <button
                     type="button"
-                    className="px-3 py-1.5 text-sm rounded-control bg-surface-2 hover:bg-surface-3 text-fg/80"
+                    className="px-3 py-1.5 text-sm rounded-control bg-surface-2 hover:bg-surface-2/80 text-fg/80"
                     onClick={() => setOpen(false)}
                   >
                     Close

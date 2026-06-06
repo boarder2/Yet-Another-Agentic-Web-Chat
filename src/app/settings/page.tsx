@@ -21,6 +21,7 @@ import {
   useDeleteSystemPrompt,
 } from '@/lib/hooks/api/useSystemPrompts';
 import { qk } from '@/lib/api/keys';
+import { PREDEFINED_CONTEXT_SIZES } from '@/lib/models/presets';
 
 import { SettingsType, SectionKey } from './types';
 import {
@@ -37,14 +38,11 @@ import ResearchMethodologiesSection from './sections/ResearchMethodologiesSectio
 import DefaultSearchSection from './sections/DefaultSearchSection';
 import SearchProvidersSection from './sections/SearchProvidersSection';
 import ModelSettingsSection from './sections/ModelSettingsSection';
+import ModelPresetsSection from './sections/ModelPresetsSection';
 import ModelVisibilitySection from './sections/ModelVisibilitySection';
 import ImageGenerationSection from './sections/ImageGenerationSection';
 import ApiKeysSection from './sections/ApiKeysSection';
 import SkillsSection from './sections/SkillsSection';
-
-const predefinedContextSizes = [
-  1024, 2048, 3072, 4096, 8192, 16384, 32768, 65536, 131072,
-];
 
 export default function SettingsPage() {
   const [config, setConfig] = useState<SettingsType | null>(null);
@@ -239,7 +237,7 @@ export default function SettingsPage() {
     );
     setContextWindowSize(storedContextWindow);
     setIsCustomContextWindow(
-      !predefinedContextSizes.includes(storedContextWindow),
+      !PREDEFINED_CONTEXT_SIZES.includes(storedContextWindow),
     );
 
     const storedLocation =
@@ -945,6 +943,26 @@ export default function SettingsPage() {
                     setContextWindowSize={setContextWindowSize}
                     setIsCustomContextWindow={setIsCustomContextWindow}
                     setConfig={setConfig}
+                    saveConfig={saveConfig}
+                  />
+                )}
+
+                {activeSection === 'model-presets' && (
+                  <ModelPresetsSection
+                    selectedChatModelProvider={selectedChatModelProvider}
+                    selectedChatModel={selectedChatModel}
+                    selectedSystemModelProvider={selectedSystemModelProvider}
+                    selectedSystemModel={selectedSystemModel}
+                    contextWindowSize={contextWindowSize}
+                    setSelectedChatModelProvider={setSelectedChatModelProvider}
+                    setSelectedChatModel={setSelectedChatModel}
+                    setSelectedSystemModelProvider={
+                      setSelectedSystemModelProvider
+                    }
+                    setSelectedSystemModel={setSelectedSystemModel}
+                    setContextWindowSize={setContextWindowSize}
+                    setIsCustomContextWindow={setIsCustomContextWindow}
+                    setLinkSystemToChat={setLinkSystemToChat}
                     saveConfig={saveConfig}
                   />
                 )}

@@ -2,15 +2,21 @@
 
 import AppSwitch from '@/components/ui/AppSwitch';
 import { PROVIDER_METADATA } from '@/lib/providers';
-import { LoaderCircle, RefreshCw } from 'lucide-react';
+import { LoaderCircle, RefreshCw, BookMarked, Check, X } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import SettingsSection from '../components/SettingsSection';
 import Select from '../components/Select';
 import InputComponent from '../components/InputComponent';
 import { SettingsType } from '../types';
-
-const predefinedContextSizes = [32768, 65536, 131072, 262144];
+import {
+  createPreset,
+  loadPresets,
+  savePresets,
+  PRESET_MAX,
+  PRESET_NAME_MAX,
+  PREDEFINED_CONTEXT_SIZES,
+} from '@/lib/models/presets';
 
 export default function ModelSettingsSection({
   config,
@@ -63,6 +69,35 @@ export default function ModelSettingsSection({
   ) => void;
 }) {
   const [refreshing, setRefreshing] = useState(false);
+  const [savingPresetName, setSavingPresetName] = useState(false);
+  const [presetNameInput, setPresetNameInput] = useState('');
+
+  const handleSaveCurrentAsPreset = () => {
+    const trimmed = presetNameInput.trim().slice(0, PRESET_NAME_MAX);
+    if (!trimmed) {
+      toast.error('Preset name cannot be empty');
+      return;
+    }
+    const existing = loadPresets();
+    if (existing.length >= PRESET_MAX) {
+      toast.error(`You can have at most ${PRESET_MAX} presets`);
+      return;
+    }
+    const imageCapable = localStorage.getItem('imageCapable') === 'true';
+    const preset = createPreset({
+      name: trimmed,
+      chatProvider: selectedChatModelProvider ?? '',
+      chatModel: selectedChatModel ?? '',
+      systemProvider: selectedSystemModelProvider ?? '',
+      systemModel: selectedSystemModel ?? '',
+      imageCapable,
+      contextWindowSize,
+    });
+    savePresets([...existing, preset]);
+    setPresetNameInput('');
+    setSavingPresetName(false);
+    toast.success(`Preset "${trimmed}" saved`);
+  };
 
   const handleRefreshModels = async () => {
     try {
@@ -80,6 +115,7 @@ export default function ModelSettingsSection({
   };
 
   const chatModelLabel = selectedChatModel || 'Chat';
+  const canSavePreset = !!selectedChatModel && !!selectedChatModelProvider;
 
   return (
     <SettingsSection
@@ -101,6 +137,65 @@ export default function ModelSettingsSection({
         </button>
       }
     >
+      {/* Save current selection as preset */}
+      <div className="flex items-center gap-2">
+        {savingPresetName ? (
+          <div className="flex items-center gap-2 w-full">
+            <input
+              autoFocus
+              type="text"
+              aria-label="Preset name"
+              maxLength={PRESET_NAME_MAX}
+              placeholder="Preset name…"
+              value={presetNameInput}
+              onChange={(e) => setPresetNameInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSaveCurrentAsPreset();
+                if (e.key === 'Escape') {
+                  setSavingPresetName(false);
+                  setPresetNameInput('');
+                }
+              }}
+              className="flex-1 text-xs bg-bg border border-surface-2 rounded-control px-2 py-1.5 text-fg outline-none focus:border-accent"
+            />
+            <button
+              type="button"
+              onClick={handleSaveCurrentAsPreset}
+              className="text-xs px-2.5 py-1.5 rounded-control bg-accent text-accent-fg hover:bg-accent-700 transition-colors duration-150 flex items-center gap-1"
+            >
+              <Check size={12} />
+              Save
+            </button>
+            <button
+              type="button"
+              aria-label="Cancel"
+              onClick={() => {
+                setSavingPresetName(false);
+                setPresetNameInput('');
+              }}
+              className="text-xs px-2 py-1.5 rounded-control bg-surface-2 text-fg/70 hover:bg-surface-2/80 transition-colors duration-150"
+            >
+              <X size={12} />
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            disabled={!canSavePreset}
+            onClick={() => setSavingPresetName(true)}
+            title={
+              canSavePreset
+                ? 'Save current model selection as a preset'
+                : 'Select a chat model first'
+            }
+            className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-control border border-surface-2 text-fg/60 hover:bg-surface-2 hover:text-fg transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <BookMarked size={12} />
+            Save current as preset
+          </button>
+        )}
+      </div>
+
       {config.chatModelProviders && (
         <div className="flex flex-col space-y-4">
           <div className="flex flex-col space-y-1">
@@ -218,7 +313,7 @@ export default function ModelSettingsSection({
                   }
                 }}
                 options={[
-                  ...predefinedContextSizes.map((size) => ({
+                  ...PREDEFINED_CONTEXT_SIZES.map((size) => ({
                     value: size.toString(),
                     label: `${size.toLocaleString()} tokens`,
                   })),

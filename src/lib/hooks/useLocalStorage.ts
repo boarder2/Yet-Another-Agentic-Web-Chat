@@ -47,10 +47,31 @@ export const writeLocalStorage = (key: string, value: string | null) => {
   notify(key);
 };
 
+/**
+ * Write multiple localStorage keys atomically and fire a single wildcard
+ * notification so all subscribers update in one React render cycle instead of
+ * one render per key.
+ */
+export const writeLocalStorageBatch = (entries: [string, string | null][]) => {
+  for (const [key, value] of entries) {
+    try {
+      if (value === null) localStorage.removeItem(key);
+      else localStorage.setItem(key, value);
+    } catch {
+      // ignore quota / access errors
+    }
+  }
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(
+    new CustomEvent<ChangeDetail>(EVENT, { detail: { key: '*' } }),
+  );
+};
+
 const makeSubscribe = (key: string) => (cb: () => void) => {
   const handleCustom = (e: Event) => {
     const detail = (e as CustomEvent<ChangeDetail>).detail;
-    if (!detail || detail.key === key) cb();
+    // '*' is a wildcard fired by writeLocalStorageBatch
+    if (!detail || detail.key === key || detail.key === '*') cb();
   };
   const handleStorage = (e: StorageEvent) => {
     if (e.key === null || e.key === key) cb();

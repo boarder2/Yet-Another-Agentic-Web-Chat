@@ -20,7 +20,7 @@ Stack: Next.js (App Router) + React 19 + Tailwind 4, TanStack Query (client data
 
 ## Settings
 
-`config.toml` holds API keys, DB, search, similarity. Settings page also exposes Chat Model, System Model (`systemModelProvider`, `systemModel` in localStorage), and Link System to Chat toggle (`linkSystemToChat`, default ON). **Model Presets** (`modelPresets` in localStorage) let users save named bundles of chat+system provider/model, vision, and context window — accessible from the chat `ModelConfigurator` dialog (quick switcher) and Settings → Model Presets (full CRUD). No DB or server changes.
+`config.toml` holds API keys, DB, search, similarity. **All model selection uses one controlled component, `ModelPicker` (`src/components/models/`)** — chat/system/vision/context-window fields are optional per caller, and it owns no persistence (caller persists `onChange`). The chat model, Link-System-to-Chat toggle, vision, and context window are configured from the **chat input's `ModelConfigurator` dialog** (localStorage `SELECTION_KEYS`). Settings → **Model Settings** is now minimal: only the server-side **system** model (`systemModelProvider`/`systemModel`, used by background tasks & memory processing), the embedding model, and custom_openai credentials — no chat/link/context controls. **Model Presets** (`modelPresets` in localStorage) are named bundles of chat+system provider/model, vision, and context window — applied/saved from the chat dialog (`PresetBar`) and managed in Settings → Model Presets (full CRUD). No DB or server changes.
 
 ## Conventions
 

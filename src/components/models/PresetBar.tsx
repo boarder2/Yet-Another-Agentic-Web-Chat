@@ -1,5 +1,3 @@
-'use client';
-
 import { useRef, useState } from 'react';
 import { ChevronDown, ExternalLink, BookMarked } from 'lucide-react';
 import {
@@ -12,23 +10,19 @@ import { Fragment } from 'react';
 import { toast } from 'sonner';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
-import {
-  useLocalStorageBoolean,
-  useLocalStorageString,
-  useLocalStorageJSON,
-} from '@/lib/hooks/useLocalStorage';
+import { useLocalStorageJSON } from '@/lib/hooks/useLocalStorage';
 import {
   PRESETS_KEY,
-  SELECTION_KEYS,
   PRESET_MAX,
   PRESET_NAME_MAX,
   type ModelPreset,
   type ModelPresetList,
-  type ActiveSelection,
+  type ModelSelection,
   createPreset,
   findMatchingPreset,
-  applyPresetToStorage,
-  captureCurrentSelection,
+  presetToSelection,
+  selectionToActiveSelection,
+  selectionToPresetInput,
   isPresetAvailable,
 } from '@/lib/models/presets';
 import { useModels } from '@/lib/hooks/api/useModels';
@@ -36,51 +30,25 @@ import PresetOption from './PresetOption';
 
 const EMPTY_PRESETS: ModelPresetList = [];
 
-function buildActiveSelection(
-  chatProvider: string,
-  chatModel: string,
-  systemProvider: string,
-  systemModel: string,
-  imageCapable: boolean,
-  contextWindowSize: string,
-): ActiveSelection {
-  const cwParsed = parseInt(contextWindowSize, 10);
-  return {
-    chatProvider,
-    chatModel,
-    systemProvider,
-    systemModel,
-    imageCapable,
-    contextWindowSize: isNaN(cwParsed) ? 32768 : cwParsed,
-  };
-}
-
-export default function PresetSwitcher({
-  currentChatModel,
+/**
+ * Controlled preset switcher used by the unified `ModelPicker`. Applying a
+ * preset emits a `ModelSelection` via `onApply` so non-localStorage callers
+ * (scheduled tasks, widgets) can persist however they like; saving captures the
+ * current `value`. `mode` controls whether the "Manage" link is shown ('full',
+ * for chat) or omitted ('apply-save', for forms).
+ */
+export default function PresetBar({
+  value,
+  onApply,
+  mode,
 }: {
-  currentChatModel: { provider: string; model: string } | null;
+  value: ModelSelection;
+  onApply: (sel: ModelSelection) => void;
+  mode: 'full' | 'apply-save';
 }) {
   const [presets, setPresetsState] = useLocalStorageJSON<ModelPresetList>(
     PRESETS_KEY,
     EMPTY_PRESETS,
-  );
-  const [chatProvider] = useLocalStorageString(SELECTION_KEYS.chatProvider, '');
-  const [chatModelKey] = useLocalStorageString(SELECTION_KEYS.chatModel, '');
-  const [systemProvider] = useLocalStorageString(
-    SELECTION_KEYS.systemProvider,
-    '',
-  );
-  const [systemModelKey] = useLocalStorageString(
-    SELECTION_KEYS.systemModel,
-    '',
-  );
-  const [imageCapable] = useLocalStorageBoolean(
-    SELECTION_KEYS.imageCapable,
-    false,
-  );
-  const [contextWindowSizeStr] = useLocalStorageString(
-    SELECTION_KEYS.contextWindowSize,
-    '32768',
   );
 
   const { data: modelsData } = useModels();
@@ -93,15 +61,10 @@ export default function PresetSwitcher({
   const [nameInput, setNameInput] = useState('');
   const savingRef = useRef(false);
 
-  const activeSelection = buildActiveSelection(
-    chatProvider,
-    chatModelKey,
-    systemProvider,
-    systemModelKey,
-    imageCapable,
-    contextWindowSizeStr,
+  const matchingPreset = findMatchingPreset(
+    presets,
+    selectionToActiveSelection(value),
   );
-  const matchingPreset = findMatchingPreset(presets, activeSelection);
 
   const saveNewPreset = (close: () => void) => {
     if (savingRef.current) return;
@@ -117,18 +80,8 @@ export default function PresetSwitcher({
       savingRef.current = false;
       return;
     }
-    const sel = captureCurrentSelection();
-    const newPreset = createPreset({
-      name: trimmedName,
-      chatProvider: sel.chatProvider,
-      chatModel: sel.chatModel,
-      systemProvider: sel.systemProvider,
-      systemModel: sel.systemModel,
-      imageCapable: sel.imageCapable,
-      contextWindowSize: sel.contextWindowSize,
-    });
-    const updated = [...presets, newPreset];
-    setPresetsState(updated);
+    const newPreset = createPreset(selectionToPresetInput(value, trimmedName));
+    setPresetsState([...presets, newPreset]);
     setNameInput('');
     setNamingPreset(false);
     toast.success(`Preset "${trimmedName}" saved`);
@@ -137,12 +90,12 @@ export default function PresetSwitcher({
   };
 
   const applyPreset = (preset: ModelPreset, close: () => void) => {
-    applyPresetToStorage(preset);
+    onApply(presetToSelection(preset));
     toast.success(`Applied preset "${preset.name}"`);
     close();
   };
 
-  const canSave = !!currentChatModel;
+  const canSave = !!value.chatModel;
 
   return (
     <div className="flex items-center justify-between">
@@ -256,14 +209,16 @@ export default function PresetSwitcher({
                         >
                           Save current…
                         </button>
-                        <Link
-                          href="/settings?section=model-presets"
-                          onClick={() => close()}
-                          className="flex items-center gap-1 text-xs text-fg/40 hover:text-fg/70 transition-colors duration-150"
-                        >
-                          Manage
-                          <ExternalLink size={10} />
-                        </Link>
+                        {mode === 'full' && (
+                          <Link
+                            href="/settings?section=model-presets"
+                            onClick={() => close()}
+                            className="flex items-center gap-1 text-xs text-fg/40 hover:text-fg/70 transition-colors duration-150"
+                          >
+                            Manage
+                            <ExternalLink size={10} />
+                          </Link>
+                        )}
                       </>
                     )}
                   </div>

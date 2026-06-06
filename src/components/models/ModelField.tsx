@@ -31,7 +31,13 @@ interface ProviderModelMap {
   };
 }
 
-const ModelSelector = ({
+/**
+ * Grouped-by-provider model picker for a single role (chat or system). This is
+ * the shared primitive behind the unified `ModelPicker` and every surface that
+ * needs to choose one model. It is fully controlled via `selectedModel` /
+ * `setSelectedModel` and owns no persistence.
+ */
+const ModelField = ({
   selectedModel,
   setSelectedModel,
   truncateModelName = true,
@@ -339,4 +345,4 @@ const ModelSelector = ({
   );
 };
 
-export default ModelSelector;
+export default ModelField;

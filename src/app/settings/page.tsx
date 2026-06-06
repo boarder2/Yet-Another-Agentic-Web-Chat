@@ -66,7 +66,7 @@ export default function SettingsPage() {
   const [selectedEmbeddingModel, setSelectedEmbeddingModel] = useState<
     string | null
   >(null);
-  const [linkSystemToChat, setLinkSystemToChat] = useState<boolean>(true);
+  const [, setLinkSystemToChat] = useState<boolean>(true);
   const [isLoading, setIsLoading] = useState(true);
   const [automaticSuggestions, setAutomaticSuggestions] = useState(true);
   const [personalizationLocation, setPersonalizationLocation] = useState('');
@@ -77,7 +77,7 @@ export default function SettingsPage() {
     useState(false);
   const [savingStates, setSavingStates] = useState<Record<string, boolean>>({});
   const [contextWindowSize, setContextWindowSize] = useState(32768);
-  const [isCustomContextWindow, setIsCustomContextWindow] = useState(false);
+  const [, setIsCustomContextWindow] = useState(false);
 
   const [privateSessionDurationMinutes, setPrivateSessionDurationMinutes] =
     useState(1440);
@@ -917,20 +917,13 @@ export default function SettingsPage() {
                 {activeSection === 'model-settings' && (
                   <ModelSettingsSection
                     config={config}
-                    selectedChatModelProvider={selectedChatModelProvider}
-                    selectedChatModel={selectedChatModel}
                     selectedSystemModelProvider={selectedSystemModelProvider}
                     selectedSystemModel={selectedSystemModel}
                     selectedEmbeddingModelProvider={
                       selectedEmbeddingModelProvider
                     }
                     selectedEmbeddingModel={selectedEmbeddingModel}
-                    linkSystemToChat={linkSystemToChat}
-                    contextWindowSize={contextWindowSize}
-                    isCustomContextWindow={isCustomContextWindow}
                     savingStates={savingStates}
-                    setSelectedChatModelProvider={setSelectedChatModelProvider}
-                    setSelectedChatModel={setSelectedChatModel}
                     setSelectedSystemModelProvider={
                       setSelectedSystemModelProvider
                     }
@@ -939,9 +932,6 @@ export default function SettingsPage() {
                       setSelectedEmbeddingModelProvider
                     }
                     setSelectedEmbeddingModel={setSelectedEmbeddingModel}
-                    setLinkSystemToChat={setLinkSystemToChat}
-                    setContextWindowSize={setContextWindowSize}
-                    setIsCustomContextWindow={setIsCustomContextWindow}
                     setConfig={setConfig}
                     saveConfig={saveConfig}
                   />

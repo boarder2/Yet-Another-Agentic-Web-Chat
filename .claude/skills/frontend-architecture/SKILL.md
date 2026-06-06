@@ -36,7 +36,7 @@ app/layout.tsx
                     ├── Attach button (MessageInputActions/Attach.tsx)
                     ├── ContextIndicator (MessageInputActions/ContextIndicator.tsx)
                     ├── ModelConfigurator (MessageInputActions/ModelConfigurator.tsx)
-                    │   └── PresetSwitcher (MessageInputActions/PresetSwitcher.tsx)
+                    │   └── ModelPicker (components/models/ModelPicker.tsx → PresetBar/ModelField/...)
                     ├── SystemPromptSelector (MessageInputActions/SystemPromptSelector.tsx)
                     ├── MethodologySelector (MessageInputActions/MethodologySelector.tsx)
                     └── PersonalizationPicker (src/components/PersonalizationPicker.tsx)
@@ -97,6 +97,37 @@ Model selections are stored in `localStorage`, not React state:
 mount effect), so changes made anywhere — including applying a preset — reflect
 immediately. Anything writing these keys outside the hooks must go through
 `writeLocalStorage` / `writeLocalStorageBatch` so subscribers are notified.
+`ModelConfigurator` also keeps the stored system model mirrored to chat (via a
+storage-only effect) whenever `linkSystemToChat` is on, because chat requests
+read `systemModel` from localStorage and do **not** re-check the link flag.
+
+### Unified `ModelPicker` (`src/components/models/`)
+
+`ModelPicker` is the **single controlled** model-selection component used
+everywhere models are picked. It owns **no persistence** — caller passes
+`value: ModelSelection` and persists `onChange` itself.
+
+```tsx
+<ModelPicker value={selection} onChange={persist}
+  fields={{ system?, vision?, contextWindow? }}   // each optional, default off
+  presets={'full' | 'apply-save' | 'none'}        // default 'none'
+  layout={'inline' | 'dialog'} />                 // panel opens below | above
+```
+
+It enforces link behavior (mirror chat→system when linked, disable system
+field) and emits a complete `ModelSelection` on every change. Sub-components in
+the same dir: `ModelField` (grouped-by-provider popover for one role — replaces
+the old `ModelSelector`), `LinkToggle`, `VisionToggle`, `ContextWindowField`,
+`PresetBar` (controlled preset switch + "Save current…"), `PresetOption`.
+Embedding models are **out of scope** for `ModelPicker` (settings + scheduled
+tasks keep their own embedding `<Select>` / `EmbeddingModelSelector`).
+
+Callers: chat `ModelConfigurator` (`fields={system,vision,contextWindow}`,
+`presets=full`, `layout=dialog`); `ModelPresetsSection` per-preset editor
+(`fields` all, `presets=none`); `ScheduledTaskForm` (`fields={system}`,
+`presets=apply-save`); `DefaultSearchSection` + dashboard `WidgetConfigModal`
+(chat-only, `presets=none`). `ModelSettingsSection` uses `ModelField` directly
+for its minimal **system** picker.
 
 ### Model presets (localStorage `modelPresets`)
 
@@ -104,19 +135,21 @@ Named bundles of chat+system provider/model, vision, and context window, stored
 as JSON under `modelPresets`. Pure helpers live in `src/lib/models/presets.ts`
 (`loadPresets`, `savePresets`, `createPreset`, `findMatchingPreset`,
 `applyPresetToStorage`, `captureCurrentSelection`, `isPresetAvailable`,
-`presetSummary`, plus `SELECTION_KEYS` / `PRESETS_KEY` / `PREDEFINED_CONTEXT_SIZES`
-constants). There is **no stored "active preset" pointer** — the active preset is
-derived by matching the current selection via `findMatchingPreset`.
+`presetSummary`, plus the unified-picker helpers `presetToSelection`,
+`selectionToPresetInput`, `selectionToActiveSelection`, `writeSelectionToStorage`,
+and `SELECTION_KEYS` / `PRESETS_KEY` / `PREDEFINED_CONTEXT_SIZES` /
+`DEFAULT_CONTEXT_WINDOW` constants). There is **no stored "active preset"
+pointer** — the active preset is derived by matching the current selection via
+`findMatchingPreset`.
 
 Surfaces:
 
-- **`PresetSwitcher`** — quick switch + "Save current…" inside the
-  `ModelConfigurator` dialog. Applies via `applyPresetToStorage` (localStorage
-  only; derives `linkSystemToChat = chat===system`).
+- **`PresetBar`** (inside `ModelPicker`) — quick switch + "Save current…".
+  Apply emits a `ModelSelection` via `presetToSelection` so non-localStorage
+  callers work; save reads the current `value`. `mode=full` shows a "Manage"
+  link to settings; `mode=apply-save` omits it.
 - **`ModelPresetsSection`** (Settings → Model Presets) — full CRUD + up/down
-  reorder. Apply mirrors the settings write path (settings state + `saveConfig`
-  - `applyPresetToStorage`).
-- **`ModelSettingsSection`** — a "Save current as preset" shortcut.
+  reorder; each editor body is a `ModelPicker`.
 
 Personalization is stored in `localStorage` and accessed via `useLocalStorageBoolean`/`useLocalStorageString` hooks from `src/lib/hooks/useLocalStorage.ts`:
 
@@ -203,36 +236,37 @@ border-surface-2 — borders
 
 ## Key Files Reference
 
-| File                                                         | Purpose                                                                |
-| ------------------------------------------------------------ | ---------------------------------------------------------------------- |
-| `src/components/ChatWindow.tsx`                              | Main orchestrator — state, streaming, message send (~3400 lines)       |
-| `src/components/NewChatWindow.tsx`                           | Wrapper that resets ChatWindow key on return to root path              |
-| `src/components/Chat.tsx`                                    | Message list rendering, scroll management, approval widgets            |
-| `src/components/ChatActions.tsx`                             | Per-chat header actions (pin, private, export, delete)                 |
-| `src/components/MessageBox.tsx`                              | Individual message display (user + assistant + compaction)             |
-| `src/components/MessageInput.tsx`                            | Text input, image paste, file attach, skill autocomplete               |
-| `src/components/MarkdownRenderer.tsx`                        | Markdown→JSX with ToolCall/SubagentExecution/Chart                     |
-| `src/components/EmptyChat.tsx`                               | Initial empty state with focus mode                                    |
-| `src/components/TodoWidget.tsx`                              | Research progress bar (transient)                                      |
-| `src/components/ThinkBox.tsx`                                | Collapsible reasoning/thinking block                                   |
-| `src/components/ChartWidget.tsx`                             | Chart rendering (uses ChartSpec from ChartSpecContext)                 |
-| `src/components/CompactionIndicator.tsx`                     | Visual marker between compacted message blocks                         |
-| `src/components/Sidebar.tsx`                                 | Icon-rail navigation (uses TanStack Query for active runs/badges)      |
-| `src/components/Layout.tsx`                                  | Content width container (not a full shell)                             |
-| `src/components/CodeExecution.tsx`                           | Code execution approval widget types and UI                            |
-| `src/components/UserQuestionPrompt.tsx`                      | Agent pause-for-input question widget                                  |
-| `src/components/WorkspaceEditApproval.tsx`                   | Workspace file edit approval widget                                    |
-| `src/components/SkillEditApproval.tsx`                       | Skill file edit approval widget                                        |
-| `src/components/MessageInputActions/Focus.tsx`               | Focus mode selector buttons                                            |
-| `src/components/MessageInputActions/ModelConfigurator.tsx`   | Inline model picker (reactive localStorage selection)                  |
-| `src/components/MessageInputActions/PresetSwitcher.tsx`      | Model preset quick switch + save (inside ModelConfigurator)            |
-| `src/components/MessageInputActions/MethodologySelector.tsx` | Methodology (deep research style) selector                             |
-| `src/components/MessageActions/SubagentExecution.tsx`        | Deep research UI panel                                                 |
-| `src/components/MessageActions/ModelInfo.tsx`                | Per-response model stats display                                       |
-| `src/lib/hooks/api/`                                         | TanStack Query hooks for all server state                              |
-| `src/lib/api/client.ts`                                      | `apiFetch` / `ApiError` shared fetch helper                            |
-| `src/lib/api/keys.ts`                                        | `qk` query key constants                                               |
-| `src/lib/chart/ChartSpecContext.tsx`                         | React context for chart specs (chartId → ChartSpec)                    |
-| `src/lib/hooks/useLocalStorage.ts`                           | `useLocalStorage*` hooks, `writeLocalStorage`/`writeLocalStorageBatch` |
-| `src/lib/models/presets.ts`                                  | Model preset types + pure helpers + selection key constants            |
-| `src/app/settings/sections/ModelPresetsSection.tsx`          | Settings model preset CRUD + reorder                                   |
+| File                                                         | Purpose                                                                  |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| `src/components/ChatWindow.tsx`                              | Main orchestrator — state, streaming, message send (~3400 lines)         |
+| `src/components/NewChatWindow.tsx`                           | Wrapper that resets ChatWindow key on return to root path                |
+| `src/components/Chat.tsx`                                    | Message list rendering, scroll management, approval widgets              |
+| `src/components/ChatActions.tsx`                             | Per-chat header actions (pin, private, export, delete)                   |
+| `src/components/MessageBox.tsx`                              | Individual message display (user + assistant + compaction)               |
+| `src/components/MessageInput.tsx`                            | Text input, image paste, file attach, skill autocomplete                 |
+| `src/components/MarkdownRenderer.tsx`                        | Markdown→JSX with ToolCall/SubagentExecution/Chart                       |
+| `src/components/EmptyChat.tsx`                               | Initial empty state with focus mode                                      |
+| `src/components/TodoWidget.tsx`                              | Research progress bar (transient)                                        |
+| `src/components/ThinkBox.tsx`                                | Collapsible reasoning/thinking block                                     |
+| `src/components/ChartWidget.tsx`                             | Chart rendering (uses ChartSpec from ChartSpecContext)                   |
+| `src/components/CompactionIndicator.tsx`                     | Visual marker between compacted message blocks                           |
+| `src/components/Sidebar.tsx`                                 | Icon-rail navigation (uses TanStack Query for active runs/badges)        |
+| `src/components/Layout.tsx`                                  | Content width container (not a full shell)                               |
+| `src/components/CodeExecution.tsx`                           | Code execution approval widget types and UI                              |
+| `src/components/UserQuestionPrompt.tsx`                      | Agent pause-for-input question widget                                    |
+| `src/components/WorkspaceEditApproval.tsx`                   | Workspace file edit approval widget                                      |
+| `src/components/SkillEditApproval.tsx`                       | Skill file edit approval widget                                          |
+| `src/components/MessageInputActions/Focus.tsx`               | Focus mode selector buttons                                              |
+| `src/components/MessageInputActions/ModelConfigurator.tsx`   | Chat model trigger + dialog; wraps `ModelPicker` (reactive localStorage) |
+| `src/components/models/ModelPicker.tsx`                      | Unified controlled model picker (used everywhere)                        |
+| `src/components/models/` (ModelField, PresetBar, ...)        | Picker sub-components (field popover, preset bar, toggles, ctx window)   |
+| `src/components/MessageInputActions/MethodologySelector.tsx` | Methodology (deep research style) selector                               |
+| `src/components/MessageActions/SubagentExecution.tsx`        | Deep research UI panel                                                   |
+| `src/components/MessageActions/ModelInfo.tsx`                | Per-response model stats display                                         |
+| `src/lib/hooks/api/`                                         | TanStack Query hooks for all server state                                |
+| `src/lib/api/client.ts`                                      | `apiFetch` / `ApiError` shared fetch helper                              |
+| `src/lib/api/keys.ts`                                        | `qk` query key constants                                                 |
+| `src/lib/chart/ChartSpecContext.tsx`                         | React context for chart specs (chartId → ChartSpec)                      |
+| `src/lib/hooks/useLocalStorage.ts`                           | `useLocalStorage*` hooks, `writeLocalStorage`/`writeLocalStorageBatch`   |
+| `src/lib/models/presets.ts`                                  | Model preset types + pure helpers + selection key constants              |
+| `src/app/settings/sections/ModelPresetsSection.tsx`          | Settings model preset CRUD + reorder                                     |

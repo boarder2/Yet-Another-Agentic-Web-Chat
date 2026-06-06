@@ -7,6 +7,10 @@ description: Use when working on image upload/display, the uploads API, MessageI
 
 Users can attach images to chat messages via clipboard paste or file picker. Images are stored on disk in the `uploads/` directory (not in SQLite) to avoid database bloat. The feature works across all focus modes.
 
+## Vision gating (`imageCapable`)
+
+Image attach is gated by the `imageCapable` localStorage flag (read reactively in `ChatWindow` via `useLocalStorageBoolean('imageCapable', ...)`; sent as `payload.imageCapable`). The toggle lives in the chat **`ModelConfigurator`** dialog, rendered by the unified `ModelPicker`'s `VisionToggle` (`src/components/models/VisionToggle.tsx`) when `fields.vision` is set. Presets also carry `imageCapable`. The flag uses key `SELECTION_KEYS.imageCapable` — write via `writeLocalStorage`/`writeSelectionToStorage` so subscribers update.
+
 ## Data Flow
 
 1. User pastes/picks image(s) → `POST /api/uploads/images` → saved to `uploads/` with random hex filename → returns `{ images: [{ imageId, fileName, mimeType }] }`

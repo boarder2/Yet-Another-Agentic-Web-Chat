@@ -11,9 +11,10 @@ import {
 import { X, Plus, Trash2, Play, Save, Brain } from 'lucide-react';
 import { Fragment, useState, useEffect } from 'react';
 import MarkdownRenderer from '@/components/MarkdownRenderer';
-import ModelSelector from '@/components/MessageInputActions/ModelSelector';
+import ModelPicker from '@/components/models/ModelPicker';
 import ToolSelector from '@/components/MessageInputActions/ToolSelector';
 import { WidgetConfig, Source } from '@/lib/types/widget';
+import type { ModelSelection } from '@/lib/models/presets';
 
 // Helper function to replace date/time variables in prompts on the client side
 const replaceDateTimeVariables = (prompt: string): string => {
@@ -357,11 +358,22 @@ const WidgetConfigModal = ({
                       <label className="block text-sm font-medium text-fg mb-2">
                         Model & Provider
                       </label>
-                      <ModelSelector
-                        selectedModel={selectedModel}
-                        setSelectedModel={setSelectedModel}
-                        truncateModelName={false}
-                        showModelName={true}
+                      <ModelPicker
+                        value={
+                          {
+                            chatProvider: selectedModel?.provider ?? '',
+                            chatModel: selectedModel?.model ?? '',
+                            systemProvider: selectedModel?.provider ?? '',
+                            systemModel: selectedModel?.model ?? '',
+                            linkSystemToChat: true,
+                          } satisfies ModelSelection
+                        }
+                        onChange={(next) =>
+                          setSelectedModel({
+                            provider: next.chatProvider,
+                            model: next.chatModel,
+                          })
+                        }
                       />
                       <p className="text-xs text-fg/60 mt-1">
                         Select the AI model and provider to process your widget

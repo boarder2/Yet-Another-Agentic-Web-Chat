@@ -4,8 +4,8 @@ import { type ModelPreset, presetSummary } from '@/lib/models/presets';
 
 /**
  * Compact, clickable preset row used in the popover preset switchers (the chat
- * ModelConfigurator button and the in-dialog PresetSwitcher). The active preset
- * is marked with the left accent bar; unavailable presets show a warning badge.
+ * ModelConfigurator button and the in-dialog PresetBar). The active preset is
+ * marked with the left accent bar; unavailable presets show a warning badge.
  * The richer Settings → Model Presets list uses its own layout.
  */
 export default function PresetOption({

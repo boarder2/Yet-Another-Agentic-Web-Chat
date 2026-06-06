@@ -7,7 +7,8 @@ import {
   describeCron,
 } from '@/lib/scheduledTasks/presets';
 import type { Preset } from '@/lib/scheduledTasks/presets';
-import ModelSelector from '@/components/MessageInputActions/ModelSelector';
+import ModelPicker from '@/components/models/ModelPicker';
+import type { ModelSelection } from '@/lib/models/presets';
 import { ArrowLeft, CalendarClock, Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -72,6 +73,41 @@ export default function TaskForm({
 
   const preset = cronToPreset(form.cronExpression);
   const [scheduleKind, setScheduleKind] = useState<Preset['kind']>(preset.kind);
+
+  // Whether the system model is linked to (mirrors) the chat model. A task with
+  // no explicit system model — or one equal to the chat model — is "linked".
+  const [linkSystem, setLinkSystem] = useState<boolean>(
+    !initialData?.systemModel ||
+      (initialData.systemModel.provider === initialData.chatModel?.provider &&
+        initialData.systemModel.name === initialData.chatModel?.name),
+  );
+
+  const modelValue: ModelSelection = {
+    chatProvider: form.chatModel?.provider ?? '',
+    chatModel: form.chatModel?.name ?? '',
+    systemProvider:
+      form.systemModel?.provider ?? form.chatModel?.provider ?? '',
+    systemModel: form.systemModel?.name ?? form.chatModel?.name ?? '',
+    linkSystemToChat: linkSystem,
+  };
+
+  const handleModelChange = (next: ModelSelection) => {
+    setLinkSystem(next.linkSystemToChat);
+    setForm((prev) => ({
+      ...prev,
+      chatModel:
+        next.chatProvider && next.chatModel
+          ? { provider: next.chatProvider, name: next.chatModel }
+          : null,
+      // When linked, leave systemModel unset so the task defaults to the chat
+      // model server-side.
+      systemModel: next.linkSystemToChat
+        ? null
+        : next.systemProvider && next.systemModel
+          ? { provider: next.systemProvider, name: next.systemModel }
+          : null,
+    }));
+  };
 
   useEffect(() => {
     fetch('/api/system-prompts')
@@ -528,51 +564,14 @@ export default function TaskForm({
           />
         </div>
 
-        {/* Chat Model */}
+        {/* Chat & System Models */}
         <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-fg/70">Chat Model</label>
-          <ModelSelector
-            selectedModel={
-              form.chatModel
-                ? {
-                    provider: form.chatModel.provider,
-                    model: form.chatModel.name,
-                  }
-                : null
-            }
-            setSelectedModel={(m) =>
-              updateField('chatModel', {
-                provider: m.provider,
-                name: m.model,
-              })
-            }
-            truncateModelName={false}
-            role="chat"
-          />
-        </div>
-
-        {/* System Model */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-fg/70">
-            System Model (optional, defaults to chat model)
-          </label>
-          <ModelSelector
-            selectedModel={
-              form.systemModel
-                ? {
-                    provider: form.systemModel.provider,
-                    model: form.systemModel.name,
-                  }
-                : null
-            }
-            setSelectedModel={(m) =>
-              updateField('systemModel', {
-                provider: m.provider,
-                name: m.model,
-              })
-            }
-            truncateModelName={false}
-            role="system"
+          <label className="text-sm font-medium text-fg/70">Models</label>
+          <ModelPicker
+            value={modelValue}
+            onChange={handleModelChange}
+            fields={{ system: true }}
+            presets="apply-save"
           />
         </div>
 

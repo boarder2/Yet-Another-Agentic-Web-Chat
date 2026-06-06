@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Cpu, Link, SlidersHorizontal } from 'lucide-react';
+import { Cpu, SlidersHorizontal } from 'lucide-react';
 import {
   Dialog,
   DialogPanel,
@@ -10,29 +10,31 @@ import {
   TransitionChild,
 } from '@headlessui/react';
 import { Fragment } from 'react';
-import ModelSelector from './ModelSelector';
-import PresetSwitcher from './PresetSwitcher';
 import { cn } from '@/lib/utils';
 import {
   useLocalStorageBoolean,
   useLocalStorageString,
   useLocalStorageJSON,
   writeLocalStorage,
+  writeLocalStorageBatch,
 } from '@/lib/hooks/useLocalStorage';
 import { useModels } from '@/lib/hooks/api/useModels';
 import {
   PRESETS_KEY,
   SELECTION_KEYS,
+  DEFAULT_CONTEXT_WINDOW,
   type ModelPreset,
   type ModelPresetList,
+  type ModelSelection,
   applyPresetToStorage,
+  writeSelectionToStorage,
   findMatchingPreset,
+  selectionToActiveSelection,
   isPresetAvailable,
 } from '@/lib/models/presets';
 import { toast } from 'sonner';
-import PresetOption from './PresetOption';
-
-type SelectedModel = { provider: string; model: string } | null;
+import ModelPicker from '@/components/models/ModelPicker';
+import PresetOption from '@/components/models/PresetOption';
 
 const EMPTY_PRESETS: ModelPresetList = [];
 
@@ -46,33 +48,24 @@ export default function ModelConfigurator({
   const [open, setOpen] = useState(false);
 
   // Reactive localStorage reads — updates immediately when presets apply
-  const [chatProvider, setChatProvider] = useLocalStorageString(
-    SELECTION_KEYS.chatProvider,
-    '',
-  );
-  const [chatModelKey, setChatModelKey] = useLocalStorageString(
-    SELECTION_KEYS.chatModel,
-    '',
-  );
-  const [systemProvider, setSystemProvider] = useLocalStorageString(
+  const [chatProvider] = useLocalStorageString(SELECTION_KEYS.chatProvider, '');
+  const [chatModelKey] = useLocalStorageString(SELECTION_KEYS.chatModel, '');
+  const [systemProvider] = useLocalStorageString(
     SELECTION_KEYS.systemProvider,
     '',
   );
-  const [systemModelKey, setSystemModelKey] = useLocalStorageString(
+  const [systemModelKey] = useLocalStorageString(
     SELECTION_KEYS.systemModel,
     '',
   );
-  const [linkSystemToChat, setLinkSystemToChat] = useLocalStorageBoolean(
-    SELECTION_KEYS.link,
-    true,
-  );
-  const [imageCapable, setImageCapable] = useLocalStorageBoolean(
+  const [linkSystemToChat] = useLocalStorageBoolean(SELECTION_KEYS.link, true);
+  const [imageCapable] = useLocalStorageBoolean(
     SELECTION_KEYS.imageCapable,
     false,
   );
   const [contextWindowSizeStr] = useLocalStorageString(
     SELECTION_KEYS.contextWindowSize,
-    '32768',
+    String(DEFAULT_CONTEXT_WINDOW),
   );
   const [presets] = useLocalStorageJSON<ModelPresetList>(
     PRESETS_KEY,
@@ -85,18 +78,20 @@ export default function ModelConfigurator({
     Record<string, { displayName: string }>
   >;
 
-  // Prevent post-mount effects from using pre-hydration default values
-  const [hydrated, setHydrated] = useState(false);
+  const cwParsed = parseInt(contextWindowSizeStr, 10);
+  const contextWindowSize = isNaN(cwParsed) ? DEFAULT_CONTEXT_WINDOW : cwParsed;
 
-  const chatModel: SelectedModel =
-    chatProvider && chatModelKey
-      ? { provider: chatProvider, model: chatModelKey }
-      : null;
-
-  const systemModel: SelectedModel =
-    systemProvider && systemModelKey
-      ? { provider: systemProvider, model: systemModelKey }
-      : null;
+  // Controlled value for ModelPicker. When linked, mirror system to chat so the
+  // (disabled) system field always reflects the chat model.
+  const value: ModelSelection = {
+    chatProvider,
+    chatModel: chatModelKey,
+    systemProvider: linkSystemToChat ? chatProvider : systemProvider,
+    systemModel: linkSystemToChat ? chatModelKey : systemModelKey,
+    linkSystemToChat,
+    imageCapable,
+    contextWindowSize,
+  };
 
   // Responsive default for showing model text on the main button
   const computedShowName = useMemo(() => {
@@ -106,7 +101,6 @@ export default function ModelConfigurator({
   }, [showModelName]);
 
   // Hydrate defaults once on mount without conflicting with SSR
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     try {
       const linkStored = localStorage.getItem(SELECTION_KEYS.link);
@@ -135,44 +129,34 @@ export default function ModelConfigurator({
         writeLocalStorage(SELECTION_KEYS.systemProvider, storedChatProvider);
         writeLocalStorage(SELECTION_KEYS.systemModel, storedChat);
       }
-
-      setHydrated(true);
     } catch (e) {
       console.error('ModelConfigurator: error loading model selection', e);
-      setHydrated(true);
     }
   }, []);
 
-  // When linking is enabled, mirror system to chat (after hydration)
+  // When linked, keep the stored system model mirrored to chat. Chat requests
+  // read systemModel directly from localStorage and don't re-check the link
+  // flag, and chat-model fallback elsewhere can rewrite the chat keys without
+  // touching system — so enforce consistency here. Writes only when out of sync
+  // (the reactive reads then satisfy the guard, preventing a loop).
   useEffect(() => {
-    if (!hydrated) return;
-    if (linkSystemToChat && chatProvider && chatModelKey) {
-      setSystemProvider(chatProvider);
-      setSystemModelKey(chatModelKey);
+    if (!linkSystemToChat || !chatProvider || !chatModelKey) return;
+    if (systemProvider !== chatProvider || systemModelKey !== chatModelKey) {
+      writeLocalStorageBatch([
+        [SELECTION_KEYS.systemProvider, chatProvider],
+        [SELECTION_KEYS.systemModel, chatModelKey],
+      ]);
     }
   }, [
-    hydrated,
     linkSystemToChat,
     chatProvider,
     chatModelKey,
-    setSystemProvider,
-    setSystemModelKey,
+    systemProvider,
+    systemModelKey,
   ]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
-  const handleSelectChat = (m: { provider: string; model: string }) => {
-    setChatProvider(m.provider);
-    setChatModelKey(m.model);
-    if (linkSystemToChat) {
-      setSystemProvider(m.provider);
-      setSystemModelKey(m.model);
-    }
-  };
-
-  const handleSelectSystem = (m: { provider: string; model: string }) => {
-    if (linkSystemToChat) return;
-    setSystemProvider(m.provider);
-    setSystemModelKey(m.model);
+  const handleChange = (next: ModelSelection) => {
+    writeSelectionToStorage(next);
   };
 
   const mainButtonText = useMemo(() => {
@@ -181,25 +165,20 @@ export default function ModelConfigurator({
     return `Chat: ${chatModelKey} (${chatProvider})`;
   }, [computedShowName, chatModelKey, chatProvider]);
 
-  const matchingPreset = useMemo(() => {
-    const cwParsed = parseInt(contextWindowSizeStr, 10);
-    return findMatchingPreset(presets, {
+  const matchingPreset = useMemo(
+    () => findMatchingPreset(presets, selectionToActiveSelection(value)),
+    // value is derived from the listed primitives; depend on them directly
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      presets,
       chatProvider,
-      chatModel: chatModelKey,
+      chatModelKey,
       systemProvider,
-      systemModel: systemModelKey,
+      systemModelKey,
       imageCapable,
-      contextWindowSize: isNaN(cwParsed) ? 32768 : cwParsed,
-    });
-  }, [
-    presets,
-    chatProvider,
-    chatModelKey,
-    systemProvider,
-    systemModelKey,
-    imageCapable,
-    contextWindowSizeStr,
-  ]);
+      contextWindowSize,
+    ],
+  );
 
   const applyPreset = (preset: ModelPreset, close: () => void) => {
     applyPresetToStorage(preset);
@@ -333,100 +312,14 @@ export default function ModelConfigurator({
                     in sync with Chat.
                   </p>
                 </div>
-                <div className="p-5 space-y-4">
-                  {/* Preset switcher */}
-                  <PresetSwitcher currentChatModel={chatModel} />
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-fg/80">
-                      Link System to Chat
-                    </span>
-                    <label className="inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        aria-label="Link System model to Chat model"
-                        className="sr-only peer"
-                        checked={linkSystemToChat}
-                        onChange={(e) => setLinkSystemToChat(e.target.checked)}
-                      />
-                      <div className="w-10 h-5 bg-surface-2 rounded-pill peer peer-checked:bg-accent transition-colors relative">
-                        <div
-                          className={cn(
-                            'absolute top-0.5 left-0.5 w-4 h-4 rounded-pill bg-bg transition-transform',
-                            linkSystemToChat
-                              ? 'translate-x-5'
-                              : 'translate-x-0',
-                          )}
-                        />
-                      </div>
-                    </label>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-xs text-fg/80">Vision capable</span>
-                      <p className="text-[10px] text-fg/50 mt-0.5">
-                        Allow image attachments for the selected chat model
-                      </p>
-                    </div>
-                    <label className="inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        aria-label="Vision capable"
-                        className="sr-only peer"
-                        checked={imageCapable}
-                        onChange={(e) => setImageCapable(e.target.checked)}
-                      />
-                      <div className="w-10 h-5 bg-surface-2 rounded-pill peer peer-checked:bg-accent transition-colors relative">
-                        <div
-                          className={cn(
-                            'absolute top-0.5 left-0.5 w-4 h-4 rounded-pill bg-bg transition-transform',
-                            imageCapable ? 'translate-x-5' : 'translate-x-0',
-                          )}
-                        />
-                      </div>
-                    </label>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-fg/70">Chat Model</span>
-                      <ModelSelector
-                        role="chat"
-                        selectedModel={chatModel}
-                        setSelectedModel={handleSelectChat}
-                        showModelName
-                        truncateModelName
-                      />
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-fg/70">System Model</span>
-                        {linkSystemToChat && (
-                          <span className="text-[10px] bg-surface px-2 py-0.5 rounded-control border border-surface-2 text-fg/60">
-                            <Link size={14} />
-                          </span>
-                        )}
-                      </div>
-                      <div
-                        className={cn(
-                          'relative',
-                          linkSystemToChat
-                            ? 'opacity-60 pointer-events-none'
-                            : '',
-                        )}
-                      >
-                        <ModelSelector
-                          role="system"
-                          selectedModel={systemModel}
-                          setSelectedModel={handleSelectSystem}
-                          showModelName
-                          truncateModelName
-                        />
-                      </div>
-                    </div>
-                  </div>
+                <div className="p-5">
+                  <ModelPicker
+                    value={value}
+                    onChange={handleChange}
+                    fields={{ system: true, vision: true, contextWindow: true }}
+                    presets="full"
+                    layout="dialog"
+                  />
                 </div>
 
                 <div className="px-5 py-3 border-t border-surface-2 flex justify-end gap-2">

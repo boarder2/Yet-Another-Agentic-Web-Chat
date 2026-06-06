@@ -23,6 +23,7 @@ import {
 import {
   type ModelPreset,
   type ModelPresetList,
+  type ModelSelection,
   createPreset,
   findMatchingPreset,
   applyPresetToStorage,
@@ -36,66 +37,23 @@ import {
   SELECTION_KEYS,
 } from '@/lib/models/presets';
 import SettingsSection from '../components/SettingsSection';
-import AppSwitch from '@/components/ui/AppSwitch';
-import Select from '../components/Select';
-import ModelSelector from '@/components/MessageInputActions/ModelSelector';
+import ModelPicker from '@/components/models/ModelPicker';
 
 const EMPTY_PRESETS: ModelPresetList = [];
 
-/**
- * Context-window control mirroring ModelSettingsSection: a predefined-size
- * dropdown plus a "Custom…" option that reveals a number input (min 512).
- */
-function ContextWindowField({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
-}) {
-  const [customMode, setCustomMode] = useState(
-    !PREDEFINED_CONTEXT_SIZES.includes(value),
-  );
-  const options = [
-    ...PREDEFINED_CONTEXT_SIZES.map((s) => ({
-      value: s.toString(),
-      label: `${s.toLocaleString()} tokens`,
-    })),
-    { value: 'custom', label: 'Custom…' },
-  ];
-  return (
-    <div className="flex items-center justify-between gap-2">
-      <span className="text-xs text-fg/60">{label}</span>
-      <div className="flex items-center gap-2">
-        {customMode && (
-          <input
-            type="number"
-            min={512}
-            aria-label="Custom context window size"
-            value={value}
-            onChange={(e) =>
-              onChange(Math.max(512, parseInt(e.target.value) || 512))
-            }
-            className="w-28 text-xs bg-bg border border-surface-2 rounded-control px-2 py-1.5 text-fg outline-none focus:border-accent"
-          />
-        )}
-        <Select
-          value={customMode ? 'custom' : value.toString()}
-          onChange={(e) => {
-            if (e.target.value === 'custom') {
-              setCustomMode(true);
-            } else {
-              setCustomMode(false);
-              onChange(parseInt(e.target.value) || 32768);
-            }
-          }}
-          options={options}
-        />
-      </div>
-    </div>
-  );
+/** Convert a preset edit-state to the controlled `ModelPicker` value. */
+function editToSelection(s: EditState): ModelSelection {
+  const linked =
+    s.chatProvider === s.systemProvider && s.chatModel === s.systemModel;
+  return {
+    chatProvider: s.chatProvider,
+    chatModel: s.chatModel,
+    systemProvider: s.systemProvider,
+    systemModel: s.systemModel,
+    linkSystemToChat: linked,
+    imageCapable: s.imageCapable,
+    contextWindowSize: s.contextWindowSize,
+  };
 }
 
 interface ModelPresetsProps {
@@ -439,79 +397,30 @@ export default function ModelPresetsSection({
                       className="text-sm bg-bg border border-surface-2 rounded-control px-2 py-1.5 text-fg outline-none focus:border-accent w-full"
                       placeholder="Preset name"
                     />
-                    <div className="flex flex-col gap-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-fg/60">Chat Model</span>
-                        <ModelSelector
-                          role="chat"
-                          selectedModel={{
-                            provider: editState.chatProvider,
-                            model: editState.chatModel,
-                          }}
-                          setSelectedModel={(m) =>
-                            setEditState((s) =>
-                              s
-                                ? {
-                                    ...s,
-                                    chatProvider: m.provider,
-                                    chatModel: m.model,
-                                  }
-                                : s,
-                            )
-                          }
-                          showModelName
-                          truncateModelName
-                          panelPosition="below"
-                        />
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-fg/60">System Model</span>
-                        <ModelSelector
-                          role="system"
-                          selectedModel={{
-                            provider: editState.systemProvider,
-                            model: editState.systemModel,
-                          }}
-                          setSelectedModel={(m) =>
-                            setEditState((s) =>
-                              s
-                                ? {
-                                    ...s,
-                                    systemProvider: m.provider,
-                                    systemModel: m.model,
-                                  }
-                                : s,
-                            )
-                          }
-                          showModelName
-                          truncateModelName
-                          panelPosition="below"
-                        />
-                      </div>
-                      <ContextWindowField
-                        label="Context"
-                        value={editState.contextWindowSize}
-                        onChange={(v) =>
-                          setEditState((s) =>
-                            s ? { ...s, contextWindowSize: v } : s,
-                          )
-                        }
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="flex items-center gap-1.5 text-xs text-fg/70">
-                        <Eye size={12} />
-                        Vision capable
-                      </span>
-                      <AppSwitch
-                        checked={editState.imageCapable}
-                        onChange={(v) =>
-                          setEditState((s) =>
-                            s ? { ...s, imageCapable: v } : s,
-                          )
-                        }
-                      />
-                    </div>
+                    <ModelPicker
+                      value={editToSelection(editState)}
+                      onChange={(next) =>
+                        setEditState((s) =>
+                          s
+                            ? {
+                                ...s,
+                                chatProvider: next.chatProvider,
+                                chatModel: next.chatModel,
+                                systemProvider: next.systemProvider,
+                                systemModel: next.systemModel,
+                                imageCapable: next.imageCapable ?? false,
+                                contextWindowSize:
+                                  next.contextWindowSize ?? s.contextWindowSize,
+                              }
+                            : s,
+                        )
+                      }
+                      fields={{
+                        system: true,
+                        vision: true,
+                        contextWindow: true,
+                      }}
+                    />
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
@@ -677,79 +586,26 @@ export default function ModelPresetsSection({
             className="text-sm bg-surface border border-surface-2 rounded-control px-2 py-1.5 text-fg outline-none focus:border-accent w-full"
           />
           {editState && (
-            <>
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-fg/60">Chat Model</span>
-                  <ModelSelector
-                    role="chat"
-                    selectedModel={{
-                      provider: editState.chatProvider,
-                      model: editState.chatModel,
-                    }}
-                    setSelectedModel={(m) =>
-                      setEditState((s) =>
-                        s
-                          ? {
-                              ...s,
-                              chatProvider: m.provider,
-                              chatModel: m.model,
-                            }
-                          : s,
-                      )
-                    }
-                    showModelName
-                    truncateModelName
-                    panelPosition="below"
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-fg/60">System Model</span>
-                  <ModelSelector
-                    role="system"
-                    selectedModel={{
-                      provider: editState.systemProvider,
-                      model: editState.systemModel,
-                    }}
-                    setSelectedModel={(m) =>
-                      setEditState((s) =>
-                        s
-                          ? {
-                              ...s,
-                              systemProvider: m.provider,
-                              systemModel: m.model,
-                            }
-                          : s,
-                      )
-                    }
-                    showModelName
-                    truncateModelName
-                    panelPosition="below"
-                  />
-                </div>
-                <ContextWindowField
-                  label="Context Window"
-                  value={editState.contextWindowSize}
-                  onChange={(v) =>
-                    setEditState((s) =>
-                      s ? { ...s, contextWindowSize: v } : s,
-                    )
-                  }
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-xs text-fg/70">
-                  <Eye size={12} />
-                  Vision capable
-                </span>
-                <AppSwitch
-                  checked={editState.imageCapable}
-                  onChange={(v) =>
-                    setEditState((s) => (s ? { ...s, imageCapable: v } : s))
-                  }
-                />
-              </div>
-            </>
+            <ModelPicker
+              value={editToSelection(editState)}
+              onChange={(next) =>
+                setEditState((s) =>
+                  s
+                    ? {
+                        ...s,
+                        chatProvider: next.chatProvider,
+                        chatModel: next.chatModel,
+                        systemProvider: next.systemProvider,
+                        systemModel: next.systemModel,
+                        imageCapable: next.imageCapable ?? false,
+                        contextWindowSize:
+                          next.contextWindowSize ?? s.contextWindowSize,
+                      }
+                    : s,
+                )
+              }
+              fields={{ system: true, vision: true, contextWindow: true }}
+            />
           )}
           <div className="flex items-center gap-2">
             <button

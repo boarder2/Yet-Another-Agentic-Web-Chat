@@ -180,23 +180,105 @@ export function captureCurrentSelection(): ActiveSelection {
 }
 
 /**
- * Applies a preset to localStorage via a single batch write so all reactive
- * subscribers update in one render cycle, preventing torn intermediate state
- * where linkSystemToChat is updated before provider/model keys are written.
+ * Controlled value shared by the unified `ModelPicker` component and every
+ * caller that drives it (chat, settings, presets, scheduled tasks, widgets).
+ * `imageCapable` and `contextWindowSize` are optional because some surfaces
+ * (single-model pickers) don't expose them. The component is fully controlled
+ * and owns no persistence — each caller persists `onChange` however it likes.
  */
-export function applyPresetToStorage(p: ModelPreset): void {
+export interface ModelSelection {
+  chatProvider: string;
+  chatModel: string;
+  systemProvider: string;
+  systemModel: string;
+  linkSystemToChat: boolean;
+  imageCapable?: boolean;
+  contextWindowSize?: number;
+}
+
+export const DEFAULT_CONTEXT_WINDOW = 32768;
+
+/**
+ * Pure conversion of a stored preset to a `ModelSelection`. The link flag is
+ * derived (a preset whose chat and system models are identical is "linked").
+ */
+export function presetToSelection(p: ModelPreset): ModelSelection {
   const linked =
     p.chatProvider === p.systemProvider && p.chatModel === p.systemModel;
+  return {
+    chatProvider: p.chatProvider,
+    chatModel: p.chatModel,
+    systemProvider: p.systemProvider,
+    systemModel: p.systemModel,
+    linkSystemToChat: linked,
+    imageCapable: p.imageCapable,
+    contextWindowSize: Math.max(512, p.contextWindowSize),
+  };
+}
+
+/**
+ * Pure conversion of a `ModelSelection` to the input shape `createPreset`
+ * expects — used by "save current as preset" from any caller. Missing optional
+ * fields fall back to sensible defaults so the saved preset is always complete.
+ */
+export function selectionToPresetInput(
+  sel: ModelSelection,
+  name: string,
+): Omit<ModelPreset, 'id' | 'createdAt'> {
+  return {
+    name,
+    chatProvider: sel.chatProvider,
+    chatModel: sel.chatModel,
+    systemProvider: sel.systemProvider,
+    systemModel: sel.systemModel,
+    imageCapable: sel.imageCapable ?? false,
+    contextWindowSize: sel.contextWindowSize ?? DEFAULT_CONTEXT_WINDOW,
+  };
+}
+
+/** Normalize a `ModelSelection` to an `ActiveSelection` for preset matching. */
+export function selectionToActiveSelection(
+  sel: ModelSelection,
+): ActiveSelection {
+  return {
+    chatProvider: sel.chatProvider,
+    chatModel: sel.chatModel,
+    systemProvider: sel.systemProvider,
+    systemModel: sel.systemModel,
+    imageCapable: sel.imageCapable ?? false,
+    contextWindowSize: sel.contextWindowSize ?? DEFAULT_CONTEXT_WINDOW,
+  };
+}
+
+/**
+ * Writes a full `ModelSelection` to the chat-selection localStorage keys via a
+ * single batch write so all reactive subscribers update in one render cycle,
+ * preventing torn intermediate state where linkSystemToChat is updated before
+ * provider/model keys are written. When linked, the system keys mirror chat.
+ */
+export function writeSelectionToStorage(sel: ModelSelection): void {
+  const linked = sel.linkSystemToChat;
+  const systemProvider = linked ? sel.chatProvider : sel.systemProvider;
+  const systemModel = linked ? sel.chatModel : sel.systemModel;
   writeLocalStorageBatch([
     [SELECTION_KEYS.link, linked ? 'true' : 'false'],
-    [SELECTION_KEYS.systemProvider, p.systemProvider],
-    [SELECTION_KEYS.systemModel, p.systemModel],
-    [SELECTION_KEYS.chatProvider, p.chatProvider],
-    [SELECTION_KEYS.chatModel, p.chatModel],
-    [SELECTION_KEYS.imageCapable, p.imageCapable ? 'true' : 'false'],
+    [SELECTION_KEYS.systemProvider, systemProvider],
+    [SELECTION_KEYS.systemModel, systemModel],
+    [SELECTION_KEYS.chatProvider, sel.chatProvider],
+    [SELECTION_KEYS.chatModel, sel.chatModel],
+    [SELECTION_KEYS.imageCapable, sel.imageCapable ? 'true' : 'false'],
     [
       SELECTION_KEYS.contextWindowSize,
-      String(Math.max(512, p.contextWindowSize)),
+      String(Math.max(512, sel.contextWindowSize ?? DEFAULT_CONTEXT_WINDOW)),
     ],
   ]);
+}
+
+/**
+ * Applies a preset to localStorage (chat-only wrapper over the pure
+ * `presetToSelection` + `writeSelectionToStorage`). Kept for callers that want
+ * the one-shot "apply preset to the chat selection" behavior.
+ */
+export function applyPresetToStorage(p: ModelPreset): void {
+  writeSelectionToStorage(presetToSelection(p));
 }

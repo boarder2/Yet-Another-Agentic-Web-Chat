@@ -100,7 +100,7 @@ const MethodologySelector = ({
               </div>
             ) : (
               <div className="max-h-60 overflow-y-auto p-1.5 space-y-3">
-                {/* No methodology option */}
+                {/* Default (no methodology) option */}
                 <div
                   onClick={() => handleSelect(null)}
                   className="flex items-center gap-2.5 p-2.5 rounded-control hover:bg-surface-2 cursor-pointer"
@@ -113,7 +113,7 @@ const MethodologySelector = ({
                   ) : (
                     <Circle size={18} className="text-fg/40 flex-shrink-0" />
                   )}
-                  <span className="text-sm text-fg/80">No methodology</span>
+                  <span className="text-sm text-fg/80">Default</span>
                 </div>
 
                 {builtIn.length > 0 && (

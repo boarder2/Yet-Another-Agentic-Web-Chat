@@ -2,10 +2,7 @@ import Image from 'next/image';
 import { ArrowRight, ArrowUp, LoaderCircle, Square, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
-import {
-  useLocalStorageString,
-  writeLocalStorage,
-} from '@/lib/hooks/useLocalStorage';
+import { useLocalStorageString } from '@/lib/hooks/useLocalStorage';
 import { SELECTION_KEYS } from '@/lib/models/presets';
 import { File, ImageAttachment } from './ChatWindow';
 import Attach from './MessageInputActions/Attach';
@@ -448,12 +445,6 @@ const MessageInput = ({
                 estimatedUsage={estimatedUsage}
                 messageCount={messageCount ?? 0}
                 onCompact={onCompact}
-                onChatContextSizeChange={(size) => {
-                  writeLocalStorage(
-                    SELECTION_KEYS.contextWindowSize,
-                    String(size),
-                  );
-                }}
                 compacting={compacting}
               />
             )}

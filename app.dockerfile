@@ -6,6 +6,7 @@ RUN apt-get update && \
     apt-get install -y python3 make g++ && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
+ENV ONNXRUNTIME_NODE_INSTALL_CUDA=skip
 COPY package.json yarn.lock ./
 RUN yarn install --frozen-lockfile --network-timeout 600000
 ENV NEXT_TELEMETRY_DISABLED=1

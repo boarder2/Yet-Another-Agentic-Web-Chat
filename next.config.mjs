@@ -8,7 +8,9 @@ const nextConfig = {
       },
     ],
   },
-  serverExternalPackages: ['pdf-parse', 'playwright', 'dockerode'],
+  // kokoro-js reads its voice .bin files relative to its own __dirname; it must
+  // stay an external (unbundled) module so that path resolves correctly at runtime.
+  serverExternalPackages: ['pdf-parse', 'playwright', 'dockerode', 'kokoro-js'],
 };
 
 export default nextConfig;

@@ -5,43 +5,9 @@ import {
   SystemMessage,
   ToolMessage,
 } from '@langchain/core/messages';
+import { removeThinkingBlocks, removeToolCallMarkup } from './contentStripping';
 
-/**
- * Removes all content within <think>...</think> blocks, including content
- * before orphaned </think> tags (from providers that don't send opening <think>).
- * @param text The input text containing thinking blocks
- * @returns The text with all thinking blocks removed
- */
-export const removeThinkingBlocks = (text: string): string => {
-  // First remove properly paired <think>...</think> blocks
-  let result = text.replace(/<think>[\s\S]*?<\/think>/g, '');
-
-  // Then handle orphaned </think> (no opening <think>).
-  // Remove text between the last closing HTML tag (or start of string) and </think>.
-  if (result.includes('</think>')) {
-    result = result.replace(
-      /(^|<\/[a-zA-Z][a-zA-Z0-9]*\s*>)[\s\S]*?<\/think>/g,
-      '$1',
-    );
-  }
-
-  return result.trim();
-};
-
-/**
- * Removes <ToolCall ...></ToolCall> UI markup tags (both paired and self-closing).
- * These are emitted for the frontend renderer and persisted alongside response text,
- * but are pure UI overhead — and potentially misleading — when replayed to the LLM.
- */
-export const removeToolCallMarkup = (text: string): string => {
-  // Strip SubagentExecution blocks first so a single pass handles the whole
-  // nested tree (each SubagentExecution may contain nested ToolCall markup).
-  return text
-    .replace(/<SubagentExecution\b[^>]*\/>/g, '')
-    .replace(/<SubagentExecution\b[^>]*>[\s\S]*?<\/SubagentExecution>/g, '')
-    .replace(/<ToolCall\b[^>]*\/>/g, '')
-    .replace(/<ToolCall\b[^>]*>[\s\S]*?<\/ToolCall>/g, '');
-};
+export { removeThinkingBlocks, removeToolCallMarkup };
 
 /**
  * Prepares an array of BaseMessage history entries for replay to the LLM by

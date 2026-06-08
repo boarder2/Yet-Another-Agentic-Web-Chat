@@ -8,16 +8,15 @@ import {
   Layers3,
   Plus,
   Sparkles,
-  StopCircle,
   VideoIcon,
-  Volume2,
   LoaderCircle,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSpeech } from 'react-text-to-speech';
 import { Message } from './ChatWindow';
 import MarkdownRenderer from './MarkdownRenderer';
 import Copy from './MessageActions/Copy';
+import Speak from './MessageActions/Speak';
+import { toSpeechText } from '@/lib/utils/contentStripping';
 import ModelInfoButton from './MessageActions/ModelInfo';
 import Rewrite from './MessageActions/Rewrite';
 import MessageSources from './MessageSources';
@@ -161,7 +160,7 @@ const MessageTabs = ({
       }
     }
 
-    const speech = message.content.replace(regex, '');
+    const speech = toSpeechText(message.content);
 
     if (
       message.role === 'assistant' &&
@@ -202,8 +201,6 @@ const MessageTabs = ({
 
     return { parsedMessage: processedMessage, speechMessage: speech };
   }, [message.content, message.sources, message.role]);
-
-  const { speechStatus, start, stop } = useSpeech({ text: speechMessage });
 
   // Auto-suggest effect (similar to MessageBox)
   useEffect(() => {
@@ -301,23 +298,7 @@ const MessageTabs = ({
               </div>
               <div className="flex flex-row items-center space-x-1">
                 <Copy initialMessage={message.content} message={message} />
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (speechStatus === 'started') {
-                      stop();
-                    } else {
-                      start();
-                    }
-                  }}
-                  className="p-2 opacity-70 rounded-floating hover:bg-surface-2 transition duration-200"
-                >
-                  {speechStatus === 'started' ? (
-                    <StopCircle size={18} />
-                  ) : (
-                    <Volume2 size={18} />
-                  )}
-                </button>
+                <Speak text={speechMessage} />
               </div>
             </div>
           )}

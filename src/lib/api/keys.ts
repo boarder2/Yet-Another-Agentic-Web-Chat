@@ -11,6 +11,7 @@ export const qk = {
   config: ['config'] as const,
   models: ['models'] as const,
   tools: ['tools'] as const,
+  voices: ['tts', 'voices'] as const,
   workspaces: (archived?: boolean) => ['workspaces', { archived }] as const,
   workspace: (id: string) => ['workspaces', id] as const,
   workspaceFiles: (id: string) => ['workspaces', id, 'files'] as const,

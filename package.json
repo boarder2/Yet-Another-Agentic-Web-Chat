@@ -52,6 +52,7 @@
     "html-to-text": "^9.0.5",
     "jsdom": "^28.1.0",
     "jspdf": "^4.1.0",
+    "kokoro-js": "^1.2.1",
     "langchain": "^1.2.24",
     "lucide-react": "^0.564.0",
     "luxon": "^3.7.2",

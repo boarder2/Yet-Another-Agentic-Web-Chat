@@ -11,6 +11,7 @@ import Focus from './MessageInputActions/Focus';
 import ModelConfigurator from './MessageInputActions/ModelConfigurator';
 import SystemPromptSelector from './MessageInputActions/SystemPromptSelector'; // Import new component
 import MethodologySelector from './MessageInputActions/MethodologySelector';
+import AutoReadToggle from './MessageInputActions/AutoReadToggle';
 import PersonalizationPicker from './PersonalizationPicker';
 
 const MessageInput = ({
@@ -448,6 +449,7 @@ const MessageInput = ({
                 compacting={compacting}
               />
             )}
+            {!onCancelEdit && <AutoReadToggle />}
             {loading ? (
               <button
                 type="button"

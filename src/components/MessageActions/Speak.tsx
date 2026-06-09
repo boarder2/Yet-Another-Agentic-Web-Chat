@@ -21,11 +21,13 @@ const Speak = ({
   voice: voiceProp,
   engine: engineProp,
   speed: speedProp,
+  autoPlay = false,
 }: {
   text: string;
   voice?: string;
   engine?: Engine;
   speed?: number;
+  autoPlay?: boolean;
 }) => {
   const [status, setStatus] = useState<Status>('idle');
   const ctxRef = useRef<AudioContext | null>(null);
@@ -200,6 +202,23 @@ const Speak = ({
       startBrowser();
     }
   };
+
+  // Auto-start once when `autoPlay` turns on (e.g. a response just finished and
+  // the user has auto-read enabled). Guarded so it fires a single time per
+  // activation; resets when `autoPlay` clears so a rewrite can re-trigger.
+  const autoStartedRef = useRef(false);
+  useEffect(() => {
+    if (!autoPlay) {
+      autoStartedRef.current = false;
+      return;
+    }
+    if (autoStartedRef.current || !text.trim()) return;
+    autoStartedRef.current = true;
+    void start();
+    // `start` is intentionally omitted — it's recreated each render and guarded
+    // by autoStartedRef.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoPlay, text]);
 
   const isPlaying = status === 'playing' || speechStatus === 'started';
   const isLoading = status === 'loading';

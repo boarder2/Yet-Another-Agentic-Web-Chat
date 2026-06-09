@@ -12,6 +12,7 @@ import {
   LoaderCircle,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useLocalStorageBoolean } from '@/lib/hooks/useLocalStorage';
 import { Message } from './ChatWindow';
 import MarkdownRenderer from './MarkdownRenderer';
 import Copy from './MessageActions/Copy';
@@ -202,6 +203,25 @@ const MessageTabs = ({
     return { parsedMessage: processedMessage, speechMessage: speech };
   }, [message.content, message.sources, message.role]);
 
+  // Auto-read: when this is the last assistant message and it just finished
+  // streaming (loading went true → false), kick off TTS if the user enabled
+  // "Auto-read replies". Tracked via the React "adjust state during render"
+  // pattern off the loading transition, so opening an existing chat or
+  // reloading the page (loading stays false throughout) never auto-plays.
+  const [autoReadEnabled] = useLocalStorageBoolean('ttsAutoplay', false);
+  const [prevLoading, setPrevLoading] = useState(loading);
+  const [autoPlaySpeech, setAutoPlaySpeech] = useState(false);
+  if (prevLoading !== loading) {
+    setPrevLoading(loading);
+    if (prevLoading && !loading && isLast && message.role === 'assistant') {
+      // Finished streaming — arm playback if enabled.
+      if (autoReadEnabled) setAutoPlaySpeech(true);
+    } else if (loading) {
+      // A new turn started streaming — clear so the next completion re-arms.
+      setAutoPlaySpeech(false);
+    }
+  }
+
   // Auto-suggest effect (similar to MessageBox)
   useEffect(() => {
     const autoSuggestions = localStorage.getItem('autoSuggestions');
@@ -298,7 +318,7 @@ const MessageTabs = ({
               </div>
               <div className="flex flex-row items-center space-x-1">
                 <Copy initialMessage={message.content} message={message} />
-                <Speak text={speechMessage} />
+                <Speak text={speechMessage} autoPlay={autoPlaySpeech} />
               </div>
             </div>
           )}

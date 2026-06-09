@@ -54,7 +54,7 @@ export default function ContextIndicator({
   return (
     <Popover className="relative">
       <PopoverButton
-        className="p-1.5 rounded-control hover:bg-surface-2 transition duration-150"
+        className="p-1 rounded-control hover:bg-surface-2 transition duration-150"
         title={`Context usage: ${pct}%`}
       >
         <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>

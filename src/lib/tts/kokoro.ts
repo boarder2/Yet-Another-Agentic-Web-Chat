@@ -55,7 +55,7 @@ let ttsPromise: Promise<any> | undefined;
 const getTTS = async () => {
   const { KokoroTTS } = await import('kokoro-js');
   return (ttsPromise ??= KokoroTTS.from_pretrained(MODEL_ID, {
-    dtype: 'q8',
+    dtype: 'q4',
     device: 'cpu',
   }));
 };

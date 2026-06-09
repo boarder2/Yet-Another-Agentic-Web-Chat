@@ -56,7 +56,18 @@ RUN chown -R node:node /home/yaawc && \
 # Configure the container to run in an unprivileged mode
 USER node
 
+# Next.js standalone tracing copies onnxruntime-node's *_binding.node but not the
+# libonnxruntime.so.1 it dlopens at runtime (loaded via path, not require()), so we
+# overlay the full bin/ dir to co-locate the shared lib. kokoro-js bundles its own
+# nested @huggingface/transformers -> onnxruntime-node (a different version/ABI than
+# the top-level one used by embeddings), so its bin/ needs the same treatment.
 COPY --from=builder /home/yaawc/node_modules/onnxruntime-node/bin /home/yaawc/node_modules/onnxruntime-node/bin
+COPY --from=builder /home/yaawc/node_modules/kokoro-js/node_modules/onnxruntime-node/bin /home/yaawc/node_modules/kokoro-js/node_modules/onnxruntime-node/bin
+# kokoro-js reads its voice packs from voices/*.bin via fs.readFile(path.resolve(
+# __dirname, '../voices/...')) — a runtime path read, not a require() — so nft skips
+# the voices/ data dir. Overlay it (the .bin files ship in the package, they are not
+# downloaded server-side; only the ONNX model is fetched at runtime).
+COPY --from=builder /home/yaawc/node_modules/kokoro-js/voices /home/yaawc/node_modules/kokoro-js/voices
 
 # Install Playwright and its dependencies
 RUN npx -y playwright install chromium --only-shell && \

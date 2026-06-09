@@ -1,9 +1,10 @@
 import {
-  synthesizeStream,
   SAMPLE_RATE,
   DEFAULT_VOICE,
   VOICE_LIST,
+  isValidVoice,
 } from '@/lib/tts/kokoro';
+import { synthesize } from '@/lib/tts/synthesize';
 
 export const runtime = 'nodejs';
 
@@ -32,23 +33,19 @@ export const POST = async (req: Request) => {
     }
 
     const speed = Math.min(3, Math.max(0.25, body.speed ?? 1));
+    const voice = isValidVoice(body.voice ?? '') ? body.voice! : DEFAULT_VOICE;
 
     // Stream raw 32-bit float PCM (little-endian) sentence by sentence so the
     // client can begin playback on the first chunk while the rest generate.
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
         try {
-          for await (const samples of synthesizeStream(
+          for await (const bytes of synthesize(
             text.slice(0, MAX_CHARS),
-            body.voice || DEFAULT_VOICE,
+            voice,
             speed,
           )) {
-            // Copy out of the model's WASM-backed buffer into a plain Buffer.
-            const out = Buffer.alloc(samples.length * 4);
-            for (let i = 0; i < samples.length; i++) {
-              out.writeFloatLE(samples[i], i * 4);
-            }
-            controller.enqueue(new Uint8Array(out));
+            controller.enqueue(bytes);
           }
           controller.close();
         } catch (err) {

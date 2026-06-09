@@ -44,12 +44,17 @@ COPY --from=builder /home/yaawc/migrator/index.js ./migrate.js
 
 COPY entrypoint.sh ./entrypoint.sh
 
+# Plain-JS TTS worker (src/lib/tts/ttsWorker.js). It is forked at runtime via a
+# path string, so Next's standalone tracing doesn't see it — copy it explicitly,
+# preserving the cwd-relative path the parent resolves (src/lib/tts/ttsWorker.js).
+COPY src/lib/tts/ttsWorker.js ./src/lib/tts/ttsWorker.js
+
 RUN chown -R node:node /home/yaawc && \
     chmod +x /home/yaawc/entrypoint.sh && \
     npm install playwright -g --no-fund --no-audit && \
     npx playwright install-deps chromium && \
     apt-get update && \
-    apt-get install -y procps && \
+    apt-get install -y procps util-linux && \
     apt-get clean && rm -rf /var/lib/apt/lists/* && \
     rm -rf ~/.npm
 

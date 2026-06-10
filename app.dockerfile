@@ -63,11 +63,11 @@ USER node
 
 # Next.js standalone tracing copies onnxruntime-node's *_binding.node but not the
 # libonnxruntime.so.1 it dlopens at runtime (loaded via path, not require()), so we
-# overlay the full bin/ dir to co-locate the shared lib. kokoro-js bundles its own
-# nested @huggingface/transformers -> onnxruntime-node (a different version/ABI than
-# the top-level one used by embeddings), so its bin/ needs the same treatment.
+# overlay the full bin/ dir to co-locate the shared lib. A package.json "resolutions"
+# pin forces a single onnxruntime-node version across both embeddings and kokoro-js's
+# transformers, so there is exactly one bin/ (and one libonnxruntime.so.1 SONAME) —
+# this avoids the same-SONAME collision that broke in-process TTS synthesis.
 COPY --from=builder /home/yaawc/node_modules/onnxruntime-node/bin /home/yaawc/node_modules/onnxruntime-node/bin
-COPY --from=builder /home/yaawc/node_modules/kokoro-js/node_modules/onnxruntime-node/bin /home/yaawc/node_modules/kokoro-js/node_modules/onnxruntime-node/bin
 # kokoro-js reads its voice packs from voices/*.bin via fs.readFile(path.resolve(
 # __dirname, '../voices/...')) — a runtime path read, not a require() — so nft skips
 # the voices/ data dir. Overlay it (the .bin files ship in the package, they are not

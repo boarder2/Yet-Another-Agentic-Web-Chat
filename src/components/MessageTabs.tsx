@@ -17,7 +17,6 @@ import { Message } from './ChatWindow';
 import MarkdownRenderer from './MarkdownRenderer';
 import Copy from './MessageActions/Copy';
 import Speak from './MessageActions/Speak';
-import { toSpeechText } from '@/lib/utils/contentStripping';
 import ModelInfoButton from './MessageActions/ModelInfo';
 import Rewrite from './MessageActions/Rewrite';
 import MessageSources from './MessageSources';
@@ -147,8 +146,9 @@ const MessageTabs = ({
     }
   }, [loadingSuggestions, message, chatHistory, sendMessage]);
 
-  // Process message content into rendered citations + plain speech text
-  const { parsedMessage, speechMessage } = useMemo(() => {
+  // Process message content into rendered citations (speech is handled
+  // server-side from the raw content by the TTS route).
+  const parsedMessage = useMemo(() => {
     const regex = /\[(\d+)\]/g;
     let processedMessage = message.content;
 
@@ -161,46 +161,40 @@ const MessageTabs = ({
       }
     }
 
-    const speech = toSpeechText(message.content);
-
     if (
       message.role === 'assistant' &&
       message?.sources &&
       message.sources.length > 0
     ) {
-      const parsed = processedMessage.replace(
-        regex,
-        (_, capturedContent: string) => {
-          const numbers = capturedContent
-            .split(',')
-            .map((numStr) => numStr.trim());
+      return processedMessage.replace(regex, (_, capturedContent: string) => {
+        const numbers = capturedContent
+          .split(',')
+          .map((numStr) => numStr.trim());
 
-          const linksHtml = numbers
-            .map((numStr) => {
-              const number = parseInt(numStr);
+        const linksHtml = numbers
+          .map((numStr) => {
+            const number = parseInt(numStr);
 
-              if (isNaN(number) || number <= 0) {
-                return `[${numStr}]`;
-              }
+            if (isNaN(number) || number <= 0) {
+              return `[${numStr}]`;
+            }
 
-              const source = message.sources?.[number - 1];
-              const url = source?.metadata?.url;
+            const source = message.sources?.[number - 1];
+            const url = source?.metadata?.url;
 
-              if (url) {
-                return `<a href="${url}" target="_blank" data-citation="${number}" className="bg-surface px-1 rounded-control ml-1 no-underline text-xs relative hover:bg-surface-2 transition-colors duration-200">${numStr}</a>`;
-              } else {
-                return `[${numStr}]`;
-              }
-            })
-            .join('');
+            if (url) {
+              return `<a href="${url}" target="_blank" data-citation="${number}" className="bg-surface px-1 rounded-control ml-1 no-underline text-xs relative hover:bg-surface-2 transition-colors duration-200">${numStr}</a>`;
+            } else {
+              return `[${numStr}]`;
+            }
+          })
+          .join('');
 
-          return linksHtml;
-        },
-      );
-      return { parsedMessage: parsed, speechMessage: speech };
+        return linksHtml;
+      });
     }
 
-    return { parsedMessage: processedMessage, speechMessage: speech };
+    return processedMessage;
   }, [message.content, message.sources, message.role]);
 
   // Auto-read: when this is the last assistant message and it just finished
@@ -318,7 +312,11 @@ const MessageTabs = ({
               </div>
               <div className="flex flex-row items-center space-x-1">
                 <Copy initialMessage={message.content} message={message} />
-                <Speak text={speechMessage} autoPlay={autoPlaySpeech} />
+                <Speak
+                  markdown={message.content}
+                  messageId={message.messageId}
+                  autoPlay={autoPlaySpeech}
+                />
               </div>
             </div>
           )}

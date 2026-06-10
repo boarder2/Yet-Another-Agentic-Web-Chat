@@ -26,6 +26,21 @@ interface File {
   fileId: string;
 }
 
+// Cached Mode-2 (LLM) narration for a message's read-aloud. Narration is
+// voice/speed-independent text, so one row per message. `contentHash` folds in
+// the message content *and* the narration model identity, so editing the message
+// or switching the narration model invalidates and regenerates. Kept in its own
+// table (not a messages column) so this potentially-large text never loads on the
+// hot chat-fetch path — only the TTS route reads it.
+export const ttsNarrations = sqliteTable('tts_narrations', {
+  messageId: text('message_id').primaryKey(),
+  contentHash: text('content_hash').notNull(),
+  narration: text('narration').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp' })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
 export const systemPrompts = sqliteTable('system_prompts', {
   id: text('id')
     .primaryKey()

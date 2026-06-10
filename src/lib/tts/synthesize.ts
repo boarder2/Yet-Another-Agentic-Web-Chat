@@ -1,4 +1,5 @@
-import { synthesizeStream as inlineStream } from './kokoro';
+import type { SpeechSegment } from './speechify';
+import { synthesizeSegments as inlineSegments } from './kokoro';
 import { isWorkerDisabled, synthesizeViaWorker } from './workerPool';
 
 /** View a (owned) Float32Array's bytes as PCM without an extra per-sample copy. */
@@ -6,34 +7,35 @@ const floatToBytes = (samples: Float32Array): Uint8Array =>
   new Uint8Array(samples.buffer, samples.byteOffset, samples.byteLength);
 
 async function* inlineBytes(
-  text: string,
+  segments: SpeechSegment[],
   voice: string,
   speed: number,
 ): AsyncGenerator<Uint8Array> {
-  for await (const samples of inlineStream(text, voice, speed)) {
+  for await (const samples of inlineSegments(segments, voice, speed)) {
     yield floatToBytes(samples);
   }
 }
 
 /**
- * Synthesize speech, yielding raw 32-bit float PCM bytes (little-endian, 24kHz
- * mono). Prefers the isolated worker process so synthesis can't starve the
- * server; falls back to in-process synthesis if the worker is disabled or fails
- * to start (e.g. environments without `nice`/`taskset`).
+ * Synthesize speech segments, yielding raw 32-bit float PCM bytes (little-endian,
+ * 24kHz mono) with speed-scaled silence spliced between segments. Prefers the
+ * isolated worker process so synthesis can't starve the server; falls back to
+ * in-process synthesis if the worker is disabled or fails to start (e.g.
+ * environments without `nice`/`taskset`).
  */
 export async function* synthesize(
-  text: string,
+  segments: SpeechSegment[],
   voice: string,
   speed: number,
 ): AsyncGenerator<Uint8Array> {
   if (isWorkerDisabled()) {
-    yield* inlineBytes(text, voice, speed);
+    yield* inlineBytes(segments, voice, speed);
     return;
   }
 
   let yielded = false;
   try {
-    for await (const buf of synthesizeViaWorker(text, voice, speed)) {
+    for await (const buf of synthesizeViaWorker(segments, voice, speed)) {
       yielded = true;
       yield buf;
     }
@@ -48,5 +50,5 @@ export async function* synthesize(
     );
   }
 
-  yield* inlineBytes(text, voice, speed);
+  yield* inlineBytes(segments, voice, speed);
 }

@@ -1,6 +1,8 @@
 // Kokoro-82M ONNX model. Downloads (~160MB at q8) into the transformers.js cache
 // on first use, then runs fully offline on CPU — same mechanism as the embedding
 // model in src/lib/huggingfaceTransformer.ts.
+import type { SpeechSegment } from './speechify';
+
 const MODEL_ID = 'onnx-community/Kokoro-82M-v1.0-ONNX';
 
 export interface VoiceInfo {
@@ -114,4 +116,34 @@ export async function* synthesizeStream(
     yield new Float32Array(src);
   }
   console.log(`[kokoro] stream done — ${i} chunks total`);
+}
+
+/**
+ * Number of zero-valued samples to represent `pauseAfterMs` of silence at the
+ * model's sample rate, scaled by playback speed so a pause feels the same length
+ * regardless of how fast speech plays (a 500ms gap at 2× would otherwise drag).
+ */
+export const silenceSampleCount = (
+  pauseAfterMs: number,
+  speed: number,
+): number =>
+  Math.max(0, Math.round(((pauseAfterMs / 1000) * SAMPLE_RATE) / (speed || 1)));
+
+/**
+ * Synthesize a sequence of speech segments, yielding each segment's PCM followed
+ * by a chunk of silence sized from its `pauseAfterMs`. This is what gives spoken
+ * output its structural pacing (pauses after headings, between list items, etc.).
+ */
+export async function* synthesizeSegments(
+  segments: SpeechSegment[],
+  voice: string = DEFAULT_VOICE,
+  speed: number = 1,
+): AsyncGenerator<Float32Array> {
+  for (const seg of segments) {
+    if (seg.text && seg.text.trim()) {
+      yield* synthesizeStream(seg.text, voice, speed);
+    }
+    const n = silenceSampleCount(seg.pauseAfterMs, speed);
+    if (n > 0) yield new Float32Array(n);
+  }
 }

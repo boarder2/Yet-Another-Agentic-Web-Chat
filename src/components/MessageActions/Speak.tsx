@@ -1,13 +1,30 @@
 import { LoaderCircle, StopCircle, Volume2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useSpeech } from 'react-text-to-speech';
+import { toSpeechText } from '@/lib/utils/contentStripping';
 
 type Status = 'idle' | 'loading' | 'playing';
 type Engine = 'kokoro' | 'browser';
+type Mode = 'read' | 'narrate';
 
 const readSpeed = () => {
   if (typeof window === 'undefined') return 1.0;
   return parseFloat(localStorage.getItem('ttsSpeed') || '') || 1.0;
+};
+
+const readMode = (): Mode =>
+  typeof window !== 'undefined' &&
+  localStorage.getItem('ttsNarrationMode') === 'narrate'
+    ? 'narrate'
+    : 'read';
+
+const readNarrationModel = ():
+  | { provider: string; name: string }
+  | undefined => {
+  if (typeof window === 'undefined') return undefined;
+  const provider = localStorage.getItem('ttsNarrationProvider') || '';
+  const name = localStorage.getItem('ttsNarrationModel') || '';
+  return provider && name ? { provider, name } : undefined;
 };
 
 /**
@@ -18,12 +35,18 @@ const readSpeed = () => {
  */
 const Speak = ({
   text,
+  markdown,
+  messageId,
   voice: voiceProp,
   engine: engineProp,
   speed: speedProp,
   autoPlay = false,
 }: {
-  text: string;
+  /** Plain text to speak (voice previews). Ignored when `markdown` is set. */
+  text?: string;
+  /** Rich message content; sent to the server for speechify/narration. */
+  markdown?: string;
+  messageId?: string;
   voice?: string;
   engine?: Engine;
   speed?: number;
@@ -42,12 +65,16 @@ const Speak = ({
   // value set at stream start.
   const speedRef = useRef(speedProp ?? readSpeed());
 
+  // Plain text for the browser Web Speech engine / fallback (it can't take
+  // markdown). Derived from `markdown` when present, else the `text` prop.
+  const browserText = markdown ? toSpeechText(markdown) : (text ?? '');
+
   // Browser-TTS fallback.
   const {
     speechStatus,
     start: startBrowser,
     stop: stopBrowser,
-  } = useSpeech({ text });
+  } = useSpeech({ text: browserText });
 
   // Tear down the Web Audio graph and abort the network stream.
   const teardown = () => {
@@ -98,11 +125,25 @@ const Speak = ({
       undefined;
     const speed = speedRef.current;
 
+    // Rich message content goes through speechify/narration server-side; the
+    // voice-preview path sends plain `text`.
+    const mode = readMode();
+    const payload = markdown
+      ? {
+          markdown,
+          messageId,
+          mode,
+          narrationModel: mode === 'narrate' ? readNarrationModel() : undefined,
+          voice,
+          speed,
+        }
+      : { text, voice, speed };
+
     try {
       const res = await fetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, voice, speed }),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok || !res.body) {
@@ -207,18 +248,19 @@ const Speak = ({
   // the user has auto-read enabled). Guarded so it fires a single time per
   // activation; resets when `autoPlay` clears so a rewrite can re-trigger.
   const autoStartedRef = useRef(false);
+  const content = markdown ?? text ?? '';
   useEffect(() => {
     if (!autoPlay) {
       autoStartedRef.current = false;
       return;
     }
-    if (autoStartedRef.current || !text.trim()) return;
+    if (autoStartedRef.current || !content.trim()) return;
     autoStartedRef.current = true;
     void start();
     // `start` is intentionally omitted — it's recreated each render and guarded
     // by autoStartedRef.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoPlay, text]);
+  }, [autoPlay, content]);
 
   const isPlaying = status === 'playing' || speechStatus === 'started';
   const isLoading = status === 'loading';

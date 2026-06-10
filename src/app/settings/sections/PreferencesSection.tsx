@@ -3,9 +3,12 @@
 import { useState } from 'react';
 import ThemeSwitcher from '@/components/theme/Switcher';
 import Speak from '@/components/MessageActions/Speak';
+import ModelField from '@/components/models/ModelField';
 import { useVoices } from '@/lib/hooks/api/useVoices';
 import SettingsSection from '../components/SettingsSection';
 import Select from '../components/Select';
+
+type NarrationMode = 'read' | 'narrate';
 
 const SAMPLE_TEXT =
   'The quick brown fox jumps over the lazy dog. This is how the selected voice sounds.';
@@ -29,10 +32,40 @@ export default function PreferencesSection() {
       : 1.0,
   );
   const [testText, setTestText] = useState('');
+  const [narrationMode, setNarrationMode] = useState<NarrationMode>(() =>
+    typeof window !== 'undefined' &&
+    localStorage.getItem('ttsNarrationMode') === 'narrate'
+      ? 'narrate'
+      : 'read',
+  );
+  const [narrationModel, setNarrationModel] = useState<{
+    provider: string;
+    model: string;
+  } | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const provider = localStorage.getItem('ttsNarrationProvider') || '';
+    const model = localStorage.getItem('ttsNarrationModel') || '';
+    return provider && model ? { provider, model } : null;
+  });
 
   const handleVoiceChange = (value: string) => {
     setVoice(value);
     localStorage.setItem('ttsVoice', value);
+  };
+
+  const handleNarrationModeChange = (value: string) => {
+    const next: NarrationMode = value === 'narrate' ? 'narrate' : 'read';
+    setNarrationMode(next);
+    localStorage.setItem('ttsNarrationMode', next);
+  };
+
+  const handleNarrationModelChange = (m: {
+    provider: string;
+    model: string;
+  }) => {
+    setNarrationModel(m);
+    localStorage.setItem('ttsNarrationProvider', m.provider);
+    localStorage.setItem('ttsNarrationModel', m.model);
   };
 
   const handleEngineChange = (value: string) => {
@@ -104,6 +137,38 @@ export default function PreferencesSection() {
                   { value: '2', label: '2×' },
                 ]}
               />
+            </div>
+            <div className="flex flex-col space-y-1 pt-2">
+              <p className="text-sm">Narration mode</p>
+              <p className="text-xs opacity-70">
+                Read speaks the response as written. Narrate uses an LLM to add
+                spoken descriptions of tables, charts, and other visuals (cached
+                per message; one model call per reply the first time it&apos;s
+                read).
+              </p>
+              <Select
+                value={narrationMode}
+                onChange={(e) => handleNarrationModeChange(e.target.value)}
+                options={[
+                  { value: 'read', label: 'Read (faithful, instant)' },
+                  { value: 'narrate', label: 'Narrate (LLM descriptions)' },
+                ]}
+              />
+              {narrationMode === 'narrate' && (
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-xs opacity-70">
+                    Narration model{' '}
+                    <span className="opacity-60">
+                      (defaults to the system model)
+                    </span>
+                  </span>
+                  <ModelField
+                    selectedModel={narrationModel}
+                    setSelectedModel={handleNarrationModelChange}
+                    panelPosition="above"
+                  />
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-2 pt-1">
               <input

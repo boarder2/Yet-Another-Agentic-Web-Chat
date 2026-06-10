@@ -16,6 +16,7 @@ import { spawn, spawnSync, ChildProcess } from 'child_process';
 import { existsSync } from 'fs';
 import os from 'os';
 import path from 'path';
+import type { SpeechSegment } from './speechify';
 
 export const isWorkerDisabled = (): boolean =>
   /^(1|true|yes)$/i.test(process.env.TTS_WORKER_DISABLED ?? '');
@@ -200,12 +201,13 @@ const ensureChild = (): Promise<void> => {
 };
 
 /**
- * Synthesize speech in the worker process, yielding raw 32-bit float PCM bytes
- * (little-endian, 24kHz mono) chunk by chunk. `voice` must already be validated
- * by the caller. Throws if the worker is unavailable (caller may fall back).
+ * Synthesize speech segments in the worker process, yielding raw 32-bit float PCM
+ * bytes (little-endian, 24kHz mono) chunk by chunk, with silence spliced between
+ * segments. `voice` must already be validated by the caller. Throws if the worker
+ * is unavailable (caller may fall back).
  */
 export async function* synthesizeViaWorker(
-  text: string,
+  segments: SpeechSegment[],
   voice: string,
   speed: number,
 ): AsyncGenerator<Buffer> {
@@ -242,7 +244,7 @@ export async function* synthesizeViaWorker(
     },
   });
 
-  child!.send({ type: 'job', id, text, voice, speed });
+  child!.send({ type: 'job', id, segments, voice, speed });
 
   try {
     while (true) {

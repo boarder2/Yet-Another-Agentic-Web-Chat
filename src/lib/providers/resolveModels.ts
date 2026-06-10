@@ -21,6 +21,45 @@ export type ModelRef = {
 };
 export type EmbeddingRef = { provider: string; name: string };
 
+/**
+ * Resolve a single chat model from a `ModelRef` against the live provider
+ * catalog (or the custom_openai config). Returns null if the model isn't
+ * available, so callers can fall back. Used by features that pick their own
+ * model independent of the chat/system pair (e.g. TTS narration).
+ */
+export async function resolveModelRef(
+  ref: ModelRef,
+): Promise<BaseChatModel | null> {
+  if (ref.provider === 'custom_openai') {
+    return new ChatOpenAI({
+      apiKey: getCustomOpenaiApiKey(),
+      modelName: getCustomOpenaiModelName(),
+      configuration: {
+        baseURL: getCustomOpenaiApiUrl(),
+      },
+    }) as unknown as BaseChatModel;
+  }
+
+  const providers = await getAvailableChatModelProviders();
+  const llm = providers[ref.provider]?.[ref.name]?.model as unknown as
+    | BaseChatModel
+    | undefined;
+  if (!llm) return null;
+
+  // Only mutate the (shared, catalog-cached) model instance when the caller
+  // explicitly asks for a context window. Callers that don't care (e.g. TTS
+  // narration) leave the instance untouched so they can't clobber the window of
+  // a concurrent agent request using the same singleton.
+  if (ref.contextWindowSize) {
+    if (llm instanceof ChatOllama && ref.provider === 'ollama') {
+      llm.numCtx = ref.contextWindowSize;
+    }
+    (llm as unknown as { contextWindowSize?: number }).contextWindowSize =
+      ref.contextWindowSize;
+  }
+  return llm;
+}
+
 export async function resolveChatAndEmbedding(input: {
   chatModel?: ModelRef | null;
   systemModel?: ModelRef | null;

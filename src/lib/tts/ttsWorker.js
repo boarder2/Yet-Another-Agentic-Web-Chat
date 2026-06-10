@@ -17,6 +17,15 @@
 const MODEL_ID = 'onnx-community/Kokoro-82M-v1.0-ONNX';
 const DTYPE = process.env.TTS_DTYPE || 'q4';
 
+// Kokoro outputs 24kHz mono. Mirrors SAMPLE_RATE in src/lib/tts/kokoro.ts.
+const SAMPLE_RATE = 24000;
+
+// Zero-valued PCM samples for `pauseAfterMs` of silence, scaled by playback
+// speed so a pause feels the same length regardless of speech rate. Mirrors
+// silenceSampleCount() in kokoro.ts.
+const silenceSampleCount = (pauseAfterMs, speed) =>
+  Math.max(0, Math.round(((pauseAfterMs / 1000) * SAMPLE_RATE) / (speed || 1)));
+
 let ttsPromise;
 const getTTS = async () => {
   const { KokoroTTS } = await import('kokoro-js');
@@ -35,34 +44,58 @@ const send = (msg) => {
 const cancelled = new Set();
 
 async function handleJob(job) {
-  const { id, text, voice, speed } = job;
+  const { id, segments, voice, speed } = job;
   try {
     const tts = await getTTS();
     const { TextSplitterStream } = await import('kokoro-js');
-    const splitter = new TextSplitterStream();
-    splitter.push(text);
-    splitter.close();
 
-    for await (const chunk of tts.stream(splitter, { voice, speed })) {
+    for (const seg of segments) {
       if (cancelled.has(id)) break;
 
-      // The yielded RawAudio is backed by WASM tensors whose buffers can detach
-      // after the next forward pass; copy into an owned Float32Array first.
-      const raw = chunk.audio;
-      let src = null;
-      try {
-        src = raw.data;
-      } catch {
-        /* buffer detached */
-      }
-      if (!src || src.length === 0) {
-        src = Array.isArray(raw.audio) ? raw.audio[0] : raw.audio;
-      }
-      if (!src || src.length === 0) continue; // skip empty chunk, don't hang
+      if (seg.text && seg.text.trim()) {
+        const splitter = new TextSplitterStream();
+        splitter.push(seg.text);
+        splitter.close();
 
-      const owned = new Float32Array(src);
-      const buf = Buffer.from(owned.buffer, owned.byteOffset, owned.byteLength);
-      send({ type: 'chunk', id, data: buf });
+        for await (const chunk of tts.stream(splitter, { voice, speed })) {
+          if (cancelled.has(id)) break;
+
+          // The yielded RawAudio is backed by WASM tensors whose buffers can
+          // detach after the next forward pass; copy into an owned Float32Array.
+          const raw = chunk.audio;
+          let src = null;
+          try {
+            src = raw.data;
+          } catch {
+            /* buffer detached */
+          }
+          if (!src || src.length === 0) {
+            src = Array.isArray(raw.audio) ? raw.audio[0] : raw.audio;
+          }
+          if (!src || src.length === 0) continue; // skip empty chunk, don't hang
+
+          const owned = new Float32Array(src);
+          const buf = Buffer.from(
+            owned.buffer,
+            owned.byteOffset,
+            owned.byteLength,
+          );
+          send({ type: 'chunk', id, data: buf });
+        }
+      }
+
+      if (cancelled.has(id)) break;
+
+      const n = silenceSampleCount(seg.pauseAfterMs, speed);
+      if (n > 0) {
+        const silence = new Float32Array(n);
+        const buf = Buffer.from(
+          silence.buffer,
+          silence.byteOffset,
+          silence.byteLength,
+        );
+        send({ type: 'chunk', id, data: buf });
+      }
     }
     send({ type: 'done', id });
   } catch (err) {

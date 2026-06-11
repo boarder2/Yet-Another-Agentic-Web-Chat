@@ -125,6 +125,11 @@ export default function PreferencesSection() {
             />
             <div className="flex flex-col space-y-1 pt-2">
               <p className="text-sm">Playback speed</p>
+              <p className="text-xs opacity-70">
+                Applied as the audio player&apos;s native playback rate, so it
+                stays clear at any speed. Leave at 1× if you drive speed with a
+                browser playback-speed extension instead.
+              </p>
               <Select
                 value={String(speed)}
                 onChange={(e) => handleSpeedChange(e.target.value)}
@@ -135,6 +140,8 @@ export default function PreferencesSection() {
                   { value: '1.25', label: '1.25×' },
                   { value: '1.5', label: '1.5×' },
                   { value: '2', label: '2×' },
+                  { value: '2.5', label: '2.5×' },
+                  { value: '3', label: '3×' },
                 ]}
               />
             </div>

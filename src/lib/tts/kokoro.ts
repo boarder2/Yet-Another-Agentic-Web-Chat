@@ -5,6 +5,10 @@ import type { SpeechSegment } from './speechify';
 
 const MODEL_ID = 'onnx-community/Kokoro-82M-v1.0-ONNX';
 
+// Per-chunk synthesis logging is noisy (one line per sentence on every read);
+// gate it behind TTS_DEBUG. Warnings about missing audio are always logged.
+const TTS_DEBUG = /^(1|true|yes)$/i.test(process.env.TTS_DEBUG ?? '');
+
 export interface VoiceInfo {
   id: string;
   name: string;
@@ -110,12 +114,14 @@ export async function* synthesizeStream(
       );
       continue; // skip empty chunk, don't hang
     }
-    console.log(
-      `[kokoro] chunk ${i}: ${src.length} samples, text="${chunk.text?.slice(0, 60)}"`,
-    );
+    if (TTS_DEBUG) {
+      console.log(
+        `[kokoro] chunk ${i}: ${src.length} samples, text="${chunk.text?.slice(0, 60)}"`,
+      );
+    }
     yield new Float32Array(src);
   }
-  console.log(`[kokoro] stream done — ${i} chunks total`);
+  if (TTS_DEBUG) console.log(`[kokoro] stream done — ${i} chunks total`);
 }
 
 /**

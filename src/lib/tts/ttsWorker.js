@@ -52,12 +52,35 @@ async function handleJob(job) {
     for (const seg of segments) {
       if (cancelled.has(id)) break;
 
+      // Lead-in silence (e.g. before a heading). Scaled by the global speed.
+      if (seg.pauseBeforeMs) {
+        const n = silenceSampleCount(seg.pauseBeforeMs, speed);
+        if (n > 0) {
+          const silence = new Float32Array(n);
+          send({
+            type: 'chunk',
+            id,
+            data: Buffer.from(
+              silence.buffer,
+              silence.byteOffset,
+              silence.byteLength,
+            ),
+          });
+        }
+      }
+
       if (seg.text && seg.text.trim()) {
         const splitter = new TextSplitterStream();
         splitter.push(seg.text);
         splitter.close();
 
-        for await (const chunk of tts.stream(splitter, { voice, speed })) {
+        // Per-segment speed multiplier (heading/emphasis cadence) on top of the
+        // global playback speed. Mirrors synthesizeSegments() in kokoro.ts.
+        const segSpeed = speed * (seg.speed ?? 1);
+        for await (const chunk of tts.stream(splitter, {
+          voice,
+          speed: segSpeed,
+        })) {
           if (cancelled.has(id)) break;
 
           // The yielded RawAudio is backed by WASM tensors whose buffers can

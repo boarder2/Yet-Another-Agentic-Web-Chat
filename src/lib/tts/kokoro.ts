@@ -130,9 +130,13 @@ export const silenceSampleCount = (
   Math.max(0, Math.round(((pauseAfterMs / 1000) * SAMPLE_RATE) / (speed || 1)));
 
 /**
- * Synthesize a sequence of speech segments, yielding each segment's PCM followed
- * by a chunk of silence sized from its `pauseAfterMs`. This is what gives spoken
- * output its structural pacing (pauses after headings, between list items, etc.).
+ * Synthesize a sequence of speech segments, yielding optional lead-in silence,
+ * the segment's PCM (at the global speed times the segment's own multiplier), and
+ * trailing silence sized from `pauseAfterMs`. This is what gives spoken output its
+ * structural pacing (pauses around headings, between list items, etc.) and the
+ * heading/emphasis cadence the per-segment `speed` provides. Silence is always
+ * scaled by the *global* speed so pauses feel consistent regardless of a run's
+ * own slowdown.
  */
 export async function* synthesizeSegments(
   segments: SpeechSegment[],
@@ -140,8 +144,12 @@ export async function* synthesizeSegments(
   speed: number = 1,
 ): AsyncGenerator<Float32Array> {
   for (const seg of segments) {
+    if (seg.pauseBeforeMs) {
+      const n = silenceSampleCount(seg.pauseBeforeMs, speed);
+      if (n > 0) yield new Float32Array(n);
+    }
     if (seg.text && seg.text.trim()) {
-      yield* synthesizeStream(seg.text, voice, speed);
+      yield* synthesizeStream(seg.text, voice, speed * (seg.speed ?? 1));
     }
     const n = silenceSampleCount(seg.pauseAfterMs, speed);
     if (n > 0) yield new Float32Array(n);

@@ -85,6 +85,23 @@ const makeSubscribe = (key: string) => (cb: () => void) => {
 };
 
 /**
+ * Subscribe to changes of a single localStorage key without the `useState`
+ * binding the hooks provide. Fires on same-tab writes routed through the setters
+ * here (the `local-storage-change` CustomEvent, including the `'*'` wildcard from
+ * `writeLocalStorageBatch`) and on cross-tab native `storage` events. Returns an
+ * unsubscribe function.
+ *
+ * Use this when a value must live in plain `useState` (e.g. it is threaded
+ * through props and owned by a parent) yet still needs to react to external
+ * cache updates — most notably the cross-device settings re-sync that runs on
+ * tab focus and writes fresh DB values into localStorage.
+ */
+export const subscribeLocalStorage = (
+  key: string,
+  cb: () => void,
+): (() => void) => makeSubscribe(key)(cb);
+
+/**
  * React to a string-valued localStorage key. Returns `[value, setValue]`.
  * When the key is absent, `defaultValue` is returned.
  */

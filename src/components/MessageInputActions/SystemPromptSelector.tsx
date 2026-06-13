@@ -25,12 +25,62 @@ const SystemPromptSelector = ({
   selectedPromptIds,
   onSelectedPromptIdsChange,
 }: SystemPromptSelectorProps) => {
+  const selectedCount = selectedPromptIds.length;
+
+  return (
+    <Popover className="relative">
+      {({ open }) => (
+        <>
+          <PopoverButton
+            className={cn(
+              'flex items-center gap-1 rounded-surface text-sm transition-colors duration-150 ease-in-out focus:outline-none focus-visible:ring-2 p-1',
+              selectedCount > 0
+                ? 'text-accent hover:text-accent'
+                : 'text-fg/60 hover:text-fg/30',
+            )}
+            title="Select Prompts"
+          >
+            <BookUser size={18} />
+            {selectedCount > 0 ? <span> {selectedCount} </span> : null}
+            {/* <ChevronDown size={16} className="opacity-60" /> */}
+          </PopoverButton>
+          <Transition
+            as={Fragment}
+            enter="transition ease-out duration-200"
+            enterFrom="opacity-0 translate-y-1"
+            enterTo="opacity-100 translate-y-0"
+            leave="transition ease-in duration-150"
+            leaveFrom="opacity-100 translate-y-0"
+            leaveTo="opacity-0 translate-y-1"
+          >
+            <PopoverPanel className="absolute right-0 z-20 w-72 transform bottom-full mb-2">
+              <PromptPanel
+                open={open}
+                selectedPromptIds={selectedPromptIds}
+                onSelectedPromptIdsChange={onSelectedPromptIdsChange}
+              />
+            </PopoverPanel>
+          </Transition>
+        </>
+      )}
+    </Popover>
+  );
+};
+
+interface PromptPanelProps extends SystemPromptSelectorProps {
+  open: boolean;
+}
+
+const PromptPanel = ({
+  open,
+  selectedPromptIds,
+  onSelectedPromptIdsChange,
+}: PromptPanelProps) => {
   const [availablePrompts, setAvailablePrompts] = useState<Prompt[]>([]);
-  const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (!isOpen) return; // Only fetch when popover is open or about to open
+    if (!open) return; // Only fetch when popover is open
     const fetchPrompts = async () => {
       try {
         setIsLoading(true);
@@ -60,7 +110,7 @@ const SystemPromptSelector = ({
       }
     };
     fetchPrompts();
-  }, [isOpen, selectedPromptIds, onSelectedPromptIdsChange]);
+  }, [open, selectedPromptIds, onSelectedPromptIdsChange]);
 
   const handleTogglePrompt = (promptId: string) => {
     const newSelectedIds = selectedPromptIds.includes(promptId)
@@ -69,180 +119,133 @@ const SystemPromptSelector = ({
     onSelectedPromptIdsChange(newSelectedIds);
   };
 
-  const selectedCount = selectedPromptIds.length;
-
   return (
-    <Popover className="relative">
-      {({ open }) => {
-        if (open && !isOpen) setIsOpen(true);
-        if (!open && isOpen) setIsOpen(false);
-        return (
-          <>
-            <PopoverButton
-              className={cn(
-                'flex items-center gap-1 rounded-surface text-sm transition-colors duration-150 ease-in-out focus:outline-none focus-visible:ring-2 p-1',
-                selectedCount > 0
-                  ? 'text-accent hover:text-accent'
-                  : 'text-fg/60 hover:text-fg/30',
-              )}
-              title="Select Prompts"
-            >
-              <BookUser size={18} />
-              {selectedCount > 0 ? <span> {selectedCount} </span> : null}
-              {/* <ChevronDown size={16} className="opacity-60" /> */}
-            </PopoverButton>
-            <Transition
-              as={Fragment}
-              enter="transition ease-out duration-200"
-              enterFrom="opacity-0 translate-y-1"
-              enterTo="opacity-100 translate-y-0"
-              leave="transition ease-in duration-150"
-              leaveFrom="opacity-100 translate-y-0"
-              leaveTo="opacity-0 translate-y-1"
-            >
-              <PopoverPanel className="absolute right-0 z-20 w-72 transform bottom-full mb-2">
-                <div className="overflow-hidden rounded-surface shadow-raised ring-1 ring-surface-2 bg-surface">
-                  <div className="px-4 py-3 border-b border-surface-2">
-                    <h3 className="text-sm font-medium text-fg/90">
-                      Persona Prompts
-                    </h3>
-                    <p className="text-xs text-fg/60 mt-0.5">
-                      Control response tone, style, and formatting.
-                    </p>
-                  </div>
-                  {isLoading ? (
-                    <div className="px-4 py-3">
-                      <LoaderCircle className="animate-spin text-accent" />
-                    </div>
-                  ) : (
-                    <div className="max-h-60 overflow-y-auto p-1.5 space-y-3">
-                      {availablePrompts.length === 0 && (
-                        <p className="text-xs text-fg/50 px-2.5 py-2 text-center">
-                          No prompts configured. <br /> Go to{' '}
-                          <a className="text-accent" href="/settings">
-                            settings
-                          </a>{' '}
-                          to add some.
-                        </p>
-                      )}
+    <div className="overflow-hidden rounded-surface shadow-raised ring-1 ring-surface-2 bg-surface">
+      <div className="px-4 py-3 border-b border-surface-2">
+        <h3 className="text-sm font-medium text-fg/90">Persona Prompts</h3>
+        <p className="text-xs text-fg/60 mt-0.5">
+          Control response tone, style, and formatting.
+        </p>
+      </div>
+      {isLoading ? (
+        <div className="px-4 py-3">
+          <LoaderCircle className="animate-spin text-accent" />
+        </div>
+      ) : (
+        <div className="max-h-60 overflow-y-auto p-1.5 space-y-3">
+          {availablePrompts.length === 0 && (
+            <p className="text-xs text-fg/50 px-2.5 py-2 text-center">
+              No prompts configured. <br /> Go to{' '}
+              <a className="text-accent" href="/settings">
+                settings
+              </a>{' '}
+              to add some.
+            </p>
+          )}
 
-                      {availablePrompts.filter(
-                        (p) => p.type === 'persona' && !p.readOnly,
-                      ).length > 0 && (
-                        <div>
-                          <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-fg/70">
-                            <User size={14} />
-                            <div className="flex items-center gap-1.5">
-                              <span>Default Prompts</span>
-                              <Popover>
-                                <PopoverButton className="focus:outline-none">
-                                  <Info
-                                    size={14}
-                                    className="text-fg/50 hover:text-fg/70"
-                                  />
-                                </PopoverButton>
-                                <Transition
-                                  as={Fragment}
-                                  enter="transition ease-out duration-200"
-                                  enterFrom="opacity-0 translate-y-1"
-                                  enterTo="opacity-100 translate-y-0"
-                                  leave="transition ease-in duration-150"
-                                  leaveFrom="opacity-100 translate-y-0"
-                                  leaveTo="opacity-0 translate-y-1"
-                                >
-                                  <PopoverPanel className="absolute z-30 w-64 p-3 bg-surface border border-surface-2 rounded-surface shadow-raised text-xs text-fg/80">
-                                    Built-in formatting and citation presets.
-                                    The system auto-selects one based on focus
-                                    mode when no persona prompt is active.
-                                    Select one here to override the default, or
-                                    combine with your own persona prompts.
-                                  </PopoverPanel>
-                                </Transition>
-                              </Popover>
-                            </div>
-                          </div>
-                          <div className="space-y-0.5">
-                            {availablePrompts
-                              .filter((p) => p.type === 'persona' && p.readOnly)
-                              .map((prompt) => (
-                                <div
-                                  key={prompt.id}
-                                  onClick={() => handleTogglePrompt(prompt.id)}
-                                  className="flex items-center gap-2.5 p-2.5 rounded-control hover:bg-surface-2 cursor-pointer"
-                                >
-                                  {selectedPromptIds.includes(prompt.id) ? (
-                                    <CheckSquare
-                                      size={18}
-                                      className="text-accent flex-shrink-0"
-                                    />
-                                  ) : (
-                                    <Square
-                                      size={18}
-                                      className="text-fg/40 flex-shrink-0"
-                                    />
-                                  )}
-                                  <span
-                                    className="text-sm text-fg/80 truncate"
-                                    title={prompt.name}
-                                  >
-                                    {prompt.name}
-                                  </span>
-                                </div>
-                              ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {availablePrompts.filter(
-                        (p) => p.type === 'persona' && !p.readOnly,
-                      ).length > 0 && (
-                        <div>
-                          <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-fg/70">
-                            <User size={14} />
-                            <span>Persona Prompts</span>
-                          </div>
-                          <div className="space-y-0.5">
-                            {availablePrompts
-                              .filter(
-                                (p) => p.type === 'persona' && !p.readOnly,
-                              )
-                              .map((prompt) => (
-                                <div
-                                  key={prompt.id}
-                                  onClick={() => handleTogglePrompt(prompt.id)}
-                                  className="flex items-center gap-2.5 p-2.5 rounded-control hover:bg-surface-2 cursor-pointer"
-                                >
-                                  {selectedPromptIds.includes(prompt.id) ? (
-                                    <CheckSquare
-                                      size={18}
-                                      className="text-accent flex-shrink-0"
-                                    />
-                                  ) : (
-                                    <Square
-                                      size={18}
-                                      className="text-fg/40 flex-shrink-0"
-                                    />
-                                  )}
-                                  <span
-                                    className="text-sm text-fg/80 truncate"
-                                    title={prompt.name}
-                                  >
-                                    {prompt.name}
-                                  </span>
-                                </div>
-                              ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
+          {availablePrompts.filter((p) => p.type === 'persona' && p.readOnly)
+            .length > 0 && (
+            <div>
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-fg/70">
+                <User size={14} />
+                <div className="flex items-center gap-1.5">
+                  <span>Default Prompts</span>
+                  <Popover>
+                    <PopoverButton className="focus:outline-none">
+                      <Info size={14} className="text-fg/50 hover:text-fg/70" />
+                    </PopoverButton>
+                    <Transition
+                      as={Fragment}
+                      enter="transition ease-out duration-200"
+                      enterFrom="opacity-0 translate-y-1"
+                      enterTo="opacity-100 translate-y-0"
+                      leave="transition ease-in duration-150"
+                      leaveFrom="opacity-100 translate-y-0"
+                      leaveTo="opacity-0 translate-y-1"
+                    >
+                      <PopoverPanel className="absolute z-30 w-64 p-3 bg-surface border border-surface-2 rounded-surface shadow-raised text-xs text-fg/80">
+                        Built-in formatting and citation presets. The system
+                        auto-selects one based on focus mode when no persona
+                        prompt is active. Select one here to override the
+                        default, or combine with your own persona prompts.
+                      </PopoverPanel>
+                    </Transition>
+                  </Popover>
                 </div>
-              </PopoverPanel>
-            </Transition>
-          </>
-        );
-      }}
-    </Popover>
+              </div>
+              <div className="space-y-0.5">
+                {availablePrompts
+                  .filter((p) => p.type === 'persona' && p.readOnly)
+                  .map((prompt) => (
+                    <div
+                      key={prompt.id}
+                      onClick={() => handleTogglePrompt(prompt.id)}
+                      className="flex items-center gap-2.5 p-2.5 rounded-control hover:bg-surface-2 cursor-pointer"
+                    >
+                      {selectedPromptIds.includes(prompt.id) ? (
+                        <CheckSquare
+                          size={18}
+                          className="text-accent flex-shrink-0"
+                        />
+                      ) : (
+                        <Square
+                          size={18}
+                          className="text-fg/40 flex-shrink-0"
+                        />
+                      )}
+                      <span
+                        className="text-sm text-fg/80 truncate"
+                        title={prompt.name}
+                      >
+                        {prompt.name}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {availablePrompts.filter((p) => p.type === 'persona' && !p.readOnly)
+            .length > 0 && (
+            <div>
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-fg/70">
+                <User size={14} />
+                <span>Persona Prompts</span>
+              </div>
+              <div className="space-y-0.5">
+                {availablePrompts
+                  .filter((p) => p.type === 'persona' && !p.readOnly)
+                  .map((prompt) => (
+                    <div
+                      key={prompt.id}
+                      onClick={() => handleTogglePrompt(prompt.id)}
+                      className="flex items-center gap-2.5 p-2.5 rounded-control hover:bg-surface-2 cursor-pointer"
+                    >
+                      {selectedPromptIds.includes(prompt.id) ? (
+                        <CheckSquare
+                          size={18}
+                          className="text-accent flex-shrink-0"
+                        />
+                      ) : (
+                        <Square
+                          size={18}
+                          className="text-fg/40 flex-shrink-0"
+                        />
+                      )}
+                      <span
+                        className="text-sm text-fg/80 truncate"
+                        title={prompt.name}
+                      >
+                        {prompt.name}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 };
 

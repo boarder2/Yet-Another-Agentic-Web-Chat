@@ -13,12 +13,14 @@ import {
   getAvailableEmbeddingModelProviders,
 } from '@/lib/providers';
 import { CachedEmbeddings } from '@/lib/utils/cachedEmbeddings';
-import { getSelectedEmbeddingModel } from '@/lib/config';
-import { getMemoryModelSelection } from '@/lib/settings/server';
+import {
+  getEmbeddingModelSelection,
+  getMemoryModelSelection,
+} from '@/lib/settings/server';
 
 async function getEmbeddingModel(): Promise<CachedEmbeddings | null> {
   const embeddingModelProviders = await getAvailableEmbeddingModelProviders();
-  const selected = getSelectedEmbeddingModel();
+  const selected = getEmbeddingModelSelection();
 
   // Use configured selection if available
   if (selected.provider && selected.name) {

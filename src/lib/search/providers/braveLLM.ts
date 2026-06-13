@@ -1,4 +1,5 @@
-import { getBraveLLMApiKey, getSearchLocale } from '@/lib/config';
+import { getBraveLLMApiKey } from '@/lib/config';
+import { getSearchLocale } from '@/lib/settings/server';
 import { SearchProvider, SearchResult, WebSearchOpts } from './types';
 
 const BRAVE_LLM_ENDPOINT = 'https://api.search.brave.com/res/v1/llm/context';

@@ -18,20 +18,7 @@ export interface SettingsType {
   customOpenaiApiUrl: string;
   customOpenaiModelName: string;
   contextWindowSize: number;
-  selectedSystemModelProvider: string;
-  selectedSystemModel: string;
-  selectedEmbeddingModelProvider: string;
-  selectedEmbeddingModel: string;
   privateSessionDurationMinutes: number;
-  retentionChatsMode: 'days' | 'count' | 'disabled';
-  retentionChatsValue: number;
-  retentionScheduledRunsMode: 'days' | 'count' | 'disabled';
-  retentionScheduledRunsValue: number;
-  searchProvider: string;
-  searchPrivateProvider: string;
-  searchFallbackProvider: string;
-  searchLanguage: string;
-  searchRegion: string;
   searxngApiUrl: string;
   braveSearchApiKey: string;
   braveLLMApiKey: string;
@@ -48,7 +35,6 @@ export interface SettingsType {
     videos: boolean;
     autocomplete: boolean;
   };
-  hiddenModels: string[];
 }
 
 export type SectionKey =

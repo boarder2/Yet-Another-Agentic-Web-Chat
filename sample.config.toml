@@ -2,14 +2,11 @@
 SIMILARITY_MEASURE = "cosine"
 KEEP_ALIVE = "5m"
 BASE_URL = ""
-HIDDEN_MODELS = [ ]
 PRIVATE_SESSION_DURATION_MINUTES = 1440
-
-[GENERAL.RETENTION]
-CHATS_MODE = "disabled"        # "days" | "count" | "disabled"
-CHATS_VALUE = 365
-SCHEDULED_RUNS_MODE = "disabled" # "days" | "count" | "disabled"
-SCHEDULED_RUNS_VALUE = 10
+# HIDDEN_MODELS and [GENERAL.RETENTION] have been migrated to the database
+# (app_settings table). Manage them from Settings → Model Visibility / Retention.
+# Selected models (embedding + memory-processing model) are likewise DB-backed
+# and configured from the Settings UI.
 
 [MODELS.OPENAI]
 API_KEY = ""
@@ -47,18 +44,10 @@ API_URL = ""
 SEARXNG = ""
 
 [SEARCH]
-# Primary search provider for regular chats.
-# Options: "searxng" | "brave_search" | "brave_llm" | "mojeek"
-PROVIDER = "searxng"
-# Optional: override provider for private chats. Leave empty to use PROVIDER.
-PRIVATE_PROVIDER = ""
-# Fallback provider used when the primary doesn't support a capability
-# (e.g. Mojeek has no image search — fallback covers it).
-FALLBACK_PROVIDER = "searxng"
-# Preferred result language (ISO 639-1, e.g. "en", "fr", "de").
-LANGUAGE = "en"
-# Preferred region (ISO 3166-1 alpha-2 country code, e.g. "US", "GB"). Leave empty for none.
-REGION = "US"
+# Search provider + locale preferences (PROVIDER, PRIVATE_PROVIDER,
+# FALLBACK_PROVIDER, LANGUAGE, REGION) have been migrated to the database
+# (app_settings table). Manage them from Settings → Search Providers.
+# Provider credentials/endpoints below stay here (secrets/infra).
 
 [SEARCH.PROVIDERS.SEARXNG]
 API_URL = ""
@@ -80,9 +69,6 @@ TIMEOUT_SECONDS = 30
 MEMORY_MB = 128
 MAX_OUTPUT_CHARS = 10000
 
-[TOOLS.IMAGE_GENERATION]
-ENABLED = false
-PROVIDER = "openrouter"
-MODEL = ""
-ASPECT_RATIO = "1:1"
-IMAGE_SIZE = "1K"
+# [TOOLS.IMAGE_GENERATION] has been migrated to the database (app_settings
+# table). Manage it from Settings → Image Generation. The OpenRouter API key it
+# uses stays in [MODELS.OPENROUTER].

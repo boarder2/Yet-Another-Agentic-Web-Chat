@@ -1,4 +1,5 @@
-import { getSearchLocale, getSearxngApiEndpoint } from '@/lib/config';
+import { getSearxngApiEndpoint } from '@/lib/config';
+import { getSearchLocale } from '@/lib/settings/server';
 import {
   ImageSearchOpts,
   SearchProvider,

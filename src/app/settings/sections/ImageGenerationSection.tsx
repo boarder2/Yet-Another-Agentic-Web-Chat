@@ -3,12 +3,15 @@
 import { useState } from 'react';
 import SettingsSection from '../components/SettingsSection';
 import Select from '../components/Select';
-import { SettingsType } from '../types';
 import { LoaderCircle, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { useModels } from '@/lib/hooks/api/useModels';
 import { useQueryClient } from '@tanstack/react-query';
 import { qk } from '@/lib/api/keys';
+import {
+  useLocalStorageBoolean,
+  useLocalStorageString,
+} from '@/lib/hooks/useLocalStorage';
 
 const ASPECT_RATIOS = [
   { value: '1:1', label: '1:1 (Square)' },
@@ -25,33 +28,26 @@ const IMAGE_SIZES = [
   { value: '4K', label: '4K (Ultra High)' },
 ];
 
-type ConfigRecord = Record<string, unknown>;
-
-export default function ImageGenerationSection({
-  config,
-  saveConfig,
-  setConfig,
-}: {
-  config: SettingsType;
-  savingStates: Record<string, boolean>;
-  setConfig: React.Dispatch<React.SetStateAction<SettingsType | null>>;
-  saveConfig: (key: string, value: string | boolean) => Promise<void>;
-}) {
+export default function ImageGenerationSection() {
   const qc = useQueryClient();
   const { data: modelsData, isLoading: loadingModels } = useModels();
   const [refreshing, setRefreshing] = useState(false);
 
-  const enabled =
-    ((config as unknown as ConfigRecord).imageGenerationEnabled as boolean) ??
-    false;
-  const model =
-    ((config as unknown as ConfigRecord).imageGenerationModel as string) || '';
-  const aspectRatio =
-    ((config as unknown as ConfigRecord)
-      .imageGenerationAspectRatio as string) || '1:1';
-  const imageSize =
-    ((config as unknown as ConfigRecord).imageGenerationImageSize as string) ||
-    '1K';
+  // Image generation settings are DB-backed (app_settings, synced from
+  // localStorage). The OpenRouter API key stays in config.toml.
+  const [enabled, setEnabled] = useLocalStorageBoolean(
+    'imageGenerationEnabled',
+    false,
+  );
+  const [model, setModel] = useLocalStorageString('imageGenerationModel', '');
+  const [aspectRatio, setAspectRatio] = useLocalStorageString(
+    'imageGenerationAspectRatio',
+    '1:1',
+  );
+  const [imageSize, setImageSize] = useLocalStorageString(
+    'imageGenerationImageSize',
+    '1K',
+  );
 
   const imageGenModels = modelsData?.imageGenerationModels ?? [];
   const modelOptions = imageGenModels.map((m) => ({
@@ -69,26 +65,9 @@ export default function ImageGenerationSection({
     }
   }
 
-  const handleChange =
-    (key: string) => (e: React.ChangeEvent<HTMLSelectElement>) => {
-      const value = e.target.value;
-      setConfig((prev) =>
-        prev ? ({ ...prev, [key]: value } as unknown as SettingsType) : prev,
-      );
-      saveConfig(key, value);
-    };
-
-  const handleToggle = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
     const checked = e.target.checked;
-    setConfig((prev) =>
-      prev
-        ? ({
-            ...prev,
-            imageGenerationEnabled: checked,
-          } as unknown as SettingsType)
-        : prev,
-    );
-    await saveConfig('imageGenerationEnabled', checked);
+    setEnabled(checked);
     if (checked) {
       toast.success('Image generation enabled. Configure your model below.');
     }
@@ -147,7 +126,7 @@ export default function ImageGenerationSection({
               <Select
                 value={model}
                 options={modelOptions}
-                onChange={handleChange('imageGenerationModel')}
+                onChange={(e) => setModel(e.target.value)}
               />
               {loadingModels && (
                 <p className="text-xs text-fg/50">Loading models...</p>
@@ -167,7 +146,7 @@ export default function ImageGenerationSection({
               <Select
                 value={aspectRatio}
                 options={ASPECT_RATIOS}
-                onChange={handleChange('imageGenerationAspectRatio')}
+                onChange={(e) => setAspectRatio(e.target.value)}
               />
             </div>
 
@@ -179,7 +158,7 @@ export default function ImageGenerationSection({
               <Select
                 value={imageSize}
                 options={IMAGE_SIZES}
-                onChange={handleChange('imageGenerationImageSize')}
+                onChange={(e) => setImageSize(e.target.value)}
               />
             </div>
           </>

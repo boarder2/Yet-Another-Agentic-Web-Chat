@@ -101,12 +101,29 @@ with unflushed writes, non-blocking), firing `settings-synced`
 `codeExecutionWarningAccepted`.
 
 Writes are intercepted globally, so call sites are unchanged — keep using the
-`useLocalStorage*` hooks. A consumer that reads a migrated key once and writes
-its state back outside the reactive hooks (`useDashboard`) must gate write-backs
-on `isSettingsHydrated()`/`subscribeSettingsHydrated()` and reload on
-`subscribeSettingsSynced`, else a stale snapshot clobbers newer DB values;
-`useDashboard` also holds `isLoading` until hydrated so its one-shot
-`refreshAllWidgets` runs against hydrated data.
+`useLocalStorage*` hooks. A consumer that reads a migrated key once into plain
+`useState` (instead of a reactive hook) will go **stale** on the focus re-sync —
+it won't see the DB value written into the cache until a remount. Fixes:
+
+- Prefer the reactive `useLocalStorage*` hooks (they react to the
+  `local-storage-change` wildcard the re-sync fires). `PreferencesSection` and
+  `ImageGenerationSection` use these.
+- If the value must stay in `useState` (owned by a parent / threaded through
+  props), subscribe to `subscribeLocalStorage(key, cb)` (`useLocalStorage.ts`)
+  and re-read — see `MessageInput` (`selectedSystemPromptIds`,
+  `selectedMethodologyId`), or reload on `subscribeSettingsSynced` for a bundle
+  of keys — see `settings/page.tsx` (`readLocalStorageSettings`).
+- A consumer that also writes its state back (`useDashboard`) must additionally
+  gate write-backs on `isSettingsHydrated()`/`subscribeSettingsHydrated()`, else
+  a stale snapshot clobbers newer DB values; `useDashboard` holds `isLoading`
+  until hydrated so its one-shot `refreshAllWidgets` runs against hydrated data.
+
+**Config-API-backed settings** (retention, search providers, private-session
+duration — read from `/api/config`, not migrated localStorage keys) don't ride
+the localStorage re-sync. `useConfig` sets `refetchOnWindowFocus: true` so they
+refetch on focus, and `settings/page.tsx` mirrors the response continuously
+(`applyConfigObject` keyed on `configData`) rather than once, so cross-device
+edits land without a reload.
 
 ### Model preferences (localStorage cache)
 

@@ -2,11 +2,11 @@ import db, { sqlite } from '@/lib/db';
 import { chats, scheduledTasks } from '@/lib/db/schema';
 import { deleteCheckpoint } from '@/lib/runs/checkpointer';
 import { and, eq, isNull, isNotNull, desc, sql, inArray } from 'drizzle-orm';
+import type { RetentionPolicy } from '@/lib/config';
 import {
   getChatRetentionPolicy,
   getScheduledRunRetentionPolicy,
-  type RetentionPolicy,
-} from '@/lib/config';
+} from '@/lib/settings/server';
 import { cleanupExpiredPrivateSessions } from '@/lib/privateSessionCleanup';
 import { resolveTaskRetentionPolicy } from './policy';
 import { deleteChatWithOrphanCleanup } from './deleteChat';

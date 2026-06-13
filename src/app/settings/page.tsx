@@ -10,7 +10,11 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { Prompt } from '@/lib/types/prompt';
-import { writeLocalStorage } from '@/lib/hooks/useLocalStorage';
+import {
+  writeLocalStorage,
+  useLocalStorageJSON,
+} from '@/lib/hooks/useLocalStorage';
+import { subscribeSettingsSynced } from '@/lib/settings/persist';
 import { useQueryClient } from '@tanstack/react-query';
 import { useConfig, useSaveConfig } from '@/lib/hooks/api/useConfig';
 import { useModels } from '@/lib/hooks/api/useModels';
@@ -43,6 +47,9 @@ import ModelVisibilitySection from './sections/ModelVisibilitySection';
 import ImageGenerationSection from './sections/ImageGenerationSection';
 import ApiKeysSection from './sections/ApiKeysSection';
 import SkillsSection from './sections/SkillsSection';
+
+// Stable default reference for useLocalStorageJSON (required by useSyncExternalStore).
+const EMPTY_HIDDEN_MODELS: string[] = [];
 
 export default function SettingsPage() {
   const [config, setConfig] = useState<SettingsType | null>(null);
@@ -103,7 +110,11 @@ export default function SettingsPage() {
     chat: Record<string, Record<string, { displayName: string }>>;
     embedding: Record<string, Record<string, { displayName: string }>>;
   }>({ chat: {}, embedding: {} });
-  const [hiddenModels, setHiddenModels] = useState<string[]>([]);
+  // Hidden models are DB-backed (app_settings, synced from localStorage).
+  const [hiddenModels, setHiddenModels] = useLocalStorageJSON<string[]>(
+    'hiddenModels',
+    EMPTY_HIDDEN_MODELS,
+  );
   const [expandedProviders, setExpandedProviders] = useState<Set<string>>(
     new Set(),
   );
@@ -116,7 +127,6 @@ export default function SettingsPage() {
   const searchParams = useSearchParams();
 
   const queryClient = useQueryClient();
-  const defaultsSavedRef = useRef(false);
   const isInitializedRef = useRef(false);
   const { data: configData } = useConfig();
   const { data: modelsData } = useModels(true);
@@ -139,116 +149,12 @@ export default function SettingsPage() {
     [router, searchParams],
   );
 
-  /* eslint-disable react-hooks/set-state-in-effect */
-  useEffect(() => {
-    if (!configData || isInitializedRef.current) return;
-    isInitializedRef.current = true;
-    const data = configData as unknown as SettingsType;
-
+  // (C) Config-API-backed state — mirrors the latest /api/config response
+  // (retention, search providers, private-session duration, model lists).
+  const applyConfigObject = useCallback((data: SettingsType) => {
     setConfig(data);
-    setHiddenModels(data.hiddenModels || []);
-
-    const chatModelProvidersKeys = Object.keys(data.chatModelProviders || {});
-    const embeddingModelProvidersKeys = Object.keys(
-      data.embeddingModelProviders || {},
-    );
-
-    const defaultChatModelProvider =
-      chatModelProvidersKeys.length > 0 ? chatModelProvidersKeys[0] : '';
-    const defaultEmbeddingModelProvider =
-      embeddingModelProvidersKeys.length > 0
-        ? embeddingModelProvidersKeys[0]
-        : '';
-
-    const chatModelProvider =
-      localStorage.getItem('chatModelProvider') ||
-      defaultChatModelProvider ||
-      '';
-    const chatModel =
-      localStorage.getItem('chatModel') ||
-      (data.chatModelProviders &&
-      data.chatModelProviders[chatModelProvider]?.length > 0
-        ? data.chatModelProviders[chatModelProvider][0].name
-        : undefined) ||
-      '';
-
-    // The settings page only displays the chat system model (for Model Presets);
-    // it is owned by the chat input's ModelConfigurator (localStorage, DB-backed),
-    // NOT config.toml. The memory-processing model is separate (see MemorySection).
-    const systemModelProvider =
-      localStorage.getItem('systemModelProvider') ||
-      defaultChatModelProvider ||
-      '';
-    const systemModel =
-      localStorage.getItem('systemModel') ||
-      (data.chatModelProviders &&
-      data.chatModelProviders[systemModelProvider]?.length > 0
-        ? data.chatModelProviders[systemModelProvider][0].name
-        : undefined) ||
-      '';
-
-    const embeddingModelProvider =
-      data.selectedEmbeddingModelProvider ||
-      defaultEmbeddingModelProvider ||
-      '';
-    const embeddingModel =
-      data.selectedEmbeddingModel ||
-      (data.embeddingModelProviders &&
-        data.embeddingModelProviders[embeddingModelProvider]?.[0].name) ||
-      '';
-
-    setSelectedChatModelProvider(chatModelProvider);
-    setSelectedChatModel(chatModel);
-    setSelectedSystemModelProvider(systemModelProvider);
-    setSelectedSystemModel(systemModel);
-    setSelectedEmbeddingModelProvider(embeddingModelProvider);
-    setSelectedEmbeddingModel(embeddingModel);
-
-    // systemModelProvider/systemModel intentionally NOT written here: the chat
-    // system model is owned by the chat input's ModelConfigurator (localStorage,
-    // DB-backed). Only the embedding selection is mirrored/persisted from here.
-    localStorage.setItem('embeddingModelProvider', embeddingModelProvider);
-    localStorage.setItem('embeddingModel', embeddingModel);
-
-    if (
-      (!data.selectedEmbeddingModelProvider || !data.selectedEmbeddingModel) &&
-      !defaultsSavedRef.current
-    ) {
-      defaultsSavedRef.current = true;
-      saveConfigMutation.mutate({
-        ...data,
-        selectedEmbeddingModelProvider: embeddingModelProvider,
-        selectedEmbeddingModel: embeddingModel,
-      });
-    }
-
     setChatModels(data.chatModelProviders || {});
     setEmbeddingModels(data.embeddingModelProviders || {});
-
-    setAutomaticSuggestions(
-      localStorage.getItem('autoSuggestions') !== 'false',
-    );
-    const storedContextWindow = parseInt(
-      localStorage.getItem('contextWindowSize') ?? '32768',
-    );
-    setContextWindowSize(storedContextWindow);
-    setIsCustomContextWindow(
-      !PREDEFINED_CONTEXT_SIZES.includes(storedContextWindow),
-    );
-
-    const storedLocation =
-      localStorage.getItem('personalization.location') || '';
-    const storedAbout = localStorage.getItem('personalization.about') || '';
-    setPersonalizationLocation(storedLocation);
-    setPersonalizationAbout(storedAbout);
-
-    setMemoryEnabled(localStorage.getItem('memoryEnabled') === 'true');
-    setMemoryRetrievalEnabled(
-      localStorage.getItem('memoryRetrievalEnabled') === 'true',
-    );
-    setMemoryAutoDetectionEnabled(
-      localStorage.getItem('memoryAutoDetectionEnabled') === 'true',
-    );
 
     const duration = data.privateSessionDurationMinutes ?? 1440;
     setPrivateSessionDurationMinutes(duration);
@@ -256,21 +162,153 @@ export default function SettingsPage() {
       duration,
     );
     setIsCustomPrivateDuration(!isPredefined);
-    if (!isPredefined) {
-      setCustomPrivateDurationInput(String(duration));
-    }
+    if (!isPredefined) setCustomPrivateDurationInput(String(duration));
+  }, []);
 
-    const storedSearchChatModelProvider = localStorage.getItem(
-      'searchChatModelProvider',
-    );
-    const storedSearchChatModel = localStorage.getItem('searchChatModel');
-    if (storedSearchChatModelProvider)
-      setSearchChatModelProvider(storedSearchChatModelProvider);
-    if (storedSearchChatModel) setSearchChatModel(storedSearchChatModel);
+  // (B) localStorage-backed (DB-synced) state — model selections plus the
+  // composer/memory/personalization fields. `persist` writes the resolved
+  // embedding default back on first run only; the focus re-sync passes false so
+  // it never echoes the value it just read.
+  const readLocalStorageSettings = useCallback(
+    (data: SettingsType, { persist }: { persist: boolean }) => {
+      const chatModelProvidersKeys = Object.keys(data.chatModelProviders || {});
+      const embeddingModelProvidersKeys = Object.keys(
+        data.embeddingModelProviders || {},
+      );
 
+      const defaultChatModelProvider =
+        chatModelProvidersKeys.length > 0 ? chatModelProvidersKeys[0] : '';
+      const defaultEmbeddingModelProvider =
+        embeddingModelProvidersKeys.length > 0
+          ? embeddingModelProvidersKeys[0]
+          : '';
+
+      const chatModelProvider =
+        localStorage.getItem('chatModelProvider') ||
+        defaultChatModelProvider ||
+        '';
+      const chatModel =
+        localStorage.getItem('chatModel') ||
+        (data.chatModelProviders &&
+        data.chatModelProviders[chatModelProvider]?.length > 0
+          ? data.chatModelProviders[chatModelProvider][0].name
+          : undefined) ||
+        '';
+
+      // The settings page only displays the chat system model (for Model
+      // Presets); it is owned by the chat input's ModelConfigurator (localStorage,
+      // DB-backed), NOT config.toml. The memory-processing model is separate.
+      const systemModelProvider =
+        localStorage.getItem('systemModelProvider') ||
+        defaultChatModelProvider ||
+        '';
+      const systemModel =
+        localStorage.getItem('systemModel') ||
+        (data.chatModelProviders &&
+        data.chatModelProviders[systemModelProvider]?.length > 0
+          ? data.chatModelProviders[systemModelProvider][0].name
+          : undefined) ||
+        '';
+
+      // The embedding model is DB-backed via the `embeddingModelProvider`/
+      // `embeddingModel` localStorage keys (synced to the DB by the settings
+      // persistence layer), NOT config.toml. Hydrate from there, defaulting to
+      // the first available provider/model on a fresh install.
+      const embeddingModelProvider =
+        localStorage.getItem('embeddingModelProvider') ||
+        defaultEmbeddingModelProvider ||
+        '';
+      const embeddingModel =
+        localStorage.getItem('embeddingModel') ||
+        (data.embeddingModelProviders &&
+          data.embeddingModelProviders[embeddingModelProvider]?.[0].name) ||
+        '';
+
+      setSelectedChatModelProvider(chatModelProvider);
+      setSelectedChatModel(chatModel);
+      setSelectedSystemModelProvider(systemModelProvider);
+      setSelectedSystemModel(systemModel);
+      setSelectedEmbeddingModelProvider(embeddingModelProvider);
+      setSelectedEmbeddingModel(embeddingModel);
+
+      // systemModelProvider/systemModel intentionally NOT written here: the chat
+      // system model is owned by the chat input's ModelConfigurator (localStorage,
+      // DB-backed). The embedding selection is likewise DB-backed; persist its
+      // resolved default so a fresh install has a concrete value.
+      if (persist) {
+        localStorage.setItem('embeddingModelProvider', embeddingModelProvider);
+        localStorage.setItem('embeddingModel', embeddingModel);
+      }
+
+      setAutomaticSuggestions(
+        localStorage.getItem('autoSuggestions') !== 'false',
+      );
+      const storedContextWindow = parseInt(
+        localStorage.getItem('contextWindowSize') ?? '32768',
+      );
+      setContextWindowSize(storedContextWindow);
+      setIsCustomContextWindow(
+        !PREDEFINED_CONTEXT_SIZES.includes(storedContextWindow),
+      );
+
+      setPersonalizationLocation(
+        localStorage.getItem('personalization.location') || '',
+      );
+      setPersonalizationAbout(
+        localStorage.getItem('personalization.about') || '',
+      );
+
+      setMemoryEnabled(localStorage.getItem('memoryEnabled') === 'true');
+      setMemoryRetrievalEnabled(
+        localStorage.getItem('memoryRetrievalEnabled') === 'true',
+      );
+      setMemoryAutoDetectionEnabled(
+        localStorage.getItem('memoryAutoDetectionEnabled') === 'true',
+      );
+
+      const storedSearchChatModelProvider = localStorage.getItem(
+        'searchChatModelProvider',
+      );
+      const storedSearchChatModel = localStorage.getItem('searchChatModel');
+      if (storedSearchChatModelProvider)
+        setSearchChatModelProvider(storedSearchChatModelProvider);
+      if (storedSearchChatModel) setSearchChatModel(storedSearchChatModel);
+    },
+    [],
+  );
+
+  /* eslint-disable react-hooks/set-state-in-effect */
+  // (C) Track the latest config on every change, including the window-focus
+  // refetch, so retention/search-provider/private-duration/model-list UI
+  // reflects edits made on another device. Structural sharing means this only
+  // re-runs when the config actually differs.
+  useEffect(() => {
+    if (!configData) return;
+    applyConfigObject(configData as unknown as SettingsType);
+  }, [configData, applyConfigObject]);
+
+  // One-time init: read the localStorage-backed settings, persist the resolved
+  // embedding default, and clear the loading flag.
+  useEffect(() => {
+    if (!configData || isInitializedRef.current) return;
+    isInitializedRef.current = true;
+    readLocalStorageSettings(configData as unknown as SettingsType, {
+      persist: true,
+    });
     setIsLoading(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [configData]);
+  }, [configData, readLocalStorageSettings]);
+
+  // (B) Re-read the localStorage-backed settings whenever the cross-device
+  // settings re-sync fires (tab focus/visibility). Without this they'd stay
+  // stale until a full navigation/refresh.
+  useEffect(() => {
+    return subscribeSettingsSynced(() => {
+      if (!configData) return;
+      readLocalStorageSettings(configData as unknown as SettingsType, {
+        persist: false,
+      });
+    });
+  }, [configData, readLocalStorageSettings]);
 
   useEffect(() => {
     if (!modelsData) return;
@@ -316,38 +354,23 @@ export default function SettingsPage() {
     try {
       const modelSelectionKeys = ['embeddingModelProvider', 'embeddingModel'];
 
-      const configKeyMap: Record<string, string> = {
-        embeddingModelProvider: 'selectedEmbeddingModelProvider',
-        embeddingModel: 'selectedEmbeddingModel',
-      };
-
       if (modelSelectionKeys.includes(key)) {
-        // Only the embedding selection is config.toml-backed and mirrored to
-        // localStorage. (The chat system model lives in the chat picker; the
-        // memory model is its own DB-backed setting.)
+        // The embedding selection is DB-backed via localStorage (synced by the
+        // settings persistence layer). The chat system model lives in the chat
+        // picker; the memory model is its own DB-backed setting.
         localStorage.setItem(key, value.toString());
 
-        const configPayload = {
-          [configKeyMap[key]]: value,
-        } as Partial<SettingsType>;
-
-        await saveConfigMutation.mutateAsync(
-          configPayload as Record<string, unknown>,
-        );
-
-        if (key === 'embeddingModel' || key === 'embeddingModelProvider') {
-          fetch('/api/memories/reindex', { method: 'POST' })
-            .then((res) => {
-              if (res.ok) {
-                toast.success(
-                  'Memories are being re-indexed with the new embedding model',
-                );
-              }
-            })
-            .catch(() => {
-              toast.error('Failed to trigger memory re-indexing');
-            });
-        }
+        fetch('/api/memories/reindex', { method: 'POST' })
+          .then((res) => {
+            if (res.ok) {
+              toast.success(
+                'Memories are being re-indexed with the new embedding model',
+              );
+            }
+          })
+          .catch(() => {
+            toast.error('Failed to trigger memory re-indexing');
+          });
 
         setTimeout(() => {
           setSavingStates((prev) => ({ ...prev, [key]: false }));
@@ -518,53 +541,33 @@ export default function SettingsPage() {
     writeLocalStorage(key, rawValue.trim() ? rawValue : null);
   };
 
-  const handleModelVisibilityToggle = async (
+  // hiddenModels is DB-backed via useLocalStorageJSON; setHiddenModels persists
+  // to localStorage and syncs to the DB, so no separate save call is needed.
+  const handleModelVisibilityToggle = (
     modelKey: string,
     isVisible: boolean,
   ) => {
-    let updatedHiddenModels: string[];
-
-    if (isVisible) {
-      updatedHiddenModels = hiddenModels.filter((m) => m !== modelKey);
-    } else {
-      updatedHiddenModels = [...hiddenModels, modelKey];
-    }
-
-    setHiddenModels(updatedHiddenModels);
-
-    try {
-      await saveConfig('hiddenModels', updatedHiddenModels);
-    } catch (error) {
-      console.error('Failed to save hidden models:', error);
-      setHiddenModels(hiddenModels);
-    }
+    setHiddenModels(
+      isVisible
+        ? hiddenModels.filter((m) => m !== modelKey)
+        : [...hiddenModels, modelKey],
+    );
   };
 
-  const handleProviderVisibilityToggle = async (
+  const handleProviderVisibilityToggle = (
     providerModels: Record<string, unknown>,
     showAll: boolean,
   ) => {
     const modelKeys = Object.keys(providerModels);
-    let updatedHiddenModels: string[];
-
     if (showAll) {
-      updatedHiddenModels = hiddenModels.filter(
-        (modelKey) => !modelKeys.includes(modelKey),
+      setHiddenModels(
+        hiddenModels.filter((modelKey) => !modelKeys.includes(modelKey)),
       );
     } else {
       const modelsToHide = modelKeys.filter(
         (modelKey) => !hiddenModels.includes(modelKey),
       );
-      updatedHiddenModels = [...hiddenModels, ...modelsToHide];
-    }
-
-    setHiddenModels(updatedHiddenModels);
-
-    try {
-      await saveConfig('hiddenModels', updatedHiddenModels);
-    } catch (error) {
-      console.error('Failed to save hidden models:', error);
-      setHiddenModels(hiddenModels);
+      setHiddenModels([...hiddenModels, ...modelsToHide]);
     }
   };
 
@@ -913,12 +916,7 @@ export default function SettingsPage() {
                 )}
 
                 {activeSection === 'image-generation' && config && (
-                  <ImageGenerationSection
-                    config={config}
-                    savingStates={savingStates}
-                    setConfig={setConfig}
-                    saveConfig={saveConfig}
-                  />
+                  <ImageGenerationSection />
                 )}
 
                 {activeSection === 'api-keys' && (

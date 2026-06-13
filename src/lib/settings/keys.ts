@@ -33,8 +33,7 @@ export const MIGRATED_SETTING_KEYS = [
   'memoryAutoDetectionEnabled',
   // Memory-processing model — the model used by memory extraction/dedup/
   // classification/reindex. Deliberately its OWN keys (NOT the chat picker's
-  // `systemModel`/`systemModelProvider`), so the two are fully independent. Once
-  // lived in config.toml `SELECTED_MODELS.SYSTEM_MODEL`; now DB-backed.
+  // `systemModel`/`systemModelProvider`), so the two are fully independent.
   'memoryModelProvider',
   'memoryModel',
   'personalization.location',
@@ -45,6 +44,30 @@ export const MIGRATED_SETTING_KEYS = [
   'autoSuggestions',
   'selectedSystemPromptIds',
   'selectedMethodologyId',
+  // Chat & scheduled-run retention policies (instance-wide). Seeded once from
+  // the legacy config.toml `[GENERAL.RETENTION]` block.
+  'retentionChatsMode',
+  'retentionChatsValue',
+  'retentionScheduledRunsMode',
+  'retentionScheduledRunsValue',
+  // Search provider + locale preferences (instance-wide). The provider API keys
+  // and the SearXNG URL stay in config.toml (secrets/infra). Seeded once from
+  // the legacy config.toml `[SEARCH]` block.
+  'searchProvider',
+  'searchPrivateProvider',
+  'searchFallbackProvider',
+  'searchLanguage',
+  'searchRegion',
+  // Hidden models (model-visibility). Seeded once from legacy
+  // config.toml `GENERAL.HIDDEN_MODELS`.
+  'hiddenModels',
+  // Image generation tool settings. The OpenRouter API key stays in config.toml.
+  // Seeded once from the legacy config.toml `[TOOLS.IMAGE_GENERATION]` block.
+  'imageGenerationEnabled',
+  'imageGenerationProvider',
+  'imageGenerationModel',
+  'imageGenerationAspectRatio',
+  'imageGenerationImageSize',
   // Text-to-speech
   'ttsVoice',
   'ttsEngine',

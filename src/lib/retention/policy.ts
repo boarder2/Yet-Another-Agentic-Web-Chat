@@ -1,7 +1,5 @@
-import {
-  getScheduledRunRetentionPolicy,
-  type RetentionPolicy,
-} from '@/lib/config';
+import type { RetentionPolicy } from '@/lib/config';
+import { getScheduledRunRetentionPolicy } from '@/lib/settings/server';
 
 /**
  * Resolve effective retention policy for a scheduled task.

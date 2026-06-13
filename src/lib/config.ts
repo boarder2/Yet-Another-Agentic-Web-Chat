@@ -89,12 +89,6 @@ interface Config {
       IMAGE_SIZE?: string;
     };
   };
-  SELECTED_MODELS?: {
-    SYSTEM_PROVIDER?: string;
-    SYSTEM_MODEL?: string;
-    EMBEDDING_PROVIDER?: string;
-    EMBEDDING_MODEL?: string;
-  };
 }
 
 type RecursivePartial<T> = {
@@ -155,30 +149,12 @@ export const getKeepAlive = () => loadConfig().GENERAL.KEEP_ALIVE;
 
 export const getBaseUrl = () => loadConfig().GENERAL.BASE_URL;
 
-export const getHiddenModels = () => loadConfig().GENERAL.HIDDEN_MODELS;
-
 export const getPrivateSessionDurationMinutes = () =>
   loadConfig().GENERAL.PRIVATE_SESSION_DURATION_MINUTES ?? 1440;
 
 export type RetentionPolicy = {
   mode: 'days' | 'count' | 'disabled';
   value: number;
-};
-
-export const getChatRetentionPolicy = (): RetentionPolicy => {
-  const r = loadConfig().GENERAL.RETENTION;
-  return {
-    mode: r?.CHATS_MODE ?? 'disabled',
-    value: r?.CHATS_VALUE ?? 365,
-  };
-};
-
-export const getScheduledRunRetentionPolicy = (): RetentionPolicy => {
-  const r = loadConfig().GENERAL.RETENTION;
-  return {
-    mode: r?.SCHEDULED_RUNS_MODE ?? 'disabled',
-    value: r?.SCHEDULED_RUNS_VALUE ?? 10,
-  };
 };
 
 export const getOpenaiApiKey = () => loadConfig().MODELS.OPENAI.API_KEY;
@@ -207,24 +183,6 @@ export type SearchProviderIdType =
   | 'brave_llm'
   | 'mojeek';
 
-export const getSearchProviderSelection = () => {
-  const s = loadConfig().SEARCH;
-  return {
-    provider: (s?.PROVIDER as SearchProviderIdType) || 'searxng',
-    privateProvider: (s?.PRIVATE_PROVIDER as SearchProviderIdType) || undefined,
-    fallbackProvider:
-      (s?.FALLBACK_PROVIDER as SearchProviderIdType) || 'searxng',
-  };
-};
-
-export const getSearchLocale = () => {
-  const s = loadConfig().SEARCH;
-  return {
-    language: s?.LANGUAGE || 'en',
-    region: s?.REGION ?? 'US',
-  };
-};
-
 export const getBraveSearchApiKey = () =>
   loadConfig().SEARCH?.PROVIDERS?.BRAVE_SEARCH?.API_KEY || '';
 
@@ -251,22 +209,6 @@ export const getCustomOpenaiModelName = () =>
 
 export const getLMStudioApiEndpoint = () =>
   loadConfig().MODELS.LM_STUDIO.API_URL;
-
-export const getSelectedSystemModel = () => {
-  const config = loadConfig();
-  return {
-    provider: config.SELECTED_MODELS?.SYSTEM_PROVIDER || '',
-    name: config.SELECTED_MODELS?.SYSTEM_MODEL || '',
-  };
-};
-
-export const getSelectedEmbeddingModel = () => {
-  const config = loadConfig();
-  return {
-    provider: config.SELECTED_MODELS?.EMBEDDING_PROVIDER || '',
-    name: config.SELECTED_MODELS?.EMBEDDING_MODEL || '',
-  };
-};
 
 const mergeConfigs = (
   current: Record<string, unknown>,
@@ -371,27 +313,76 @@ export interface ImageGenerationConfig {
   imageSize: string;
 }
 
-export const getImageGenerationConfig = (): ImageGenerationConfig | null => {
-  const config = loadConfig();
-  const ig = config.TOOLS?.IMAGE_GENERATION;
+/**
+ * Legacy config.toml sections that have since been migrated to the DB-backed
+ * `app_settings` table. Read raw here ONLY by the one-time seed
+ * (`src/lib/settings/seed.ts`) so existing installs don't lose values that were
+ * configured before the migration. Runtime reads go through
+ * `src/lib/settings/server.ts`, not these.
+ */
+interface LegacyMigratableConfig {
+  SELECTED_MODELS?: {
+    SYSTEM_PROVIDER?: string;
+    SYSTEM_MODEL?: string;
+    EMBEDDING_PROVIDER?: string;
+    EMBEDDING_MODEL?: string;
+  };
+}
 
-  if (!ig || !ig.ENABLED) {
-    return {
-      enabled: false,
-      provider: ig?.PROVIDER || 'openrouter',
-      model: ig?.MODEL || '',
-      aspectRatio: ig?.ASPECT_RATIO || '1:1',
-      imageSize: ig?.IMAGE_SIZE || '1K',
-    };
+/**
+ * Returns only the legacy values actually present in config.toml, keyed by their
+ * new `app_settings` key. Absent values are omitted so the seed never overwrites
+ * a DB value with a config default. Server-only (returns `{}` on the client).
+ */
+export const readLegacyMigratableConfig = (): Record<string, string> => {
+  const cfg = loadConfig();
+  const legacy = cfg as Config & LegacyMigratableConfig;
+  const out: Record<string, string> = {};
+  const put = (key: string, val: string | number | undefined | null) => {
+    if (val === undefined || val === null) return;
+    out[key] = String(val);
+  };
+
+  // [SELECTED_MODELS] → embedding model + memory-processing model
+  const sm = legacy.SELECTED_MODELS;
+  put('embeddingModelProvider', sm?.EMBEDDING_PROVIDER);
+  put('embeddingModel', sm?.EMBEDDING_MODEL);
+  put('memoryModelProvider', sm?.SYSTEM_PROVIDER);
+  put('memoryModel', sm?.SYSTEM_MODEL);
+
+  // [GENERAL.RETENTION]
+  const r = cfg.GENERAL?.RETENTION;
+  put('retentionChatsMode', r?.CHATS_MODE);
+  put('retentionChatsValue', r?.CHATS_VALUE);
+  put('retentionScheduledRunsMode', r?.SCHEDULED_RUNS_MODE);
+  put('retentionScheduledRunsValue', r?.SCHEDULED_RUNS_VALUE);
+
+  // [SEARCH] provider + locale preferences (API keys/URL stay in config.toml)
+  const s = cfg.SEARCH;
+  put('searchProvider', s?.PROVIDER);
+  put('searchPrivateProvider', s?.PRIVATE_PROVIDER);
+  put('searchFallbackProvider', s?.FALLBACK_PROVIDER);
+  put('searchLanguage', s?.LANGUAGE);
+  put('searchRegion', s?.REGION);
+
+  // GENERAL.HIDDEN_MODELS (loadConfig normalizes to an array) — seed only when
+  // the user actually hid something.
+  const hidden = cfg.GENERAL?.HIDDEN_MODELS;
+  if (Array.isArray(hidden) && hidden.length > 0) {
+    out['hiddenModels'] = JSON.stringify(hidden);
   }
 
-  return {
-    enabled: true,
-    provider: ig.PROVIDER || 'openrouter',
-    model: ig.MODEL || '',
-    aspectRatio: ig.ASPECT_RATIO || '1:1',
-    imageSize: ig.IMAGE_SIZE || '1K',
-  };
+  // [TOOLS.IMAGE_GENERATION]
+  const ig = cfg.TOOLS?.IMAGE_GENERATION;
+  if (ig?.ENABLED !== undefined) {
+    out['imageGenerationEnabled'] = ig.ENABLED ? 'true' : 'false';
+  }
+  put('imageGenerationProvider', ig?.PROVIDER);
+  put('imageGenerationModel', ig?.MODEL);
+  put('imageGenerationAspectRatio', ig?.ASPECT_RATIO);
+  put('imageGenerationImageSize', ig?.IMAGE_SIZE);
+
+  return out;
 };
 
 export const updateConfig = (config: RecursivePartial<Config>) => {

@@ -131,26 +131,15 @@ const checkConfig = async (
     let embeddingModel = localStorage.getItem('embeddingModel');
     let embeddingModelProvider = localStorage.getItem('embeddingModelProvider');
 
-    const [providers, serverConfig] = await Promise.all([
-      fetch(`/api/models`, {
-        headers: { 'Content-Type': 'application/json' },
-      }).then(async (res) => {
-        if (!res.ok)
-          throw new Error(
-            `Failed to fetch models: ${res.status} ${res.statusText}`,
-          );
-        return res.json();
-      }),
-      // Fetch server config for saved model preferences
-      !chatModel ||
-      !chatModelProvider ||
-      !embeddingModel ||
-      !embeddingModelProvider
-        ? fetch('/api/config')
-            .then((r) => (r.ok ? r.json() : null))
-            .catch(() => null)
-        : Promise.resolve(null),
-    ]);
+    const providers = await fetch(`/api/models`, {
+      headers: { 'Content-Type': 'application/json' },
+    }).then(async (res) => {
+      if (!res.ok)
+        throw new Error(
+          `Failed to fetch models: ${res.status} ${res.statusText}`,
+        );
+      return res.json();
+    });
 
     if (
       !chatModel ||
@@ -166,42 +155,22 @@ const checkConfig = async (
           return toast.error('No chat models available');
         }
 
-        // Try server config first, then fall back to first available provider
-        const serverChatProvider = serverConfig?.selectedSystemModelProvider;
+        chatModelProvider =
+          chatModelProvidersKeys.find(
+            (provider) => Object.keys(chatModelProviders[provider]).length > 0,
+          ) || chatModelProvidersKeys[0];
+
         if (
-          serverChatProvider &&
-          chatModelProviders[serverChatProvider] &&
-          Object.keys(chatModelProviders[serverChatProvider]).length > 0
+          chatModelProvider === 'custom_openai' &&
+          Object.keys(chatModelProviders[chatModelProvider]).length === 0
         ) {
-          chatModelProvider = serverChatProvider;
-          const serverModel = serverConfig.selectedSystemModel;
-          if (
-            serverModel &&
-            chatModelProviders[serverChatProvider][serverModel]
-          ) {
-            chatModel = serverModel;
-          } else {
-            chatModel = Object.keys(chatModelProviders[serverChatProvider])[0];
-          }
-        } else {
-          chatModelProvider =
-            chatModelProvidersKeys.find(
-              (provider) =>
-                Object.keys(chatModelProviders[provider]).length > 0,
-            ) || chatModelProvidersKeys[0];
-
-          if (
-            chatModelProvider === 'custom_openai' &&
-            Object.keys(chatModelProviders[chatModelProvider]).length === 0
-          ) {
-            toast.error(
-              "Looks like you haven't configured any chat model providers. Please configure them from the settings page or the config file.",
-            );
-            return setHasError(true);
-          }
-
-          chatModel = Object.keys(chatModelProviders[chatModelProvider])[0];
+          toast.error(
+            "Looks like you haven't configured any chat model providers. Please configure them from the settings page or the config file.",
+          );
+          return setHasError(true);
         }
+
+        chatModel = Object.keys(chatModelProviders[chatModelProvider])[0];
       }
 
       if (!embeddingModel || !embeddingModelProvider) {
@@ -213,27 +182,10 @@ const checkConfig = async (
         )
           return toast.error('No embedding models available');
 
-        // Try server config first
-        const serverEmbProvider = serverConfig?.selectedEmbeddingModelProvider;
-        if (serverEmbProvider && embeddingModelProviders[serverEmbProvider]) {
-          embeddingModelProvider = serverEmbProvider;
-          const serverModel = serverConfig.selectedEmbeddingModel;
-          if (
-            serverModel &&
-            embeddingModelProviders[serverEmbProvider][serverModel]
-          ) {
-            embeddingModel = serverModel;
-          } else {
-            embeddingModel = Object.keys(
-              embeddingModelProviders[serverEmbProvider],
-            )[0];
-          }
-        } else {
-          embeddingModelProvider = Object.keys(embeddingModelProviders)[0];
-          embeddingModel = Object.keys(
-            embeddingModelProviders[embeddingModelProvider],
-          )[0];
-        }
+        embeddingModelProvider = Object.keys(embeddingModelProviders)[0];
+        embeddingModel = Object.keys(
+          embeddingModelProviders[embeddingModelProvider],
+        )[0];
       }
 
       localStorage.setItem('chatModel', chatModel!);

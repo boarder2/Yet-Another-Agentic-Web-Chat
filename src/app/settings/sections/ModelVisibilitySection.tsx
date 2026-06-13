@@ -2,7 +2,7 @@
 
 import AppSwitch from '@/components/ui/AppSwitch';
 import { ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react';
-import { PROVIDER_METADATA } from '@/lib/providers';
+import { PROVIDER_METADATA } from '@/lib/providers/metadata';
 import SettingsSection from '../components/SettingsSection';
 
 export default function ModelVisibilitySection({

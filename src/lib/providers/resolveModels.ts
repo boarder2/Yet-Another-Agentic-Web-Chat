@@ -9,9 +9,8 @@ import {
   getCustomOpenaiApiKey,
   getCustomOpenaiApiUrl,
   getCustomOpenaiModelName,
-  getSelectedSystemModel,
-  getSelectedEmbeddingModel,
 } from '@/lib/config';
+import { getEmbeddingModelSelection } from '@/lib/settings/server';
 import { CachedEmbeddings } from '@/lib/utils/cachedEmbeddings';
 
 export type ModelRef = {
@@ -83,8 +82,8 @@ export async function resolveChatAndEmbedding(input: {
       input.chatModel?.name || Object.keys(chatModelProvider || {})[0]
     ];
 
-  // Embedding model: prefer explicit input, then config.toml, then first available
-  const selectedEmbedding = getSelectedEmbeddingModel();
+  // Embedding model: prefer explicit input, then DB setting, then first available
+  const selectedEmbedding = getEmbeddingModelSelection();
   const embeddingProviderKey =
     input.embeddingModel?.provider ||
     selectedEmbedding.provider ||
@@ -165,31 +164,6 @@ export async function resolveChatAndEmbedding(input: {
       (
         systemLlm as unknown as { contextWindowSize?: number }
       ).contextWindowSize = cw;
-    }
-  }
-  if (!systemLlm) {
-    // Fall back to config.toml SELECTED_MODELS.system, then to chat model
-    const selectedSystem = getSelectedSystemModel();
-    if (
-      selectedSystem.provider &&
-      selectedSystem.name &&
-      chatModelProviders[selectedSystem.provider]?.[selectedSystem.name]
-    ) {
-      systemLlm = chatModelProviders[selectedSystem.provider][
-        selectedSystem.name
-      ].model as unknown as BaseChatModel | undefined;
-      if (systemLlm) {
-        const cw = input.systemModel?.contextWindowSize || 32768;
-        if (
-          systemLlm instanceof ChatOllama &&
-          selectedSystem.provider === 'ollama'
-        ) {
-          systemLlm.numCtx = cw;
-        }
-        (
-          systemLlm as unknown as { contextWindowSize?: number }
-        ).contextWindowSize = cw;
-      }
     }
   }
   if (!systemLlm) systemLlm = chatLlm;

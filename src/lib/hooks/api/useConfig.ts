@@ -8,6 +8,12 @@ export function useConfig() {
   return useQuery({
     queryKey: qk.config,
     queryFn: () => apiFetch<Record<string, unknown>>('/api/config'),
+    // Refetch on tab focus so config-API-backed settings (retention, search
+    // providers, private-session duration, model lists) pick up edits made on
+    // another device. Overrides the global `refetchOnWindowFocus: false`.
+    // Structural sharing keeps the same reference when nothing changed, so the
+    // settings page only re-derives when the config actually differs.
+    refetchOnWindowFocus: true,
   });
 }
 

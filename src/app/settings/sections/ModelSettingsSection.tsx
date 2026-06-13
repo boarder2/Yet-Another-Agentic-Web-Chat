@@ -1,6 +1,6 @@
 'use client';
 
-import { PROVIDER_METADATA } from '@/lib/providers';
+import { PROVIDER_METADATA } from '@/lib/providers/metadata';
 import { LoaderCircle, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';

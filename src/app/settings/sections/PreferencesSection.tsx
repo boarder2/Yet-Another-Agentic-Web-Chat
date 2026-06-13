@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import ThemeSwitcher from '@/components/theme/Switcher';
 import Speak from '@/components/MessageActions/Speak';
 import ModelField from '@/components/models/ModelField';
 import { useVoices } from '@/lib/hooks/api/useVoices';
+import { useLocalStorageString } from '@/lib/hooks/useLocalStorage';
 import SettingsSection from '../components/SettingsSection';
 import Select from '../components/Select';
 
@@ -17,67 +18,63 @@ type Engine = 'kokoro' | 'browser';
 
 export default function PreferencesSection() {
   const { data } = useVoices();
-  const [voice, setVoice] = useState(() =>
-    typeof window !== 'undefined' ? localStorage.getItem('ttsVoice') || '' : '',
+  // Reactive localStorage reads (DB-backed, synced by the settings persistence
+  // layer) so the controls reflect changes made on another device on tab focus,
+  // matching ImageGenerationSection. Raw string values are mapped to their typed
+  // forms below.
+  const [voice, setVoice] = useLocalStorageString('ttsVoice', '');
+  const [engineRaw, setEngineRaw] = useLocalStorageString(
+    'ttsEngine',
+    'kokoro',
   );
-  const [engine, setEngine] = useState<Engine>(() =>
-    typeof window !== 'undefined' &&
-    localStorage.getItem('ttsEngine') === 'browser'
-      ? 'browser'
-      : 'kokoro',
-  );
-  const [speed, setSpeed] = useState(() =>
-    typeof window !== 'undefined'
-      ? parseFloat(localStorage.getItem('ttsSpeed') || '') || 1.0
-      : 1.0,
-  );
+  const engine: Engine = engineRaw === 'browser' ? 'browser' : 'kokoro';
+  const [speedRaw, setSpeedRaw] = useLocalStorageString('ttsSpeed', '1');
+  const speed = parseFloat(speedRaw) || 1.0;
   const [testText, setTestText] = useState('');
-  const [narrationMode, setNarrationMode] = useState<NarrationMode>(() =>
-    typeof window !== 'undefined' &&
-    localStorage.getItem('ttsNarrationMode') === 'narrate'
-      ? 'narrate'
-      : 'read',
+  const [narrationModeRaw, setNarrationModeRaw] = useLocalStorageString(
+    'ttsNarrationMode',
+    'read',
   );
-  const [narrationModel, setNarrationModel] = useState<{
-    provider: string;
-    model: string;
-  } | null>(() => {
-    if (typeof window === 'undefined') return null;
-    const provider = localStorage.getItem('ttsNarrationProvider') || '';
-    const model = localStorage.getItem('ttsNarrationModel') || '';
-    return provider && model ? { provider, model } : null;
-  });
+  const narrationMode: NarrationMode =
+    narrationModeRaw === 'narrate' ? 'narrate' : 'read';
+  const [narrationProvider, setNarrationProvider] = useLocalStorageString(
+    'ttsNarrationProvider',
+    '',
+  );
+  const [narrationModelName, setNarrationModelName] = useLocalStorageString(
+    'ttsNarrationModel',
+    '',
+  );
+  const narrationModel = useMemo(
+    () =>
+      narrationProvider && narrationModelName
+        ? { provider: narrationProvider, model: narrationModelName }
+        : null,
+    [narrationProvider, narrationModelName],
+  );
 
   const handleVoiceChange = (value: string) => {
     setVoice(value);
-    localStorage.setItem('ttsVoice', value);
   };
 
   const handleNarrationModeChange = (value: string) => {
-    const next: NarrationMode = value === 'narrate' ? 'narrate' : 'read';
-    setNarrationMode(next);
-    localStorage.setItem('ttsNarrationMode', next);
+    setNarrationModeRaw(value === 'narrate' ? 'narrate' : 'read');
   };
 
   const handleNarrationModelChange = (m: {
     provider: string;
     model: string;
   }) => {
-    setNarrationModel(m);
-    localStorage.setItem('ttsNarrationProvider', m.provider);
-    localStorage.setItem('ttsNarrationModel', m.model);
+    setNarrationProvider(m.provider);
+    setNarrationModelName(m.model);
   };
 
   const handleEngineChange = (value: string) => {
-    const next: Engine = value === 'browser' ? 'browser' : 'kokoro';
-    setEngine(next);
-    localStorage.setItem('ttsEngine', next);
+    setEngineRaw(value === 'browser' ? 'browser' : 'kokoro');
   };
 
   const handleSpeedChange = (value: string) => {
-    const s = parseFloat(value) || 1.0;
-    setSpeed(s);
-    localStorage.setItem('ttsSpeed', String(s));
+    setSpeedRaw(String(parseFloat(value) || 1.0));
   };
 
   const selectedVoice = voice || data?.defaultVoice || '';
@@ -166,7 +163,7 @@ export default function PreferencesSection() {
                   <span className="text-xs opacity-70">
                     Narration model{' '}
                     <span className="opacity-60">
-                      (defaults to the system model)
+                      (required for narration; otherwise reads aloud as-is)
                     </span>
                   </span>
                   <ModelField

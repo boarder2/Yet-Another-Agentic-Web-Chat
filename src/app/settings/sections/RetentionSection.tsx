@@ -4,6 +4,7 @@ import SettingsSection from '../components/SettingsSection';
 import Select from '../components/Select';
 import InputComponent from '../components/InputComponent';
 import { SettingsType } from '../types';
+import { useLocalStorageString } from '@/lib/hooks/useLocalStorage';
 
 const MODES = [
   { value: 'days', label: 'Keep for N days' },
@@ -23,8 +24,44 @@ const PREDEFINED_DURATIONS = [
   { label: 'Custom', value: -1 },
 ];
 
+function RetentionPanel({
+  label,
+  valueLabel,
+  mode,
+  setMode,
+  value,
+  setValue,
+}: {
+  label: string;
+  valueLabel: string;
+  mode: string;
+  setMode: (v: string) => void;
+  value: string;
+  setValue: (v: string) => void;
+}) {
+  return (
+    <div className="flex flex-col space-y-2">
+      <p className="text-sm font-medium">{label}</p>
+      <Select
+        value={mode}
+        onChange={(e) => setMode(e.target.value)}
+        options={MODES}
+      />
+      {mode !== 'disabled' && (
+        <InputComponent
+          type="number"
+          min={1}
+          value={value}
+          placeholder={valueLabel}
+          onChange={(e) => setValue(e.target.value)}
+          onSave={(next) => setValue(String(Math.max(1, parseInt(next) || 1)))}
+        />
+      )}
+    </div>
+  );
+}
+
 export default function RetentionSection({
-  config,
   savingStates,
   setConfig,
   saveConfig,
@@ -49,44 +86,22 @@ export default function RetentionSection({
   setIsCustomPrivateDuration: (val: boolean) => void;
   setCustomPrivateDurationInput: (val: string) => void;
 }) {
-  const panel = (
-    label: string,
-    modeKey: 'retentionChatsMode' | 'retentionScheduledRunsMode',
-    valueKey: 'retentionChatsValue' | 'retentionScheduledRunsValue',
-    valueLabel: string,
-  ) => (
-    <div className="flex flex-col space-y-2">
-      <p className="text-sm font-medium">{label}</p>
-      <Select
-        value={config[modeKey]}
-        onChange={(e) => {
-          const mode = e.target.value as 'days' | 'count' | 'disabled';
-          setConfig((prev) => ({ ...prev!, [modeKey]: mode }));
-          saveConfig(modeKey, mode);
-        }}
-        options={MODES}
-      />
-      {config[modeKey] !== 'disabled' && (
-        <InputComponent
-          type="number"
-          min={1}
-          value={String(config[valueKey])}
-          placeholder={valueLabel}
-          isSaving={savingStates[valueKey]}
-          onChange={(e) => {
-            const n = parseInt(e.target.value);
-            if (!isNaN(n)) {
-              setConfig((prev) => ({ ...prev!, [valueKey]: n }));
-            }
-          }}
-          onSave={(value) => {
-            const n = Math.max(1, parseInt(value) || 1);
-            setConfig((prev) => ({ ...prev!, [valueKey]: n }));
-            saveConfig(valueKey, n);
-          }}
-        />
-      )}
-    </div>
+  // Retention policies are DB-backed (app_settings, synced from localStorage).
+  const [chatsMode, setChatsMode] = useLocalStorageString(
+    'retentionChatsMode',
+    'disabled',
+  );
+  const [chatsValue, setChatsValue] = useLocalStorageString(
+    'retentionChatsValue',
+    '365',
+  );
+  const [schedMode, setSchedMode] = useLocalStorageString(
+    'retentionScheduledRunsMode',
+    'disabled',
+  );
+  const [schedValue, setSchedValue] = useLocalStorageString(
+    'retentionScheduledRunsValue',
+    '10',
   );
 
   return (
@@ -95,18 +110,22 @@ export default function RetentionSection({
         Automatically purge old chats and scheduled task runs. Pinned chats are
         never purged.
       </p>
-      {panel(
-        'Regular Chats',
-        'retentionChatsMode',
-        'retentionChatsValue',
-        'Days or count',
-      )}
-      {panel(
-        'Scheduled Task Runs (global default)',
-        'retentionScheduledRunsMode',
-        'retentionScheduledRunsValue',
-        'Days or count',
-      )}
+      <RetentionPanel
+        label="Regular Chats"
+        valueLabel="Days or count"
+        mode={chatsMode}
+        setMode={setChatsMode}
+        value={chatsValue}
+        setValue={setChatsValue}
+      />
+      <RetentionPanel
+        label="Scheduled Task Runs (global default)"
+        valueLabel="Days or count"
+        mode={schedMode}
+        setMode={setSchedMode}
+        value={schedValue}
+        setValue={setSchedValue}
+      />
       <div className="flex flex-col space-y-2">
         <p className="text-sm font-medium">Private Session Duration</p>
         <p className="text-xs text-fg/60">

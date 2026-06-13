@@ -2,7 +2,10 @@ import Image from 'next/image';
 import { ArrowRight, ArrowUp, LoaderCircle, Square, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
-import { useLocalStorageString } from '@/lib/hooks/useLocalStorage';
+import {
+  subscribeLocalStorage,
+  useLocalStorageString,
+} from '@/lib/hooks/useLocalStorage';
 import { SELECTION_KEYS } from '@/lib/models/presets';
 import { File, ImageAttachment } from './ChatWindow';
 import Attach from './MessageInputActions/Attach';
@@ -13,6 +16,10 @@ import SystemPromptSelector from './MessageInputActions/SystemPromptSelector'; /
 import MethodologySelector from './MessageInputActions/MethodologySelector';
 import AutoReadToggle from './MessageInputActions/AutoReadToggle';
 import PersonalizationPicker from './PersonalizationPicker';
+
+/** Shallow order-sensitive equality for the persona prompt ID list. */
+const arraysEqual = (a: string[], b: string[]): boolean =>
+  a.length === b.length && a.every((v, i) => v === b[i]);
 
 const MessageInput = ({
   sendMessage,
@@ -136,12 +143,37 @@ const MessageInput = ({
     }
   };
 
+  // Latest prop values, read inside the re-read handlers below to skip redundant
+  // setter calls (and the write-back PATCH they trigger) when nothing changed.
+  // Kept current via an effect (refs must not be mutated during render).
+  const systemPromptIdsRef = useRef(systemPromptIds);
+  const selectedMethodologyIdRef = useRef(selectedMethodologyId);
   useEffect(() => {
-    const storedPromptIds = localStorage.getItem('selectedSystemPromptIds');
-    if (storedPromptIds) {
+    systemPromptIdsRef.current = systemPromptIds;
+    selectedMethodologyIdRef.current = selectedMethodologyId;
+  });
+
+  // Load persona prompt IDs from localStorage on mount, and re-read whenever the
+  // cache changes from outside this component. This matters most for the
+  // cross-device settings re-sync that runs on tab focus/visibility: it writes
+  // the DB value into localStorage and fires the 'local-storage-change' wildcard
+  // (cross-tab edits fire the native 'storage' event). Because this value lives
+  // in ChatWindow's plain useState — not a reactive useLocalStorage* hook — it
+  // would otherwise stay stale until a remount/full refresh.
+  useEffect(() => {
+    const readPromptIds = () => {
+      const storedPromptIds = localStorage.getItem('selectedSystemPromptIds');
+      if (!storedPromptIds) {
+        // Absent (e.g. cleared on another device) → reflect the cleared state.
+        if (systemPromptIdsRef.current.length > 0) setSystemPromptIds([]);
+        return;
+      }
       try {
         const parsedIds = JSON.parse(storedPromptIds);
-        if (Array.isArray(parsedIds)) {
+        if (
+          Array.isArray(parsedIds) &&
+          !arraysEqual(systemPromptIdsRef.current, parsedIds)
+        ) {
           setSystemPromptIds(parsedIds);
         }
       } catch (e) {
@@ -151,7 +183,9 @@ const MessageInput = ({
         );
         localStorage.removeItem('selectedSystemPromptIds'); // Clear corrupted data
       }
-    }
+    };
+    readPromptIds();
+    return subscribeLocalStorage('selectedSystemPromptIds', readPromptIds);
   }, [setSystemPromptIds]);
 
   useEffect(() => {
@@ -166,13 +200,19 @@ const MessageInput = ({
     }
   }, [systemPromptIds]);
 
+  // Same as the persona prompt IDs above: re-read on external cache changes so
+  // the focus-driven cross-device re-sync (and cross-tab edits) propagate to
+  // ChatWindow's useState instead of only applying on a remount/full refresh.
   useEffect(() => {
-    if (setSelectedMethodologyId) {
+    if (!setSelectedMethodologyId) return;
+    const readMethodology = () => {
       const stored = localStorage.getItem('selectedMethodologyId');
-      if (stored) {
+      if (selectedMethodologyIdRef.current !== stored) {
         setSelectedMethodologyId(stored);
       }
-    }
+    };
+    readMethodology();
+    return subscribeLocalStorage('selectedMethodologyId', readMethodology);
   }, [setSelectedMethodologyId]);
 
   useEffect(() => {

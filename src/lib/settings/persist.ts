@@ -106,6 +106,30 @@ function readRaw(key: string): string | null {
   }
 }
 
+// localStorage marker (deliberately NOT a migrated/synced key) recording that
+// THIS browser has reconciled its local cache with the DB at least once. Until
+// it is set, the DB is treated as possibly-incomplete — it may have been seeded
+// from config.toml on the server, or written by another device, without this
+// browser's localStorage-only settings — so hydration MERGES (server values win
+// for the keys it has; local-only keys are backed up) instead of letting the
+// server delete keys it happens not to have. Once set, the server is
+// authoritative and cross-device deletions propagate.
+const SETTINGS_MIGRATED_MARKER = 'settingsDbMigrated';
+
+function isMigrationComplete(): boolean {
+  return readRaw(SETTINGS_MIGRATED_MARKER) === 'true';
+}
+
+function markMigrationComplete() {
+  // Goes through the patched setItem, but record() ignores non-migrated keys,
+  // so this never syncs to the DB (keeping the marker per-browser).
+  try {
+    localStorage.setItem(SETTINGS_MIGRATED_MARKER, 'true');
+  } catch {
+    // Best-effort; if storage is unavailable the next load simply re-merges.
+  }
+}
+
 function buildPatch(keys: Iterable<string>): SettingsPatch {
   const patch: SettingsPatch = {};
   for (const key of keys) patch[key] = readRaw(key);
@@ -289,32 +313,61 @@ export async function hydrateSettingsFromDb() {
     try {
       server = await fetchSettings();
     } catch {
-      // Offline / server error: keep using the local cache as-is.
+      // Offline / server error: keep using the local cache as-is. The migration
+      // marker stays unset so the next load retries the reconciliation.
       return;
     }
 
-    if (Object.keys(server).some(isMigratedSettingKey)) {
-      applyServerValues(server, { skipPending: true, removeAbsent: true });
-      emitSynced();
+    if (isMigrationComplete()) {
+      // Steady state: this browser has already reconciled with the DB, so the
+      // server is authoritative and deletions made elsewhere propagate.
+      if (
+        applyServerValues(server, { skipPending: true, removeAbsent: true })
+      ) {
+        emitSynced();
+      }
       return;
     }
 
-    // Fresh DB: backfill whatever the user already has locally. Only send
-    // non-null values — backfill must NEVER delete. A null for a locally-unset
-    // key could otherwise wipe a row another device wrote during the migration
-    // window (the gap between the empty read above and this write).
+    // First reconciliation for THIS browser. The DB may already hold settings —
+    // seeded from config.toml on the server, or written by another device — but
+    // it does NOT necessarily reflect this browser's localStorage-only values
+    // (chat model, presets, personalization, TTS, dashboard, …). Merge instead
+    // of letting the server win outright: apply the server's values WITHOUT
+    // removeAbsent (so nothing local is deleted), then back up any migrated key
+    // the server is missing. Server values win for keys it has, matching the
+    // pre-migration runtime behavior where config.toml was authoritative.
+    const applied = applyServerValues(server, {
+      skipPending: true,
+      removeAbsent: false,
+    });
+
+    // Only send non-null values — backfill must NEVER delete. A null for a
+    // locally-unset key could otherwise wipe a row another device wrote during
+    // the migration window.
     const patch: SettingsPatch = {};
     for (const key of MIGRATED_SETTING_KEYS) {
+      if (key in server) continue; // already applied from the server above
       const value = readRaw(key);
-      if (value !== null) patch[key] = value;
+      if (value !== null) patch[key] = value; // local-only → preserve it
     }
+
     if (Object.keys(patch).length > 0) {
       try {
         await patchSettings(patch);
       } catch {
-        // Will be retried on the next local write.
+        // Couldn't upload this browser's local-only values. Leave the marker
+        // unset so the next load retries BEFORE the server is ever allowed to
+        // delete keys it doesn't have (resync is gated on the marker too).
+        if (applied) emitSynced();
+        return;
       }
     }
+
+    // Reconciliation succeeded: the DB now reflects this browser's settings, so
+    // future loads/resyncs may treat the server as authoritative.
+    markMigrationComplete();
+    if (applied || Object.keys(patch).length > 0) emitSynced();
   } finally {
     clearTimeout(watchdog);
     // Signal completion on every exit path (including offline) so
@@ -336,7 +389,15 @@ const RESYNC_MIN_INTERVAL_MS = 2_000;
  * with an unflushed local write so it never clobbers a pending local change.
  */
 export async function resyncSettingsFromDb() {
-  if (typeof window === 'undefined' || !settingsHydrated || resyncInFlight) {
+  // Gated on the migration marker as well: until this browser has reconciled its
+  // local-only settings up to the DB, a removeAbsent resync could delete keys the
+  // server doesn't have yet (e.g. a backfill that failed on first hydration).
+  if (
+    typeof window === 'undefined' ||
+    !settingsHydrated ||
+    !isMigrationComplete() ||
+    resyncInFlight
+  ) {
     return;
   }
   const now = Date.now();

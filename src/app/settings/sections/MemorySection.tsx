@@ -104,26 +104,6 @@ export default function MemorySection({
     '',
   );
 
-  // One-time migration: older installs kept this model in config.toml, surfaced
-  // as config.selectedSystemModel*. If the DB-backed keys are still empty, seed
-  // them from that value so the split happens transparently on first visit.
-  useEffect(() => {
-    if (memoryModelProvider || memoryModelName) return;
-    const legacyProvider = config.selectedSystemModelProvider;
-    const legacyModel = config.selectedSystemModel;
-    if (legacyProvider && legacyModel) {
-      setMemoryModelProvider(legacyProvider);
-      setMemoryModelName(legacyModel);
-    }
-  }, [
-    memoryModelProvider,
-    memoryModelName,
-    config.selectedSystemModelProvider,
-    config.selectedSystemModel,
-    setMemoryModelProvider,
-    setMemoryModelName,
-  ]);
-
   const memoryModel =
     memoryModelProvider && memoryModelName
       ? { provider: memoryModelProvider, model: memoryModelName }

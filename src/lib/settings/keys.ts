@@ -1,0 +1,75 @@
+/**
+ * The allowlist of settings keys that are persisted to the database
+ * (`app_settings` table) and synchronized across devices. Everything here was
+ * historically stored only in browser localStorage.
+ *
+ * Shared by both the client persistence layer (`src/lib/settings/persist.ts`)
+ * and the server API route (`src/app/api/settings/route.ts`), so this module
+ * must stay free of client-only or server-only dependencies.
+ *
+ * Deliberately NOT migrated (stay local / elsewhere):
+ * - Secrets: `openAIApiKey`, `openAIBaseURL` — live in config.toml.
+ * - Device-local UI prefs: `appTheme`, `userBg`, `userAccent`, `chatWidthWide`,
+ *   `codeExecutionWarningAccepted`.
+ * - Legacy `perplexica_dashboard_*` keys (handled by a separate one-shot
+ *   localStorage migration).
+ */
+export const MIGRATED_SETTING_KEYS = [
+  // Model selection
+  'chatModelProvider',
+  'chatModel',
+  'systemModelProvider',
+  'systemModel',
+  'imageCapable',
+  'contextWindowSize',
+  'embeddingModelProvider',
+  'embeddingModel',
+  'modelPresets',
+  'searchChatModelProvider',
+  'searchChatModel',
+  // Memory + personalization
+  'memoryEnabled',
+  'memoryRetrievalEnabled',
+  'memoryAutoDetectionEnabled',
+  // Memory-processing model — the model used by memory extraction/dedup/
+  // classification/reindex. Deliberately its OWN keys (NOT the chat picker's
+  // `systemModel`/`systemModelProvider`), so the two are fully independent. Once
+  // lived in config.toml `SELECTED_MODELS.SYSTEM_MODEL`; now DB-backed.
+  'memoryModelProvider',
+  'memoryModel',
+  'personalization.location',
+  'personalization.about',
+  'personalization.sendLocationEnabled',
+  'personalization.sendProfileEnabled',
+  // Behavior / composer
+  'autoSuggestions',
+  'selectedSystemPromptIds',
+  'selectedMethodologyId',
+  // Text-to-speech
+  'ttsVoice',
+  'ttsEngine',
+  'ttsSpeed',
+  'ttsNarrationMode',
+  'ttsNarrationProvider',
+  'ttsNarrationModel',
+  'ttsAutoplay',
+  // Dashboard. The rendered-widget cache is synced too so a widget rendered on
+  // one device isn't re-rendered on another until its stored expiry — staleness
+  // is data-driven (each entry carries its own `expiresAt`), so it travels
+  // safely across devices.
+  'yaawc_dashboard_widgets',
+  'yaawc_dashboard_settings',
+  'yaawc_dashboard_layouts',
+  'yaawc_dashboard_cache',
+] as const;
+
+export type MigratedSettingKey = (typeof MIGRATED_SETTING_KEYS)[number];
+
+const MIGRATED_SETTING_KEY_SET: ReadonlySet<string> = new Set(
+  MIGRATED_SETTING_KEYS,
+);
+
+/** Whether a given localStorage key is database-backed (and cross-device). */
+export function isMigratedSettingKey(key: string): key is MigratedSettingKey {
+  return MIGRATED_SETTING_KEY_SET.has(key);
+}

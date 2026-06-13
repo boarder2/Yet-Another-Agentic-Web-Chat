@@ -9,6 +9,7 @@ const MEMORIES_NS = ['memories'] as const;
 
 export const qk = {
   config: ['config'] as const,
+  settings: ['settings'] as const,
   models: ['models'] as const,
   tools: ['tools'] as const,
   voices: ['tts', 'voices'] as const,

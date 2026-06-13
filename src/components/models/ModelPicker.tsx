@@ -1,11 +1,8 @@
-import { Link as LinkIcon } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import {
   type ModelSelection,
   DEFAULT_CONTEXT_WINDOW,
 } from '@/lib/models/presets';
 import ModelField from './ModelField';
-import LinkToggle from './LinkToggle';
 import VisionToggle from './VisionToggle';
 import ContextWindowField from './ContextWindowField';
 import PresetBar from './PresetBar';
@@ -18,11 +15,10 @@ export interface ModelPickerFields {
 
 /**
  * The single, controlled model-selection component used everywhere models are
- * picked. It renders only the requested `fields`, enforces link behavior
- * (mirroring chat → system when linked, disabling the system field), and emits
- * a complete `ModelSelection` on every change. It owns no persistence — the
- * caller persists `onChange` however it likes. When `presets !== 'none'` it
- * renders the `PresetBar`.
+ * picked. It renders only the requested `fields` and emits a complete
+ * `ModelSelection` on every change. It owns no persistence — the caller
+ * persists `onChange` however it likes. When `presets !== 'none'` it renders
+ * the `PresetBar`.
  */
 export default function ModelPicker({
   value,
@@ -38,19 +34,10 @@ export default function ModelPicker({
   layout?: 'inline' | 'dialog';
 }) {
   const panelPosition = layout === 'dialog' ? 'above' : 'below';
-  const linked = value.linkSystemToChat;
 
-  // Build a next selection from a patch, mirroring chat → system when linked.
+  // Build a next selection from a patch and emit it.
   const emit = (patch: Partial<ModelSelection>) => {
-    let next: ModelSelection = { ...value, ...patch };
-    if (next.linkSystemToChat) {
-      next = {
-        ...next,
-        systemProvider: next.chatProvider,
-        systemModel: next.chatModel,
-      };
-    }
-    onChange(next);
+    onChange({ ...value, ...patch });
   };
 
   const chatModel =
@@ -66,13 +53,6 @@ export default function ModelPicker({
     <div className="space-y-4">
       {presets !== 'none' && (
         <PresetBar value={value} onApply={onChange} mode={presets} />
-      )}
-
-      {fields.system && (
-        <LinkToggle
-          checked={linked}
-          onChange={(checked) => emit({ linkSystemToChat: checked })}
-        />
       )}
 
       {fields.vision && (
@@ -99,31 +79,17 @@ export default function ModelPicker({
 
         {fields.system && (
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-fg/70">System Model</span>
-              {linked && (
-                <span className="text-[10px] bg-surface px-2 py-0.5 rounded-control border border-surface-2 text-fg/60">
-                  <LinkIcon size={14} />
-                </span>
-              )}
-            </div>
-            <div
-              className={cn(
-                'relative',
-                linked ? 'opacity-60 pointer-events-none' : '',
-              )}
-            >
-              <ModelField
-                role="system"
-                selectedModel={systemModel}
-                setSelectedModel={(m) =>
-                  emit({ systemProvider: m.provider, systemModel: m.model })
-                }
-                showModelName
-                truncateModelName
-                panelPosition={panelPosition}
-              />
-            </div>
+            <span className="text-xs text-fg/70">System Model</span>
+            <ModelField
+              role="system"
+              selectedModel={systemModel}
+              setSelectedModel={(m) =>
+                emit({ systemProvider: m.provider, systemModel: m.model })
+              }
+              showModelName
+              truncateModelName
+              panelPosition={panelPosition}
+            />
           </div>
         )}
 

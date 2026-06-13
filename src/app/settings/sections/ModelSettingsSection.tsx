@@ -8,30 +8,21 @@ import SettingsSection from '../components/SettingsSection';
 import Select from '../components/Select';
 import InputComponent from '../components/InputComponent';
 import { SettingsType } from '../types';
-import ModelField from '@/components/models/ModelField';
 
 export default function ModelSettingsSection({
   config,
-  selectedSystemModelProvider,
-  selectedSystemModel,
   selectedEmbeddingModelProvider,
   selectedEmbeddingModel,
   savingStates,
-  setSelectedSystemModelProvider,
-  setSelectedSystemModel,
   setSelectedEmbeddingModelProvider,
   setSelectedEmbeddingModel,
   setConfig,
   saveConfig,
 }: {
   config: SettingsType;
-  selectedSystemModelProvider: string | null;
-  selectedSystemModel: string | null;
   selectedEmbeddingModelProvider: string | null;
   selectedEmbeddingModel: string | null;
   savingStates: Record<string, boolean>;
-  setSelectedSystemModelProvider: (val: string | null) => void;
-  setSelectedSystemModel: (val: string | null) => void;
   setSelectedEmbeddingModelProvider: (val: string | null) => void;
   setSelectedEmbeddingModel: (val: string | null) => void;
   setConfig: React.Dispatch<React.SetStateAction<SettingsType | null>>;
@@ -57,11 +48,6 @@ export default function ModelSettingsSection({
     }
   };
 
-  const systemModel =
-    selectedSystemModelProvider && selectedSystemModel
-      ? { provider: selectedSystemModelProvider, model: selectedSystemModel }
-      : null;
-
   return (
     <SettingsSection
       title="Model Settings"
@@ -83,40 +69,13 @@ export default function ModelSettingsSection({
       }
     >
       <p className="text-xs text-fg/60">
-        The chat model and context window are chosen from the chat input&apos;s
-        model picker. These settings configure the server-side defaults used by
-        background tasks.
+        The chat and system models are chosen from the chat input&apos;s model
+        picker. These settings configure the embedding model and custom OpenAI
+        credentials. The memory-processing model lives in the Memory section.
       </p>
 
-      {/* System Model (background tasks & memory processing) */}
-      {config.chatModelProviders && (
-        <div className="flex flex-col space-y-1">
-          <div className="flex items-center justify-between">
-            <p className="text-sm">System Model</p>
-            <ModelField
-              role="system"
-              selectedModel={systemModel}
-              setSelectedModel={(m) => {
-                setSelectedSystemModelProvider(m.provider);
-                setSelectedSystemModel(m.model);
-                saveConfig('systemModelProvider', m.provider);
-                saveConfig('systemModel', m.model);
-              }}
-              showModelName
-              truncateModelName={false}
-              panelPosition="below"
-            />
-          </div>
-          <p className="text-xs mt-0.5 text-fg/40">
-            Used for background tasks like web summarization, query generation,
-            and memory processing. You may want a faster/cheaper model than your
-            main chat model.
-          </p>
-        </div>
-      )}
-
       {/* Custom OpenAI credentials (provider configuration) */}
-      <div className="flex flex-col space-y-4 mt-4 pt-4 border-t border-surface-2">
+      <div className="flex flex-col space-y-4 pt-4 border-t border-surface-2">
         <p className="text-sm font-medium">Custom OpenAI</p>
         <div className="flex flex-col space-y-1">
           <p className="text-sm">Model Name</p>

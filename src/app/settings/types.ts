@@ -22,7 +22,6 @@ export interface SettingsType {
   selectedSystemModel: string;
   selectedEmbeddingModelProvider: string;
   selectedEmbeddingModel: string;
-  linkSystemToChat: boolean;
   privateSessionDurationMinutes: number;
   retentionChatsMode: 'days' | 'count' | 'disabled';
   retentionChatsValue: number;

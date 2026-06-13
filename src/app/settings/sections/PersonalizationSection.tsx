@@ -17,8 +17,8 @@ export default function PersonalizationSection({
     <div id="personalization">
       <SettingsSection title="Personalization">
         <p className="text-xs text-fg/60">
-          Saved locally in your browser. You can choose to send this info per
-          message.
+          Saved to your account and synced across devices. You can choose to
+          send this info per message.
         </p>
         <div className="flex flex-col space-y-4">
           <div className="flex flex-col space-y-2">

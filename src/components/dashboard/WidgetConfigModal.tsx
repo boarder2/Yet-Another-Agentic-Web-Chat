@@ -365,7 +365,6 @@ const WidgetConfigModal = ({
                             chatModel: selectedModel?.model ?? '',
                             systemProvider: selectedModel?.provider ?? '',
                             systemModel: selectedModel?.model ?? '',
-                            linkSystemToChat: true,
                           } satisfies ModelSelection
                         }
                         onChange={(next) =>

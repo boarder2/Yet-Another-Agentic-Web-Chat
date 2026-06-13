@@ -74,36 +74,25 @@ export default function TaskForm({
   const preset = cronToPreset(form.cronExpression);
   const [scheduleKind, setScheduleKind] = useState<Preset['kind']>(preset.kind);
 
-  // Whether the system model is linked to (mirrors) the chat model. A task with
-  // no explicit system model — or one equal to the chat model — is "linked".
-  const [linkSystem, setLinkSystem] = useState<boolean>(
-    !initialData?.systemModel ||
-      (initialData.systemModel.provider === initialData.chatModel?.provider &&
-        initialData.systemModel.name === initialData.chatModel?.name),
-  );
-
   const modelValue: ModelSelection = {
     chatProvider: form.chatModel?.provider ?? '',
     chatModel: form.chatModel?.name ?? '',
     systemProvider:
       form.systemModel?.provider ?? form.chatModel?.provider ?? '',
     systemModel: form.systemModel?.name ?? form.chatModel?.name ?? '',
-    linkSystemToChat: linkSystem,
   };
 
   const handleModelChange = (next: ModelSelection) => {
-    setLinkSystem(next.linkSystemToChat);
     setForm((prev) => ({
       ...prev,
       chatModel:
         next.chatProvider && next.chatModel
           ? { provider: next.chatProvider, name: next.chatModel }
           : null,
-      // When linked, leave systemModel unset so the task defaults to the chat
+      // Leave systemModel unset when empty so the task defaults to the chat
       // model server-side.
-      systemModel: next.linkSystemToChat
-        ? null
-        : next.systemProvider && next.systemModel
+      systemModel:
+        next.systemProvider && next.systemModel
           ? { provider: next.systemProvider, name: next.systemModel }
           : null,
     }));

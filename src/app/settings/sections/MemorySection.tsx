@@ -14,8 +14,11 @@ import {
   Link as LinkIcon,
 } from 'lucide-react';
 import AppSwitch from '@/components/ui/AppSwitch';
+import ModelField from '@/components/models/ModelField';
 import SettingsSection from '../components/SettingsSection';
+import { SettingsType } from '../types';
 import { cn, formatTimeDifference } from '@/lib/utils';
+import { useLocalStorageString } from '@/lib/hooks/useLocalStorage';
 import {
   useMemories,
   useAddMemoryItem,
@@ -68,6 +71,7 @@ export default function MemorySection({
   setMemoryEnabled,
   setMemoryRetrievalEnabled,
   setMemoryAutoDetectionEnabled,
+  config,
 }: {
   memoryEnabled: boolean;
   memoryRetrievalEnabled: boolean;
@@ -75,6 +79,7 @@ export default function MemorySection({
   setMemoryEnabled: (val: boolean) => void;
   setMemoryRetrievalEnabled: (val: boolean) => void;
   setMemoryAutoDetectionEnabled: (val: boolean) => void;
+  config: SettingsType;
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -86,6 +91,43 @@ export default function MemorySection({
   const [newContent, setNewContent] = useState('');
   const editInputRef = useRef<HTMLTextAreaElement>(null);
   const newInputRef = useRef<HTMLTextAreaElement>(null);
+
+  // The memory-processing model is its own DB-backed setting, independent of the
+  // chat picker's system model. Stored under `memoryModel*` (synced to the DB by
+  // the settings persistence layer), never config.toml.
+  const [memoryModelProvider, setMemoryModelProvider] = useLocalStorageString(
+    'memoryModelProvider',
+    '',
+  );
+  const [memoryModelName, setMemoryModelName] = useLocalStorageString(
+    'memoryModel',
+    '',
+  );
+
+  // One-time migration: older installs kept this model in config.toml, surfaced
+  // as config.selectedSystemModel*. If the DB-backed keys are still empty, seed
+  // them from that value so the split happens transparently on first visit.
+  useEffect(() => {
+    if (memoryModelProvider || memoryModelName) return;
+    const legacyProvider = config.selectedSystemModelProvider;
+    const legacyModel = config.selectedSystemModel;
+    if (legacyProvider && legacyModel) {
+      setMemoryModelProvider(legacyProvider);
+      setMemoryModelName(legacyModel);
+    }
+  }, [
+    memoryModelProvider,
+    memoryModelName,
+    config.selectedSystemModelProvider,
+    config.selectedSystemModel,
+    setMemoryModelProvider,
+    setMemoryModelName,
+  ]);
+
+  const memoryModel =
+    memoryModelProvider && memoryModelName
+      ? { provider: memoryModelProvider, model: memoryModelName }
+      : null;
 
   const { data, isLoading: loading } = useMemories(null, {
     q: debouncedQuery || undefined,
@@ -234,7 +276,7 @@ export default function MemorySection({
                 </p>
                 <p className="text-xs text-fg/60">
                   Analyze conversations to identify facts worth remembering.
-                  Uses additional calls to your System Model.
+                  Uses additional calls to the memory processing model below.
                 </p>
               </div>
               <AppSwitch
@@ -248,6 +290,30 @@ export default function MemorySection({
                 }}
               />
             </div>
+
+            {config.chatModelProviders && (
+              <div className="flex flex-col space-y-1 pl-4 border-l-2 border-surface-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium">Memory Processing Model</p>
+                  <ModelField
+                    role="system"
+                    selectedModel={memoryModel}
+                    setSelectedModel={(m) => {
+                      setMemoryModelProvider(m.provider);
+                      setMemoryModelName(m.model);
+                    }}
+                    showModelName
+                    truncateModelName={false}
+                    panelPosition="below"
+                  />
+                </div>
+                <p className="text-xs text-fg/60">
+                  Used to extract, deduplicate, and process memories.
+                  Independent from the chat/system model chosen in the chat
+                  model picker. You may want a faster/cheaper model here.
+                </p>
+              </div>
+            )}
           </>
         )}
       </div>

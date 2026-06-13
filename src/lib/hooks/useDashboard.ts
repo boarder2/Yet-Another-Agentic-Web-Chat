@@ -10,6 +10,11 @@ import {
 } from '@/lib/types/dashboard';
 import { WidgetCache } from '@/lib/types/cache';
 import {
+  isSettingsHydrated,
+  subscribeSettingsHydrated,
+  subscribeSettingsSynced,
+} from '@/lib/settings/persist';
+import {
   DASHBOARD_CONSTRAINTS,
   getResponsiveConstraints,
 } from '@/lib/constants/dashboard';
@@ -122,6 +127,14 @@ export const useDashboard = (): UseDashboardReturn => {
     },
   });
 
+  // Dashboard storage is DB-backed (app_settings) with localStorage as a cache.
+  // We must not persist our loaded state until settings hydration has reconciled
+  // with the DB, or a stale local-on-mount snapshot could clobber newer values
+  // another device wrote. Until then, write-backs are gated off.
+  const [settingsHydrated, setSettingsHydrated] = useState<boolean>(() =>
+    isSettingsHydrated(),
+  );
+
   const loadDashboardData = useCallback(() => {
     try {
       // Migrate legacy Perplexica localStorage keys if present
@@ -167,7 +180,11 @@ export const useDashboard = (): UseDashboardReturn => {
         ...prev,
         widgets,
         settings,
-        isLoading: false,
+        // Stay "loading" until settings hydration has reconciled with the DB.
+        // Reporting ready on the pre-hydration (stale) snapshot lets the
+        // dashboard's auto-refresh fire against old cache and race the
+        // freshly-hydrated values, intermittently re-applying stale renders.
+        isLoading: !isSettingsHydrated(),
       }));
     } catch (error) {
       console.error('Error loading dashboard data:', error);
@@ -187,23 +204,42 @@ export const useDashboard = (): UseDashboardReturn => {
     loadDashboardData();
   }, [loadDashboardData]);
 
-  // Save widgets to localStorage whenever they change (but not on initial load)
+  // When settings hydration reconciles with the DB, pull the freshly-hydrated
+  // values into state and unblock write-backs. Fires immediately if hydration
+  // already completed before this hook mounted.
   useEffect(() => {
-    if (!state.isLoading) {
+    return subscribeSettingsHydrated(() => {
+      setSettingsHydrated(true);
+      loadDashboardData();
+    });
+  }, [loadDashboardData]);
+
+  // Re-read the cache whenever a focus/visibility re-sync pulls newer values
+  // from the DB, so a long-lived tab reflects changes made on another device.
+  useEffect(() => {
+    return subscribeSettingsSynced(loadDashboardData);
+  }, [loadDashboardData]);
+
+  // Save widgets to localStorage whenever they change (not on initial load, and
+  // not before hydration — see settingsHydrated note above).
+  useEffect(() => {
+    if (!state.isLoading && settingsHydrated) {
       localStorage.setItem(
         DASHBOARD_STORAGE_KEYS.WIDGETS,
         JSON.stringify(state.widgets),
       );
     }
-  }, [state.widgets, state.isLoading]);
+  }, [state.widgets, state.isLoading, settingsHydrated]);
 
-  // Save settings to localStorage whenever they change
+  // Save settings to localStorage whenever they change (gated the same way).
   useEffect(() => {
-    localStorage.setItem(
-      DASHBOARD_STORAGE_KEYS.SETTINGS,
-      JSON.stringify(state.settings),
-    );
-  }, [state.settings]);
+    if (!state.isLoading && settingsHydrated) {
+      localStorage.setItem(
+        DASHBOARD_STORAGE_KEYS.SETTINGS,
+        JSON.stringify(state.settings),
+      );
+    }
+  }, [state.settings, state.isLoading, settingsHydrated]);
 
   const addWidget = useCallback(
     (config: WidgetConfig) => {

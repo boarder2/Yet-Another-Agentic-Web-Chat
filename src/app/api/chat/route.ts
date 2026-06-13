@@ -17,6 +17,11 @@ import { EventEmitter } from 'stream';
 import { registerRetrieval, clearSoftStop } from '@/lib/utils/runControl';
 import { CachedEmbeddings } from '@/lib/utils/cachedEmbeddings';
 import { retrieveRelevantMemories } from '@/lib/utils/memoryRetrieval';
+import {
+  getSettings,
+  getBooleanSetting,
+  getStringSetting,
+} from '@/lib/settings/server';
 import { buildMemorySection } from '@/lib/prompts/memory/memoryContext';
 import { processExtraction } from '@/lib/utils/memoryExtraction';
 import { distillQueryForEmbedding } from '@/lib/utils/queryDistillation';
@@ -245,12 +250,56 @@ export const POST = async (req: Request) => {
     // Note: req.signal no longer aborts the run — client disconnect only
     // removes the subscriber from the fan-out set. Cancel via POST /api/chat/cancel.
 
-    // --- Privacy mode: strip personalization/memory server-side ---
-    if (body.isPrivate) {
-      body.userLocation = undefined;
-      body.userProfile = undefined;
-      body.memoryEnabled = false;
-      body.memoryAutoDetection = false;
+    // --- Ambient settings are server-authoritative (read from the DB, not the
+    // request body). Memory toggles and personalization are configured in
+    // Settings and applied passively, so the server owns them; private sessions
+    // strip them entirely. Per-request composer choices (models, prompts, vision)
+    // stay in the body. ---
+    {
+      const settings = getSettings([
+        'memoryEnabled',
+        'memoryRetrievalEnabled',
+        'memoryAutoDetectionEnabled',
+        'personalization.sendLocationEnabled',
+        'personalization.sendProfileEnabled',
+        'personalization.location',
+        'personalization.about',
+      ]);
+      const priv = !!body.isPrivate;
+      // Defaults are OFF to match the Settings UI (which treats an absent key as
+      // unchecked). Memory only runs after the user explicitly opts in.
+      const memoryMaster = getBooleanSetting(settings, 'memoryEnabled', false);
+      const memoryRetrieval = getBooleanSetting(
+        settings,
+        'memoryRetrievalEnabled',
+        false,
+      );
+      const memoryAutoDetection = getBooleanSetting(
+        settings,
+        'memoryAutoDetectionEnabled',
+        false,
+      );
+      const sendLocation = getBooleanSetting(
+        settings,
+        'personalization.sendLocationEnabled',
+        false,
+      );
+      const sendProfile = getBooleanSetting(
+        settings,
+        'personalization.sendProfileEnabled',
+        false,
+      );
+
+      body.memoryEnabled = !priv && memoryMaster && memoryRetrieval;
+      body.memoryAutoDetection = !priv && memoryMaster && memoryAutoDetection;
+      body.userLocation =
+        !priv && sendLocation
+          ? getStringSetting(settings, 'personalization.location', '')
+          : undefined;
+      body.userProfile =
+        !priv && sendProfile
+          ? getStringSetting(settings, 'personalization.about', '')
+          : undefined;
     }
 
     // --- Workspace context (load early so workspaceId is available for memory scoping) ---

@@ -81,14 +81,41 @@ Components outside ChatWindow use TanStack Query for all server state. Provider 
 - Query keys: `src/lib/api/keys.ts` — use `qk.*` constants
 - Mutations must invalidate relevant `qk` keys
 
-### Model preferences (localStorage)
+### Settings persistence (DB-backed, localStorage cache)
 
-Model selections are stored in `localStorage`, not React state:
+Non-secret settings live in the `app_settings` DB table (durable, cross-device);
+`localStorage` is a synchronous cache so sync reads keep working with no flash.
+`src/lib/settings/persist.ts` patches `Storage.prototype.setItem`/`removeItem`
+(installed in `Providers` via `SettingsHydrator`; must patch the **prototype**,
+not the instance — instance assignment is silently dropped on the exotic Storage
+object) and debounce-PATCHes allowlisted keys (`MIGRATED_SETTING_KEYS` in
+`src/lib/settings/keys.ts`) to `/api/settings`. On load it hydrates the cache
+from the DB (backfills local→DB on a fresh DB) and re-pulls on tab
+focus/visibility and every route navigation (`SettingsHydrator` watches
+`usePathname`) via `resyncSettingsFromDb` (throttled, single-flight, skips keys
+with unflushed writes, non-blocking), firing `settings-synced`
+(`subscribeSettingsSynced`). API access: `src/lib/hooks/api/useSettings.ts`
+(`useSettings`/`useUpdateSettings`, key `qk.settings`). **Excluded:** secrets
+`openAIApiKey`/`openAIBaseURL` (config.toml) and device-local UI prefs
+`appTheme`, `userBg`, `userAccent`, `chatWidthWide`,
+`codeExecutionWarningAccepted`.
+
+Writes are intercepted globally, so call sites are unchanged — keep using the
+`useLocalStorage*` hooks. A consumer that reads a migrated key once and writes
+its state back outside the reactive hooks (`useDashboard`) must gate write-backs
+on `isSettingsHydrated()`/`subscribeSettingsHydrated()` and reload on
+`subscribeSettingsSynced`, else a stale snapshot clobbers newer DB values;
+`useDashboard` also holds `isLoading` until hydrated so its one-shot
+`refreshAllWidgets` runs against hydrated data.
+
+### Model preferences (localStorage cache)
+
+Model selections are read synchronously from the `localStorage` cache (DB-backed
+per above), not React state:
 
 - `chatModel`, `chatModelProvider` — Chat model selection
-- `systemModel`, `systemModelProvider` — System model selection
+- `systemModel`, `systemModelProvider` — System model selection (independent of chat)
 - `embeddingModel`, `embeddingModelProvider` — Embedding model
-- `linkSystemToChat` — When `"true"`, system model mirrors chat model
 - `imageCapable` — When `"true"`, allow image attachments for the chat model
 - `contextWindowSize` — Available context window (int string; default `32768`)
 
@@ -96,10 +123,10 @@ Model selections are stored in `localStorage`, not React state:
 `useLocalStorageString`/`useLocalStorageBoolean` hooks (no longer a one-shot
 mount effect), so changes made anywhere — including applying a preset — reflect
 immediately. Anything writing these keys outside the hooks must go through
-`writeLocalStorage` / `writeLocalStorageBatch` so subscribers are notified.
-`ModelConfigurator` also keeps the stored system model mirrored to chat (via a
-storage-only effect) whenever `linkSystemToChat` is on, because chat requests
-read `systemModel` from localStorage and do **not** re-check the link flag.
+`writeLocalStorage` / `writeLocalStorageBatch` so subscribers are notified. Chat
+and system models are selected independently — there is no link/mirror toggle;
+paired combos are saved as Model Presets. When `systemModel` is empty, chat
+requests fall back to the chat model server-side.
 
 ### Unified `ModelPicker` (`src/components/models/`)
 
@@ -114,10 +141,10 @@ everywhere models are picked. It owns **no persistence** — caller passes
   layout={'inline' | 'dialog'} />                 // panel opens below | above
 ```
 
-It enforces link behavior (mirror chat→system when linked, disable system
-field) and emits a complete `ModelSelection` on every change. Sub-components in
-the same dir: `ModelField` (grouped-by-provider popover for one role — replaces
-the old `ModelSelector`), `LinkToggle`, `VisionToggle`, `ContextWindowField`,
+It emits a complete `ModelSelection` on every change; chat and system models are
+selected independently (no link/mirror — paired combos live in Model Presets).
+Sub-components in the same dir: `ModelField` (grouped-by-provider popover for one
+role — replaces the old `ModelSelector`), `VisionToggle`, `ContextWindowField`,
 `PresetBar` (controlled preset switch + "Save current…"), `PresetOption`.
 Embedding models are **out of scope** for `ModelPicker` (settings + scheduled
 tasks keep their own embedding `<Select>` / `EmbeddingModelSelector`).

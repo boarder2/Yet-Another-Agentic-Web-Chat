@@ -21,7 +21,6 @@ export default function DefaultSearchSection({
     chatModel: searchChatModel,
     systemProvider: searchChatModelProvider,
     systemModel: searchChatModel,
-    linkSystemToChat: true,
   };
 
   return (

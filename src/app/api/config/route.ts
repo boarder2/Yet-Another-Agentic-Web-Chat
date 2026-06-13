@@ -15,7 +15,6 @@ import {
   getHiddenModels,
   getSelectedSystemModel,
   getSelectedEmbeddingModel,
-  getLinkSystemToChat,
   getPrivateSessionDurationMinutes,
   getChatRetentionPolicy,
   getScheduledRunRetentionPolicy,
@@ -100,7 +99,6 @@ export const GET = async (_req: Request) => {
     config['selectedSystemModel'] = selectedSystem.name;
     config['selectedEmbeddingModelProvider'] = selectedEmbedding.provider;
     config['selectedEmbeddingModel'] = selectedEmbedding.name;
-    config['linkSystemToChat'] = getLinkSystemToChat();
     config['privateSessionDurationMinutes'] =
       getPrivateSessionDurationMinutes();
 
@@ -364,9 +362,6 @@ export const POST = async (req: Request) => {
     }
     if (config.selectedEmbeddingModel !== undefined) {
       modelSelections.EMBEDDING_MODEL = config.selectedEmbeddingModel;
-    }
-    if (config.linkSystemToChat !== undefined) {
-      modelSelections.LINK_SYSTEM_TO_CHAT = config.linkSystemToChat;
     }
     if (Object.keys(modelSelections).length > 0) {
       updateConfig({ SELECTED_MODELS: modelSelections });

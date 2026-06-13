@@ -1748,11 +1748,6 @@ const ChatWindow = ({
       images?: ImageAttachment[];
     },
   ) => {
-    const userLocation =
-      !isPrivateSession && sendLocation ? personalizationLocation : '';
-    const userProfile =
-      !isPrivateSession && sendPersonalization ? personalizationAbout : '';
-
     setScrollTrigger((x) => (x === 0 ? -1 : 0));
     // Special case: If we're just updating an existing message with suggestions
     if (options?.suggestions && options.messageId) {
@@ -2809,27 +2804,9 @@ const ChatWindow = ({
       payload.messageImages = messageImages;
     }
 
-    if (userLocation) {
-      payload.userLocation = userLocation;
-    }
-    if (userProfile) {
-      payload.userProfile = userProfile;
-    }
-
-    // Memory settings from localStorage (disabled in private sessions)
-    if (!isPrivateSession) {
-      const memEnabled = localStorage.getItem('memoryEnabled') !== 'false';
-      const memRetrievalEnabled =
-        localStorage.getItem('memoryRetrievalEnabled') !== 'false';
-      const memAutoDetection =
-        localStorage.getItem('memoryAutoDetectionEnabled') !== 'false';
-      if (memEnabled && memRetrievalEnabled) {
-        payload.memoryEnabled = true;
-      }
-      if (memEnabled && memAutoDetection) {
-        payload.memoryAutoDetection = true;
-      }
-    }
+    // Personalization (userLocation/userProfile) and memory toggles are
+    // server-authoritative: the /api/chat route reads them from the DB
+    // (app_settings) so they are no longer sent from the client.
 
     if (isPrivateSession) {
       payload.isPrivate = true;

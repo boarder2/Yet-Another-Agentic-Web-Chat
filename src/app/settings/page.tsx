@@ -66,7 +66,6 @@ export default function SettingsPage() {
   const [selectedEmbeddingModel, setSelectedEmbeddingModel] = useState<
     string | null
   >(null);
-  const [, setLinkSystemToChat] = useState<boolean>(true);
   const [isLoading, setIsLoading] = useState(true);
   const [automaticSuggestions, setAutomaticSuggestions] = useState(true);
   const [personalizationLocation, setPersonalizationLocation] = useState('');
@@ -173,20 +172,20 @@ export default function SettingsPage() {
         : undefined) ||
       '';
 
-    const linkFlag = data.linkSystemToChat ?? true;
-    setLinkSystemToChat(linkFlag);
-
-    const systemModelProvider = linkFlag
-      ? chatModelProvider
-      : data.selectedSystemModelProvider || defaultChatModelProvider || '';
-    const systemModel = linkFlag
-      ? chatModel
-      : data.selectedSystemModel ||
-        (data.chatModelProviders &&
-        data.chatModelProviders[systemModelProvider]?.length > 0
-          ? data.chatModelProviders[systemModelProvider][0].name
-          : undefined) ||
-        '';
+    // The settings page only displays the chat system model (for Model Presets);
+    // it is owned by the chat input's ModelConfigurator (localStorage, DB-backed),
+    // NOT config.toml. The memory-processing model is separate (see MemorySection).
+    const systemModelProvider =
+      localStorage.getItem('systemModelProvider') ||
+      defaultChatModelProvider ||
+      '';
+    const systemModel =
+      localStorage.getItem('systemModel') ||
+      (data.chatModelProviders &&
+      data.chatModelProviders[systemModelProvider]?.length > 0
+        ? data.chatModelProviders[systemModelProvider][0].name
+        : undefined) ||
+      '';
 
     const embeddingModelProvider =
       data.selectedEmbeddingModelProvider ||
@@ -205,11 +204,11 @@ export default function SettingsPage() {
     setSelectedEmbeddingModelProvider(embeddingModelProvider);
     setSelectedEmbeddingModel(embeddingModel);
 
-    localStorage.setItem('systemModelProvider', systemModelProvider);
-    localStorage.setItem('systemModel', systemModel);
+    // systemModelProvider/systemModel intentionally NOT written here: the chat
+    // system model is owned by the chat input's ModelConfigurator (localStorage,
+    // DB-backed). Only the embedding selection is mirrored/persisted from here.
     localStorage.setItem('embeddingModelProvider', embeddingModelProvider);
     localStorage.setItem('embeddingModel', embeddingModel);
-    localStorage.setItem('linkSystemToChat', linkFlag.toString());
 
     if (
       (!data.selectedEmbeddingModelProvider || !data.selectedEmbeddingModel) &&
@@ -218,11 +217,8 @@ export default function SettingsPage() {
       defaultsSavedRef.current = true;
       saveConfigMutation.mutate({
         ...data,
-        selectedSystemModelProvider: systemModelProvider,
-        selectedSystemModel: systemModel,
         selectedEmbeddingModelProvider: embeddingModelProvider,
         selectedEmbeddingModel: embeddingModel,
-        linkSystemToChat: linkFlag,
       });
     }
 
@@ -318,23 +314,17 @@ export default function SettingsPage() {
     setSavingStates((prev) => ({ ...prev, [key]: true }));
 
     try {
-      const modelSelectionKeys = [
-        'systemModelProvider',
-        'systemModel',
-        'embeddingModelProvider',
-        'embeddingModel',
-        'linkSystemToChat',
-      ];
+      const modelSelectionKeys = ['embeddingModelProvider', 'embeddingModel'];
 
       const configKeyMap: Record<string, string> = {
-        systemModelProvider: 'selectedSystemModelProvider',
-        systemModel: 'selectedSystemModel',
         embeddingModelProvider: 'selectedEmbeddingModelProvider',
         embeddingModel: 'selectedEmbeddingModel',
-        linkSystemToChat: 'linkSystemToChat',
       };
 
       if (modelSelectionKeys.includes(key)) {
+        // Only the embedding selection is config.toml-backed and mirrored to
+        // localStorage. (The chat system model lives in the chat picker; the
+        // memory model is its own DB-backed setting.)
         localStorage.setItem(key, value.toString());
 
         const configPayload = {
@@ -432,48 +422,9 @@ export default function SettingsPage() {
           }
         }
 
-        const currentSystemProvider = selectedSystemModelProvider;
-        const newSystemProviders = Object.keys(data.chatModelProviders || {});
-
-        if (!currentSystemProvider && newSystemProviders.length > 0) {
-          const firstProvider = newSystemProviders[0];
-          const firstModel = data.chatModelProviders[firstProvider]?.[0]?.name;
-          if (firstModel) {
-            setSelectedSystemModelProvider(firstProvider);
-            setSelectedSystemModel(firstModel);
-            localStorage.setItem('systemModelProvider', firstProvider);
-            localStorage.setItem('systemModel', firstModel);
-          }
-        } else if (
-          currentSystemProvider &&
-          (!data.chatModelProviders ||
-            !data.chatModelProviders[currentSystemProvider] ||
-            !Array.isArray(data.chatModelProviders[currentSystemProvider]) ||
-            data.chatModelProviders[currentSystemProvider].length === 0)
-        ) {
-          const firstValidProvider = Object.entries(
-            data.chatModelProviders || {},
-          ).find(
-            ([, models]) => Array.isArray(models) && models.length > 0,
-          )?.[0];
-
-          if (firstValidProvider) {
-            setSelectedSystemModelProvider(firstValidProvider);
-            setSelectedSystemModel(
-              data.chatModelProviders[firstValidProvider][0].name,
-            );
-            localStorage.setItem('systemModelProvider', firstValidProvider);
-            localStorage.setItem(
-              'systemModel',
-              data.chatModelProviders[firstValidProvider][0].name,
-            );
-          } else {
-            setSelectedSystemModelProvider(null);
-            setSelectedSystemModel(null);
-            localStorage.removeItem('systemModelProvider');
-            localStorage.removeItem('systemModel');
-          }
-        }
+        // The chat system model (used only here for Model Presets) is owned by
+        // the chat input's ModelConfigurator via localStorage; the settings page
+        // neither persists nor re-defaults it on provider changes.
 
         const currentEmbeddingProvider = selectedEmbeddingModelProvider;
         const newEmbeddingProviders = Object.keys(
@@ -828,6 +779,7 @@ export default function SettingsPage() {
                     setMemoryAutoDetectionEnabled={
                       setMemoryAutoDetectionEnabled
                     }
+                    config={config}
                   />
                 )}
 
@@ -917,17 +869,11 @@ export default function SettingsPage() {
                 {activeSection === 'model-settings' && (
                   <ModelSettingsSection
                     config={config}
-                    selectedSystemModelProvider={selectedSystemModelProvider}
-                    selectedSystemModel={selectedSystemModel}
                     selectedEmbeddingModelProvider={
                       selectedEmbeddingModelProvider
                     }
                     selectedEmbeddingModel={selectedEmbeddingModel}
                     savingStates={savingStates}
-                    setSelectedSystemModelProvider={
-                      setSelectedSystemModelProvider
-                    }
-                    setSelectedSystemModel={setSelectedSystemModel}
                     setSelectedEmbeddingModelProvider={
                       setSelectedEmbeddingModelProvider
                     }
@@ -952,8 +898,6 @@ export default function SettingsPage() {
                     setSelectedSystemModel={setSelectedSystemModel}
                     setContextWindowSize={setContextWindowSize}
                     setIsCustomContextWindow={setIsCustomContextWindow}
-                    setLinkSystemToChat={setLinkSystemToChat}
-                    saveConfig={saveConfig}
                   />
                 )}
 

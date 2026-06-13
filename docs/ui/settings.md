@@ -4,6 +4,17 @@ The Settings page is the central configuration hub for YAAWC. It is organized in
 
 **Route:** `/settings`
 
+> **Persistence note:** "in localStorage" below describes the synchronous local
+> cache. Non-secret settings are also the durable, cross-device source of truth
+> in the `app_settings` DB table, synced via `/api/settings` (see
+> `src/lib/settings/persist.ts` + the `MIGRATED_SETTING_KEYS` allowlist).
+> Exceptions that stay **localStorage-only**: `appTheme`, `userBg`, `userAccent`,
+> `chatWidthWide`, `codeExecutionWarningAccepted`. Secrets stay in `config.toml`.
+> **Ambient settings** (memory toggles, personalization location/profile and
+> their send-enabled flags) are read **server-side** from `app_settings` by
+> `/api/chat` and are no longer sent in the request body; per-request composer
+> choices (model selection, selected prompts, vision) remain request parameters.
+
 ---
 
 ## Navigation
@@ -98,23 +109,18 @@ Configuration for the three model roles used by the application:
 - **Provider dropdown**: Lists all available LLM providers with their models.
 - **Model dropdown**: Lists models for the selected provider.
 - Changing the provider auto-selects the first available model.
-- When "Link System to Chat" is enabled, changes here also update the system model.
 - **Custom OpenAI**: When `custom_openai` is the provider, three additional fields appear:
   - Model Name (text)
   - Custom OpenAI API Key (password)
   - Custom OpenAI Base URL (text)
 - **Persistence**: `chatModelProvider`, `chatModel` in localStorage.
 
-#### System Model
+#### Memory Processing Model
 
-- **Provider and Model dropdowns**: Same as Chat Model.
-- **Disabled when linked**: If "Link System to Chat" is on, these controls are disabled and mirror the chat model.
-- **Client-only**: System model selection is stored only in localStorage (not sent to the server).
-- **Persistence**: `systemModelProvider`, `systemModel` in localStorage.
+Moved out of Model Settings — now lives in **Settings → Memory** ("Memory Processing Model", visible when Memory is enabled).
 
-#### Link System to Chat Toggle
-
-A switch that, when enabled, forces the system model to match the chat model selection. Defaults to ON for new users.
+- **Provider and Model dropdowns**: Picks the server-side model used to extract, deduplicate, classify, and reindex memories (`api/memories/*`).
+- **Persistence**: DB-backed under its own keys `memoryModelProvider` / `memoryModel` (the `app_settings` table, via the settings persistence layer / `localStorage` cache — see [Settings persistence](../../AGENTS.md)). Fully independent of the chat picker's per-chat `systemModelProvider`/`systemModel` keys, so applying a chat model preset never changes it (and vice versa). Read server-side via `getMemoryModelSelection()`, which falls back to the legacy config.toml `SELECTED_MODELS.SYSTEM_MODEL` for installs that predate the split (a one-time migration in the Memory section seeds the new keys from that value on first visit).
 
 #### Ollama Context Window
 

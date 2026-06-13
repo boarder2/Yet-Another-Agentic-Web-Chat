@@ -43,14 +43,11 @@ const EMPTY_PRESETS: ModelPresetList = [];
 
 /** Convert a preset edit-state to the controlled `ModelPicker` value. */
 function editToSelection(s: EditState): ModelSelection {
-  const linked =
-    s.chatProvider === s.systemProvider && s.chatModel === s.systemModel;
   return {
     chatProvider: s.chatProvider,
     chatModel: s.chatModel,
     systemProvider: s.systemProvider,
     systemModel: s.systemModel,
-    linkSystemToChat: linked,
     imageCapable: s.imageCapable,
     contextWindowSize: s.contextWindowSize,
   };
@@ -62,17 +59,12 @@ interface ModelPresetsProps {
   selectedSystemModelProvider: string | null;
   selectedSystemModel: string | null;
   contextWindowSize: number;
-  saveConfig: (
-    key: string,
-    value: string | string[] | number | boolean,
-  ) => void;
   setSelectedChatModelProvider: (v: string | null) => void;
   setSelectedChatModel: (v: string | null) => void;
   setSelectedSystemModelProvider: (v: string | null) => void;
   setSelectedSystemModel: (v: string | null) => void;
   setContextWindowSize: (v: number) => void;
   setIsCustomContextWindow: (v: boolean) => void;
-  setLinkSystemToChat: (v: boolean) => void;
 }
 
 type EditState = {
@@ -92,14 +84,12 @@ export default function ModelPresetsSection({
   selectedSystemModelProvider,
   selectedSystemModel,
   contextWindowSize,
-  saveConfig,
   setSelectedChatModelProvider,
   setSelectedChatModel,
   setSelectedSystemModelProvider,
   setSelectedSystemModel,
   setContextWindowSize,
   setIsCustomContextWindow,
-  setLinkSystemToChat,
 }: ModelPresetsProps) {
   const [imageCapable] = useLocalStorageBoolean(
     SELECTION_KEYS.imageCapable,
@@ -137,7 +127,8 @@ export default function ModelPresetsSection({
   };
 
   const handleApply = (preset: ModelPreset) => {
-    // Settings-side apply: update settings state + saveConfig (like changing selectors manually)
+    // Settings-side apply: reflect the preset in local display state, then write
+    // it to the (DB-backed) localStorage selection via applyPresetToStorage.
     setSelectedChatModelProvider(preset.chatProvider);
     setSelectedChatModel(preset.chatModel);
     setSelectedSystemModelProvider(preset.systemProvider);
@@ -146,19 +137,10 @@ export default function ModelPresetsSection({
     setIsCustomContextWindow(
       !PREDEFINED_CONTEXT_SIZES.includes(preset.contextWindowSize),
     );
-    const linked =
-      preset.chatProvider === preset.systemProvider &&
-      preset.chatModel === preset.systemModel;
-    setLinkSystemToChat(linked);
-
-    saveConfig('chatModelProvider', preset.chatProvider);
-    saveConfig('chatModel', preset.chatModel);
-    saveConfig('systemModelProvider', preset.systemProvider);
-    saveConfig('systemModel', preset.systemModel);
-    saveConfig('contextWindowSize', preset.contextWindowSize);
-    saveConfig('linkSystemToChat', linked);
-
-    // Also write to localStorage via writeLocalStorage so dialog reflects it
+    // The chat + system model and context window are localStorage-only (the chat
+    // picker's selection, DB-backed); applyPresetToStorage writes them. They are
+    // NOT config.toml settings, so don't route them through saveConfig — doing so
+    // previously clobbered the independent memory-processing model in config.toml.
     applyPresetToStorage(preset);
 
     toast.success(`Applied preset "${preset.name}"`);

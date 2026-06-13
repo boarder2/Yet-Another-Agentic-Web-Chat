@@ -41,6 +41,21 @@ export const ttsNarrations = sqliteTable('tts_narrations', {
     .$defaultFn(() => new Date()),
 });
 
+// Instance-wide app settings, stored as a flat key→string map. Mirrors the
+// browser localStorage key space exactly (values are the same serialized
+// strings the client cache holds) so the DB is the durable, cross-device source
+// of truth while localStorage acts as a synchronous local cache. Only the keys
+// in MIGRATED_SETTING_KEYS (src/lib/settings/keys.ts) ever land here — secrets
+// (custom_openai creds, provider API keys) stay in config.toml and device-local
+// UI prefs (theme, chat width) stay in localStorage only.
+export const appSettings = sqliteTable('app_settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
 export const systemPrompts = sqliteTable('system_prompts', {
   id: text('id')
     .primaryKey()

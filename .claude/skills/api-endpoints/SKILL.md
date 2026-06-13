@@ -27,6 +27,8 @@ description: Use when adding, modifying, or debugging API endpoints, request/res
   selectedMethodologyId?: string;
   messageImageIds?: string[];
   messageImages?: Array<{ imageId: string; fileName: string; mimeType: string }>;
+  // Server-authoritative: route reads these from the DB (app_settings) and
+  // overwrites any client value; the UI no longer sends them. Private sessions strip them.
   userLocation?: string;
   userProfile?: string;
   memoryEnabled?: boolean;

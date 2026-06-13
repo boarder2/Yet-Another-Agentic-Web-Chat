@@ -9,10 +9,8 @@ import {
   getAvailableEmbeddingModelProviders,
 } from '@/lib/providers';
 import { CachedEmbeddings } from '@/lib/utils/cachedEmbeddings';
-import {
-  getSelectedSystemModel,
-  getSelectedEmbeddingModel,
-} from '@/lib/config';
+import { getSelectedEmbeddingModel } from '@/lib/config';
+import { getMemoryModelSelection } from '@/lib/settings/server';
 
 async function getEmbeddingModel(): Promise<CachedEmbeddings | null> {
   const embeddingModelProviders = await getAvailableEmbeddingModelProviders();
@@ -41,9 +39,9 @@ async function getEmbeddingModel(): Promise<CachedEmbeddings | null> {
   );
 }
 
-async function getSystemModel() {
+async function getMemoryModel() {
   const chatModelProviders = await getAvailableChatModelProviders();
-  const selected = getSelectedSystemModel();
+  const selected = getMemoryModelSelection();
 
   if (selected.provider && selected.name) {
     const provider = chatModelProviders[selected.provider];
@@ -110,7 +108,7 @@ export async function PUT(req: Request, context: RouteContext) {
     }
 
     const embeddingModel = await getEmbeddingModel();
-    const systemModel = await getSystemModel();
+    const systemModel = await getMemoryModel();
 
     let embedding: number[] | null = null;
     let embeddingIdentifier: string | null = null;

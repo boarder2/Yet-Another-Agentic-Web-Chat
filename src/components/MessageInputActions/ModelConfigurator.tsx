@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Cpu, SlidersHorizontal } from 'lucide-react';
 import {
   Dialog,
@@ -15,8 +15,6 @@ import {
   useLocalStorageBoolean,
   useLocalStorageString,
   useLocalStorageJSON,
-  writeLocalStorage,
-  writeLocalStorageBatch,
 } from '@/lib/hooks/useLocalStorage';
 import { useModels } from '@/lib/hooks/api/useModels';
 import {
@@ -58,7 +56,6 @@ export default function ModelConfigurator({
     SELECTION_KEYS.systemModel,
     '',
   );
-  const [linkSystemToChat] = useLocalStorageBoolean(SELECTION_KEYS.link, true);
   const [imageCapable] = useLocalStorageBoolean(
     SELECTION_KEYS.imageCapable,
     false,
@@ -81,14 +78,12 @@ export default function ModelConfigurator({
   const cwParsed = parseInt(contextWindowSizeStr, 10);
   const contextWindowSize = isNaN(cwParsed) ? DEFAULT_CONTEXT_WINDOW : cwParsed;
 
-  // Controlled value for ModelPicker. When linked, mirror system to chat so the
-  // (disabled) system field always reflects the chat model.
+  // Controlled value for ModelPicker.
   const value: ModelSelection = {
     chatProvider,
     chatModel: chatModelKey,
-    systemProvider: linkSystemToChat ? chatProvider : systemProvider,
-    systemModel: linkSystemToChat ? chatModelKey : systemModelKey,
-    linkSystemToChat,
+    systemProvider,
+    systemModel: systemModelKey,
     imageCapable,
     contextWindowSize,
   };
@@ -99,61 +94,6 @@ export default function ModelConfigurator({
     if (typeof showModelName === 'boolean') return showModelName;
     return window.matchMedia('(min-width: 640px)').matches;
   }, [showModelName]);
-
-  // Hydrate defaults once on mount without conflicting with SSR
-  useEffect(() => {
-    try {
-      const linkStored = localStorage.getItem(SELECTION_KEYS.link);
-      if (linkStored === null) {
-        // Write default ON for new users; the reactive hook will pick it up
-        writeLocalStorage(SELECTION_KEYS.link, 'true');
-      }
-
-      const storedChatProvider = localStorage.getItem(
-        SELECTION_KEYS.chatProvider,
-      );
-      const storedChat = localStorage.getItem(SELECTION_KEYS.chatModel);
-      const storedSystemProvider = localStorage.getItem(
-        SELECTION_KEYS.systemProvider,
-      );
-      const storedSystem = localStorage.getItem(SELECTION_KEYS.systemModel);
-      const isLinked = linkStored === null ? true : linkStored === 'true';
-
-      if (
-        (!storedSystemProvider || !storedSystem) &&
-        isLinked &&
-        storedChatProvider &&
-        storedChat
-      ) {
-        // Mirror chat → system for new users who haven't set system explicitly
-        writeLocalStorage(SELECTION_KEYS.systemProvider, storedChatProvider);
-        writeLocalStorage(SELECTION_KEYS.systemModel, storedChat);
-      }
-    } catch (e) {
-      console.error('ModelConfigurator: error loading model selection', e);
-    }
-  }, []);
-
-  // When linked, keep the stored system model mirrored to chat. Chat requests
-  // read systemModel directly from localStorage and don't re-check the link
-  // flag, and chat-model fallback elsewhere can rewrite the chat keys without
-  // touching system — so enforce consistency here. Writes only when out of sync
-  // (the reactive reads then satisfy the guard, preventing a loop).
-  useEffect(() => {
-    if (!linkSystemToChat || !chatProvider || !chatModelKey) return;
-    if (systemProvider !== chatProvider || systemModelKey !== chatModelKey) {
-      writeLocalStorageBatch([
-        [SELECTION_KEYS.systemProvider, chatProvider],
-        [SELECTION_KEYS.systemModel, chatModelKey],
-      ]);
-    }
-  }, [
-    linkSystemToChat,
-    chatProvider,
-    chatModelKey,
-    systemProvider,
-    systemModelKey,
-  ]);
 
   const handleChange = (next: ModelSelection) => {
     writeSelectionToStorage(next);
@@ -308,8 +248,7 @@ export default function ModelConfigurator({
                     Model Configuration
                   </h2>
                   <p className="text-xs text-fg/60 mt-1">
-                    Choose the Chat and System models. Link them to keep System
-                    in sync with Chat.
+                    Choose the Chat and System models, or apply a preset.
                   </p>
                 </div>
                 <div className="p-5">

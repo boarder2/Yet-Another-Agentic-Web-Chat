@@ -7,7 +7,6 @@ export const SELECTION_KEYS = {
   chatModel: 'chatModel',
   systemProvider: 'systemModelProvider',
   systemModel: 'systemModel',
-  link: 'linkSystemToChat',
   imageCapable: 'imageCapable',
   contextWindowSize: 'contextWindowSize',
 } as const;
@@ -191,26 +190,19 @@ export interface ModelSelection {
   chatModel: string;
   systemProvider: string;
   systemModel: string;
-  linkSystemToChat: boolean;
   imageCapable?: boolean;
   contextWindowSize?: number;
 }
 
 export const DEFAULT_CONTEXT_WINDOW = 32768;
 
-/**
- * Pure conversion of a stored preset to a `ModelSelection`. The link flag is
- * derived (a preset whose chat and system models are identical is "linked").
- */
+/** Pure conversion of a stored preset to a `ModelSelection`. */
 export function presetToSelection(p: ModelPreset): ModelSelection {
-  const linked =
-    p.chatProvider === p.systemProvider && p.chatModel === p.systemModel;
   return {
     chatProvider: p.chatProvider,
     chatModel: p.chatModel,
     systemProvider: p.systemProvider,
     systemModel: p.systemModel,
-    linkSystemToChat: linked,
     imageCapable: p.imageCapable,
     contextWindowSize: Math.max(512, p.contextWindowSize),
   };
@@ -253,17 +245,13 @@ export function selectionToActiveSelection(
 /**
  * Writes a full `ModelSelection` to the chat-selection localStorage keys via a
  * single batch write so all reactive subscribers update in one render cycle,
- * preventing torn intermediate state where linkSystemToChat is updated before
- * provider/model keys are written. When linked, the system keys mirror chat.
+ * preventing torn intermediate state where provider/model keys are written
+ * separately.
  */
 export function writeSelectionToStorage(sel: ModelSelection): void {
-  const linked = sel.linkSystemToChat;
-  const systemProvider = linked ? sel.chatProvider : sel.systemProvider;
-  const systemModel = linked ? sel.chatModel : sel.systemModel;
   writeLocalStorageBatch([
-    [SELECTION_KEYS.link, linked ? 'true' : 'false'],
-    [SELECTION_KEYS.systemProvider, systemProvider],
-    [SELECTION_KEYS.systemModel, systemModel],
+    [SELECTION_KEYS.systemProvider, sel.systemProvider],
+    [SELECTION_KEYS.systemModel, sel.systemModel],
     [SELECTION_KEYS.chatProvider, sel.chatProvider],
     [SELECTION_KEYS.chatModel, sel.chatModel],
     [SELECTION_KEYS.imageCapable, sel.imageCapable ? 'true' : 'false'],

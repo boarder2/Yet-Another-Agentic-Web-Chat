@@ -19,6 +19,7 @@ import {
   getMojeekApiKey,
   updateConfig,
 } from '@/lib/config';
+import { getCodeExecutionConfig } from '@/lib/config';
 import { getResolvedSearchCapabilities } from '@/lib/search/providers';
 import { invalidateModelCache } from '@/lib/providers/modelCache';
 import {
@@ -94,6 +95,12 @@ export const GET = async (_req: Request) => {
     config['mojeekApiKey'] = protectApiKey(getMojeekApiKey());
     config['searchCapabilitiesRegular'] = getResolvedSearchCapabilities(false);
     config['searchCapabilitiesPrivate'] = getResolvedSearchCapabilities(true);
+
+    // Drives the code-widget kind chooser. Only the boolean is exposed.
+    const ceCfg = getCodeExecutionConfig();
+    config['codeExecution'] = {
+      enabled: ceCfg.enabled && !('validationError' in ceCfg),
+    };
 
     return Response.json({ ...config }, { status: 200 });
   } catch (err) {

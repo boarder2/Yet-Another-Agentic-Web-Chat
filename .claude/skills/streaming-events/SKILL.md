@@ -71,6 +71,21 @@ These events are emitted by tools that interrupt the LangGraph run for user appr
 | `modelStats` (on `'stats'` channel) | `SimplifiedAgent.emitModelStats()`               | Updates live token usage display                                                                        |
 | `context_grew`                      | `runHost.ts`                                     | Shows context-grew indicator                                                                            |
 | `response`                          | `SimplifiedAgent.emitResponse()`                 | Streams assistant text tokens to the in-progress message                                                |
+| `widget_proposal`                   | `propose_widget_changes` (widget-builder tools)  | `WidgetChatPanel` renders a `WidgetProposalCard` (delta + Accept/Reject); carries a base-revision stamp |
+
+## Widget-builder stream (dashboard code widgets)
+
+The code-widget editor's assistant runs a dedicated, **non-persisted** SSE route
+`POST /api/dashboard/widget-builder` (not `/api/chat` — no checkpointer/history/
+memory). It constructs a `SimplifiedAgent` with `focusMode: 'chat'`, a custom
+system prompt (current widget state + latest error injected per turn), and a
+**server-enforced tool allowlist** of exactly four custom tools from
+`src/lib/tools/agents/widgetBuilderTools.ts`: `read_current_widget`,
+`sample_source`, `preview_widget_output` (sandboxed, rate-limited ≤5/turn), and
+`propose_widget_changes` (emits `widget_proposal`). The agent never edits the
+widget directly — the user Accepts a proposal. The route pipes the agent's
+`EventEmitter` straight to an SSE `ReadableStream`; `WidgetChatPanel` tolerates
+the full event vocabulary and renders only `response` (markdown) + proposals.
 
 ## Implementation Details
 

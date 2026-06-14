@@ -272,7 +272,7 @@ export const getCodeExecutionConfig = () => {
     dockerHost: 'unix:///var/run/docker.sock',
     timeoutSeconds: 30,
     memoryMb: 128,
-    maxOutputChars: 10000,
+    maxOutputChars: 50000,
   };
 
   if (!ALLOWED_IMAGE_PATTERN.test(dockerImage)) {
@@ -301,7 +301,7 @@ export const getCodeExecutionConfig = () => {
     dockerHost,
     timeoutSeconds: ce?.TIMEOUT_SECONDS ?? 30,
     memoryMb: ce?.MEMORY_MB ?? 128,
-    maxOutputChars: ce?.MAX_OUTPUT_CHARS ?? 10000,
+    maxOutputChars: ce?.MAX_OUTPUT_CHARS ?? 50000,
   };
 };
 

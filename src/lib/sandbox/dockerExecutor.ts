@@ -103,10 +103,15 @@ export async function ensureImage(imageName: string): Promise<void> {
   }
 }
 
-export async function executeCode(code: string): Promise<ExecutionResult> {
+export async function executeCode(
+  code: string,
+  opts?: { stdin?: string; maxOutputChars?: number },
+): Promise<ExecutionResult> {
   const config = getCodeExecutionConfig();
   const docker = createDockerClient();
   const memoryBytes = config.memoryMb * 1024 * 1024;
+  const stdinData = opts?.stdin;
+  const withStdin = typeof stdinData === 'string';
 
   const container = await docker.createContainer({
     Image: config.dockerImage,
@@ -115,7 +120,9 @@ export async function executeCode(code: string): Promise<ExecutionResult> {
     Tty: false,
     AttachStdout: true,
     AttachStderr: true,
-    OpenStdin: false,
+    AttachStdin: withStdin,
+    OpenStdin: withStdin,
+    StdinOnce: withStdin,
     NetworkDisabled: true,
     StopTimeout: config.timeoutSeconds * 3,
     Env: [
@@ -142,13 +149,21 @@ export async function executeCode(code: string): Promise<ExecutionResult> {
       stream: true,
       stdout: true,
       stderr: true,
+      stdin: withStdin,
+      // hijack:true is REQUIRED for stdin — without it the duplex socket's
+      // end() never half-closes, so the container's fs.readFileSync(0) blocks
+      // forever (every run silently hits the timeout).
+      hijack: withStdin,
     });
 
     const stdoutChunks: string[] = [];
     const stderrChunks: string[] = [];
     let stdoutLen = 0;
     let stderrLen = 0;
-    const maxChars = config.maxOutputChars;
+    // Callers (e.g. the code-widget runner, whose whole result is a single
+    // stdout envelope) can override the per-stream cap; chat keeps the config
+    // default so its truncate-with-note behavior is unchanged.
+    const maxChars = opts?.maxOutputChars ?? config.maxOutputChars;
 
     const stdoutStream = new PassThrough();
     const stderrStream = new PassThrough();
@@ -175,6 +190,14 @@ export async function executeCode(code: string): Promise<ExecutionResult> {
 
     await container.start();
 
+    // Inject source data over stdin. EOF (end()) is mandatory: the harness
+    // blocks on fs.readFileSync(0) until the stream closes, else every run
+    // hits the timeout.
+    if (withStdin) {
+      attachStream.write(stdinData);
+      attachStream.end();
+    }
+
     let timedOut = false;
     const timeoutMs = config.timeoutSeconds * 1000;
     let timeoutHandle: NodeJS.Timeout;
@@ -199,9 +222,16 @@ export async function executeCode(code: string): Promise<ExecutionResult> {
       oomKilled = info.State?.OOMKilled ?? false;
     } catch {}
 
+    // Bounded: the hijacked stream can occasionally not emit a clean end after
+    // the container exits. Never let draining hang the request (and, upstream,
+    // leak a concurrency-semaphore slot).
     try {
-      await finished(attachStream);
+      await Promise.race([
+        finished(attachStream),
+        new Promise((resolve) => setTimeout(resolve, 2000)),
+      ]);
     } catch {}
+    (attachStream as { destroy?: () => void }).destroy?.();
 
     const stdout = stdoutChunks.join('');
     const stderr = stderrChunks.join('');

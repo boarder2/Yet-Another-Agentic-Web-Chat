@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getWebContent } from '@/lib/utils/documents';
-import { Document } from '@langchain/core/documents';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage } from '@langchain/core/messages';
@@ -13,47 +11,10 @@ import {
 import { ChatOllama } from '@langchain/ollama';
 import { createAgent } from 'langchain';
 import { allTools } from '@/lib/tools';
-import { Source } from '@/lib/types/widget';
 import { WidgetProcessRequest } from '@/lib/types/api';
+import { fetchSourceContent } from '@/lib/dashboard/sources';
+import { themePromptBlock } from '@/lib/widgets/widgetTheme';
 // import { getLangfuseCallbacks } from '@/lib/tracing/langfuse';
-
-// Helper function to fetch content from a single source
-async function fetchSourceContent(
-  source: Source,
-): Promise<{ content: string; error?: string }> {
-  try {
-    let document;
-
-    if (source.type === 'Web Page') {
-      // Use headless browser for complex web pages
-      document = await getWebContent(source.url, 50000);
-    } else {
-      // Use faster fetch for HTTP data/APIs
-      const response = await fetch(source.url);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const text = await response.text();
-      document = new Document({
-        pageContent: text || '',
-        metadata: { source: source.url },
-      });
-    }
-
-    if (!document) {
-      return {
-        content: '',
-        error: `Failed to fetch content from ${source.url}`,
-      };
-    }
-
-    return { content: document.pageContent };
-  } catch (error) {
-    console.error(`Error fetching content from ${source.url}:`, error);
-    return {
-      content: '',
-      error: `Error fetching ${source.url}: ${error instanceof Error ? error.message : 'Unknown error'}`,
-    };
-  }
-}
 
 // Helper function to replace variables in prompt
 function replacePromptVariables(
@@ -206,6 +167,12 @@ export async function POST(request: NextRequest) {
       }
       // Replace variables in prompt
       processedPrompt = replacePromptVariables(body.prompt, sourceContents);
+    }
+
+    // Append the user's current theme colors so the widget can style any HTML
+    // it emits to match the dashboard theme.
+    if (body.theme) {
+      processedPrompt = `${processedPrompt}\n\n${themePromptBlock(body.theme)}`;
     }
 
     console.log('Processing prompt:', processedPrompt);

@@ -67,7 +67,7 @@ DOCKER_IMAGE = "node:slim"
 DOCKER_HOST = "unix:///var/run/docker.sock"
 TIMEOUT_SECONDS = 30
 MEMORY_MB = 128
-MAX_OUTPUT_CHARS = 10000
+MAX_OUTPUT_CHARS = 50000
 
 # [TOOLS.IMAGE_GENERATION] has been migrated to the database (app_settings
 # table). Manage it from Settings → Image Generation. The OpenRouter API key it

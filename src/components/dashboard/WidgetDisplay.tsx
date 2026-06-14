@@ -6,20 +6,22 @@ import {
   Edit,
   Trash2,
   AlertCircle,
-  ChevronDown,
-  ChevronRight,
   GripVertical,
+  Code2,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import MarkdownRenderer from '@/components/MarkdownRenderer';
 import { Widget } from '@/lib/types/widget';
-import { useState } from 'react';
+import { useConfig } from '@/lib/hooks/api/useConfig';
+import WidgetContent from './WidgetContent';
 
 interface WidgetDisplayProps {
   widget: Widget;
   onEdit: (widget: Widget) => void;
   onDelete: (widgetId: string) => void;
   onRefresh: (widgetId: string) => void;
+  onConvert?: (widget: Widget) => void;
+  /** Edit mode shows the header, footer, and actions; normal mode shows only content. */
+  isEditMode?: boolean;
 }
 
 const WidgetDisplay = ({
@@ -27,8 +29,15 @@ const WidgetDisplay = ({
   onEdit,
   onDelete,
   onRefresh,
+  onConvert,
+  isEditMode = false,
 }: WidgetDisplayProps) => {
-  const [isFooterExpanded, setIsFooterExpanded] = useState(false);
+  const { data: appConfig } = useConfig();
+  const ceEnabled = !!(
+    appConfig?.codeExecution as { enabled?: boolean } | undefined
+  )?.enabled;
+  const isCode = widget.widgetType === 'code';
+  const inert = isCode && !ceEnabled;
 
   const formatLastUpdated = (date: Date | null) => {
     if (!date) return 'Never';
@@ -50,51 +59,107 @@ const WidgetDisplay = ({
   };
 
   return (
-    <Card className="flex flex-col h-full w-full">
-      <CardHeader className="pb-3 shrink-0">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2 flex-1 min-w-0">
-            {/* Drag Handle */}
-            <div
-              className="widget-drag-handle shrink-0 p-1 rounded-control hover:bg-surface-2 cursor-move transition-colors"
-              title="Drag to move widget"
-            >
-              <GripVertical size={16} className="text-fg/50" />
+    <Card
+      className={`flex flex-col h-full w-full ${
+        isEditMode ? '' : 'border-0 bg-transparent shadow-none rounded-none'
+      }`}
+    >
+      {isEditMode && (
+        <CardHeader className="pb-3 shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2 flex-1 min-w-0">
+              {/* Drag Handle */}
+              <div
+                className="widget-drag-handle shrink-0 p-1 rounded-control hover:bg-surface-2 cursor-move transition-colors"
+                title="Drag to move widget"
+              >
+                <GripVertical size={16} className="text-fg/50" />
+              </div>
+
+              <CardTitle className="text-lg font-medium truncate">
+                {widget.title}
+              </CardTitle>
+              {isCode && (
+                <span
+                  className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-control bg-surface-2 text-fg/60 text-[10px]"
+                  title="Code widget"
+                >
+                  <Code2 size={11} />
+                  JS
+                </span>
+              )}
             </div>
 
-            <CardTitle className="text-lg font-medium truncate">
-              {widget.title}
-            </CardTitle>
-          </div>
+            <div className="flex items-center space-x-2 shrink-0">
+              {/* Last updated date with refresh frequency tooltip */}
+              <span
+                className="text-xs text-fg/60"
+                title={getRefreshFrequencyText()}
+              >
+                {formatLastUpdated(widget.lastUpdated)}
+              </span>
 
-          <div className="flex items-center space-x-2 shrink-0">
-            {/* Last updated date with refresh frequency tooltip */}
-            <span
-              className="text-xs text-fg/60"
-              title={getRefreshFrequencyText()}
-            >
-              {formatLastUpdated(widget.lastUpdated)}
-            </span>
+              {/* Refresh button */}
+              <button
+                type="button"
+                onClick={() => onRefresh(widget.id)}
+                disabled={widget.isLoading || inert}
+                className="p-1.5 hover:bg-surface-2 rounded-control transition-colors disabled:opacity-50"
+                title={
+                  inert
+                    ? 'Code execution is disabled — cannot refresh'
+                    : 'Refresh Widget'
+                }
+              >
+                {widget.isLoading ? (
+                  <LoaderCircle
+                    size={16}
+                    className="animate-spin text-accent"
+                  />
+                ) : (
+                  <RefreshCw size={16} className="text-fg/70" />
+                )}
+              </button>
 
-            {/* Refresh button */}
-            <button
-              type="button"
-              onClick={() => onRefresh(widget.id)}
-              disabled={widget.isLoading}
-              className="p-1.5 hover:bg-surface-2 rounded-control transition-colors disabled:opacity-50"
-              title="Refresh Widget"
-            >
-              {widget.isLoading ? (
-                <LoaderCircle size={16} className="animate-spin text-accent" />
-              ) : (
-                <RefreshCw size={16} className="text-fg/70" />
+              {/* Edit */}
+              <button
+                type="button"
+                onClick={() => onEdit(widget)}
+                className="p-1.5 hover:bg-surface-2 rounded-control transition-colors"
+                title="Edit Widget"
+              >
+                <Edit size={16} className="text-fg/70" />
+              </button>
+
+              {/* Convert AI → Code */}
+              {!isCode && ceEnabled && onConvert && (
+                <button
+                  type="button"
+                  onClick={() => onConvert(widget)}
+                  className="p-1.5 hover:bg-surface-2 rounded-control transition-colors"
+                  title="Convert to Code Widget"
+                >
+                  <Code2 size={16} className="text-fg/70" />
+                </button>
               )}
-            </button>
-          </div>
-        </div>
-      </CardHeader>
 
-      <CardContent className="flex-1 overflow-hidden">
+              {/* Delete */}
+              <button
+                type="button"
+                onClick={() => onDelete(widget.id)}
+                className="p-1.5 hover:bg-surface-2 rounded-control transition-colors"
+                title="Delete Widget"
+              >
+                <Trash2 size={16} className="text-danger" />
+              </button>
+            </div>
+          </div>
+        </CardHeader>
+      )}
+
+      <CardContent
+        className={`flex-1 overflow-hidden ${isEditMode ? '' : 'p-0'}`}
+      >
         <div className="h-full overflow-y-auto">
           {widget.isLoading ? (
             <div className="flex items-center justify-center py-8 text-fg/60">
@@ -115,8 +180,22 @@ const WidgetDisplay = ({
               </div>
             </div>
           ) : widget.content ? (
-            <div className="prose prose-sm max-w-none">
-              <MarkdownRenderer content={widget.content} showThinking={false} />
+            <>
+              <WidgetContent
+                content={widget.content}
+                charts={widget.charts}
+                className="max-w-none"
+              />
+              {inert && (
+                <p className="mt-3 text-xs text-fg/50 italic">
+                  Code execution disabled — showing last result from{' '}
+                  {formatLastUpdated(widget.lastUpdated)}.
+                </p>
+              )}
+            </>
+          ) : inert ? (
+            <div className="flex items-center justify-center py-8 text-fg/60 text-center text-sm">
+              Code execution is disabled — this widget cannot run.
             </div>
           ) : (
             <div className="flex items-center justify-center py-8 text-fg/60">
@@ -128,66 +207,6 @@ const WidgetDisplay = ({
           )}
         </div>
       </CardContent>
-
-      {/* Collapsible footer with sources and actions */}
-      <div className="bg-surface/30 shrink-0">
-        <button
-          type="button"
-          onClick={() => setIsFooterExpanded(!isFooterExpanded)}
-          className="w-full px-4 py-2 flex items-center space-x-2 text-xs text-fg/60 hover:bg-surface-2 transition-colors"
-        >
-          {isFooterExpanded ? (
-            <ChevronDown size={14} />
-          ) : (
-            <ChevronRight size={14} />
-          )}
-          <span>Sources & Actions</span>
-        </button>
-
-        {isFooterExpanded && (
-          <div className="px-4 pb-4 space-y-3">
-            {/* Sources */}
-            {widget.sources.length > 0 && (
-              <div>
-                <p className="text-xs text-fg/60 mb-2">Sources:</p>
-                <div className="space-y-1">
-                  {widget.sources.map((source, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center space-x-2 text-xs"
-                    >
-                      <span className="inline-block w-2 h-2 bg-accent rounded-pill"></span>
-                      <span className="text-fg/70 truncate">{source.url}</span>
-                      <span className="text-fg/60">({source.type})</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Action buttons */}
-            <div className="flex items-center space-x-2 pt-2">
-              <button
-                type="button"
-                onClick={() => onEdit(widget)}
-                className="flex items-center space-x-1 px-2 py-1 text-xs text-fg/70 hover:bg-surface-2 rounded-control transition-colors"
-              >
-                <Edit size={12} />
-                <span>Edit</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => onDelete(widget.id)}
-                className="flex items-center space-x-1 px-2 py-1 text-xs text-danger hover:bg-surface-2 rounded-control transition-colors"
-              >
-                <Trash2 size={12} />
-                <span>Delete</span>
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
     </Card>
   );
 };

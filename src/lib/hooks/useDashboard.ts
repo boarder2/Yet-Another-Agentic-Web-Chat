@@ -18,6 +18,7 @@ import {
   DASHBOARD_CONSTRAINTS,
   getResponsiveConstraints,
 } from '@/lib/constants/dashboard';
+import { resolveWidgetTheme } from '@/lib/widgets/widgetTheme';
 
 // Helper function to request location permission and get user's location
 const requestLocationPermission = async (): Promise<string | undefined> => {
@@ -101,6 +102,7 @@ interface UseDashboardReturn {
   exportDashboard: () => Promise<string>;
   importDashboard: (configJson: string) => Promise<void>;
   clearCache: () => void;
+  invalidateWidgetCache: (id: string) => void;
 
   // Settings
   updateSettings: (newSettings: Partial<DashboardConfig['settings']>) => void;
@@ -146,6 +148,10 @@ export const useDashboard = (): UseDashboardReturn => {
 
       // Convert date strings back to Date objects and ensure layout exists
       widgets.forEach((widget, index) => {
+        // Migration: legacy widgets predate the discriminated union.
+        const w = widget as unknown as { widgetType?: 'llm' | 'code' };
+        if (!w.widgetType) w.widgetType = 'llm';
+
         if (widget.lastUpdated) {
           widget.lastUpdated = new Date(widget.lastUpdated);
         }
@@ -304,17 +310,26 @@ export const useDashboard = (): UseDashboardReturn => {
     [state.widgets],
   );
 
+  // Replace-not-merge: take ALL config-bearing fields from the new
+  // discriminated `config`, keeping only runtime status + id + layout from the
+  // prior widget. A spread-merge would leave stale prompt/provider/model on a
+  // widget switched to `code`, corrupting the persisted union. Callers must
+  // therefore pass a COMPLETE discriminated config, not a partial patch.
   const updateWidget = useCallback((id: string, config: WidgetConfig) => {
     setState((prev) => ({
       ...prev,
       widgets: prev.widgets.map((widget) =>
         widget.id === id
-          ? {
-              ...widget,
+          ? ({
               ...config,
-              id, // Preserve the ID
-              layout: config.layout || widget.layout, // Preserve existing layout if not provided
-            }
+              id,
+              layout: config.layout || widget.layout,
+              lastUpdated: widget.lastUpdated,
+              isLoading: widget.isLoading,
+              content: widget.content,
+              error: widget.error,
+              charts: widget.charts,
+            } as Widget)
           : widget,
       ),
     }));
@@ -371,6 +386,7 @@ export const useDashboard = (): UseDashboardReturn => {
               ? {
                   ...w,
                   content: cachedData.content,
+                  charts: cachedData.charts,
                   lastUpdated: new Date(cachedData.lastFetched),
                 }
               : w,
@@ -387,35 +403,60 @@ export const useDashboard = (): UseDashboardReturn => {
         ),
       }));
 
+      // Resolve the user's current theme so the widget output matches it.
+      const theme = resolveWidgetTheme();
+
       try {
-        // Check if prompt uses location variable and request permission if needed
-        let location: string | undefined;
-        if (widget.prompt.includes('{{location}}')) {
-          location = await requestLocationPermission();
+        // Branch on widgetType BEFORE touching any llm-only field (prompt).
+        let response: Response;
+        if (widget.widgetType === 'code') {
+          // Only request geolocation when the saved code actually references
+          // `location`. Strip comments first (so the template's docs or a stray
+          // "// ...location..." note never prompt) and match it as a whole word
+          // (so "allocation"/"relocation" don't either). The seed template omits
+          // `location` from render()'s args, making it strictly opt-in.
+          const codeSansComments = widget.code
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .replace(/\/\/[^\n]*/g, '');
+          const location = /\blocation\b/.test(codeSansComments)
+            ? await requestLocationPermission()
+            : undefined;
+          response = await fetch('/api/dashboard/process-code-widget', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              code: widget.code,
+              sources: widget.sources,
+              location,
+              theme,
+            }),
+          });
+        } else {
+          let location: string | undefined;
+          if (widget.prompt.includes('{{location}}')) {
+            location = await requestLocationPermission();
+          }
+          const processedPrompt = replaceDateTimeVariables(widget.prompt);
+          response = await fetch('/api/dashboard/process-widget', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              sources: widget.sources,
+              prompt: processedPrompt,
+              provider: widget.provider,
+              model: widget.model,
+              tool_names: widget.tool_names,
+              location,
+              theme,
+            }),
+          });
         }
-
-        // Replace date/time variables on the client side
-        const processedPrompt = replaceDateTimeVariables(widget.prompt);
-
-        const response = await fetch('/api/dashboard/process-widget', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            sources: widget.sources,
-            prompt: processedPrompt,
-            provider: widget.provider,
-            model: widget.model,
-            tool_names: widget.tool_names,
-            location,
-          }),
-        });
 
         const result = await response.json();
         const now = new Date();
 
         if (result.success) {
+          const charts = result.charts as Widget['charts'];
           // Update widget
           setState((prev) => ({
             ...prev,
@@ -425,6 +466,7 @@ export const useDashboard = (): UseDashboardReturn => {
                     ...w,
                     isLoading: false,
                     content: result.content,
+                    charts,
                     lastUpdated: now,
                     error: null,
                   }
@@ -436,6 +478,7 @@ export const useDashboard = (): UseDashboardReturn => {
           const cache = getWidgetCache();
           cache[id] = {
             content: result.content,
+            charts,
             lastFetched: now,
             expiresAt: getCacheExpiryTime(widget),
           };
@@ -518,16 +561,25 @@ export const useDashboard = (): UseDashboardReturn => {
         }
 
         // Process widgets and ensure they have valid IDs
-        const processedWidgets: Widget[] = config.widgets.map((widget) => ({
-          ...widget,
-          id:
-            widget.id ||
-            Date.now().toString() + Math.random().toString(36).substr(2, 9),
-          lastUpdated: widget.lastUpdated ? new Date(widget.lastUpdated) : null,
-          isLoading: false,
-          content: widget.content || null,
-          error: null,
-        }));
+        const processedWidgets: Widget[] = config.widgets.map(
+          (widget) =>
+            ({
+              ...widget,
+              // Migration: backfill widgetType on legacy exported JSON.
+              widgetType:
+                (widget as unknown as { widgetType?: 'llm' | 'code' })
+                  .widgetType ?? 'llm',
+              id:
+                widget.id ||
+                Date.now().toString() + Math.random().toString(36).substr(2, 9),
+              lastUpdated: widget.lastUpdated
+                ? new Date(widget.lastUpdated)
+                : null,
+              isLoading: false,
+              content: widget.content || null,
+              error: null,
+            }) as Widget,
+        );
 
         setState((prev) => ({
           ...prev,
@@ -545,6 +597,12 @@ export const useDashboard = (): UseDashboardReturn => {
 
   const clearCache = useCallback(() => {
     localStorage.removeItem(DASHBOARD_STORAGE_KEYS.CACHE);
+  }, []);
+
+  const invalidateWidgetCache = useCallback((id: string) => {
+    const cache = getWidgetCache();
+    const { [id]: _, ...rest } = cache;
+    localStorage.setItem(DASHBOARD_STORAGE_KEYS.CACHE, JSON.stringify(rest));
   }, []);
 
   const updateSettings = useCallback(
@@ -643,6 +701,7 @@ export const useDashboard = (): UseDashboardReturn => {
     exportDashboard,
     importDashboard,
     clearCache,
+    invalidateWidgetCache,
 
     // Settings
     updateSettings,

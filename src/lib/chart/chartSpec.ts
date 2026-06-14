@@ -8,14 +8,22 @@ const isCssColor = (val: string) =>
   /^var\(--[a-zA-Z0-9_-]+(\s*,[^)]*)?\)$/.test(val) ||
   /^[a-zA-Z]+$/.test(val);
 
+// Size caps bound DB bloat + client DoS for code-widget-generated specs.
+export const CHART_MAX_DATA_ROWS = 1000;
+export const CHART_MAX_SERIES = 20;
+export const CHART_MAX_STRING_LEN = 500;
+export const CHART_MAX_PER_WIDGET = 10;
+
+const cappedString = z.string().max(CHART_MAX_STRING_LEN);
+
 export const ChartSeriesSchema = z.object({
-  key: z.string().min(1),
-  label: z.string().optional(),
+  key: cappedString.min(1),
+  label: cappedString.optional(),
   color: z
     .string()
     .refine(isCssColor, { message: 'color must be a valid CSS color' })
     .optional(),
-  stackId: z.string().optional(),
+  stackId: cappedString.optional(),
 });
 
 export const ChartOptionsSchema = z
@@ -34,14 +42,19 @@ export const ChartOptionsSchema = z
 export const ChartSpecSchema = z
   .object({
     type: z.enum(['bar', 'line', 'pie', 'area']),
-    title: z.string().optional(),
+    title: cappedString.optional(),
     data: z
-      .array(z.record(z.string(), z.union([z.string(), z.number()])))
-      .min(1, 'data must have at least one row'),
+      .array(z.record(z.string(), z.union([cappedString, z.number()])))
+      .min(1, 'data must have at least one row')
+      .max(
+        CHART_MAX_DATA_ROWS,
+        `data must have at most ${CHART_MAX_DATA_ROWS} rows`,
+      ),
     series: z
       .array(ChartSeriesSchema)
-      .min(1, 'series must have at least one entry'),
-    xKey: z.string().optional(),
+      .min(1, 'series must have at least one entry')
+      .max(CHART_MAX_SERIES, `at most ${CHART_MAX_SERIES} series allowed`),
+    xKey: cappedString.optional(),
     options: ChartOptionsSchema,
   })
   .superRefine((spec, ctx) => {

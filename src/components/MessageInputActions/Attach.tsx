@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils';
+import { DEFAULT_CONTEXT_WINDOW } from '@/lib/models/presets';
 import {
   Popover,
   PopoverButton,
@@ -81,7 +82,8 @@ const Attach = ({
       const chatModelProvider = localStorage.getItem('chatModelProvider');
       const chatModel = localStorage.getItem('chatModel');
       const contextWindowSize =
-        localStorage.getItem('contextWindowSize') || '32768';
+        localStorage.getItem('contextWindowSize') ||
+        String(DEFAULT_CONTEXT_WINDOW);
 
       data.append('embedding_model_provider', embeddingModelProvider!);
       data.append('embedding_model', embeddingModel!);

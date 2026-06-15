@@ -33,6 +33,7 @@ import {
   useLocalStorageBoolean,
   useLocalStorageString,
 } from '@/lib/hooks/useLocalStorage';
+import { DEFAULT_CONTEXT_WINDOW } from '@/lib/models/presets';
 
 export type TokenUsage = {
   input_tokens: number;
@@ -2705,7 +2706,8 @@ const ChatWindow = ({
     };
 
     const contextWindowSize = parseInt(
-      localStorage.getItem('contextWindowSize') || '32768',
+      localStorage.getItem('contextWindowSize') ||
+        String(DEFAULT_CONTEXT_WINDOW),
       10,
     );
 
@@ -2990,7 +2992,8 @@ const ChatWindow = ({
     setCompacting(true);
     try {
       const contextWindowSize = parseInt(
-        localStorage.getItem('contextWindowSize') || '32768',
+        localStorage.getItem('contextWindowSize') ||
+          String(DEFAULT_CONTEXT_WINDOW),
         10,
       );
 

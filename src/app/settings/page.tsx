@@ -25,7 +25,10 @@ import {
   useDeleteSystemPrompt,
 } from '@/lib/hooks/api/useSystemPrompts';
 import { qk } from '@/lib/api/keys';
-import { PREDEFINED_CONTEXT_SIZES } from '@/lib/models/presets';
+import {
+  DEFAULT_CONTEXT_WINDOW,
+  PREDEFINED_CONTEXT_SIZES,
+} from '@/lib/models/presets';
 
 import { SettingsType, SectionKey } from './types';
 import {
@@ -82,7 +85,9 @@ export default function SettingsPage() {
   const [memoryAutoDetectionEnabled, setMemoryAutoDetectionEnabled] =
     useState(false);
   const [savingStates, setSavingStates] = useState<Record<string, boolean>>({});
-  const [contextWindowSize, setContextWindowSize] = useState(32768);
+  const [contextWindowSize, setContextWindowSize] = useState(
+    DEFAULT_CONTEXT_WINDOW,
+  );
   const [, setIsCustomContextWindow] = useState(false);
 
   const [privateSessionDurationMinutes, setPrivateSessionDurationMinutes] =
@@ -244,7 +249,8 @@ export default function SettingsPage() {
         localStorage.getItem('autoSuggestions') !== 'false',
       );
       const storedContextWindow = parseInt(
-        localStorage.getItem('contextWindowSize') ?? '32768',
+        localStorage.getItem('contextWindowSize') ??
+          String(DEFAULT_CONTEXT_WINDOW),
       );
       setContextWindowSize(storedContextWindow);
       setIsCustomContextWindow(

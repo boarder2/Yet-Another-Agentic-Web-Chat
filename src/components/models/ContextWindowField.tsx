@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import Select from '@/app/settings/components/Select';
-import { PREDEFINED_CONTEXT_SIZES } from '@/lib/models/presets';
+import {
+  DEFAULT_CONTEXT_WINDOW,
+  PREDEFINED_CONTEXT_SIZES,
+} from '@/lib/models/presets';
 
 /**
  * Context-window control: a predefined-size dropdown plus a "Custom…" option
@@ -49,7 +52,7 @@ export default function ContextWindowField({
               setCustomMode(true);
             } else {
               setCustomMode(false);
-              onChange(parseInt(e.target.value) || 32768);
+              onChange(parseInt(e.target.value) || DEFAULT_CONTEXT_WINDOW);
             }
           }}
           options={options}

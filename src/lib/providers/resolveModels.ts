@@ -1,4 +1,5 @@
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import { DEFAULT_CONTEXT_WINDOW } from '@/lib/models/presets';
 import { ChatOllama } from '@langchain/ollama';
 import { ChatOpenAI } from '@langchain/openai';
 import {
@@ -122,7 +123,7 @@ export async function resolveChatAndEmbedding(input: {
     chatLlm = chatModelEntry.model;
 
     if (chatLlm) {
-      const cw = input.chatModel?.contextWindowSize || 32768;
+      const cw = input.chatModel?.contextWindowSize || DEFAULT_CONTEXT_WINDOW;
       if (
         chatLlm instanceof ChatOllama &&
         input.chatModel?.provider === 'ollama'
@@ -154,7 +155,7 @@ export async function resolveChatAndEmbedding(input: {
         | undefined;
     }
     if (systemLlm) {
-      const cw = input.systemModel?.contextWindowSize || 32768;
+      const cw = input.systemModel?.contextWindowSize || DEFAULT_CONTEXT_WINDOW;
       if (
         systemLlm instanceof ChatOllama &&
         input.systemModel?.provider === 'ollama'

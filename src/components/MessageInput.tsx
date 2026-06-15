@@ -6,7 +6,7 @@ import {
   subscribeLocalStorage,
   useLocalStorageString,
 } from '@/lib/hooks/useLocalStorage';
-import { SELECTION_KEYS } from '@/lib/models/presets';
+import { DEFAULT_CONTEXT_WINDOW, SELECTION_KEYS } from '@/lib/models/presets';
 import { File, ImageAttachment } from './ChatWindow';
 import Attach from './MessageInputActions/Attach';
 import ContextIndicator from './MessageInputActions/ContextIndicator';
@@ -98,7 +98,7 @@ const MessageInput = ({
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [contextWindowSizeStr] = useLocalStorageString(
     SELECTION_KEYS.contextWindowSize,
-    '32768',
+    String(DEFAULT_CONTEXT_WINDOW),
   );
   const [skillSuggestions, setSkillSuggestions] = useState<
     Array<{ name: string; description: string }>

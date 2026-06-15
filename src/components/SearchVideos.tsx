@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Lightbox, { GenericSlide, VideoSlide } from 'yet-another-react-lightbox';
 import 'yet-another-react-lightbox/styles.css';
 import { Message } from './ChatWindow';
+import { DEFAULT_CONTEXT_WINDOW } from '@/lib/models/presets';
 
 type Video = {
   url: string;
@@ -71,7 +72,8 @@ const Searchvideos = ({
       const customOpenAIBaseURL = localStorage.getItem('openAIBaseURL');
       const customOpenAIKey = localStorage.getItem('openAIApiKey');
       const contextWindowSize = parseInt(
-        localStorage.getItem('contextWindowSize') || '32768',
+        localStorage.getItem('contextWindowSize') ||
+          String(DEFAULT_CONTEXT_WINDOW),
         10,
       );
 

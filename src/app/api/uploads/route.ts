@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { DEFAULT_CONTEXT_WINDOW } from '@/lib/models/presets';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
@@ -152,12 +153,12 @@ export async function POST(req: Request) {
       if (llm instanceof ChatOllama && chat_model_provider === 'ollama') {
         const contextWindow = context_window
           ? parseInt(context_window as string, 10)
-          : 32768;
+          : DEFAULT_CONTEXT_WINDOW;
         llm.numCtx = contextWindow;
       }
       (llm as any).contextWindowSize = context_window
         ? parseInt(context_window as string, 10)
-        : 32768;
+        : DEFAULT_CONTEXT_WINDOW;
     }
 
     const processedFiles: FileRes[] = [];

@@ -3,6 +3,7 @@ import {
   getCustomOpenaiApiUrl,
   getCustomOpenaiModelName,
 } from '@/lib/config';
+import { DEFAULT_CONTEXT_WINDOW } from '@/lib/models/presets';
 import { getAvailableChatModelProviders } from '@/lib/providers';
 import { removeThinkingBlocks } from '@/lib/utils/contentUtils';
 import { hydrateSearchHits, searchChatsByKeywords } from '@/lib/db/chatSearch';
@@ -65,10 +66,10 @@ export const POST = async (req: Request) => {
     } else if (chatModelProvider && selectedChatModel) {
       llm = selectedChatModel.model;
       if (llm instanceof ChatOllama && chatModel?.provider === 'ollama') {
-        llm.numCtx = chatModel.contextWindowSize || 32768;
+        llm.numCtx = chatModel.contextWindowSize || DEFAULT_CONTEXT_WINDOW;
       }
       (llm as unknown as { contextWindowSize?: number }).contextWindowSize =
-        chatModel.contextWindowSize || 32768;
+        chatModel.contextWindowSize || DEFAULT_CONTEXT_WINDOW;
     }
 
     if (!llm) {

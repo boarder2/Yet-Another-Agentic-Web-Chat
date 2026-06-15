@@ -43,7 +43,7 @@ export const PRESET_NAME_MAX = 60;
  * ModelPresetsSection (dropdown options) so all three stay consistent.
  */
 export const PREDEFINED_CONTEXT_SIZES: readonly number[] = [
-  1024, 2048, 3072, 4096, 8192, 16384, 32768, 65536, 131072, 262144,
+  1024, 2048, 3072, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 1048576,
 ];
 
 function generateId(): string {
@@ -165,7 +165,7 @@ export function findMatchingPreset(
 
 export function captureCurrentSelection(): ActiveSelection {
   const cwRaw = parseInt(
-    readRaw(SELECTION_KEYS.contextWindowSize) ?? '32768',
+    readRaw(SELECTION_KEYS.contextWindowSize) ?? String(DEFAULT_CONTEXT_WINDOW),
     10,
   );
   return {
@@ -174,7 +174,7 @@ export function captureCurrentSelection(): ActiveSelection {
     systemProvider: readRaw(SELECTION_KEYS.systemProvider) ?? '',
     systemModel: readRaw(SELECTION_KEYS.systemModel) ?? '',
     imageCapable: readRaw(SELECTION_KEYS.imageCapable) === 'true',
-    contextWindowSize: isNaN(cwRaw) ? 32768 : cwRaw,
+    contextWindowSize: isNaN(cwRaw) ? DEFAULT_CONTEXT_WINDOW : cwRaw,
   };
 }
 

@@ -1,4 +1,5 @@
 import handleVideoSearch from '@/lib/chains/videoSearchAgent';
+import { DEFAULT_CONTEXT_WINDOW } from '@/lib/models/presets';
 import {
   getCustomOpenaiApiKey,
   getCustomOpenaiApiUrl,
@@ -62,10 +63,10 @@ export const POST = async (req: Request) => {
     } else if (chatModelProvider && chatModel) {
       llm = chatModel.model;
       if (llm instanceof ChatOllama && body.chatModel?.provider === 'ollama') {
-        llm.numCtx = body.chatModel.contextWindowSize || 32768;
+        llm.numCtx = body.chatModel.contextWindowSize || DEFAULT_CONTEXT_WINDOW;
       }
       (llm as unknown as { contextWindowSize?: number }).contextWindowSize =
-        body.chatModel?.contextWindowSize || 32768;
+        body.chatModel?.contextWindowSize || DEFAULT_CONTEXT_WINDOW;
     }
 
     if (!llm) {

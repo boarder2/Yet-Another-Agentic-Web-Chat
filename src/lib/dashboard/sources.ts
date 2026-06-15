@@ -25,7 +25,7 @@ import { Source } from '@/lib/types/widget';
 // If this app ever grows multi-tenant or accepts source URLs from untrusted
 // users, reinstate a guard (resolve-and-validate + pinned fetch) here.
 
-export const SOURCE_CONTENT_CAP = 50_000;
+export const SOURCE_CONTENT_CAP = 300_000;
 export const MAX_SOURCES_PER_WIDGET = 8;
 
 export interface FetchedSource {

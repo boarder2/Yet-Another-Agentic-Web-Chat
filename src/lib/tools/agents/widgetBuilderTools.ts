@@ -27,7 +27,7 @@ export interface WidgetBuilderContext {
   theme?: WidgetTheme;
 }
 
-const MAX_CODE_CHARS = 50_000;
+const MAX_CODE_CHARS = 100_000;
 const MAX_PREVIEW_PER_TURN = 5;
 
 // Strict sequential left-fold; each oldString must match EXACTLY once.
@@ -145,10 +145,10 @@ export function createWidgetBuilderTools(ctx: WidgetBuilderContext) {
       });
       return JSON.stringify({
         success: r.success,
-        content: r.content.slice(0, 4000),
+        content: r.content.slice(0, 100_000),
         chartIds: Object.keys(r.charts),
         error: r.error,
-        stderr: r.logs.stderr.slice(0, 2000),
+        stderr: r.logs.stderr.slice(0, 50_000),
         exitCode: r.logs.exitCode,
         timedOut: r.logs.timedOut,
         oomKilled: r.logs.oomKilled,
@@ -187,7 +187,7 @@ export function createWidgetBuilderTools(ctx: WidgetBuilderContext) {
       } else if (input.codeEdits?.length) {
         const res = applyCodeEdits(code, input.codeEdits);
         if ('error' in res) {
-          return `${res.error}\nCurrent code:\n${ctx.state.code.slice(0, 2000)}`;
+          return `${res.error}\nCurrent code:\n${ctx.state.code.slice(0, 50_000)}`;
         }
         code = res.code;
       }

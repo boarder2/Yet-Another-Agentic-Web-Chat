@@ -9,6 +9,7 @@ import {
   List,
   Pencil,
   Eye,
+  ArrowDownToLine,
 } from 'lucide-react';
 import type { WidgetBoard } from '@/lib/hooks/useWidgetBoard';
 
@@ -27,6 +28,7 @@ const HomeWidgetToolbar = ({ board }: { board: WidgetBoard }) => {
     handleExport,
     handleImport,
     handleToggleProcessingMode,
+    handleToggleHomePeek,
   } = board;
 
   return (
@@ -55,6 +57,23 @@ const HomeWidgetToolbar = ({ board }: { board: WidgetBoard }) => {
 
       {isEditMode && (
         <>
+          <button
+            type="button"
+            onClick={handleToggleHomePeek}
+            className={`p-2 rounded-surface transition duration-200 ${
+              settings.homeWidgetsPeek
+                ? 'bg-accent text-accent-fg hover:bg-accent-700'
+                : 'text-fg/60 hover:text-fg hover:bg-surface-2'
+            }`}
+            title={
+              settings.homeWidgetsPeek
+                ? 'Widgets peek at the bottom of the screen — click to show in place'
+                : 'Push widgets below the fold (only their tops peek up)'
+            }
+          >
+            <ArrowDownToLine size={18} />
+          </button>
+
           <button
             type="button"
             onClick={handleToggleProcessingMode}

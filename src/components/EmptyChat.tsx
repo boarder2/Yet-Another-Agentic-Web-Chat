@@ -12,6 +12,13 @@ import WidgetModals from './dashboard/WidgetModals';
 
 import WorkspacePicker from './Workspaces/WorkspacePicker';
 
+// How much of the widget board peeks above the bottom of the screen in "peek"
+// mode — enough to signal there are widgets without being distracting. Larger
+// screens reveal less; mobile keeps more since the bottom nav bar covers part
+// of the sliver anyway. (Larger reveal ⇒ smaller min-height above the fold.)
+const HOME_PEEK_MIN_HEIGHT =
+  'min-h-[calc(100vh-6.5rem)] lg:min-h-[calc(100vh-2.5rem)]';
+
 const EmptyChat = ({
   sendMessage,
   focusMode,
@@ -78,6 +85,13 @@ const EmptyChat = ({
   // or while customizing (edit mode); wait for load to avoid a flash.
   const showBoard =
     isHome && !board.isLoading && (homeWidgets.length > 0 || board.isEditMode);
+  // "Peek" mode pushes the board below the fold so only its top edge shows. It
+  // is disabled while editing (you need to see widgets to arrange them) and
+  // only kicks in once there are widgets to reveal.
+  const peekActive =
+    !!board.settings.homeWidgetsPeek &&
+    !board.isEditMode &&
+    homeWidgets.length > 0;
 
   const messageInput = (
     <MessageInput
@@ -128,6 +142,34 @@ const EmptyChat = ({
     </Link>
   );
 
+  const inputCard = (
+    <div className="flex flex-col items-center w-full max-w-screen-sm p-2 space-y-2">
+      <div className="flex w-full items-center justify-between px-1">
+        <div>
+          {setSelectedWorkspaceId && (
+            <WorkspacePicker
+              value={selectedWorkspaceId ?? null}
+              onChange={setSelectedWorkspaceId}
+            />
+          )}
+        </div>
+        {privateToggle}
+      </div>
+      {messageInput}
+      {isHome && homeWidgets.length === 0 && (
+        <button
+          type="button"
+          onClick={board.handleAddWidget}
+          className="flex items-center gap-1.5 text-sm text-fg/50 hover:text-fg/80 transition-colors px-3 py-1.5 rounded-pill"
+          title="Add a widget to your home page"
+        >
+          <Plus size={15} />
+          <span>Add widget</span>
+        </button>
+      )}
+    </div>
+  );
+
   return (
     <div className="relative">
       {isHome && <WidgetModals board={board} />}
@@ -138,39 +180,32 @@ const EmptyChat = ({
         </Link>
       </div>
 
-      {/* A 50vh spacer drops the input to mid-screen, then -translate-y-1/2
-          pulls it up by half its own height so it lands dead-center regardless
-          of its height. The widgets flow immediately after it. */}
       <div className="flex flex-col items-center min-h-screen">
-        <div className="h-[50vh] shrink-0" aria-hidden />
-        <div className="flex flex-col items-center w-full max-w-screen-sm p-2 space-y-2 -translate-y-1/2">
-          <div className="flex w-full items-center justify-between px-1">
-            <div>
-              {setSelectedWorkspaceId && (
-                <WorkspacePicker
-                  value={selectedWorkspaceId ?? null}
-                  onChange={setSelectedWorkspaceId}
-                />
-              )}
-            </div>
-            {privateToggle}
+        {peekActive ? (
+          // Peek mode: the input centers in the space above the fold, leaving a
+          // fixed sliver (HOME_PEEK_REVEAL) for the widget board to poke into.
+          <div
+            className={cn(
+              'flex flex-col items-center justify-center w-full',
+              HOME_PEEK_MIN_HEIGHT,
+            )}
+          >
+            {inputCard}
           </div>
-          {messageInput}
-          {isHome && homeWidgets.length === 0 && (
-            <button
-              type="button"
-              onClick={board.handleAddWidget}
-              className="flex items-center gap-1.5 text-sm text-fg/50 hover:text-fg/80 transition-colors px-3 py-1.5 rounded-pill"
-              title="Add a widget to your home page"
-            >
-              <Plus size={15} />
-              <span>Add widget</span>
-            </button>
-          )}
-        </div>
+        ) : (
+          // Default: a 50vh spacer drops the input to mid-screen, then
+          // -translate-y-1/2 pulls it up by half its own height so it lands
+          // dead-center regardless of its height. Widgets flow right after it.
+          <>
+            <div className="h-[50vh] shrink-0" aria-hidden />
+            <div className="w-full flex flex-col items-center -translate-y-1/2">
+              {inputCard}
+            </div>
+          </>
+        )}
 
         {showBoard && (
-          <div className="w-full -mt-8 pb-12">
+          <div className={cn('w-full pb-12', !peekActive && '-mt-8')}>
             <HomeWidgetBoard board={board} />
           </div>
         )}

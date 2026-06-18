@@ -238,6 +238,10 @@ export const useWidgetBoard = (surface: DashboardSurface) => {
     updateSettings({ parallelLoading: !settings.parallelLoading });
   }, [updateSettings, settings.parallelLoading]);
 
+  const handleToggleHomePeek = useCallback(() => {
+    updateSettings({ homeWidgetsPeek: !settings.homeWidgetsPeek });
+  }, [updateSettings, settings.homeWidgetsPeek]);
+
   return {
     // State
     surface,
@@ -274,6 +278,7 @@ export const useWidgetBoard = (surface: DashboardSurface) => {
     handleExport,
     handleImport,
     handleToggleProcessingMode,
+    handleToggleHomePeek,
   };
 };
 

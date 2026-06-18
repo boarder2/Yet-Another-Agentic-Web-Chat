@@ -8,6 +8,8 @@ import {
   AlertCircle,
   GripVertical,
   Code2,
+  Home,
+  LayoutDashboard,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Widget } from '@/lib/types/widget';
@@ -20,6 +22,8 @@ interface WidgetDisplayProps {
   onDelete: (widgetId: string) => void;
   onRefresh: (widgetId: string) => void;
   onConvert?: (widget: Widget) => void;
+  /** Toggle which surface (home/dashboard) the widget appears on. */
+  onTogglePlacement?: (widget: Widget, key: 'home' | 'dashboard') => void;
   /** Edit mode shows the header, footer, and actions; normal mode shows only content. */
   isEditMode?: boolean;
 }
@@ -30,6 +34,7 @@ const WidgetDisplay = ({
   onDelete,
   onRefresh,
   onConvert,
+  onTogglePlacement,
   isEditMode = false,
 }: WidgetDisplayProps) => {
   const { data: appConfig } = useConfig();
@@ -120,6 +125,44 @@ const WidgetDisplay = ({
                   <RefreshCw size={16} className="text-fg/70" />
                 )}
               </button>
+
+              {/* Placement toggles — which surface(s) the widget appears on */}
+              {onTogglePlacement && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => onTogglePlacement(widget, 'home')}
+                    className={`p-1.5 rounded-control transition-colors ${
+                      widget.showOnHome
+                        ? 'bg-accent text-accent-fg hover:bg-accent-700'
+                        : 'hover:bg-surface-2 text-fg/70'
+                    }`}
+                    title={
+                      widget.showOnHome
+                        ? 'Showing on home — click to hide'
+                        : 'Show on home page'
+                    }
+                  >
+                    <Home size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onTogglePlacement(widget, 'dashboard')}
+                    className={`p-1.5 rounded-control transition-colors ${
+                      widget.showOnDashboard !== false
+                        ? 'bg-accent text-accent-fg hover:bg-accent-700'
+                        : 'hover:bg-surface-2 text-fg/70'
+                    }`}
+                    title={
+                      widget.showOnDashboard !== false
+                        ? 'Showing on dashboard — click to hide'
+                        : 'Show on dashboard'
+                    }
+                  >
+                    <LayoutDashboard size={16} />
+                  </button>
+                </>
+              )}
 
               {/* Edit */}
               <button

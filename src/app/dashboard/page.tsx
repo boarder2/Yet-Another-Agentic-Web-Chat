@@ -12,7 +12,7 @@ import {
   Pencil,
   Eye,
 } from 'lucide-react';
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useMemo } from 'react';
 import { Responsive, WidthProvider } from 'react-grid-layout';
 import {
   Card,
@@ -22,19 +22,11 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import WidgetConfigModal from '@/components/dashboard/WidgetConfigModal';
-import CodeWidgetConfigModal from '@/components/dashboard/CodeWidgetConfigModal';
-import WidgetKindChooser from '@/components/dashboard/WidgetKindChooser';
 import WidgetDisplay from '@/components/dashboard/WidgetDisplay';
+import WidgetModals from '@/components/dashboard/WidgetModals';
 import PageHeader from '@/components/PageHeader';
-import { useDashboard } from '@/lib/hooks/useDashboard';
-import { useConfig } from '@/lib/hooks/api/useConfig';
-import { Widget, WidgetConfig, CodeWidgetConfig } from '@/lib/types/widget';
-import { CODE_WIDGET_TEMPLATE } from '@/lib/widgets/codeWidgetTemplate';
-import { DashboardLayouts } from '@/lib/types/dashboard';
+import { useWidgetBoard } from '@/lib/hooks/useWidgetBoard';
 import { DASHBOARD_CONSTRAINTS } from '@/lib/constants/dashboard';
-import { toast } from 'sonner';
-import { Layout, Layouts } from 'react-grid-layout';
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
@@ -70,180 +62,51 @@ const EmptyDashboard = ({ onAddWidget }: { onAddWidget: () => void }) => (
 );
 
 const DashboardPage = () => {
+  const board = useWidgetBoard('dashboard');
   const {
-    widgets,
+    surfaceWidgets,
     isLoading,
-    addWidget,
-    updateWidget,
-    deleteWidget,
-    refreshWidget,
-    refreshAllWidgets,
-    exportDashboard,
-    importDashboard,
-    invalidateWidgetCache,
+    isEditMode,
+    setIsEditMode,
     settings,
-    updateSettings,
+    handleAddWidget,
+    handleEditWidget,
+    handleConvertWidget,
+    handleDelete,
+    handleRefresh,
+    handleRefreshAll,
+    handleTogglePlacement,
+    persistLayout,
+    handleExport,
+    handleImport,
+    handleToggleProcessingMode,
     getLayouts,
-    updateLayouts,
-  } = useDashboard();
-
-  const { data: appConfig } = useConfig();
-  const ceEnabled = !!(
-    appConfig?.codeExecution as { enabled?: boolean } | undefined
-  )?.enabled;
-
-  // Which editor (if any) is open, and what it's editing.
-  const [activeModal, setActiveModal] = useState<
-    'none' | 'chooser' | 'llm' | 'code'
-  >('none');
-  const [editingWidget, setEditingWidget] = useState<Widget | null>(null);
-  const [seedCode, setSeedCode] = useState<string | undefined>(undefined);
-  // Normal view (default) renders only widget content; edit mode reveals
-  // titles, refresh/sources/actions, and grid drag/resize.
-  const [isEditMode, setIsEditMode] = useState(false);
-  const hasAutoRefreshed = useRef(false);
-
-  // Memoize the ResponsiveGridLayout to prevent re-renders
-  const ResponsiveGrid = useMemo(() => ResponsiveGridLayout, []);
-
-  // Auto-refresh stale widgets when dashboard loads (only once)
-  useEffect(() => {
-    if (!isLoading && widgets.length > 0 && !hasAutoRefreshed.current) {
-      hasAutoRefreshed.current = true;
-      refreshAllWidgets();
-    }
-  }, [isLoading, widgets, refreshAllWidgets]);
-
-  const handleAddWidget = () => {
-    setEditingWidget(null);
-    setSeedCode(undefined);
-    // CE off → no chooser, behavior unchanged (AI widget only).
-    setActiveModal(ceEnabled ? 'chooser' : 'llm');
-  };
-
-  const handleChooseKind = (kind: 'llm' | 'code') => {
-    setEditingWidget(null);
-    setSeedCode(undefined);
-    setActiveModal(kind);
-  };
-
-  const handleEditWidget = (widget: Widget) => {
-    setEditingWidget(widget);
-    setSeedCode(undefined);
-    setActiveModal(widget.widgetType === 'code' ? 'code' : 'llm');
-  };
-
-  // Convert an AI widget to a Code widget: open the code editor pre-seeding the
-  // template with the old prompt so it's never silently discarded.
-  const handleConvertWidget = (widget: Widget) => {
-    if (widget.widgetType !== 'llm') return;
-    setEditingWidget(widget);
-    setSeedCode(
-      `${CODE_WIDGET_TEMPLATE}\n/* Converted from AI widget. Original prompt:\n${widget.prompt}\n*/\n`,
-    );
-    setActiveModal('code');
-  };
-
-  // Persist, then invalidate that widget's cache and refresh once so the card
-  // immediately matches what the user approved.
-  const persistAndRefresh = (id: string) => {
-    invalidateWidgetCache(id);
-    refreshWidget(id, true);
-  };
-
-  const handleSaveWidget = (widgetConfig: WidgetConfig) => {
-    if (editingWidget) {
-      updateWidget(editingWidget.id, widgetConfig);
-      persistAndRefresh(editingWidget.id);
-    } else {
-      addWidget(widgetConfig);
-    }
-    handleCloseModal();
-  };
-
-  const handleSaveCodeWidget = (widgetConfig: CodeWidgetConfig) => {
-    // Convert flow edits an existing AI widget in place (same id).
-    if (editingWidget) {
-      updateWidget(editingWidget.id, widgetConfig);
-      persistAndRefresh(editingWidget.id);
-    } else {
-      addWidget(widgetConfig);
-    }
-    handleCloseModal();
-  };
-
-  const handleCloseModal = () => {
-    setActiveModal('none');
-    setEditingWidget(null);
-    setSeedCode(undefined);
-  };
-
-  const handleDeleteWidget = useCallback(
-    (widgetId: string) => {
-      deleteWidget(widgetId);
-    },
-    [deleteWidget],
-  );
-
-  const handleRefreshWidget = useCallback(
-    (widgetId: string) => {
-      refreshWidget(widgetId, true); // Force refresh when manually triggered
-    },
-    [refreshWidget],
-  );
-
-  const handleRefreshAll = () => {
-    refreshAllWidgets(true);
-  };
-
-  const handleExport = async () => {
-    try {
-      const configJson = await exportDashboard();
-      await navigator.clipboard.writeText(configJson);
-      toast.success('Dashboard configuration copied to clipboard');
-      console.log('Dashboard configuration copied to clipboard');
-    } catch (error) {
-      console.error('Export failed:', error);
-      toast.error('Failed to copy dashboard configuration');
-    }
-  };
-
-  const handleImport = async () => {
-    try {
-      const configJson = await navigator.clipboard.readText();
-      await importDashboard(configJson);
-      toast.success('Dashboard configuration imported successfully');
-      console.log('Dashboard configuration imported successfully');
-    } catch (error) {
-      console.error('Import failed:', error);
-      toast.error('Failed to import dashboard configuration');
-    }
-  };
-
-  const handleToggleProcessingMode = () => {
-    updateSettings({ parallelLoading: !settings.parallelLoading });
-  };
-
-  // Handle layout changes from react-grid-layout
-  const handleLayoutChange = (_layout: Layout[], layouts: Layouts) => {
-    updateLayouts(layouts as DashboardLayouts);
-  };
+  } = board;
 
   // Memoize grid children to prevent unnecessary re-renders
   const gridChildren = useMemo(() => {
-    return widgets.map((widget) => (
+    return surfaceWidgets.map((widget) => (
       <div key={widget.id}>
         <WidgetDisplay
           widget={widget}
           onEdit={handleEditWidget}
-          onDelete={handleDeleteWidget}
-          onRefresh={handleRefreshWidget}
+          onDelete={handleDelete}
+          onRefresh={handleRefresh}
           onConvert={handleConvertWidget}
+          onTogglePlacement={handleTogglePlacement}
           isEditMode={isEditMode}
         />
       </div>
     ));
-  }, [widgets, handleDeleteWidget, handleRefreshWidget, isEditMode]);
+  }, [
+    surfaceWidgets,
+    handleEditWidget,
+    handleDelete,
+    handleRefresh,
+    handleConvertWidget,
+    handleTogglePlacement,
+    isEditMode,
+  ]);
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -333,10 +196,10 @@ const DashboardPage = () => {
               <p className="text-fg/60">Loading dashboard...</p>
             </div>
           </div>
-        ) : widgets.length === 0 ? (
+        ) : surfaceWidgets.length === 0 ? (
           <EmptyDashboard onAddWidget={handleAddWidget} />
         ) : (
-          <ResponsiveGrid
+          <ResponsiveGridLayout
             className="layout"
             layouts={getLayouts()}
             breakpoints={DASHBOARD_CONSTRAINTS.GRID_BREAKPOINTS}
@@ -344,7 +207,8 @@ const DashboardPage = () => {
             rowHeight={DASHBOARD_CONSTRAINTS.GRID_ROW_HEIGHT}
             margin={DASHBOARD_CONSTRAINTS.GRID_MARGIN}
             containerPadding={DASHBOARD_CONSTRAINTS.GRID_CONTAINER_PADDING}
-            onLayoutChange={handleLayoutChange}
+            onDragStop={persistLayout}
+            onResizeStop={persistLayout}
             isDraggable={isEditMode}
             isResizable={isEditMode}
             compactType="vertical"
@@ -352,37 +216,11 @@ const DashboardPage = () => {
             draggableHandle=".widget-drag-handle"
           >
             {gridChildren}
-          </ResponsiveGrid>
+          </ResponsiveGridLayout>
         )}
       </div>
 
-      {/* Widget kind chooser */}
-      <WidgetKindChooser
-        isOpen={activeModal === 'chooser'}
-        onClose={handleCloseModal}
-        onChoose={handleChooseKind}
-      />
-
-      {/* AI (LLM) widget editor */}
-      <WidgetConfigModal
-        isOpen={activeModal === 'llm'}
-        onClose={handleCloseModal}
-        onSave={handleSaveWidget}
-        editingWidget={
-          editingWidget?.widgetType === 'llm' ? editingWidget : null
-        }
-      />
-
-      {/* Code widget editor (also used by the convert flow) */}
-      <CodeWidgetConfigModal
-        isOpen={activeModal === 'code'}
-        onClose={handleCloseModal}
-        onSave={handleSaveCodeWidget}
-        editingWidget={
-          editingWidget?.widgetType === 'code' ? editingWidget : null
-        }
-        seedCode={seedCode}
-      />
+      <WidgetModals board={board} />
     </div>
   );
 };

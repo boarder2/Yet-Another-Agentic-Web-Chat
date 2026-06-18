@@ -43,7 +43,17 @@ interface WidgetConfigBase {
   sources: Source[];
   refreshFrequency: number;
   refreshUnit: 'minutes' | 'hours';
+  // Where the widget is shown. The two surfaces are independent: a widget may
+  // appear on the dashboard, on the home/new-chat page, on both, or neither.
+  // `showOnDashboard === undefined` is treated as `true` for back-compat with
+  // widgets created before home placement existed.
+  showOnHome?: boolean;
+  showOnDashboard?: boolean;
+  // `layout` is the dashboard grid position; `homeLayout` is the (independent)
+  // home grid position so arranging a widget on one surface never moves it on
+  // the other.
   layout?: WidgetLayout;
+  homeLayout?: WidgetLayout;
 }
 
 export interface LlmWidgetConfig extends WidgetConfigBase {
@@ -68,5 +78,6 @@ export type Widget = WidgetConfig & {
   content: string | null;
   error: string | null;
   layout: WidgetLayout;
+  homeLayout?: WidgetLayout;
   charts?: Record<string, ChartSpec>;
 };

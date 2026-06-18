@@ -80,6 +80,10 @@ const replaceDateTimeVariables = (prompt: string): string => {
   return processedPrompt;
 };
 
+// Widgets render on two independent surfaces. Layout + placement operations are
+// surface-aware so a widget shown on both keeps a separate position per surface.
+export type DashboardSurface = 'home' | 'dashboard';
+
 interface UseDashboardReturn {
   // State
   widgets: Widget[];
@@ -88,15 +92,21 @@ interface UseDashboardReturn {
   settings: DashboardConfig['settings'];
 
   // Widget management
-  addWidget: (config: WidgetConfig) => void;
+  addWidget: (config: WidgetConfig, surface?: DashboardSurface) => void;
   updateWidget: (id: string, config: WidgetConfig) => void;
   deleteWidget: (id: string) => void;
   refreshWidget: (id: string, forceRefresh?: boolean) => Promise<void>;
   refreshAllWidgets: (forceRefresh?: boolean) => Promise<void>;
+  setWidgetPlacement: (
+    id: string,
+    patch: { showOnHome?: boolean; showOnDashboard?: boolean },
+  ) => void;
 
-  // Layout management
-  updateLayouts: (layouts: DashboardLayouts) => void;
-  getLayouts: () => DashboardLayouts;
+  // Layout management. `layout` is the currently-active breakpoint's layout
+  // (react-grid-layout's first onLayoutChange arg) — using it, rather than a
+  // fixed breakpoint, lets edits made at any width persist.
+  updateLayouts: (surface: DashboardSurface, layout: Layout[]) => void;
+  getLayouts: (surface: DashboardSurface) => DashboardLayouts;
 
   // Storage management
   exportDashboard: () => Promise<string>;
@@ -107,6 +117,38 @@ interface UseDashboardReturn {
   // Settings
   updateSettings: (newSettings: Partial<DashboardConfig['settings']>) => void;
 }
+
+// `showOnDashboard === undefined` means "show" (back-compat with widgets created
+// before home placement existed). Home is strictly opt-in.
+const isOnSurface = (w: Widget, surface: DashboardSurface): boolean =>
+  surface === 'home' ? !!w.showOnHome : w.showOnDashboard !== false;
+
+// The per-surface position field. Home falls back to the dashboard layout when a
+// home layout hasn't been seeded yet (e.g. imported widgets).
+const surfaceLayout = (w: Widget, surface: DashboardSurface): WidgetLayout =>
+  surface === 'home' ? (w.homeLayout ?? w.layout) : w.layout;
+
+// First free grid slot among the given layouts (half-width widgets, scanning
+// top-to-bottom). Mirrors the original dashboard placement heuristic.
+const findOpenPosition = (
+  layouts: WidgetLayout[],
+): { x: number; y: number } => {
+  for (let row = 0; row < 20; row++) {
+    for (let col = 0; col < 12; col += 6) {
+      const position = { x: col, y: row };
+      const hasCollision = layouts.some(
+        (l) =>
+          l.x < position.x + 6 &&
+          l.x + l.w > position.x &&
+          l.y < position.y + 3 &&
+          l.y + l.h > position.y,
+      );
+      if (!hasCollision) return position;
+    }
+  }
+  const maxY = Math.max(0, ...layouts.map((l) => l.y + l.h));
+  return { x: 0, y: maxY };
+};
 
 const getWidgetCache = (): WidgetCache => {
   try {
@@ -248,41 +290,12 @@ export const useDashboard = (): UseDashboardReturn => {
   }, [state.settings, state.isLoading, settingsHydrated]);
 
   const addWidget = useCallback(
-    (config: WidgetConfig) => {
-      // Find the next available position in the grid
-      const getNextPosition = () => {
-        const existingWidgets = state.widgets;
-        const _x = 0;
-        const _y = 0;
-
-        // Simple algorithm: try to place in first available spot
-        for (let row = 0; row < 20; row++) {
-          for (let col = 0; col < 12; col += 6) {
-            // Start with half-width widgets
-            const position = { x: col, y: row };
-            const hasCollision = existingWidgets.some(
-              (widget) =>
-                widget.layout.x < position.x + 6 &&
-                widget.layout.x + widget.layout.w > position.x &&
-                widget.layout.y < position.y + 3 &&
-                widget.layout.y + widget.layout.h > position.y,
-            );
-
-            if (!hasCollision) {
-              return { x: position.x, y: position.y };
-            }
-          }
-        }
-
-        // Fallback: place at bottom
-        const maxY = Math.max(
-          0,
-          ...existingWidgets.map((w) => w.layout.y + w.layout.h),
-        );
-        return { x: 0, y: maxY };
-      };
-
-      const position = getNextPosition();
+    (config: WidgetConfig, surface: DashboardSurface = 'dashboard') => {
+      // Position only against widgets already on the target surface.
+      const occupied = state.widgets
+        .filter((w) => isOnSurface(w, surface))
+        .map((w) => surfaceLayout(w, surface));
+      const position = findOpenPosition(occupied);
       const defaultLayout: WidgetLayout = {
         x: position.x,
         y: position.y,
@@ -292,14 +305,26 @@ export const useDashboard = (): UseDashboardReturn => {
         isResizable: true,
       };
 
+      // New widgets get BOTH placement flags set explicitly so a home-created
+      // widget isn't accidentally treated as "show on dashboard" by the
+      // undefined-means-true back-compat rule.
       const newWidget: Widget = {
         ...config,
+        showOnHome: surface === 'home' ? true : (config.showOnHome ?? false),
+        showOnDashboard:
+          surface === 'dashboard' ? true : (config.showOnDashboard ?? false),
         id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
         lastUpdated: null,
         isLoading: false,
         content: null,
         error: null,
-        layout: config.layout || defaultLayout,
+        layout:
+          config.layout ??
+          (surface === 'dashboard' ? defaultLayout : { ...defaultLayout }),
+        homeLayout:
+          surface === 'home'
+            ? (config.homeLayout ?? defaultLayout)
+            : config.homeLayout,
       };
 
       setState((prev) => ({
@@ -349,6 +374,47 @@ export const useDashboard = (): UseDashboardReturn => {
       JSON.stringify(newCache),
     );
   }, []);
+
+  // Flip placement flags only (never reconstruct the discriminated config — see
+  // updateWidget's replace-not-merge note). When a widget is newly placed on
+  // home and has no home layout yet, seed one in a free slot.
+  const setWidgetPlacement = useCallback(
+    (
+      id: string,
+      patch: { showOnHome?: boolean; showOnDashboard?: boolean },
+    ) => {
+      setState((prev) => {
+        const seedingHome =
+          patch.showOnHome === true &&
+          !prev.widgets.find((w) => w.id === id)?.homeLayout;
+        const homeOccupied = seedingHome
+          ? prev.widgets
+              .filter((w) => isOnSurface(w, 'home'))
+              .map((w) => surfaceLayout(w, 'home'))
+          : [];
+        return {
+          ...prev,
+          widgets: prev.widgets.map((w) => {
+            if (w.id !== id) return w;
+            const next: Widget = { ...w, ...patch };
+            if (seedingHome) {
+              const position = findOpenPosition(homeOccupied);
+              next.homeLayout = {
+                x: position.x,
+                y: position.y,
+                w: DASHBOARD_CONSTRAINTS.DEFAULT_WIDGET_WIDTH,
+                h: DASHBOARD_CONSTRAINTS.DEFAULT_WIDGET_HEIGHT,
+                isDraggable: true,
+                isResizable: true,
+              };
+            }
+            return next;
+          }),
+        };
+      });
+    },
+    [],
+  );
 
   const isWidgetCacheValid = useCallback((widget: Widget): boolean => {
     const cache = getWidgetCache();
@@ -615,56 +681,62 @@ export const useDashboard = (): UseDashboardReturn => {
     [],
   );
 
-  const getLayouts = useCallback((): DashboardLayouts => {
-    const createBreakpointLayout = (
-      breakpoint: keyof typeof DASHBOARD_CONSTRAINTS.GRID_COLUMNS,
-    ) => {
-      const constraints = getResponsiveConstraints(breakpoint);
-      const maxCols = DASHBOARD_CONSTRAINTS.GRID_COLUMNS[breakpoint];
+  const getLayouts = useCallback(
+    (surface: DashboardSurface): DashboardLayouts => {
+      const onSurface = state.widgets.filter((w) => isOnSurface(w, surface));
+      const createBreakpointLayout = (
+        breakpoint: keyof typeof DASHBOARD_CONSTRAINTS.GRID_COLUMNS,
+      ) => {
+        const constraints = getResponsiveConstraints(breakpoint);
+        const maxCols = DASHBOARD_CONSTRAINTS.GRID_COLUMNS[breakpoint];
 
-      return state.widgets.map((widget) => ({
-        i: widget.id,
-        x: widget.layout.x,
-        y: widget.layout.y,
-        w: Math.min(widget.layout.w, maxCols), // Constrain width to available columns
-        h: widget.layout.h,
-        minW: constraints.minW,
-        maxW: constraints.maxW,
-        minH: constraints.minH,
-        maxH: constraints.maxH,
-        static: widget.layout.static,
-        isDraggable: widget.layout.isDraggable,
-        isResizable: widget.layout.isResizable,
-      }));
-    };
+        return onSurface.map((widget) => {
+          const layout = surfaceLayout(widget, surface);
+          return {
+            i: widget.id,
+            x: layout.x,
+            y: layout.y,
+            w: Math.min(layout.w, maxCols), // Constrain width to available columns
+            h: layout.h,
+            minW: constraints.minW,
+            maxW: constraints.maxW,
+            minH: constraints.minH,
+            maxH: constraints.maxH,
+            static: layout.static,
+            isDraggable: layout.isDraggable,
+            isResizable: layout.isResizable,
+          };
+        });
+      };
 
-    return {
-      lg: createBreakpointLayout('lg'),
-      md: createBreakpointLayout('md'),
-      sm: createBreakpointLayout('sm'),
-      xs: createBreakpointLayout('xs'),
-      xxs: createBreakpointLayout('xxs'),
-    };
-  }, [state.widgets]);
+      return {
+        lg: createBreakpointLayout('lg'),
+        md: createBreakpointLayout('md'),
+        sm: createBreakpointLayout('sm'),
+        xs: createBreakpointLayout('xs'),
+        xxs: createBreakpointLayout('xxs'),
+      };
+    },
+    [state.widgets],
+  );
 
   const updateLayouts = useCallback(
-    (layouts: DashboardLayouts) => {
+    (surface: DashboardSurface, layout: Layout[]) => {
+      const field = surface === 'home' ? 'homeLayout' : 'layout';
       const updatedWidgets = state.widgets.map((widget) => {
-        // Use lg layout as the primary layout for position and size updates
-        const newLayout = layouts.lg.find(
-          (layout: Layout) => layout.i === widget.id,
-        );
+        const newLayout = layout.find((l: Layout) => l.i === widget.id);
         if (newLayout) {
+          const prevLayout = surfaceLayout(widget, surface);
           return {
             ...widget,
-            layout: {
+            [field]: {
               x: newLayout.x,
               y: newLayout.y,
               w: newLayout.w,
               h: newLayout.h,
-              static: newLayout.static || widget.layout.static,
-              isDraggable: newLayout.isDraggable ?? widget.layout.isDraggable,
-              isResizable: newLayout.isResizable ?? widget.layout.isResizable,
+              static: newLayout.static || prevLayout.static,
+              isDraggable: newLayout.isDraggable ?? prevLayout.isDraggable,
+              isResizable: newLayout.isResizable ?? prevLayout.isResizable,
             },
           };
         }
@@ -692,6 +764,7 @@ export const useDashboard = (): UseDashboardReturn => {
     deleteWidget,
     refreshWidget,
     refreshAllWidgets,
+    setWidgetPlacement,
 
     // Layout management
     updateLayouts,

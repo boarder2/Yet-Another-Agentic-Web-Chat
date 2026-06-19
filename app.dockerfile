@@ -51,8 +51,7 @@ COPY src/lib/tts/ttsWorker.js ./src/lib/tts/ttsWorker.js
 
 RUN chown -R node:node /home/yaawc && \
     chmod +x /home/yaawc/entrypoint.sh && \
-    npm install playwright -g --no-fund --no-audit && \
-    npx playwright install-deps chromium && \
+    node node_modules/playwright/cli.js install-deps chromium && \
     apt-get update && \
     apt-get install -y procps util-linux && \
     apt-get clean && rm -rf /var/lib/apt/lists/* && \
@@ -74,8 +73,13 @@ COPY --from=builder /home/yaawc/node_modules/onnxruntime-node/bin /home/yaawc/no
 # downloaded server-side; only the ONNX model is fetched at runtime).
 COPY --from=builder /home/yaawc/node_modules/kokoro-js/voices /home/yaawc/node_modules/kokoro-js/voices
 
-# Install Playwright and its dependencies
-RUN npx -y playwright install chromium --only-shell && \
+# Install the browser via the app's BUNDLED Playwright (node_modules/playwright)
+# rather than a global or `npx -y` copy. npx/global may resolve to a newer
+# Playwright that downloads a different chromium revision than the bundled
+# playwright-core resolves at runtime, leaving the expected revision missing
+# (e.g. runtime looks for chromium_headless_shell-1223 but a newer rev is on disk).
+# Driving the install from the same package guarantees the revisions match.
+RUN node node_modules/playwright/cli.js install chromium --only-shell && \
     rm -rf ~/.npm
 
 CMD ["./entrypoint.sh"]

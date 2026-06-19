@@ -8,8 +8,8 @@ import {
 } from '@headlessui/react';
 import { Fragment } from 'react';
 import { toast } from 'sonner';
-import Link from 'next/link';
 import { cn } from '@/lib/utils';
+import { useSettingsModal } from '@/components/settings/SettingsModalProvider';
 import { useLocalStorageJSON } from '@/lib/hooks/useLocalStorage';
 import {
   PRESETS_KEY,
@@ -60,6 +60,7 @@ export default function PresetBar({
   const [namingPreset, setNamingPreset] = useState(false);
   const [nameInput, setNameInput] = useState('');
   const savingRef = useRef(false);
+  const { openSettings } = useSettingsModal();
 
   const matchingPreset = findMatchingPreset(
     presets,
@@ -210,14 +211,17 @@ export default function PresetBar({
                           Save current…
                         </button>
                         {mode === 'full' && (
-                          <Link
-                            href="/settings?section=model-presets"
-                            onClick={() => close()}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              close();
+                              openSettings('model-presets');
+                            }}
                             className="flex items-center gap-1 text-xs text-fg/40 hover:text-fg/70 transition-colors duration-150"
                           >
                             Manage
                             <ExternalLink size={10} />
-                          </Link>
+                          </button>
                         )}
                       </>
                     )}

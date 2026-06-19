@@ -29,6 +29,7 @@ Stack: Next.js (App Router) + React 19 + Tailwind 4, TanStack Query (client data
 - `config.toml` holds **only** secrets/infra (API keys, DB, search). No model selection lives there — all of it is DB-backed (`app_settings`) or request-supplied.
 - Non-secret settings sync localStorage ⇄ DB via `src/lib/settings/persist.ts` (the durable source of truth is the DB); secrets and device-local UI prefs are excluded. Keep using `useLocalStorage*` — call sites are unchanged.
 - Model selection UI: `ModelPicker` (`src/components/models/`); embedding/memory model keys read server-side via helpers in `src/lib/settings/server.ts`.
+- The settings UI is one controlled `SettingsPanel` (`src/app/settings/`) rendered on two surfaces: the `/settings` page (URL-driven section state, deep-link fallback) and a global modal. `SettingsModalProvider` (mounted in `layout.tsx`) exposes `useSettingsModal().openSettings(section?)`; entry points (sidebar/mobile gears, personalization/preset/persona pickers) open it instead of navigating.
 
 ## Conventions
 

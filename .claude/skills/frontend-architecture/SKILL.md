@@ -112,7 +112,7 @@ it won't see the DB value written into the cache until a remount. Fixes:
   props), subscribe to `subscribeLocalStorage(key, cb)` (`useLocalStorage.ts`)
   and re-read — see `MessageInput` (`selectedSystemPromptIds`,
   `selectedMethodologyId`), or reload on `subscribeSettingsSynced` for a bundle
-  of keys — see `settings/page.tsx` (`readLocalStorageSettings`).
+  of keys — see `settings/SettingsPanel.tsx` (`readLocalStorageSettings`).
 - A consumer that also writes its state back (`useDashboard`) must additionally
   gate write-backs on `isSettingsHydrated()`/`subscribeSettingsHydrated()`, else
   a stale snapshot clobbers newer DB values; `useDashboard` holds `isLoading`
@@ -121,7 +121,7 @@ it won't see the DB value written into the cache until a remount. Fixes:
 **Config-API-backed settings** (retention, search providers, private-session
 duration — read from `/api/config`, not migrated localStorage keys) don't ride
 the localStorage re-sync. `useConfig` sets `refetchOnWindowFocus: true` so they
-refetch on focus, and `settings/page.tsx` mirrors the response continuously
+refetch on focus, and `settings/SettingsPanel.tsx` mirrors the response continuously
 (`applyConfigObject` keyed on `configData`) rather than once, so cross-device
 edits land without a reload.
 

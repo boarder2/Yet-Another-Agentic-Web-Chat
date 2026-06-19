@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
+  CloseButton,
   Popover,
   PopoverButton,
   PopoverPanel,
@@ -17,6 +18,7 @@ import { Fragment } from 'react';
 import { useModels } from '@/lib/hooks/api/useModels';
 import { useQueryClient } from '@tanstack/react-query';
 import { qk } from '@/lib/api/keys';
+import { useSettingsModal } from '@/components/settings/SettingsModalProvider';
 
 interface ModelOption {
   provider: string;
@@ -53,6 +55,7 @@ const ModelField = ({
   panelPosition?: 'above' | 'below';
 }) => {
   const qc = useQueryClient();
+  const { openSettings } = useSettingsModal();
   const { data: modelsData, isLoading: loading } = useModels();
   const [providerModels, setProviderModels] = useState<ProviderModelMap>({});
   const [providersList, setProvidersList] = useState<string[]>([]);
@@ -251,7 +254,15 @@ const ModelField = ({
                     </div>
                   ) : providersList.length === 0 ? (
                     <div className="px-4 py-3 text-sm text-fg/70">
-                      No models available
+                      No models available.{' '}
+                      <CloseButton
+                        type="button"
+                        onClick={() => openSettings('api-keys')}
+                        className="text-accent hover:underline"
+                      >
+                        Add an API key
+                      </CloseButton>{' '}
+                      to get started.
                     </div>
                   ) : (
                     <div className="py-1">

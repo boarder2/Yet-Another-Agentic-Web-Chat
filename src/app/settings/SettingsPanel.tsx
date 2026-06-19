@@ -6,7 +6,6 @@ import {
   ArrowLeft,
 } from 'lucide-react';
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { Prompt } from '@/lib/types/prompt';
@@ -29,6 +28,7 @@ import {
   DEFAULT_CONTEXT_WINDOW,
   PREDEFINED_CONTEXT_SIZES,
 } from '@/lib/models/presets';
+import { cn } from '@/lib/utils';
 
 import { SettingsType, SectionKey } from './types';
 import {
@@ -54,7 +54,24 @@ import SkillsSection from './sections/SkillsSection';
 // Stable default reference for useLocalStorageJSON (required by useSyncExternalStore).
 const EMPTY_HIDDEN_MODELS: string[] = [];
 
-export default function SettingsPage() {
+export type SettingsPanelVariant = 'page' | 'modal';
+
+/**
+ * The full settings UI (nav + every section). Section selection is **controlled**
+ * via props so it can be driven by either URL state (page wrapper) or local
+ * state (modal). `variant` only tweaks chrome — the page renders its own
+ * heading/divider and adds bottom padding for the mobile fixed bar; the modal
+ * supplies its own header/close, so neither is rendered there.
+ */
+export default function SettingsPanel({
+  activeSection,
+  onSelectSection,
+  variant = 'page',
+}: {
+  activeSection: SectionKey;
+  onSelectSection: (key: SectionKey) => void;
+  variant?: SettingsPanelVariant;
+}) {
   const [config, setConfig] = useState<SettingsType | null>(null);
   const [_chatModels, setChatModels] = useState<Record<string, unknown>>({});
   const [_embeddingModels, setEmbeddingModels] = useState<
@@ -128,9 +145,6 @@ export default function SettingsPage() {
     useState<string>('');
   const [searchChatModel, setSearchChatModel] = useState<string>('');
 
-  const router = useRouter();
-  const searchParams = useSearchParams();
-
   const queryClient = useQueryClient();
   const isInitializedRef = useRef(false);
   const { data: configData } = useConfig();
@@ -141,18 +155,6 @@ export default function SettingsPage() {
   const createSystemPromptMutation = useCreateSystemPrompt();
   const updateSystemPromptMutation = useUpdateSystemPrompt();
   const deleteSystemPromptMutation = useDeleteSystemPrompt();
-
-  const activeSection: SectionKey =
-    (searchParams.get('section') as SectionKey) || 'personalization';
-
-  const setActiveSection = useCallback(
-    (key: SectionKey) => {
-      const params = new URLSearchParams(searchParams.toString());
-      params.set('section', key);
-      router.replace(`?${params.toString()}`, { scroll: false });
-    },
-    [router, searchParams],
-  );
 
   // (C) Config-API-backed state — mirrors the latest /api/config response
   // (retention, search providers, private-session duration, model lists).
@@ -727,18 +729,20 @@ export default function SettingsPage() {
 
   return (
     <div>
-      <div className="flex flex-col pt-4">
-        <div className="flex items-center space-x-2">
-          <Link href="/" className="lg:hidden">
-            <ArrowLeft />
-          </Link>
-          <div className="flex flex-row space-x-0.5 items-center">
-            <SettingsIcon size={23} />
-            <h1 className="text-3xl font-medium p-2">Settings</h1>
+      {variant === 'page' && (
+        <div className="flex flex-col pt-4">
+          <div className="flex items-center space-x-2">
+            <Link href="/" className="lg:hidden">
+              <ArrowLeft />
+            </Link>
+            <div className="flex flex-row space-x-0.5 items-center">
+              <SettingsIcon size={23} />
+              <h1 className="text-3xl font-medium p-2">Settings</h1>
+            </div>
           </div>
+          <hr className="border-t border-surface-2 my-4 w-full" />
         </div>
-        <hr className="border-t border-surface-2 my-4 w-full" />
-      </div>
+      )}
 
       {isLoading ? (
         <div className="flex flex-row items-center justify-center min-h-[50vh]">
@@ -749,13 +753,18 @@ export default function SettingsPage() {
           <>
             <MobileSettingsNav
               activeSection={activeSection}
-              onSelect={setActiveSection}
+              onSelect={onSelectSection}
             />
 
-            <div className="flex flex-row gap-8 pb-28 lg:pb-8">
+            <div
+              className={cn(
+                'flex flex-row gap-8',
+                variant === 'page' ? 'pb-28 lg:pb-8' : 'pb-2',
+              )}
+            >
               <DesktopSettingsNav
                 activeSection={activeSection}
-                onSelect={setActiveSection}
+                onSelect={onSelectSection}
               />
               <div className="flex-1 min-w-0">
                 {activeSection === 'voice' && <VoiceSection />}

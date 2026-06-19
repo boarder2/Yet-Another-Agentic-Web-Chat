@@ -27,7 +27,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { getSuggestions } from '@/lib/actions';
 import { SKILL_TOKEN_SCAN_REGEX } from '@/lib/skills/validation';
 import { LoaderCircle, Settings } from 'lucide-react';
-import Link from 'next/link';
+import { useSettingsModal } from '@/components/settings/SettingsModalProvider';
 import NextError from 'next/error';
 import {
   useLocalStorageBoolean,
@@ -125,6 +125,7 @@ const checkConfig = async (
   setEmbeddingModelProvider: (provider: EmbeddingModelProvider) => void,
   setIsConfigReady: (ready: boolean) => void,
   setHasError: (hasError: boolean) => void,
+  onOpenApiKeys: () => void,
 ) => {
   try {
     let chatModel = localStorage.getItem('chatModel');
@@ -166,7 +167,10 @@ const checkConfig = async (
           Object.keys(chatModelProviders[chatModelProvider]).length === 0
         ) {
           toast.error(
-            "Looks like you haven't configured any chat model providers. Please configure them from the settings page or the config file.",
+            "Looks like you haven't configured any chat model providers. Please configure them in settings or the config file.",
+            {
+              action: { label: 'Open settings', onClick: onOpenApiKeys },
+            },
           );
           return setHasError(true);
         }
@@ -220,7 +224,10 @@ const checkConfig = async (
           Object.keys(chatModelProviders[chatModelProvider]).length === 0
         ) {
           toast.error(
-            "Looks like you haven't configured any chat model providers. Please configure them from the settings page or the config file.",
+            "Looks like you haven't configured any chat model providers. Please configure them in settings or the config file.",
+            {
+              action: { label: 'Open settings', onClick: onOpenApiKeys },
+            },
           );
           return setHasError(true);
         }
@@ -431,6 +438,7 @@ const ChatWindow = ({
   const router = useRouter();
   const initialMessage = searchParams.get('q');
   const queryClient = useQueryClient();
+  const { openSettings } = useSettingsModal();
 
   const [chatId, setChatId] = useState<string | undefined>(id);
   const [newChatCreated, setNewChatCreated] = useState(false);
@@ -458,8 +466,9 @@ const ChatWindow = ({
       setEmbeddingModelProvider,
       setIsConfigReady,
       setHasError,
+      () => openSettings('api-keys'),
     );
-  }, []);
+  }, [openSettings]);
 
   const [loading, setLoading] = useState(false);
   const [scrollTrigger, setScrollTrigger] = useState(0);
@@ -2926,9 +2935,13 @@ const ChatWindow = ({
     return (
       <div className="relative">
         <div className="absolute w-full flex flex-row items-center justify-end mr-5 mt-5">
-          <Link href="/settings">
+          <button
+            type="button"
+            onClick={() => openSettings()}
+            aria-label="Settings"
+          >
             <Settings className="cursor-pointer lg:hidden" />
-          </Link>
+          </button>
         </div>
         <div className="flex flex-col items-center justify-center min-h-screen">
           <p className="text-sm">

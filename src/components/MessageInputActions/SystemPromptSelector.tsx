@@ -5,9 +5,11 @@ import {
   User,
   LoaderCircle,
   Info,
+  Settings as SettingsIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
+  CloseButton,
   Popover,
   PopoverButton,
   PopoverPanel,
@@ -15,6 +17,7 @@ import {
 } from '@headlessui/react';
 import { Fragment, useEffect, useState } from 'react';
 import { Prompt } from '@/lib/types/prompt';
+import { useSettingsModal } from '@/components/settings/SettingsModalProvider';
 
 interface SystemPromptSelectorProps {
   selectedPromptIds: string[];
@@ -78,6 +81,7 @@ const PromptPanel = ({
 }: PromptPanelProps) => {
   const [availablePrompts, setAvailablePrompts] = useState<Prompt[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const { openSettings } = useSettingsModal();
 
   useEffect(() => {
     if (!open) return; // Only fetch when popover is open
@@ -121,11 +125,21 @@ const PromptPanel = ({
 
   return (
     <div className="overflow-hidden rounded-surface shadow-raised ring-1 ring-surface-2 bg-surface">
-      <div className="px-4 py-3 border-b border-surface-2">
-        <h3 className="text-sm font-medium text-fg/90">Persona Prompts</h3>
-        <p className="text-xs text-fg/60 mt-0.5">
-          Control response tone, style, and formatting.
-        </p>
+      <div className="px-4 py-3 border-b border-surface-2 flex items-start justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-medium text-fg/90">Persona Prompts</h3>
+          <p className="text-xs text-fg/60 mt-0.5">
+            Control response tone, style, and formatting.
+          </p>
+        </div>
+        <CloseButton
+          type="button"
+          onClick={() => openSettings('persona-prompts')}
+          className="text-xs inline-flex items-center gap-1 text-accent hover:underline shrink-0"
+          title="Manage persona prompts"
+        >
+          <SettingsIcon size={14} />
+        </CloseButton>
       </div>
       {isLoading ? (
         <div className="px-4 py-3">
@@ -136,9 +150,13 @@ const PromptPanel = ({
           {availablePrompts.length === 0 && (
             <p className="text-xs text-fg/50 px-2.5 py-2 text-center">
               No prompts configured. <br /> Go to{' '}
-              <a className="text-accent" href="/settings">
+              <CloseButton
+                type="button"
+                className="text-accent"
+                onClick={() => openSettings('persona-prompts')}
+              >
                 settings
-              </a>{' '}
+              </CloseButton>{' '}
               to add some.
             </p>
           )}

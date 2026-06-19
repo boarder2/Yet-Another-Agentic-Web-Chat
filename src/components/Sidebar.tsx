@@ -20,6 +20,7 @@ import { useActiveRuns } from '@/lib/hooks/api/useActiveRuns';
 import { useScheduledRunsUnread } from '@/lib/hooks/api/useScheduledTasks';
 import { qk } from '@/lib/api/keys';
 import { useQueryClient } from '@tanstack/react-query';
+import { useSettingsModal } from '@/components/settings/SettingsModalProvider';
 
 const VerticalIconContainer = ({ children }: { children: ReactNode }) => {
   return (
@@ -160,6 +161,7 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
   // you're actively watching. Matches /c/<id> and /workspaces/<ws>/c/<id>.
   const pathname = usePathname();
   const currentChatId = pathname?.match(/\/c\/([^/?#]+)/)?.[1];
+  const { openSettings } = useSettingsModal();
 
   // Navigating into/out of a chat changes which run is excluded from the
   // in-progress flare above. Refetch immediately so a run we just backgrounded
@@ -270,12 +272,14 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
           <div className="flex-1 flex items-end justify-center w-full">
             <div className="flex flex-col items-center gap-y-3 w-full -mb-2">
               <WidthToggle />
-              <Link
-                href="/settings"
+              <button
+                type="button"
+                onClick={() => openSettings()}
+                aria-label="Settings"
                 className="flex items-center justify-center w-full py-2 rounded-surface text-fg/70 hover:text-fg hover:bg-surface-2 duration-150 transition"
               >
                 <Settings />
-              </Link>
+              </button>
             </div>
           </div>
         </div>

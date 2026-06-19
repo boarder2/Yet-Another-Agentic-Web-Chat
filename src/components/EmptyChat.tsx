@@ -12,6 +12,7 @@ import HomeWidgetToolbar from './dashboard/HomeWidgetToolbar';
 import WidgetModals from './dashboard/WidgetModals';
 
 import WorkspacePicker from './Workspaces/WorkspacePicker';
+import { useSettingsModal } from '@/components/settings/SettingsModalProvider';
 
 // How much of the widget board peeks above the bottom of the screen in "peek"
 // mode — enough to signal there are widgets without being distracting. Larger
@@ -76,6 +77,7 @@ const EmptyChat = ({
   enabledSkills?: Array<{ name: string; description: string }>;
 }) => {
   const basePath = workspaceId ? `/workspaces/${workspaceId}/c/new` : '/';
+  const { openSettings } = useSettingsModal();
 
   // Home widgets only live on the true home page, never on workspace new-chat.
   const isHome = !workspaceId;
@@ -207,9 +209,13 @@ const EmptyChat = ({
       {isHome && <WidgetModals board={board} />}
       <div className="absolute top-0 right-0 z-10 flex flex-row items-center justify-end gap-2 mr-5 mt-5">
         {showBoard && <HomeWidgetToolbar board={board} />}
-        <Link href="/settings">
+        <button
+          type="button"
+          onClick={() => openSettings()}
+          aria-label="Settings"
+        >
           <Settings className="cursor-pointer lg:hidden" />
-        </Link>
+        </button>
       </div>
 
       <div className="flex flex-col items-center min-h-screen">

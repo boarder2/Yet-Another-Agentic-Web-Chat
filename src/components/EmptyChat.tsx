@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import { Eye, EyeOff, Settings, Plus } from 'lucide-react';
 import { File, ImageAttachment } from './ChatWindow';
 import Link from 'next/link';
@@ -92,6 +93,37 @@ const EmptyChat = ({
     !!board.settings.homeWidgetsPeek &&
     !board.isEditMode &&
     homeWidgets.length > 0;
+
+  // While peeking and parked at the top of the page, fade the sliver of widgets
+  // poking above the fold so they read as a hint rather than a distraction. The
+  // fade's opacity tracks scroll distance — fully faded at rest, gone once the
+  // user has scrolled ~one sliver's worth down. Driven straight to the node's
+  // style via rAF so it follows the scroll without re-rendering EmptyChat.
+  const fadeRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!peekActive) return;
+    // Distance (px) over which the fade ramps from full to none — kept short so
+    // it clears quickly as the user starts scrolling toward the widgets.
+    const FADE_DISTANCE = 64;
+    let raf = 0;
+    const apply = () => {
+      raf = 0;
+      if (fadeRef.current) {
+        fadeRef.current.style.opacity = String(
+          Math.max(0, 1 - window.scrollY / FADE_DISTANCE),
+        );
+      }
+    };
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(apply);
+    };
+    apply();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [peekActive]);
 
   const messageInput = (
     <MessageInput
@@ -205,8 +237,21 @@ const EmptyChat = ({
         )}
 
         {showBoard && (
-          <div className={cn('w-full pb-12', !peekActive && '-mt-8')}>
+          <div
+            className={cn('w-full pb-12', peekActive ? 'relative' : '-mt-8')}
+          >
             <HomeWidgetBoard board={board} />
+            {peekActive && (
+              // Fade glued to the top of the board (not the viewport) so it
+              // scrolls with the widgets — no hard edge for widget tops to poke
+              // above. Covers the peeking sliver at rest; opacity clears it the
+              // moment the user scrolls down to engage.
+              <div
+                ref={fadeRef}
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 top-0 z-10 h-26 bg-linear-to-t from-transparent to-bg lg:h-10"
+              />
+            )}
           </div>
         )}
       </div>

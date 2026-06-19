@@ -20,15 +20,15 @@ Stack: Next.js (App Router) + React 19 + Tailwind 4, TanStack Query (client data
 
 ## Dashboard Widgets
 
-Discriminated union (`src/lib/types/widget.ts`): `LlmWidgetConfig` (LLM-transformed via `/api/dashboard/process-widget`) and `CodeWidgetConfig` (user JS in Docker sandbox via `/api/dashboard/process-code-widget`, gated on code execution being enabled). Sources fetched server-side (`src/lib/dashboard/sources.ts`; no SSRF guard by design — single-user trust model). Output sanitized (`sanitizeWidgetOutput.ts`: allows images, blocks SVG/script/iframe) and rendered by `WidgetContent.tsx` (HTML, markdown, or portaled `<ChartWidget>`). Code widgets expose `render({ sources, now, location, theme })` — contract in `widgetTheme.ts`. Code editor has a built-in builder assistant (`POST /api/dashboard/widget-builder`). Widgets persist localStorage → DB.
-
-**Two surfaces.** Widgets render on the `/dashboard` page **and** the home/new-chat page (`EmptyChat`). Independent per-widget placement flags (`showOnHome`, `showOnDashboard`; `showOnDashboard === undefined` ⇒ shown, for back-compat) and a separate layout per surface (`layout` = dashboard, `homeLayout` = home). Both are full editors sharing `useWidgetBoard(surface)` (`src/lib/hooks/useWidgetBoard.ts`, wraps surface-aware `useDashboard`) and the `WidgetModals` trio. Placement is toggled from `WidgetDisplay`'s edit-mode controls (`setWidgetPlacement`). Home renders via `HomeWidgetBoard`; the new-chat input is vertically centered in the viewport (a `50vh` spacer + `-translate-y-1/2` on the input, so it stays centered regardless of widget count) with an "Add widget" affordance, and the widget board flows immediately below it. An edit-mode "peek" toggle (`HomeWidgetToolbar` → `handleToggleHomePeek`, persisted as `settings.homeWidgetsPeek`) pushes the board below the fold so only its top edge shows (`HOME_PEEK_MIN_HEIGHT`; reveals less at `lg`+, more on mobile where the bottom nav covers the sliver); it centers the input above the fold instead of using the spacer/translate centering, and is suppressed while editing. Home widgets are gated to the true home only (not workspace new-chat).
+- Two widget kinds (`src/lib/types/widget.ts`): LLM-transformed and user-JS (Docker sandbox, gated on code execution). Processed via `/api/dashboard/*`; sources fetched server-side (`src/lib/dashboard/sources.ts`), output sanitized (`sanitizeWidgetOutput.ts`) and rendered by `WidgetContent.tsx`.
+- Rendered on two surfaces — `/dashboard` and the home page (`EmptyChat`) — with per-widget placement flags and a layout per surface. Both share `useWidgetBoard` (`src/lib/hooks/`), with board UI in `src/components/dashboard/`.
+- Code-widget contract (`render({ sources, now, location, theme })`) lives in `widgetTheme.ts`; widgets persist localStorage → DB.
 
 ## Settings
 
-`config.toml` holds only secrets and infra (API keys, DB, search, similarity) — there is **no `[SELECTED_MODELS]` section**; all model selection is DB-backed or request-supplied. Model selection uses one controlled, persistence-free component, `ModelPicker` (`src/components/models/`). Chat/system/vision/context-window are set from the chat input's `ModelConfigurator` dialog (chat and system independent — pair them via **Model Presets**, `modelPresets`). DB-backed model keys (`app_settings` table, read server-side): `embeddingModel*` via `getEmbeddingModelSelection()` (Settings → Model Settings), `memoryModel*` via `getMemoryModelSelection()` (Settings → Memory; independent of `systemModel`). Each falls back to the first available model when unset; `resolveModels` falls back to the chat model when a request omits `systemModel`.
-
-**Settings persistence:** non-secret settings are the durable, cross-device source of truth in `app_settings`; `localStorage` is a synchronous cache. `src/lib/settings/persist.ts` patches `Storage.prototype` to sync allowlisted keys (`MIGRATED_SETTING_KEYS`) to `/api/settings`, hydrating from DB on load and re-pulling on focus/navigation (`SettingsHydrator`, `resyncSettingsFromDb`). Call sites are unchanged — keep using `useLocalStorage*`. **Excluded:** secrets stay in `config.toml`; device-local UI prefs (`appTheme`, `userBg`, `userAccent`, `chatWidthWide`, `codeExecutionWarningAccepted`) stay in localStorage only.
+- `config.toml` holds **only** secrets/infra (API keys, DB, search). No model selection lives there — all of it is DB-backed (`app_settings`) or request-supplied.
+- Non-secret settings sync localStorage ⇄ DB via `src/lib/settings/persist.ts` (the durable source of truth is the DB); secrets and device-local UI prefs are excluded. Keep using `useLocalStorage*` — call sites are unchanged.
+- Model selection UI: `ModelPicker` (`src/components/models/`); embedding/memory model keys read server-side via helpers in `src/lib/settings/server.ts`.
 
 ## Conventions
 
@@ -40,7 +40,7 @@ Discriminated union (`src/lib/types/widget.ts`): `LlmWidgetConfig` (LLM-transfor
 - Terse, factual responses; ask when requirements are unclear
 - Ask before adding dependencies
 - Scope changes to the specific task; follow existing patterns
-- Keep AGENTS.md reflecting the **current** state of the project
+- Keep AGENTS.md reflecting the **current** state of the project — but reserve it for architecture and big-picture pointers (subsystems, data flow, where things live). Do **not** add implementation minutiae (specific CSS classes, pixel constants, opacity math, individual handlers, scroll listeners); those belong in the code/comments and become stale fast. If an entry reads like a code comment, it's too detailed.
 - Keep the skills in `.claude/skills/**` up to date as the application changes — when a change affects a subsystem documented by a skill (see Subsystem Skills), update that skill's `SKILL.md` in the same change so it stays accurate
 - DB schema changes: edit `src/lib/db/schema.ts` only; run `yarn db:generate` to emit the drizzle migration — never hand-write files in `drizzle/`
 

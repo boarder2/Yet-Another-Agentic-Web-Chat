@@ -1,5 +1,18 @@
 {
   "enabledPlugins": {
     "typescript-lsp@claude-plugins-official": true
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(jq -r '.tool_input.file_path // empty'); case \"$f\" in *.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs) out=$(npx eslint \"$f\" 2>&1); rc=$?; if [ $rc -ne 0 ]; then echo \"ESLint errors in $f — fix before continuing:\" >&2; echo \"$out\" >&2; exit 2; fi ;; esac"
+          }
+        ]
+      }
+    ]
   }
 }

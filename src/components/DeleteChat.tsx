@@ -103,7 +103,7 @@ const DeleteChat = ({
             }
           }}
         >
-          <DialogBackdrop className="fixed inset-0 bg-fg/30" />
+          <DialogBackdrop className="fixed inset-0 bg-overlay" />
           <div className="fixed inset-0 overflow-y-auto">
             <div className="flex min-h-full items-center justify-center p-4 text-center">
               <TransitionChild

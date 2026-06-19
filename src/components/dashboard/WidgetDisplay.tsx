@@ -11,6 +11,16 @@ import {
   Home,
   LayoutDashboard,
 } from 'lucide-react';
+import {
+  Description,
+  Dialog,
+  DialogBackdrop,
+  DialogPanel,
+  DialogTitle,
+  Transition,
+  TransitionChild,
+} from '@headlessui/react';
+import { Fragment, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Widget } from '@/lib/types/widget';
 import { useConfig } from '@/lib/hooks/api/useConfig';
@@ -43,6 +53,19 @@ const WidgetDisplay = ({
   )?.enabled;
   const isCode = widget.widgetType === 'code';
   const inert = isCode && !ceEnabled;
+
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+
+  // Surfaces this widget currently appears on — surfaced in the delete
+  // confirmation so users understand a delete removes it everywhere, not just
+  // from the page they're looking at (placement toggles handle per-page hiding).
+  const surfaces: string[] = [];
+  if (widget.showOnHome) surfaces.push('the home page');
+  if (widget.showOnDashboard !== false) surfaces.push('the dashboard');
+  const surfacesText =
+    surfaces.length === 2
+      ? `${surfaces[0]} and ${surfaces[1]}`
+      : surfaces[0] || 'this page';
 
   const formatLastUpdated = (date: Date | null) => {
     if (!date) return 'Never';
@@ -189,7 +212,7 @@ const WidgetDisplay = ({
               {/* Delete */}
               <button
                 type="button"
-                onClick={() => onDelete(widget.id)}
+                onClick={() => setConfirmDeleteOpen(true)}
                 className="p-1.5 hover:bg-surface-2 rounded-control transition-colors"
                 title="Delete Widget"
               >
@@ -250,6 +273,61 @@ const WidgetDisplay = ({
           )}
         </div>
       </CardContent>
+
+      <Transition appear show={confirmDeleteOpen} as={Fragment}>
+        <Dialog
+          as="div"
+          className="relative z-50"
+          onClose={() => setConfirmDeleteOpen(false)}
+        >
+          <DialogBackdrop className="fixed inset-0 bg-overlay" />
+          <div className="fixed inset-0 overflow-y-auto">
+            <div className="flex min-h-full items-center justify-center p-4 text-center">
+              <TransitionChild
+                as={Fragment}
+                enter="ease-out duration-200"
+                enterFrom="opacity-0 scale-95"
+                enterTo="opacity-100 scale-100"
+                leave="ease-in duration-100"
+                leaveFrom="opacity-100 scale-100"
+                leaveTo="opacity-0 scale-95"
+              >
+                <DialogPanel className="w-full max-w-md transform rounded-floating bg-surface border border-surface-2 p-6 text-left align-middle shadow-floating transition-all">
+                  <DialogTitle className="text-lg font-medium leading-6">
+                    Delete widget
+                  </DialogTitle>
+                  <Description className="text-sm text-fg/70 mt-2">
+                    Permanently delete{' '}
+                    <span className="font-medium text-fg">{widget.title}</span>?
+                    It currently appears on {surfacesText}, and deleting removes
+                    it everywhere — this cannot be undone. To hide it from a
+                    single page instead, use the home/dashboard toggles.
+                  </Description>
+                  <div className="flex flex-row items-end justify-end space-x-4 mt-6">
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDeleteOpen(false)}
+                      className="text-sm transition-colors duration-150"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setConfirmDeleteOpen(false);
+                        onDelete(widget.id);
+                      }}
+                      className="text-danger text-sm font-medium transition-colors duration-150"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </DialogPanel>
+              </TransitionChild>
+            </div>
+          </div>
+        </Dialog>
+      </Transition>
     </Card>
   );
 };

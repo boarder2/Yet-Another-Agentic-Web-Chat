@@ -49,6 +49,7 @@ Use `animate-spin` from Tailwind for continuous rotation (spinners).
 - **ALWAYS** use the 4px Tailwind spacing scale; the most common values in this codebase are `py-2 px-3`, `gap-2`, `p-2`, `p-4`. Match neighbors.
 - **ALWAYS** default body text to `text-sm` at normal weight (`400`); use `font-medium` (`500`) for emphasis and `font-semibold` (`600`) for headings.
 - **ALWAYS** pair `transition-colors` with `duration-150` (or `100`/`200`) for hover/focus states.
+- **ALWAYS** use `bg-overlay` (or `bg-overlay-strong`) for modal/dialog/popover scrims and backdrops — it's a theme-aware dark scrim. This is what every modal here uses (`SettingsDialog`, `WorkspaceModal`, `WidgetConfigModal`, etc.).
 - **ALWAYS** add new tokens to `@theme` in `src/app/globals.css` if a needed semantic doesn't yet exist — extend the system rather than reach for a raw value.
 
 ## NEVER
@@ -56,6 +57,7 @@ Use `animate-spin` from Tailwind for continuous rotation (spinners).
 - **NEVER** hardcode hex codes, `rgb(...)`, or `oklch(...)` literals inside components. If the system doesn't have a token for it, add one to `@theme`.
 - **NEVER** use raw Tailwind palette colors (`bg-red-500`, `text-green-400`, `border-amber-500/30`, `text-gray-700`, etc.) in app code. Map to semantic status / surface tokens.
 - **NEVER** use `text-white`, `bg-white`, `text-black`, `bg-black` directly — they don't flip with theme. Use `text-fg` / `bg-bg`, or `text-accent-fg` on accent fills, or `bg-overlay` for scrims.
+- **NEVER** use `bg-fg/30` (or any `bg-fg/*`) for a modal scrim — `fg` is light on dark themes, so the backdrop reads bright. Use `bg-overlay` instead.
 - **NEVER** introduce new shadow utilities outside `shadow-resting` / `shadow-raised` / `shadow-floating`.
 - **NEVER** use arbitrary radius values (`rounded-[10px]`, `rounded-[14px]`). Pick a semantic radius.
 - **NEVER** use legacy aliases (`bg-light-primary`, `bg-dark-primary`, `bg-light-secondary`, `bg-dark-100`, `border-light-200`, etc.) in new code. They exist only for backwards compat.

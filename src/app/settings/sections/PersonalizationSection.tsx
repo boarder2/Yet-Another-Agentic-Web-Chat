@@ -1,5 +1,6 @@
 'use client';
 
+import ThemeSwitcher from '@/components/theme/Switcher';
 import SettingsSection from '../components/SettingsSection';
 import InputComponent from '../components/InputComponent';
 import TextareaComponent from '../components/TextareaComponent';
@@ -21,6 +22,11 @@ export default function PersonalizationSection({
           send this info per message.
         </p>
         <div className="flex flex-col space-y-4">
+          <div className="flex flex-col space-y-2">
+            <p className="text-sm font-medium">Theme</p>
+            <ThemeSwitcher />
+          </div>
+
           <div className="flex flex-col space-y-2">
             <label
               className="text-sm font-medium"

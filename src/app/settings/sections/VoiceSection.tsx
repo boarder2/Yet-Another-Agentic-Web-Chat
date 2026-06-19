@@ -1,7 +1,6 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import ThemeSwitcher from '@/components/theme/Switcher';
 import Speak from '@/components/MessageActions/Speak';
 import ModelField from '@/components/models/ModelField';
 import { useVoices } from '@/lib/hooks/api/useVoices';
@@ -16,7 +15,7 @@ const SAMPLE_TEXT =
 
 type Engine = 'kokoro' | 'browser';
 
-export default function PreferencesSection() {
+export default function VoiceSection() {
   const { data } = useVoices();
   // Reactive localStorage reads (DB-backed, synced by the settings persistence
   // layer) so the controls reflect changes made on another device on tab focus,
@@ -85,12 +84,8 @@ export default function PreferencesSection() {
   }));
 
   return (
-    <SettingsSection title="Preferences">
+    <SettingsSection title="Voice">
       <div className="flex flex-col space-y-4">
-        <div className="flex flex-col space-y-1">
-          <p className="text-sm">Theme</p>
-          <ThemeSwitcher />
-        </div>
         <div className="flex flex-col space-y-1">
           <p className="text-sm">Read-aloud engine</p>
           <p className="text-xs opacity-70">

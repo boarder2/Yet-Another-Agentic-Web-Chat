@@ -35,9 +35,9 @@ import {
   MobileSettingsNav,
   DesktopSettingsNav,
 } from './components/SettingsNav';
-import PreferencesSection from './sections/PreferencesSection';
 import AutomaticSearchSection from './sections/AutomaticSearchSection';
 import PersonalizationSection from './sections/PersonalizationSection';
+import VoiceSection from './sections/VoiceSection';
 import MemorySection from './sections/MemorySection';
 import RetentionSection from './sections/RetentionSection';
 import PersonaPromptsSection from './sections/PersonaPromptsSection';
@@ -143,7 +143,7 @@ export default function SettingsPage() {
   const deleteSystemPromptMutation = useDeleteSystemPrompt();
 
   const activeSection: SectionKey =
-    (searchParams.get('section') as SectionKey) || 'preferences';
+    (searchParams.get('section') as SectionKey) || 'personalization';
 
   const setActiveSection = useCallback(
     (key: SectionKey) => {
@@ -758,7 +758,7 @@ export default function SettingsPage() {
                 onSelect={setActiveSection}
               />
               <div className="flex-1 min-w-0">
-                {activeSection === 'preferences' && <PreferencesSection />}
+                {activeSection === 'voice' && <VoiceSection />}
 
                 {activeSection === 'automatic-search' && (
                   <AutomaticSearchSection

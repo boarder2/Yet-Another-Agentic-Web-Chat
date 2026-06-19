@@ -22,10 +22,6 @@ YAAWC's codebase is organized as follows:
   - Chat model and embedding model providers are managed in `src/lib/providers`.
   - Prompt templates and LLM chain definitions are in `src/lib/prompts` and `src/lib/chains` respectively.
 
-## API Documentation
-
-YAAWC exposes API endpoints for programmatic access. The primary endpoint is `/api/chat` for streaming chat interactions. See the README for a full endpoint listing.
-
 ## Setting Up Your Environment
 
 Before diving into coding, setting up your local environment is key. Here's what you need to do:

@@ -51,7 +51,6 @@ YAAWC (**Pronounced: "yawck"** — as in the sound you make when yet another AI 
   - [Manual Setup](#manual-setup)
   - [Ollama Connection Errors](#ollama-connection-errors)
 - [Using as a Browser Search Engine](#using-as-a-browser-search-engine)
-- [API](#api)
 - [Network \& Reverse Proxy](#network--reverse-proxy)
 - [Observability](#observability)
 - [Contributing](#contributing)
@@ -77,7 +76,7 @@ Want to know more about the architecture? See [docs/architecture/README.md](docs
 | **Chat History Search**     | The agent can search and quote your past conversations to answer follow-ups                                                                                                                          |
 | **10 LLM Providers**        | OpenAI, Anthropic, Groq, Ollama, Gemini, DeepSeek, LM Studio, OpenRouter, AI/ML API, Custom OpenAI                                                                                                   |
 | **6 Embedding Providers**   | OpenAI, Ollama, Gemini, Xenova Transformers (local), AI/ML API, LM Studio                                                                                                                            |
-| **Dashboard Widgets**       | AI-powered info widgets with auto-refresh, drag-and-drop layout, export/import                                                                                                                       |
+| **Dashboard Widgets**       | LLM- and code-based widgets on the dashboard and home screen, with auto-refresh, drag-and-drop layout, and export/import                                                                             |
 | **Personas**                | Custom system prompts with built-in templates (scholarly, conversational, etc.)                                                                                                                      |
 | **Research Methodologies**  | Per-message selectable research playbooks (Comparative Analysis, Literature Review, Fact-Check) with custom methodology authoring                                                                    |
 | **Scheduled Tasks**         | Cron-scheduled recurring agent runs with presets, per-task models/tools, run history, and unread-result badges                                                                                       |
@@ -186,7 +185,7 @@ YAAWC can run JavaScript code in isolated Docker containers with strict security
    DOCKER_HOST = "unix:///var/run/docker.sock"
    TIMEOUT_SECONDS = 30
    MEMORY_MB = 128
-   MAX_OUTPUT_CHARS = 10000
+   MAX_OUTPUT_CHARS = 50000
    ```
 
 2. The app needs access to a Docker daemon to create sandbox containers.
@@ -265,20 +264,23 @@ Each sandbox container runs with:
 
 ## Deep Research (Sub-Agents)
 
-When the agent encounters a question that needs serious digging, it can invoke the **Deep Research** tool, which spawns an independent sub-agent with its own system prompt and tool access (`web_search`, `url_fetch`, `image_search`, `pdf_loader` — but not `deep_research`, because infinite recursion is nobody's friend).
+When the agent encounters a question that needs serious digging, it can invoke the **Deep Research** tool, which spawns an independent sub-agent with its own system prompt and tool access (`web_search`, `url_fetch`, `image_search`, `image_analysis`, `pdf_loader` — but not `deep_research`, because infinite recursion is nobody's friend).
 
 Sub-agent progress streams live to the UI: task description, nested tool calls, and the final synthesized response — all collapsible and inspectable.
 
 ## Dashboard Widgets
 
-The `/dashboard` page provides a configurable grid of AI-powered widgets:
+Configurable grids of AI-powered widgets, shown on both the `/dashboard` page and — opt-in per widget — the home screen, where they peek above the fold. Each surface keeps its own layout.
 
-- Fetch content from **web pages** or **HTTP endpoints**
-- Process fetched content with an **AI prompt** using any configured provider/model
-- **Drag, drop, and resize** widgets on a responsive grid
-- **Auto-refresh** at configurable intervals (minutes/hours)
-- **Export/import** dashboard configurations as JSON
-- Date/time template variables for dynamic prompts (`{{current_utc_datetime}}`, `{{current_local_datetime}}`)
+Two widget kinds:
+
+- **LLM widgets** — fetch content from **web pages** or **HTTP endpoints**, then transform it with an **AI prompt** using any configured provider/model.
+- **Code widgets** — run user-authored JavaScript in the Docker sandbox (requires [Code Execution](#code-execution-sandbox)); the code's `render({ sources, now, location, theme })` returns themed Markdown and can emit inline charts. An AI builder helps draft them conversationally. Output is sanitized before rendering.
+
+- **Drag, drop, and resize** on a responsive grid (per surface).
+- **Auto-refresh** at configurable intervals (minutes/hours).
+- **Export/import** dashboard configurations as JSON.
+- Template variables in LLM prompts: `{{current_utc_datetime}}`, `{{current_local_datetime}}`, `{{source_content_N}}`, `{{location}}`.
 
 ## Workspaces
 
@@ -300,18 +302,18 @@ Configure workspaces from `/workspaces`, or pick one inline while chatting.
 
 ### Chat Models
 
-| Provider      | Config                                                        |
-| ------------- | ------------------------------------------------------------- |
-| OpenAI        | API key                                                       |
-| Anthropic     | API key                                                       |
-| Groq          | API key                                                       |
-| Google Gemini | API key                                                       |
-| DeepSeek      | API key                                                       |
-| OpenRouter    | API key                                                       |
-| AI/ML API     | API key                                                       |
-| Ollama        | Local URL, configurable context window (512 – 131,072 tokens) |
-| LM Studio     | Local URL                                                     |
-| Custom OpenAI | Base URL + API key + model name                               |
+| Provider      | Config                                 |
+| ------------- | -------------------------------------- |
+| OpenAI        | API key                                |
+| Anthropic     | API key                                |
+| Groq          | API key                                |
+| Google Gemini | API key                                |
+| DeepSeek      | API key                                |
+| OpenRouter    | API key                                |
+| AI/ML API     | API key                                |
+| Ollama        | Local URL, configurable context window |
+| LM Studio     | Local URL                              |
+| Custom OpenAI | Base URL + API key + model name        |
 
 ### Embedding Models
 
@@ -414,12 +416,12 @@ Configurable policies automatically clean up old data to keep the database lean.
 
 Policies are applied independently to two groups:
 
-- **Regular chats** — global policy under `[GENERAL.RETENTION] CHATS_MODE` / `CHATS_VALUE` (disabled by default)
-- **Scheduled-task runs** — global policy under `[GENERAL.RETENTION] SCHEDULED_RUNS_MODE` / `SCHEDULED_RUNS_VALUE` (disabled by default); individual scheduled tasks may override the global policy with their own mode/value
+- **Regular chats** — global policy (`CHATS_MODE` / `CHATS_VALUE`), disabled by default
+- **Scheduled-task runs** — global policy (`SCHEDULED_RUNS_MODE` / `SCHEDULED_RUNS_VALUE`), disabled by default; individual scheduled tasks may override the global policy with their own mode/value
 - **Private sessions** — deleted on their own expiry schedule (see [Private Sessions](#private-sessions))
 - **Pinning** — individual chats can be pinned from the History page to exempt them from all retention policies
 
-Configure from the Settings page under "Retention", or via `[GENERAL.RETENTION]` in `config.toml`. Cleanup runs on a background cron alongside the private-session cleanup job.
+Configure from the Settings page under "Retention" — these are database-backed settings (legacy `[GENERAL.RETENTION]` config keys are migrated in automatically). Cleanup runs on a background cron alongside the private-session cleanup job.
 
 ## Conversation Compaction
 
@@ -427,7 +429,7 @@ Long conversations eat up context window. Compaction replaces the conversation h
 
 - **Context gauge & compaction** — a circular indicator in the message input shows context usage and turns yellow then red as it fills. Click to compact the conversation, optionally with custom instructions for what the summary should capture.
 - **Compaction marker** — a "Conversation compacted" card appears in the timeline showing how many messages were summarized and the token savings, with a toggle to view the summary.
-- **Adjustable context window** — pick a preset size (32K–256K) or enter a custom value to match your model, applied to the current chat.
+- **Adjustable context window** — pick a preset size (1K–1M) or enter a custom value to match your model, applied to the current chat.
 
 ## Search Providers
 
@@ -506,60 +508,6 @@ On Linux, you may also need to set `Environment="OLLAMA_HOST=0.0.0.0"` in `/etc/
 3. YAAWC also exposes an **OpenSearch description** at `/api/opensearch` with autocomplete support, so some browsers can discover and add it automatically.
 
 URL queries via `?q=` automatically apply your saved model preferences for a seamless search-bar experience.
-
-## API
-
-YAAWC exposes a full API for programmatic access:
-
-| Endpoint                              | Method              | Description                                                    |
-| ------------------------------------- | ------------------- | -------------------------------------------------------------- |
-| `/api/chat`                           | POST                | Streaming chat with tool calls, sources, and live events (SSE) |
-| `/api/models`                         | GET                 | List available models (`?include_hidden=true` for admin view)  |
-| `/api/config`                         | GET/POST            | Read/write server configuration                                |
-| `/api/chats`                          | GET                 | List all chats (paginated)                                     |
-| `/api/chats/[id]`                     | GET/DELETE/PATCH    | Get, delete, or update (e.g. pin) a specific chat              |
-| `/api/chats/search`                   | GET                 | Full-text search across chat history                           |
-| `/api/chats/[id]/seen`                | POST                | Mark a chat's latest run as seen (clears unread state)         |
-| `/api/chat/runs/active`               | GET                 | List active/unread background runs for sidebar status          |
-| `/api/chat/runs/resume`               | POST                | Resume a paused run (approve/reject a tool call or answer)     |
-| `/api/chat/runs/[messageId]/stream`   | GET                 | Re-attach to a running message's live event stream (SSE)       |
-| `/api/approvals/pending`              | GET                 | List pending approval prompts for a chat                       |
-| `/api/messages/[messageId]`           | GET                 | Fetch a single message's full content                          |
-| `/api/skills`                         | GET/POST            | List or create skills                                          |
-| `/api/skills/[id]`                    | GET/PUT/DELETE      | Get, update, or delete a skill                                 |
-| `/api/suggestions`                    | POST                | Generate follow-up suggestions                                 |
-| `/api/system-prompts`                 | GET/POST/PUT/DELETE | CRUD for persona prompts                                       |
-| `/api/images`                         | POST                | Image search                                                   |
-| `/api/videos`                         | POST                | Video search                                                   |
-| `/api/uploads`                        | POST                | File upload                                                    |
-| `/api/uploads/images`                 | POST/GET            | Image upload and serving                                       |
-| `/api/memories`                       | GET/POST/DELETE     | List, add, or delete all memories                              |
-| `/api/memories/[id]`                  | PUT/DELETE          | Update or delete a specific memory                             |
-| `/api/memories/reindex`               | POST                | Regenerate all memory embeddings                               |
-| `/api/tools`                          | GET                 | List available agent tools                                     |
-| `/api/dashboard`                      | GET/POST            | Dashboard widget CRUD                                          |
-| `/api/respond-now`                    | POST                | Interrupt retrieval for immediate response                     |
-| `/api/opensearch`                     | GET                 | OpenSearch description XML                                     |
-| `/api/autocomplete`                   | GET                 | Search autocomplete (via configured search provider)           |
-| `/api/scheduled-tasks`                | GET/POST            | List or create scheduled tasks                                 |
-| `/api/scheduled-tasks/[id]`           | GET/PUT/DELETE      | Get, update, or delete a scheduled task                        |
-| `/api/scheduled-tasks/[id]/run`       | POST                | Trigger an immediate run of a scheduled task                   |
-| `/api/scheduled-tasks/[id]/runs`      | GET                 | List run history for a scheduled task                          |
-| `/api/scheduled-tasks/runs`           | GET                 | List recent runs across all scheduled tasks                    |
-| `/api/scheduled-tasks/runs/unread`    | GET                 | Count of unread scheduled-task run results                     |
-| `/api/workspaces`                     | GET/POST            | List all workspaces or create a new one                        |
-| `/api/workspaces/[id]`                | GET/PUT/DELETE      | Get, update, or delete a workspace                             |
-| `/api/workspaces/[id]/archive`        | POST                | Archive a workspace                                            |
-| `/api/workspaces/[id]/unarchive`      | POST                | Unarchive a workspace                                          |
-| `/api/workspaces/[id]/files`          | GET/POST            | List or upload workspace files                                 |
-| `/api/workspaces/[id]/files/[fid]`    | GET/PUT/DELETE      | Get, update, or delete a workspace file                        |
-| `/api/workspaces/[id]/urls`           | GET/PUT             | Get or update workspace source URLs                            |
-| `/api/workspaces/[id]/urls/check`     | GET                 | Check reachability of workspace source URLs                    |
-| `/api/workspaces/[id]/system-prompts` | GET/PUT             | Get or update linked persona prompts                           |
-
-> Agent file edits, code-execution, skill edits, and other approvals now flow through the unified run approval endpoint (`/api/chat/runs/resume`).
-
-For detailed payload schemas, see the [API documentation](docs/API/).
 
 ## Network & Reverse Proxy
 

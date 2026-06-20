@@ -475,7 +475,16 @@ YAAWC supports multiple search backends and lets you choose from the Settings pa
    docker compose up -d
    ```
 
+   This pulls the prebuilt `boarder2/yaawc:latest` image from Docker Hub — no local build required.
+
 5. Open http://localhost:3000.
+
+To update later, pull the latest image and recreate the stack:
+
+```bash
+docker compose pull
+docker compose up -d
+```
 
 ### Manual Setup
 

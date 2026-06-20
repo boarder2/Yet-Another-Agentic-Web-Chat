@@ -10,9 +10,7 @@ services:
     restart: unless-stopped
 
   app:
-    build:
-      context: .
-      dockerfile: app.dockerfile
+    image: boarder2/yaawc:latest
     cap_add:
       - SYS_ADMIN # Required for Playwright sandboxing
     init: true

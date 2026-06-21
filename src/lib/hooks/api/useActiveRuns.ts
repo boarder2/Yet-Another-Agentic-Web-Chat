@@ -25,6 +25,9 @@ export function useActiveRuns() {
     queryFn: () => apiFetch<ActiveRunsData>('/api/chat/runs/active'),
     refetchInterval: (q) =>
       (q.state.data?.active?.length ?? 0) > 0 ? 5000 : 30000,
+    // Keep polling while the tab is backgrounded so the unread/attention title
+    // badge stays current — that's the one moment it matters most.
+    refetchIntervalInBackground: true,
     refetchOnWindowFocus: true,
     // Always treat as stale so navigating into a view that observes this query
     // (e.g. mounting ChatBrowser when opening history) refetches immediately

@@ -102,6 +102,9 @@ export function useScheduledRunsUnread() {
       apiFetch<{ count: number }>('/api/scheduled-tasks/runs/unread'),
     select: (d) => d.count ?? 0,
     refetchInterval: 30000,
+    // Keep polling while the tab is backgrounded so the title badge stays
+    // current even when the user isn't looking at this tab.
+    refetchIntervalInBackground: true,
     refetchOnWindowFocus: true,
     // Always treat as stale so navigating into a view that observes this query
     // refetches immediately rather than serving the global 30s-cached snapshot.

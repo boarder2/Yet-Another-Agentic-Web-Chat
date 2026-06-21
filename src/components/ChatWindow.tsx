@@ -23,6 +23,7 @@ import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { qk } from '@/lib/api/keys';
 import type { ActiveRunsData } from '@/lib/hooks/api/useActiveRuns';
+import { useMarkChatSeen } from '@/lib/hooks/api/useActiveRuns';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { getSuggestions } from '@/lib/actions';
 import { SKILL_TOKEN_SCAN_REGEX } from '@/lib/skills/validation';
@@ -1446,6 +1447,69 @@ const ChatWindow = ({
     setMessages(msgs);
     attachToRun(runMsgId, msgs);
   };
+
+  // Background-unread: while a run is streaming, a backgrounded tab keeps its
+  // fetch open, so the server still counts this client as "watching" and marks
+  // the run read on completion. Drop the live stream when the tab is hidden
+  // (same abort-the-fetch mechanism as the navigation cleanup above, see
+  // streamAbortRef) so a run that finishes while hidden correctly stays unread.
+  // On return, soft-reload from the DB to pick up whatever streamed while we
+  // were disconnected, re-attaching if the run is still in flight.
+  const markSeen = useMarkChatSeen();
+  const suspendedForHiddenRef = useRef(false);
+  // Latest-ref for the resume logic so the once-registered listener always runs
+  // against the current closures — chatId is state and is assigned only after
+  // the first send on a brand-new chat, so a value captured at mount would be
+  // undefined and the resume would silently bail.
+  const resumeFromHiddenRef = useRef<() => void>(() => {});
+  // Refresh the closure after every render so it captures the current chatId.
+  useEffect(() => {
+    resumeFromHiddenRef.current = () => {
+      if (!chatId) return;
+      loadMessages(
+        chatId,
+        setMessages,
+        setIsMessagesLoaded,
+        setFocusMode,
+        setNotFound,
+        setFiles,
+        setFileIds,
+        setIsPrivateSession,
+        setPinned,
+        setSelectedWorkspaceId,
+        setLoading,
+      ).then(({ activeRunMessageId, loadedMessages } = {}) => {
+        if (activeRunMessageId) {
+          attachToRun(activeRunMessageId, loadedMessages);
+        } else {
+          // Finished while hidden — clear the spinner the aborted stream left on
+          // and mark the chat seen now that the user is looking at the result.
+          // (The server only auto-marks seen when a subscriber was connected at
+          // completion; we deliberately disconnected on hide, so do it here.)
+          setLoading(false);
+          markSeen.mutate(chatId);
+        }
+      });
+    };
+  });
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        const ac = streamAbortRef.current;
+        if (ac && !ac.signal.aborted) {
+          ac.abort();
+          suspendedForHiddenRef.current = true;
+        }
+        return;
+      }
+      if (!suspendedForHiddenRef.current) return;
+      suspendedForHiddenRef.current = false;
+      resumeFromHiddenRef.current();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () =>
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, []);
 
   // One-time mount init: either load an existing chat or establish a fresh
   // chat id. The synchronous setState in the new-chat branch is intentional

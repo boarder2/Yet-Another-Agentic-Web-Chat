@@ -9,6 +9,7 @@ import {
   installSettingsPersistence,
   resyncSettingsFromDb,
 } from '@/lib/settings/persist';
+import TitleBadge from '@/components/TitleBadge';
 
 /**
  * Installs the localStorage→DB persistence interceptor and hydrates the local
@@ -50,6 +51,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <SettingsHydrator />
+      <TitleBadge />
       {children}
       {process.env.NODE_ENV === 'development' && (
         <ReactQueryDevtools initialIsOpen={false} />

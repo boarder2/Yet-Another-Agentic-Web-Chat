@@ -236,8 +236,10 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
                   key={i}
                   href={link.href}
                   className={cn(
-                    'relative flex flex-row items-center justify-center cursor-pointer hover:bg-surface-2 duration-150 transition w-full py-2 rounded-surface',
-                    link.active ? 'text-fg' : 'text-fg/70',
+                    'relative flex flex-row items-center justify-center cursor-pointer duration-150 transition-colors w-full py-2 rounded-surface',
+                    link.active
+                      ? 'bg-surface-2 text-accent'
+                      : 'text-fg/70 hover:bg-surface-2/50 hover:text-fg',
                   )}
                 >
                   {link.label === 'History' && historyInProgress ? (
@@ -262,9 +264,6 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
                       {link.badgeCount > 99 ? '99+' : link.badgeCount}
                     </span>
                   ) : null}
-                  {link.active && (
-                    <div className="absolute right-0 -mr-2 h-full w-1 rounded-l-surface bg-accent" />
-                  )}
                 </Link>
               ))}
             </VerticalIconContainer>

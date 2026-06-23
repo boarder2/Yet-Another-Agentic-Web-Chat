@@ -178,6 +178,7 @@ export class SimplifiedAgent {
     name: string;
     contextWindowSize?: number;
   } | null;
+  private panelConfig: Record<string, unknown> | null = null;
 
   constructor(
     chatLlm: BaseChatModel,
@@ -235,6 +236,26 @@ export class SimplifiedAgent {
     this.threadId = threadId;
   }
 
+  /** Add to the pre-seeded system-token usage (e.g. panel executor totals) so
+   *  the run's reported system tokens include work done before this agent ran. */
+  public addInitialSystemUsage(usage: {
+    input_tokens: number;
+    output_tokens: number;
+    total_tokens: number;
+  }) {
+    this.initialSystemUsage = {
+      input_tokens: this.initialSystemUsage.input_tokens + usage.input_tokens,
+      output_tokens:
+        this.initialSystemUsage.output_tokens + usage.output_tokens,
+      total_tokens: this.initialSystemUsage.total_tokens + usage.total_tokens,
+    };
+  }
+
+  /** Stash the panel config so it lands in the resume config snapshot. */
+  public setPanelConfig(panel: Record<string, unknown> | null) {
+    this.panelConfig = panel;
+  }
+
   public setModelRefs(
     chatModelRef: {
       provider: string;
@@ -273,6 +294,7 @@ export class SimplifiedAgent {
       interactiveSession: this.interactiveSession,
       workspaceSuffix: this.workspaceSuffix,
       memoryEnabled: this.memoryEnabled,
+      panel: this.panelConfig,
     };
   }
 
@@ -587,6 +609,7 @@ export class SimplifiedAgent {
     messageImageIds?: string[],
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     extraTools?: any[],
+    initialDocuments?: Document[],
   ): Promise<void> {
     // Declared outside try so the catch block can clean it up
     let toolLlmUsageHandler: ((data: string) => void) | null = null;
@@ -656,13 +679,16 @@ export class SimplifiedAgent {
         extraTools,
       );
 
-      // Prepare initial state
+      // Prepare initial state. `initialDocuments` (panel orchestrator) seeds the
+      // citation set so the agent's [n] references align with the pre-merged
+      // sources, and further searches append after them.
+      const seededDocuments = initialDocuments ?? [];
       const initialState = {
         messages: messagesHistory,
         query,
         focusMode,
         fileIds,
-        relevantDocuments: [],
+        relevantDocuments: seededDocuments,
         subagentExecutions: [],
       };
 
@@ -1193,6 +1219,21 @@ export class SimplifiedAgent {
         }
       };
       this.emitter.on('tool_llm_usage', toolLlmUsageHandler);
+
+      // Seed pre-merged citation set (panel orchestrator) into the collected
+      // documents + emit them so the UI numbers them ahead of any new searches.
+      if (seededDocuments.length > 0) {
+        collectedDocuments.push(...seededDocuments);
+        this.emitter.emit(
+          'data',
+          JSON.stringify({
+            type: 'sources_added',
+            data: seededDocuments,
+            searchQuery: 'Panel sources',
+            searchUrl: '',
+          }),
+        );
+      }
 
       try {
         // Process the event stream

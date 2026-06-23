@@ -25,6 +25,10 @@ export const MIGRATED_SETTING_KEYS = [
   'embeddingModelProvider',
   'embeddingModel',
   'modelPresets',
+  // Agent panel: saved presets sync cross-device like model presets; the active
+  // composer selection rides along so an enabled panel survives device switches.
+  'panelPresets',
+  'panelSelection',
   'searchChatModelProvider',
   'searchChatModel',
   // Memory + personalization

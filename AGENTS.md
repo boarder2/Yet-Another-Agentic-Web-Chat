@@ -18,6 +18,12 @@ Stack: Next.js (App Router) + React 19 + Tailwind 4, TanStack Query (client data
 - **Chat**: conversational only
 - **Firefox AI**: auto-detected, conversational only
 
+## Agent Panel
+
+- Optional composer mode (orthogonal to focus mode; research modes only) that fans one prompt out across **2–4 executor models in parallel**, then has the **turn's chat model** synthesize a single answer from their results. Request shape: `body.panel` (`src/lib/types/panel.ts`) — executors only; no separate synthesizer model is configured.
+- **Phase 1** — `PanelCoordinator` (`src/lib/search/panel/coordinator.ts`) runs each executor as a `SimplifiedAgent` on an isolated emitter with a non-prompting research toolset (`tools/panel/restrictedToolset.ts`), streaming `panel_executor_*` events; sources are merged/deduped by URL. **Phase 2** — the chat model runs as an ordinary agent (full tools, interrupts/resume unchanged), seeded with the merged citation set + a synthesis system turn (`prompts/panel/orchestrator.ts`). Wired in `api/chat/route.ts` inside the `isNew` block (resume never re-runs Phase 1).
+- Columns render via the `<PanelColumns>` markup (`utils/panelMarkup.ts`, `MessageActions/PanelColumns.tsx`); stripped from history by `removeToolCallMarkup`. Composer UI: `MessageInputActions/PanelSelector.tsx` + device-local `panelSelection`. Presets (`lib/panel/panelPresets.ts`) store like model presets and have a settings section.
+
 ## Dashboard Widgets
 
 - Two widget kinds (`src/lib/types/widget.ts`): LLM-transformed and user-JS (Docker sandbox, gated on code execution). Processed via `/api/dashboard/*`; sources fetched server-side (`src/lib/dashboard/sources.ts`), output sanitized (`sanitizeWidgetOutput.ts`) and rendered by `WidgetContent.tsx`.

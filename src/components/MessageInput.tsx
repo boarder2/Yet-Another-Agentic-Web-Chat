@@ -12,6 +12,7 @@ import Attach from './MessageInputActions/Attach';
 import ContextIndicator from './MessageInputActions/ContextIndicator';
 import Focus from './MessageInputActions/Focus';
 import ModelConfigurator from './MessageInputActions/ModelConfigurator';
+import PanelSelector from './MessageInputActions/PanelSelector';
 import SystemPromptSelector from './MessageInputActions/SystemPromptSelector'; // Import new component
 import MethodologySelector from './MessageInputActions/MethodologySelector';
 import AutoReadToggle from './MessageInputActions/AutoReadToggle';
@@ -445,6 +446,7 @@ const MessageInput = ({
         <div className="flex flex-row items-center justify-between">
           <div className="flex flex-row items-center space-x-2">
             <Focus focusMode={focusMode} setFocusMode={setFocusMode} />
+            <PanelSelector focusMode={focusMode} />
             <Attach
               fileIds={fileIds}
               setFileIds={setFileIds}

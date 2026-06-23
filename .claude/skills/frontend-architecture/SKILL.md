@@ -237,6 +237,7 @@ The `messageHandler()` function dispatches by event `type`:
 
 - **`<ToolCall>`**: Renders tool execution status widgets (spinner/check/X) with tool-specific icons. Attributes: `type`, `status`, `toolCallId`, `query`, `url`, `error`, etc.
 - **`<SubagentExecution>`**: Collapsible deep research panel. Attributes: `name`, `task`, `status`, `response`, `error`.
+- **`<PanelColumns>`**: Agent-panel executor columns (side-by-side on desktop, tabbed on mobile). Single attribute `data` = base64 JSON of all executors; mutated by `src/lib/utils/panelMarkup.ts` from `panel_executor_*` events.
 - **`<Chart>`**: Renders a `ChartWidget`. Looks up the `ChartSpec` via `useChartSpec()` from `ChartSpecContext`. Attribute: `id`.
 - **`<a>` links**: Citation links (`[N]`) get special styling via `CitationLink` component.
 - **Security blocks**: `iframe`, `script`, `object`, `style` tags render as `null`.

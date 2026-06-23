@@ -46,6 +46,7 @@ import DefaultSearchSection from './sections/DefaultSearchSection';
 import SearchProvidersSection from './sections/SearchProvidersSection';
 import ModelSettingsSection from './sections/ModelSettingsSection';
 import ModelPresetsSection from './sections/ModelPresetsSection';
+import PanelPresetsSection from './sections/PanelPresetsSection';
 import ModelVisibilitySection from './sections/ModelVisibilitySection';
 import ImageGenerationSection from './sections/ImageGenerationSection';
 import ApiKeysSection from './sections/ApiKeysSection';
@@ -918,6 +919,8 @@ export default function SettingsPanel({
                     setIsCustomContextWindow={setIsCustomContextWindow}
                   />
                 )}
+
+                {activeSection === 'panel-presets' && <PanelPresetsSection />}
 
                 {activeSection === 'model-visibility' && (
                   <ModelVisibilitySection

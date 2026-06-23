@@ -26,7 +26,9 @@ export const removeThinkingBlocks = (text: string): string => {
 
 /**
  * Removes <ToolCall ...></ToolCall> UI markup tags (both paired and self-closing),
- * including nested <SubagentExecution> trees.
+ * including nested <SubagentExecution> trees and <PanelColumns> blocks. These are
+ * UI-only artifacts that would otherwise bloat the context when fed back as
+ * history (the panel blob in particular embeds every executor's full answer).
  */
 export const removeToolCallMarkup = (text: string): string => {
   // Strip SubagentExecution blocks first so a single pass handles the whole
@@ -34,6 +36,8 @@ export const removeToolCallMarkup = (text: string): string => {
   return text
     .replace(/<SubagentExecution\b[^>]*\/>/g, '')
     .replace(/<SubagentExecution\b[^>]*>[\s\S]*?<\/SubagentExecution>/g, '')
+    .replace(/<PanelColumns\b[^>]*\/>/g, '')
+    .replace(/<PanelColumns\b[^>]*>[\s\S]*?<\/PanelColumns>/g, '')
     .replace(/<ToolCall\b[^>]*\/>/g, '')
     .replace(/<ToolCall\b[^>]*>[\s\S]*?<\/ToolCall>/g, '');
 };

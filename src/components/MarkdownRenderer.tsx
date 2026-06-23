@@ -37,6 +37,7 @@ import { Document } from '@langchain/core/documents';
 import CitationLink from './CitationLink';
 import { decodeHtmlEntities, decodeBase64 } from '@/lib/utils/html';
 import { SubagentExecution } from './MessageActions/SubagentExecution';
+import { PanelColumns } from './MessageActions/PanelColumns';
 import ChartWidget from './ChartWidget';
 import { useChartSpec } from '@/lib/chart/ChartSpecContext';
 
@@ -46,7 +47,8 @@ import { useChartSpec } from '@/lib/chart/ChartSpecContext';
  * Must NOT match arbitrary HTML-like tags that models may produce in their
  * thinking output (e.g. </parameter>, </tool>, </result>).
  */
-const KNOWN_CLOSING_TAG = '<\\/(?:ToolCall|SubagentExecution|Chart)\\s*>';
+const KNOWN_CLOSING_TAG =
+  '<\\/(?:ToolCall|SubagentExecution|PanelColumns|Chart)\\s*>';
 
 /**
  * Ensure custom block elements (ToolCall, SubagentExecution) are surrounded by
@@ -61,6 +63,7 @@ const ensureBlockElements = (text: string): string =>
       /(<SubagentExecution\b[^>]*>[\s\S]*?<\/SubagentExecution>)/g,
       '\n\n$1\n\n',
     )
+    .replace(/(<PanelColumns\b[^>]*>[\s\S]*?<\/PanelColumns>)/g, '\n\n$1\n\n')
     .replace(/(<Chart\b[^>]*\/>)/g, '\n\n$1\n\n');
 
 /**
@@ -871,6 +874,9 @@ const MarkdownRenderer = ({
       },
       SubagentExecution: {
         component: SubagentExecution,
+      },
+      PanelColumns: {
+        component: PanelColumns,
       },
       Chart: {
         component: ChartElement,

@@ -8,6 +8,11 @@ import {
   applySubagentResponseToken,
   applySubagentStatus,
 } from '@/lib/utils/subagentMarkup';
+import {
+  applyPanelExecutorStarted,
+  applyPanelExecutorResponseToken,
+  applyPanelExecutorStatus,
+} from '@/lib/utils/panelMarkup';
 import { ChartSpecContext } from '@/lib/chart/ChartSpecContext';
 import { ChartSpec, ChartSpecSchema } from '@/lib/chart/chartSpec';
 import { Document } from '@langchain/core/documents';
@@ -962,6 +967,73 @@ const ChatWindow = ({
           ),
         );
         recievedMessage = transform(recievedMessage);
+        setScrollTrigger((prev) => prev + 1);
+        return;
+      }
+
+      // Agent panel executor lifecycle. started/completed/error are idempotent
+      // milestones; data (token streams) is gated by inReplay since the seeded
+      // content already contains the accumulated panel responseText.
+      if (
+        data.type === 'panel_executor_started' ||
+        data.type === 'panel_executor_completed' ||
+        data.type === 'panel_executor_error'
+      ) {
+        const idx = data.executorIdx as number;
+        const transform = (content: string): string => {
+          if (data.type === 'panel_executor_started') {
+            return applyPanelExecutorStarted(
+              content,
+              idx,
+              data.model ?? `Model ${idx + 1}`,
+            );
+          }
+          if (data.type === 'panel_executor_completed') {
+            return applyPanelExecutorStatus(content, idx, 'success', {
+              sourceCount: data.sourceCount,
+              model: data.model,
+            });
+          }
+          return applyPanelExecutorStatus(content, idx, 'error', {
+            error: data.error,
+            model: data.model,
+          });
+        };
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.messageId === aiMessageId
+              ? { ...m, content: transform(m.content) }
+              : m,
+          ),
+        );
+        recievedMessage = transform(recievedMessage);
+        setScrollTrigger((prev) => prev + 1);
+        return;
+      }
+
+      if (data.type === 'panel_executor_data') {
+        if (inReplay) return;
+        const idx = data.executorIdx as number;
+        const token: string = data.token ?? '';
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.messageId === aiMessageId
+              ? {
+                  ...m,
+                  content: applyPanelExecutorResponseToken(
+                    m.content,
+                    idx,
+                    token,
+                  ),
+                }
+              : m,
+          ),
+        );
+        recievedMessage = applyPanelExecutorResponseToken(
+          recievedMessage,
+          idx,
+          token,
+        );
         setScrollTrigger((prev) => prev + 1);
         return;
       }
@@ -2260,6 +2332,69 @@ const ChatWindow = ({
         return;
       }
 
+      // Agent panel executor lifecycle (live stream).
+      if (
+        data.type === 'panel_executor_started' ||
+        data.type === 'panel_executor_data' ||
+        data.type === 'panel_executor_completed' ||
+        data.type === 'panel_executor_error'
+      ) {
+        const idx = data.executorIdx as number;
+        const transform = (content: string): string => {
+          if (data.type === 'panel_executor_started') {
+            return applyPanelExecutorStarted(
+              content,
+              idx,
+              data.model ?? `Model ${idx + 1}`,
+            );
+          }
+          if (data.type === 'panel_executor_data') {
+            return applyPanelExecutorResponseToken(
+              content,
+              idx,
+              data.token ?? '',
+            );
+          }
+          if (data.type === 'panel_executor_completed') {
+            return applyPanelExecutorStatus(content, idx, 'success', {
+              sourceCount: data.sourceCount,
+              model: data.model,
+            });
+          }
+          return applyPanelExecutorStatus(content, idx, 'error', {
+            error: data.error,
+            model: data.model,
+          });
+        };
+
+        if (!added) {
+          recievedMessage = transform('');
+          setMessages((prevMessages) => [
+            ...prevMessages,
+            {
+              content: recievedMessage,
+              messageId: data.messageId || 'temp',
+              chatId: chatId!,
+              role: 'assistant',
+              sources: sources,
+              createdAt: new Date(),
+            },
+          ]);
+          added = true;
+        } else {
+          recievedMessage = transform(recievedMessage);
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.messageId === data.messageId
+                ? { ...message, content: transform(message.content) }
+                : message,
+            ),
+          );
+        }
+        setScrollTrigger((prev) => prev + 1);
+        return;
+      }
+
       if (data.type === 'code_execution_pending') {
         // executionId is the approvalId in the interrupt-based flow
         const executionId = data.data?.approvalId ?? data.data?.executionId;
@@ -2849,6 +2984,35 @@ const ChatWindow = ({
 
     if (msgInvokedSkills.length > 0) {
       payload.invokedSkills = msgInvokedSkills;
+    }
+
+    // Agent panel: when enabled (and the focus mode supports research), fan the
+    // turn out across the selected executor models; the chat model synthesizes.
+    if (focusMode === 'webSearch' || focusMode === 'localResearch') {
+      try {
+        const raw = localStorage.getItem('panelSelection');
+        if (raw) {
+          const sel = JSON.parse(raw) as {
+            enabled?: boolean;
+            executors?: Array<{
+              provider: string;
+              name: string;
+              contextWindowSize?: number;
+              imageCapable?: boolean;
+            }>;
+          };
+          if (
+            sel.enabled &&
+            Array.isArray(sel.executors) &&
+            sel.executors.length >= 2 &&
+            sel.executors.length <= 4
+          ) {
+            payload.panel = { executors: sel.executors };
+          }
+        }
+      } catch {
+        // ignore malformed panel selection
+      }
     }
 
     streamAbortRef.current?.abort();

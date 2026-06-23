@@ -43,6 +43,13 @@ import {
   evictByChatId,
 } from '@/lib/runs/runHub';
 import { attachRunHost } from '@/lib/runs/runHost';
+import { resolveModelRef } from '@/lib/providers/resolveModels';
+import {
+  PanelCoordinator,
+  type ResolvedExecutor,
+} from '@/lib/search/panel/coordinator';
+import { buildOrchestratorSynthesisContext } from '@/lib/prompts/panel/orchestrator';
+import { validatePanelConfig, type PanelConfig } from '@/lib/types/panel';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -92,6 +99,7 @@ type Body = {
   workspaceId?: string | null;
   imageCapable?: boolean;
   invokedSkills?: string[];
+  panel?: PanelConfig;
 };
 
 type TokenUsage = {
@@ -189,6 +197,16 @@ export const POST = async (req: Request) => {
         },
         { status: 400 },
       );
+    }
+
+    // Validate panel config up front (when present). An invalid panel is a 400;
+    // an absent panel leaves the single-model path byte-for-byte unchanged.
+    const panelConfig = body.panel;
+    if (panelConfig) {
+      const check = validatePanelConfig(panelConfig);
+      if (!check.ok) {
+        return Response.json({ error: check.error }, { status: 400 });
+      }
     }
 
     const humanMessageId =
@@ -541,7 +559,8 @@ export const POST = async (req: Request) => {
     // in `history` via buildHistoryFromDb — no in-flight injection needed.
     handler.setInvokedSkillNames(invokedSkillNames);
     // Store model refs so the agent can build a config snapshot for resume.
-    handler.setModelRefs(body.chatModel!, body.systemModel);
+    handler.setModelRefs(body.chatModel, body.systemModel);
+    if (panelConfig) handler.setPanelConfig(panelConfig);
 
     // Build a stable thread_id for LangGraph checkpointing: messageId:startedAt
     // Using startedAt avoids collisions on regenerate/retry of the same user message.
@@ -586,17 +605,95 @@ export const POST = async (req: Request) => {
         throw err;
       }
 
-      // Fire agent (not awaited — runs independently until end/error)
-      handler.searchAndAnswer(
-        message.content,
-        history,
-        body.files,
-        body.focusMode,
-        undefined,
-        undefined,
-        body.messageImageIds,
-        workspaceExtraTools.length > 0 ? workspaceExtraTools : undefined,
-      );
+      const workspaceTools =
+        workspaceExtraTools.length > 0 ? workspaceExtraTools : undefined;
+
+      if (panelConfig) {
+        // Panel mode: run executors to completion, merge their sources, then
+        // fire the chat model as an ordinary agent run augmented with the
+        // executors' answers + merged citation set, synthesizing the final
+        // answer. Fired in an async IIFE (not awaited) so the HTTP response can
+        // subscribe immediately.
+        (async () => {
+          try {
+            const executors: ResolvedExecutor[] = [];
+            for (const ref of panelConfig.executors) {
+              const llm = await resolveModelRef(ref);
+              if (llm) executors.push({ ref, llm });
+            }
+            if (executors.length < 2) {
+              throw new Error(
+                'Fewer than 2 panel executor models could be resolved.',
+              );
+            }
+
+            const coordinator = new PanelCoordinator({
+              executors,
+              systemLlm: systemLlm!,
+              embeddings: embedding,
+              parentEmitter: stream,
+              signal: abortController.signal,
+              messageId: message.messageId,
+              retrievalSignal: retrievalController.signal,
+              userLocation: body.userLocation,
+              userProfile: body.userProfile,
+              memorySection,
+            });
+
+            const { executorResults, mergedSources, totalUsage } =
+              await coordinator.run(
+                message.content,
+                history,
+                body.files,
+                body.focusMode,
+                body.messageImageIds,
+              );
+
+            // Roll executor token usage into the run's system-token total.
+            handler.addInitialSystemUsage(totalUsage.usageSystem);
+            handler.addInitialSystemUsage(totalUsage.usageChat);
+
+            // Inject the synthesis context as a system turn ahead of the query.
+            const synthesisContext = buildOrchestratorSynthesisContext({
+              userPrompt: message.content,
+              executorResults,
+              mergedSources,
+            });
+            const orchestratorHistory = [
+              ...history,
+              new SystemMessage(synthesisContext),
+            ];
+
+            await handler.searchAndAnswer(
+              message.content,
+              orchestratorHistory,
+              body.files,
+              body.focusMode,
+              undefined,
+              undefined,
+              body.messageImageIds,
+              workspaceTools,
+              mergedSources,
+            );
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error('[panel] coordination failed:', err);
+            stream.emit('error', JSON.stringify({ data: msg }));
+          }
+        })();
+      } else {
+        // Fire agent (not awaited — runs independently until end/error)
+        handler.searchAndAnswer(
+          message.content,
+          history,
+          body.files,
+          body.focusMode,
+          undefined,
+          undefined,
+          body.messageImageIds,
+          workspaceTools,
+        );
+      }
 
       // Post-response automatic memory extraction (fire-and-forget)
       // If a workspace is active, only run if autoMemoryEnabled is explicitly ON (=1).

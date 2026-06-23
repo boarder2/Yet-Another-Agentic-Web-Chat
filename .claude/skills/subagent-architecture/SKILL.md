@@ -175,6 +175,10 @@ API Route → SimplifiedAgent
                     MarkdownRenderer (SubagentExecution component)
 ```
 
+## Related: Agent Panel
+
+The **Agent Panel** (`src/lib/search/panel/coordinator.ts`) reuses this isolated-emitter + markup-persistence pattern, but is distinct from agent-invoked `deep_research`: it is a user-selected composer mode that fans the prompt across 2–4 executor `SimplifiedAgent`s in parallel (each with a non-prompting research toolset via `tools/panel/restrictedToolset.ts`) and then has the turn's chat model synthesize their results. Events are `panel_executor_*` (not `subagent_*`); markup is a single `<PanelColumns>` block (not per-execution `<SubagentExecution>`). See AGENTS.md → Agent Panel.
+
 ## Constraints
 
 - Each subagent sees only last 5 messages (limited context window)

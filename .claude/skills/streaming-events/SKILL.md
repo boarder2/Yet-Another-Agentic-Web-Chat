@@ -46,6 +46,19 @@ Emitted by `SubagentExecutor` (`src/lib/search/subagents/executor.ts`):
 | `subagent_completed` | `{ executionId, … }`                                                    | Updates widget `status` to `"success"`                        |
 | `subagent_error`     | `{ executionId, … }`                                                    | Updates widget `status` to `"error"`                          |
 
+## Agent Panel Events
+
+Emitted by `PanelCoordinator` (`src/lib/search/panel/coordinator.ts`) during Phase 1 fan-out. All executors share ONE `<PanelColumns data="base64json">` block (mutated via `src/lib/utils/panelMarkup.ts`), rendered by `PanelColumns.tsx`.
+
+| Event Type                 | Payload                                             | UI Behavior                                           |
+| -------------------------- | --------------------------------------------------- | ----------------------------------------------------- |
+| `panel_executor_started`   | `{ executorIdx, model }`                            | Adds an executor column (status running). Idempotent. |
+| `panel_executor_data`      | `{ executorIdx, token }` — streamed response tokens | Accumulates into that column's `responseText`         |
+| `panel_executor_completed` | `{ executorIdx, model, sourceCount, usage }`        | Column → success; shows source + token counts         |
+| `panel_executor_error`     | `{ executorIdx, model, error }`                     | Column → error                                        |
+
+`_started/_completed/_error` are persisted milestones; `_data` is not (the accumulated `responseText` lives in the persisted message content, like `subagent_data`). The chat model's synthesized final answer streams via the normal `response` path below the columns.
+
 ## Approval / Interrupt Events (Persistent Sessions)
 
 These events are emitted by tools that interrupt the LangGraph run for user approval. All `*_pending` events are persisted as milestones so they can be replayed on resume. The frontend also handles an `*_answered` companion event to update UI state.

@@ -1,4 +1,9 @@
 import { updateToolCallMarkup } from '@/lib/utils/toolCallMarkup';
+import {
+  applyPanelExecutorStarted,
+  applyPanelExecutorResponseToken,
+  applyPanelExecutorStatus,
+} from '@/lib/utils/panelMarkup';
 import { encodeHtmlAttribute } from '@/lib/utils/html';
 import {
   insertPartialAssistantRow,
@@ -1088,6 +1093,54 @@ export async function attachRunHost(params: {
               updatedAttrs += ` error="${esc}"`;
             }
             return `<SubagentExecution ${updatedAttrs}>${innerContent}</SubagentExecution>`;
+          },
+        );
+      }
+      scheduleFlush(true);
+    } else if (
+      parsedData.type === 'panel_executor_started' ||
+      parsedData.type === 'panel_executor_data' ||
+      parsedData.type === 'panel_executor_completed' ||
+      parsedData.type === 'panel_executor_error'
+    ) {
+      pushEvent(run, { ...parsedData, messageId: aiMessageId });
+      const idx = parsedData.executorIdx as number;
+      if (parsedData.type === 'panel_executor_started') {
+        recievedMessage = applyPanelExecutorStarted(
+          recievedMessage,
+          idx,
+          parsedData.model ?? `Model ${idx + 1}`,
+        );
+      } else if (parsedData.type === 'panel_executor_data') {
+        recievedMessage = applyPanelExecutorResponseToken(
+          recievedMessage,
+          idx,
+          parsedData.token ?? '',
+        );
+      } else if (parsedData.type === 'panel_executor_completed') {
+        const u = parsedData.usage;
+        const tokens = u
+          ? (u.usageChat?.total_tokens ?? 0) +
+            (u.usageSystem?.total_tokens ?? 0)
+          : undefined;
+        recievedMessage = applyPanelExecutorStatus(
+          recievedMessage,
+          idx,
+          'success',
+          {
+            sourceCount: parsedData.sourceCount,
+            tokens,
+            model: parsedData.model,
+          },
+        );
+      } else if (parsedData.type === 'panel_executor_error') {
+        recievedMessage = applyPanelExecutorStatus(
+          recievedMessage,
+          idx,
+          'error',
+          {
+            error: parsedData.error,
+            model: parsedData.model,
           },
         );
       }

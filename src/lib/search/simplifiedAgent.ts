@@ -1193,6 +1193,20 @@ export class SimplifiedAgent {
         relevantDocuments?: Document[];
       } | null = null;
       const collectedDocuments: Document[] = [];
+      // Reference-identity dedupe for collected docs. The `relevantDocuments`
+      // graph channel uses a concat reducer, so seeded panel sources (placed in
+      // initialState) and tool-added docs reappear in `finalResult` as the SAME
+      // object references already collected from incremental events — without
+      // this they would be pushed (and re-emitted as sources_added) twice,
+      // duplicating citations and corrupting [n] numbering. Returns only the
+      // docs not seen before so callers emit each source exactly once.
+      const seenDocs = new Set<Document>();
+      const collectNewDocs = (docs: Document[]): Document[] => {
+        const fresh = docs.filter((d) => !seenDocs.has(d));
+        for (const d of fresh) seenDocs.add(d);
+        collectedDocuments.push(...fresh);
+        return fresh;
+      };
       let currentResponseBuffer = '';
       // Separate usage trackers for chat (final answer) and system (tools/internal chains).
       // Pre-seed each with any pre-agent LLM usage (e.g. query distillation into
@@ -1250,7 +1264,7 @@ export class SimplifiedAgent {
       // Seed pre-merged citation set (panel orchestrator) into the collected
       // documents + emit them so the UI numbers them ahead of any new searches.
       if (seededDocuments.length > 0) {
-        collectedDocuments.push(...seededDocuments);
+        collectNewDocs(seededDocuments);
         this.emitter.emit(
           'data',
           JSON.stringify({
@@ -1388,10 +1402,13 @@ export class SimplifiedAgent {
             event.name === 'RunnableSequence'
           ) {
             finalResult = event.data.output;
-            // Collect relevant documents from the final result
+            // Collect relevant documents from the final result. Dedupe by
+            // reference so seeded/tool docs already collected from incremental
+            // events (the concat reducer keeps the same object refs here) aren't
+            // counted or re-emitted a second time.
             if (finalResult && finalResult.relevantDocuments) {
-              collectedDocuments.push(...finalResult.relevantDocuments);
-              emitNewDocs(finalResult.relevantDocuments);
+              const fresh = collectNewDocs(finalResult.relevantDocuments);
+              if (fresh.length > 0) emitNewDocs(fresh);
             }
           }
 
@@ -1411,8 +1428,8 @@ export class SimplifiedAgent {
                   item.update.relevantDocuments &&
                   Array.isArray(item.update.relevantDocuments)
                 ) {
-                  collectedDocuments.push(...item.update.relevantDocuments);
-                  emitNewDocs(item.update.relevantDocuments);
+                  const fresh = collectNewDocs(item.update.relevantDocuments);
+                  if (fresh.length > 0) emitNewDocs(fresh);
 
                   // Log for deep_research to verify sources are being emitted
                   if (event.name === 'deep_research') {

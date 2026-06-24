@@ -54,6 +54,13 @@ export async function resolveModelRef(
   // concurrent non-panel request to the shared singleton, can't race or clobber
   // it. Done unconditionally (not gated on contextWindowSize) so isolation holds
   // even when no context window is supplied.
+  //
+  // Note: transport handles held as own properties (e.g. a ChatOllama `client`,
+  // an OpenAI `client`, the shared `caller`) are copied by reference, so they
+  // remain shared. That's deliberate — those are concurrency-safe connection
+  // objects, and for an Ollama client a per-run abort that cancels all of a
+  // run's in-flight requests is exactly the desired stop-all behavior. Only the
+  // per-call config (numCtx/contextWindowSize) needs to be private, and it is.
   if (opts?.isolate) {
     llm = Object.assign(
       Object.create(Object.getPrototypeOf(llm)),

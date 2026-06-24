@@ -10,8 +10,9 @@
  * active persona / methodology so each model researches in the user's configured
  * voice; the orchestrator then synthesizes their results in that same voice.
  *
- * After all executors settle, their sources are merged + deduped by URL into a
- * single citation set (with 1-based `sourceId`s) for the orchestrator.
+ * After all executors settle, their sources are merged + deduped (by URL, or by
+ * title+content for URL-less file snippets) into a single citation set (with
+ * 1-based `sourceId`s) for the orchestrator.
  */
 
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
@@ -335,9 +336,20 @@ export class PanelCoordinator {
     const merged: Document[] = [];
     for (const r of results) {
       for (const doc of r.sources) {
-        const url = (doc.metadata?.url || doc.metadata?.source || '') as string;
-        if (url && seen.has(url)) continue;
-        if (url) seen.add(url);
+        const meta = doc.metadata ?? {};
+        const url = (meta.url as string) || '';
+        const source = (meta.source as string) || '';
+        // Prefer a real URL, then a meaningful `source`. File-search snippets
+        // all carry the sentinel `source: 'file_search'`, which is NOT a unique
+        // identity — using it would collapse every file snippet into one. For
+        // those (and any other URL-less doc) fall back to title+content so the
+        // same snippet returned by multiple executors dedupes to a single entry
+        // while distinct snippets/files (different title or text) are kept.
+        const stableId =
+          url || (source && source !== 'file_search' ? source : '');
+        const key = stableId || `${meta.title ?? ''}::${doc.pageContent}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
         merged.push(
           new Document({
             pageContent: doc.pageContent,

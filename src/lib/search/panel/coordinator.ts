@@ -6,8 +6,9 @@
  * (no code execution, workspace edits, ask_user, edit_skill, or deep_research)
  * and runs against an isolated EventEmitter so its stream can be forwarded to
  * the parent as `panel_executor_*` events without polluting the parent's own
- * tool/token streams. Executors receive chat history + retrieved memory but no
- * persona / methodology — those shape the orchestrator's final voice.
+ * tool/token streams. Executors receive chat history, retrieved memory, and the
+ * active persona / methodology so each model researches in the user's configured
+ * voice; the orchestrator then synthesizes their results in that same voice.
  *
  * After all executors settle, their sources are merged + deduped by URL into a
  * single citation set (with 1-based `sourceId`s) for the orchestrator.
@@ -95,6 +96,8 @@ export class PanelCoordinator {
   private userLocation?: string;
   private userProfile?: string;
   private memorySection: string;
+  private personaInstructions: string;
+  private methodologyInstructions: string;
 
   constructor(params: {
     executors: ResolvedExecutor[];
@@ -107,6 +110,8 @@ export class PanelCoordinator {
     userLocation?: string;
     userProfile?: string;
     memorySection?: string;
+    personaInstructions?: string;
+    methodologyInstructions?: string;
   }) {
     this.executors = params.executors;
     this.systemLlm = params.systemLlm;
@@ -118,6 +123,8 @@ export class PanelCoordinator {
     this.userLocation = params.userLocation;
     this.userProfile = params.userProfile;
     this.memorySection = params.memorySection ?? '';
+    this.personaInstructions = params.personaInstructions ?? '';
+    this.methodologyInstructions = params.methodologyInstructions ?? '';
   }
 
   /** Run all executors concurrently and merge their sources. */
@@ -249,7 +256,7 @@ export class PanelCoordinator {
         this.systemLlm,
         this.embeddings,
         isolated,
-        '', // no persona — executors are research-only
+        this.personaInstructions, // executors research in the user's configured voice
         this.signal,
         `${this.messageId}_panel_${idx}`,
         this.retrievalSignal ?? this.signal,
@@ -257,6 +264,9 @@ export class PanelCoordinator {
         this.userProfile,
         false, // memory tools off for executors
         this.memorySection, // but inject retrieved memory context
+        undefined, // chatId
+        false, // interactiveSession
+        this.methodologyInstructions,
       );
 
       const tools = executorToolsForFocusMode(focusMode, fileIds);

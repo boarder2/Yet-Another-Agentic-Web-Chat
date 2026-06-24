@@ -638,6 +638,8 @@ export const POST = async (req: Request) => {
               userLocation: body.userLocation,
               userProfile: body.userProfile,
               memorySection,
+              personaInstructions: personaInstructionsContent,
+              methodologyInstructions,
             });
 
             const { executorResults, mergedSources, totalUsage } =

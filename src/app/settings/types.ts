@@ -86,9 +86,5 @@ export const SETTINGS_SECTIONS: {
     label: 'Image Generation',
     group: 'AI Models',
   },
-  { key: 'model-presets', label: 'Model Presets', group: 'AI Models' },
-  { key: 'model-settings', label: 'Model Settings', group: 'AI Models' },
-  { key: 'model-visibility', label: 'Model Visibility', group: 'AI Models' },
-  { key: 'search-providers', label: 'Search Providers', group: 'Search' },
   { key: 'api-keys', label: 'API Keys', group: 'Security' },
 ];

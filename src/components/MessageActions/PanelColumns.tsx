@@ -1,5 +1,11 @@
 import React, { useState } from 'react';
-import { CheckCircle, XCircle, LoaderCircle, Users } from 'lucide-react';
+import {
+  CheckCircle,
+  XCircle,
+  LoaderCircle,
+  Users,
+  ChevronDown,
+} from 'lucide-react';
 import Markdown, { MarkdownToJSX } from 'markdown-to-jsx';
 import { cn } from '@/lib/utils';
 import {
@@ -124,49 +130,96 @@ interface PanelColumnsProps {
 export const PanelColumns: React.FC<PanelColumnsProps> = ({ data }) => {
   const { executors } = decodePanelColumns(data ?? '');
   const [activeIdx, setActiveIdx] = useState(0);
+  const [expanded, setExpanded] = useState(false);
 
   if (executors.length === 0) return null;
 
   const active = executors.find((e) => e.idx === activeIdx) ?? executors[0];
 
+  const runningCount = executors.filter((e) => e.status === 'running').length;
+  const errorCount = executors.filter((e) => e.status === 'error').length;
+  const summary =
+    runningCount > 0
+      ? `${runningCount} running`
+      : errorCount > 0
+        ? `${executors.length - errorCount}/${executors.length} done`
+        : 'all done';
+
   return (
     <div className="my-3">
-      <div className="flex items-center gap-2 mb-2 text-xs font-semibold text-fg/70 uppercase tracking-wide">
-        <Users size={14} className="text-accent" />
-        Agent Panel · {executors.length} models
-      </div>
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center gap-2 mb-2 text-xs font-semibold text-fg/70 uppercase tracking-wide hover:text-fg transition-colors duration-150"
+      >
+        <Users size={14} className="text-accent shrink-0" />
+        <span className="shrink-0">
+          Agent Panel · {executors.length} models
+        </span>
+        <span className="text-fg/40 normal-case font-normal tracking-normal shrink-0">
+          {summary}
+        </span>
+        {/* Collapsed: inline per-model status chips */}
+        {!expanded && (
+          <span className="flex items-center gap-2 overflow-hidden ml-1">
+            {executors.map((ex) => (
+              <span
+                key={ex.idx}
+                className="flex items-center gap-1 min-w-0 normal-case font-normal tracking-normal"
+                title={ex.model}
+              >
+                <StatusIcon status={ex.status} />
+                <span className="truncate max-w-[120px] text-fg/60">
+                  {ex.model}
+                </span>
+              </span>
+            ))}
+          </span>
+        )}
+        <ChevronDown
+          size={14}
+          className={cn(
+            'ml-auto shrink-0 transition-transform duration-150',
+            expanded && 'rotate-180',
+          )}
+        />
+      </button>
 
-      {/* Mobile: tab selector + single active column */}
-      <div className="sm:hidden">
-        <div className="flex gap-1.5 mb-2 overflow-x-auto">
-          {executors.map((ex) => (
-            <button
-              key={ex.idx}
-              type="button"
-              onClick={() => setActiveIdx(ex.idx)}
-              className={cn(
-                'flex items-center gap-1.5 px-2.5 py-1 rounded-control text-xs whitespace-nowrap transition-colors duration-150',
-                ex.idx === active.idx
-                  ? 'bg-accent text-accent-fg'
-                  : 'bg-surface-2 text-fg/70 hover:text-fg',
-              )}
-            >
-              <StatusIcon status={ex.status} />
-              <span className="truncate max-w-[120px]">{ex.model}</span>
-            </button>
-          ))}
-        </div>
-        <Column ex={active} />
-      </div>
-
-      {/* Desktop: all columns side-by-side */}
-      <div className="hidden sm:flex sm:flex-wrap gap-3">
-        {executors.map((ex) => (
-          <div key={ex.idx} className="flex-1 min-w-[240px]">
-            <Column ex={ex} />
+      {expanded && (
+        <>
+          {/* Mobile: tab selector + single active column */}
+          <div className="sm:hidden">
+            <div className="flex gap-1.5 mb-2 overflow-x-auto">
+              {executors.map((ex) => (
+                <button
+                  key={ex.idx}
+                  type="button"
+                  onClick={() => setActiveIdx(ex.idx)}
+                  className={cn(
+                    'flex items-center gap-1.5 px-2.5 py-1 rounded-control text-xs whitespace-nowrap transition-colors duration-150',
+                    ex.idx === active.idx
+                      ? 'bg-accent text-accent-fg'
+                      : 'bg-surface-2 text-fg/70 hover:text-fg',
+                  )}
+                >
+                  <StatusIcon status={ex.status} />
+                  <span className="truncate max-w-[120px]">{ex.model}</span>
+                </button>
+              ))}
+            </div>
+            <Column ex={active} />
           </div>
-        ))}
-      </div>
+
+          {/* Desktop: all columns side-by-side */}
+          <div className="hidden sm:flex sm:flex-wrap gap-3">
+            {executors.map((ex) => (
+              <div key={ex.idx} className="flex-1 min-w-[240px]">
+                <Column ex={ex} />
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 };

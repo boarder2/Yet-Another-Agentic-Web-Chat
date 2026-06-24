@@ -1,5 +1,13 @@
 import { Fragment, useState } from 'react';
-import { Layers, X, Plus, Check, Save } from 'lucide-react';
+import {
+  Layers,
+  X,
+  Plus,
+  BookMarked,
+  ChevronDown,
+  ExternalLink,
+  AlertTriangle,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Popover,
@@ -8,6 +16,7 @@ import {
   Transition,
 } from '@headlessui/react';
 import { cn } from '@/lib/utils';
+import { useSettingsModal } from '@/components/settings/SettingsModalProvider';
 import { useLocalStorageJSON } from '@/lib/hooks/useLocalStorage';
 import { useModels } from '@/lib/hooks/api/useModels';
 import ModelField from '@/components/models/ModelField';
@@ -28,6 +37,8 @@ import {
   PANEL_PRESET_NAME_MAX,
   createPanelPreset,
   findMatchingPanelPreset,
+  isPanelPresetAvailable,
+  panelPresetSummary,
   type PanelPresetList,
 } from '@/lib/panel/panelPresets';
 
@@ -52,6 +63,7 @@ const PanelSelector = ({ focusMode }: { focusMode: string }) => {
   );
   const [savingName, setSavingName] = useState(false);
   const [nameInput, setNameInput] = useState('');
+  const { openSettings } = useSettingsModal();
   const { data: modelsData } = useModels();
   const providers = (modelsData?.chatModelProviders ?? {}) as Record<
     string,
@@ -186,34 +198,177 @@ const PanelSelector = ({ focusMode }: { focusMode: string }) => {
               </div>
             ) : (
               <div className="px-4 py-3 space-y-4">
-                {/* Presets */}
-                {presets.length > 0 && (
-                  <div className="space-y-1.5">
-                    <span className="text-xs font-semibold text-fg/70 uppercase tracking-wide">
-                      Presets
-                    </span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {presets.map((p) => (
-                        <button
-                          key={p.id}
+                {/* Presets — dropdown switcher (mirrors the model presets popover) */}
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-fg/70 uppercase tracking-wide">
+                    Presets
+                  </span>
+                  <Popover className="relative">
+                    {({ open, close }) => (
+                      <>
+                        <PopoverButton
                           type="button"
-                          onClick={() => applyPreset(p.id)}
                           className={cn(
-                            'inline-flex items-center gap-1 px-2.5 py-1 rounded-control text-xs transition-colors duration-150',
-                            matchingPreset?.id === p.id
-                              ? 'bg-accent text-accent-fg'
-                              : 'bg-surface-2 text-fg/70 hover:text-fg',
+                            'flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-control border transition-colors duration-150',
+                            open
+                              ? 'bg-surface-2 border-border-strong text-fg'
+                              : 'bg-surface border-surface-2 text-fg/70 hover:bg-surface-2 hover:text-fg',
                           )}
+                          aria-label="Select panel preset"
                         >
-                          {matchingPreset?.id === p.id && <Check size={11} />}
-                          <span className="truncate max-w-[140px]">
-                            {p.name}
+                          <BookMarked size={12} />
+                          <span className="max-w-28 truncate">
+                            {matchingPreset ? matchingPreset.name : 'Custom'}
                           </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                          <ChevronDown
+                            size={12}
+                            className={cn(
+                              'transition-transform duration-150',
+                              open ? 'rotate-180' : '',
+                            )}
+                          />
+                        </PopoverButton>
+
+                        <Transition
+                          as={Fragment}
+                          enter="transition ease-out duration-100"
+                          enterFrom="opacity-0 scale-95"
+                          enterTo="opacity-100 scale-100"
+                          leave="transition ease-in duration-75"
+                          leaveFrom="opacity-100 scale-100"
+                          leaveTo="opacity-0 scale-95"
+                        >
+                          <PopoverPanel className="absolute right-0 z-50 mt-1 w-64 rounded-floating bg-surface border border-surface-2 shadow-floating overflow-hidden">
+                            <div className="max-h-64 overflow-y-auto">
+                              {presets.length === 0 ? (
+                                <div className="px-3 py-4 text-center text-xs text-fg/50">
+                                  No presets yet. Save the current panel to
+                                  create one.
+                                </div>
+                              ) : (
+                                presets.map((p) => {
+                                  const isActive = matchingPreset?.id === p.id;
+                                  const available = isPanelPresetAvailable(
+                                    p,
+                                    providers,
+                                  );
+                                  return (
+                                    <button
+                                      key={p.id}
+                                      type="button"
+                                      aria-label={`Apply panel preset ${p.name}`}
+                                      onClick={() => {
+                                        applyPreset(p.id);
+                                        close();
+                                      }}
+                                      className="w-full text-left pl-2 pr-3 py-2.5 flex items-start gap-2 hover:bg-surface-2 transition-colors duration-100"
+                                    >
+                                      <span
+                                        className={cn(
+                                          'w-1 self-stretch rounded-full shrink-0 transition-colors duration-150',
+                                          isActive
+                                            ? 'bg-accent'
+                                            : 'bg-transparent',
+                                        )}
+                                      />
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="text-xs font-medium text-fg truncate">
+                                            {p.name}
+                                          </span>
+                                          {!available && (
+                                            <span className="flex items-center gap-0.5 text-[10px] text-warning bg-warning-soft px-1 py-0.5 rounded-control shrink-0">
+                                              <AlertTriangle size={10} />
+                                              unavailable
+                                            </span>
+                                          )}
+                                        </div>
+                                        <p className="text-[10px] text-fg/50 mt-0.5 truncate">
+                                          {panelPresetSummary(p)}
+                                        </p>
+                                      </div>
+                                    </button>
+                                  );
+                                })
+                              )}
+                            </div>
+
+                            <div className="border-t border-surface-2 px-3 py-2 flex items-center justify-between">
+                              {savingName ? (
+                                <div className="flex items-center gap-1.5 w-full">
+                                  <input
+                                    autoFocus
+                                    type="text"
+                                    aria-label="Panel preset name"
+                                    maxLength={PANEL_PRESET_NAME_MAX}
+                                    placeholder="Preset name…"
+                                    value={nameInput}
+                                    onChange={(e) =>
+                                      setNameInput(e.target.value)
+                                    }
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter')
+                                        saveCurrentPreset();
+                                      if (e.key === 'Escape') {
+                                        setSavingName(false);
+                                        setNameInput('');
+                                      }
+                                    }}
+                                    className="flex-1 min-w-0 text-xs bg-bg border border-surface-2 rounded-control px-2 py-1 text-fg outline-none focus:border-accent"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={saveCurrentPreset}
+                                    className="shrink-0 text-xs px-2 py-1 rounded-control bg-accent text-accent-fg hover:bg-accent-700 transition-colors duration-150"
+                                  >
+                                    Save
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSavingName(false);
+                                      setNameInput('');
+                                    }}
+                                    className="shrink-0 text-xs px-2 py-1 rounded-control bg-surface-2 text-fg/70 hover:bg-surface-2/80 transition-colors duration-150"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              ) : (
+                                <>
+                                  <button
+                                    type="button"
+                                    disabled={!ready}
+                                    onClick={() => setSavingName(true)}
+                                    className="text-xs text-fg/60 hover:text-fg transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+                                    title={
+                                      ready
+                                        ? 'Save the current panel as a preset'
+                                        : 'Configure a valid panel first'
+                                    }
+                                  >
+                                    Save current…
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      close();
+                                      openSettings('panel-presets');
+                                    }}
+                                    className="flex items-center gap-1 text-xs text-fg/40 hover:text-fg/70 transition-colors duration-150"
+                                  >
+                                    Manage
+                                    <ExternalLink size={10} />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </PopoverPanel>
+                        </Transition>
+                      </>
+                    )}
+                  </Popover>
+                </div>
 
                 {/* Executors */}
                 <div className="space-y-2">
@@ -275,65 +430,6 @@ const PanelSelector = ({ focusMode }: { focusMode: string }) => {
                     Select {PANEL_MIN}–{PANEL_MAX} executors to use the panel.
                   </p>
                 )}
-
-                {/* Save current as preset */}
-                <div className="border-t border-surface-2 pt-3">
-                  {savingName ? (
-                    <div className="flex items-center gap-2">
-                      <input
-                        autoFocus
-                        type="text"
-                        aria-label="Panel preset name"
-                        maxLength={PANEL_PRESET_NAME_MAX}
-                        placeholder="Preset name…"
-                        value={nameInput}
-                        onChange={(e) => setNameInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') saveCurrentPreset();
-                          if (e.key === 'Escape') {
-                            setSavingName(false);
-                            setNameInput('');
-                          }
-                        }}
-                        className="flex-1 min-w-0 text-xs bg-bg border border-surface-2 rounded-control px-2 py-1.5 text-fg outline-none focus:border-accent"
-                      />
-                      <button
-                        type="button"
-                        onClick={saveCurrentPreset}
-                        className="text-xs px-2 py-1.5 rounded-control bg-accent text-accent-fg hover:bg-accent-700 transition-colors duration-150 flex items-center gap-1"
-                      >
-                        <Check size={12} />
-                        Save
-                      </button>
-                      <button
-                        type="button"
-                        aria-label="Cancel"
-                        onClick={() => {
-                          setSavingName(false);
-                          setNameInput('');
-                        }}
-                        className="text-xs px-2 py-1.5 rounded-control bg-surface-2 text-fg/70 hover:bg-surface-2/80 transition-colors duration-150"
-                      >
-                        <X size={12} />
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled={!ready}
-                      onClick={() => setSavingName(true)}
-                      title={
-                        ready
-                          ? 'Save the current panel as a preset'
-                          : 'Configure a valid panel first'
-                      }
-                      className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-control bg-surface-2 text-fg/70 hover:text-fg transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      <Save size={12} />
-                      Save current as preset
-                    </button>
-                  )}
-                </div>
               </div>
             )}
           </div>

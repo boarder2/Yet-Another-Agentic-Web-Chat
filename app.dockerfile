@@ -11,12 +11,14 @@ COPY package.json yarn.lock ./
 RUN yarn install --frozen-lockfile --network-timeout 600000
 ENV NEXT_TELEMETRY_DISABLED=1
 
-COPY tsconfig.json next.config.mjs postcss.config.js drizzle.config.ts tailwind.config.ts ./
+COPY tsconfig.json next.config.mjs postcss.config.js drizzle.config.ts tailwind.config.ts eslint.config.mjs ./
 COPY drizzle ./drizzle
 COPY src ./src
 COPY public ./public
 
 RUN mkdir -p /home/yaawc/data
+# Fail the build on lint or type errors so the image build is the single CI gate.
+RUN yarn lint && npx tsc --noEmit
 RUN yarn build
 
 RUN yarn add --dev @vercel/ncc

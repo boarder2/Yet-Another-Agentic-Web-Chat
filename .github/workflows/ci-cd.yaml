@@ -16,28 +16,16 @@ env:
   ONNXRUNTIME_NODE_INSTALL_CUDA: skip
 
 jobs:
-  checks:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: yarn
-      - run: yarn install --frozen-lockfile --network-timeout 600000
-      - run: yarn lint
-      - run: npx tsc --noEmit
-      - run: yarn build # runs db:push (creates db.sqlite) then next build
-
   docker:
-    needs: checks
-    # publish only on push-to-main or release, never on PRs
-    if: github.event_name != 'pull_request'
+    # The image build is the single gate: app.dockerfile runs lint + tsc + next
+    # build, so a PR that fails any of them fails here. Push only on
+    # push-to-main/develop or release; PRs build for validation but never publish.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
       - uses: docker/login-action@v4
+        if: github.event_name != 'pull_request'
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
@@ -57,7 +45,7 @@ jobs:
           context: .
           file: app.dockerfile
           platforms: linux/amd64
-          push: true
+          push: ${{ github.event_name != 'pull_request' }}
           provenance: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

@@ -616,11 +616,19 @@ export const POST = async (req: Request) => {
         // subscribe immediately.
         (async () => {
           try {
-            const executors: ResolvedExecutor[] = [];
-            for (const ref of panelConfig.executors) {
-              const llm = await resolveModelRef(ref);
-              if (llm) executors.push({ ref, llm });
-            }
+            // Resolve all executor models in parallel. `isolate` gives each its
+            // own model instance so concurrent executors (and the Phase-2 chat
+            // model) can't clobber each other's context window on a shared,
+            // catalog-cached singleton.
+            const resolved = await Promise.all(
+              panelConfig.executors.map(async (ref) => ({
+                ref,
+                llm: await resolveModelRef(ref, { isolate: true }),
+              })),
+            );
+            const executors: ResolvedExecutor[] = resolved.filter(
+              (e): e is ResolvedExecutor => e.llm !== null,
+            );
             if (executors.length < 2) {
               throw new Error(
                 'Fewer than 2 panel executor models could be resolved.',
@@ -651,9 +659,11 @@ export const POST = async (req: Request) => {
                 body.messageImageIds,
               );
 
-            // Roll executor token usage into the run's system-token total.
+            // Seed the run's token totals with the executors' work, keeping the
+            // chat/system split intact: their chat-model generation counts as
+            // chat tokens, their tool/internal chains as system tokens.
             handler.addInitialSystemUsage(totalUsage.usageSystem);
-            handler.addInitialSystemUsage(totalUsage.usageChat);
+            handler.addInitialChatUsage(totalUsage.usageChat);
 
             // Inject the synthesis context as a system turn ahead of the query.
             const synthesisContext = buildOrchestratorSynthesisContext({

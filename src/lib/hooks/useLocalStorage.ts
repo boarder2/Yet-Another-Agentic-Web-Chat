@@ -25,7 +25,11 @@ const notify = (key: string) => {
   );
 };
 
-const readRaw = (key: string): string | null => {
+/**
+ * Read a localStorage key, swallowing access/security errors (returns null).
+ * Exported so non-reactive callers (e.g. preset stores) share one safe reader.
+ */
+export const readLocalStorage = (key: string): string | null => {
   try {
     return localStorage.getItem(key);
   } catch {
@@ -114,7 +118,7 @@ export function useLocalStorageString(
     [key],
   );
   const getSnapshot = useCallback(
-    () => readRaw(key) ?? defaultValue,
+    () => readLocalStorage(key) ?? defaultValue,
     [key, defaultValue],
   );
   const getServerSnapshot = useCallback(() => defaultValue, [defaultValue]);
@@ -138,7 +142,7 @@ export function useLocalStorageBoolean(
     [key],
   );
   const getSnapshot = useCallback(() => {
-    const raw = readRaw(key);
+    const raw = readLocalStorage(key);
     if (raw === null) return defaultValue;
     return raw === 'true';
   }, [key, defaultValue]);
@@ -170,7 +174,7 @@ export function useLocalStorageJSON<T>(
     [key],
   );
   const getSnapshot = useCallback((): T => {
-    const raw = readRaw(key);
+    const raw = readLocalStorage(key);
     const cached = jsonCache.get(key);
     if (cached && cached.raw === raw) return cached.parsed as T;
     let parsed: T = defaultValue;

@@ -216,12 +216,16 @@ export class PanelCoordinator {
           if (token) {
             this.emit('panel_executor_data', { executorIdx: idx, token });
           }
-        } else if (
-          parsed.type === 'sources' ||
-          parsed.type === 'sources_added'
-        ) {
+        } else if (parsed.type === 'sources_added') {
+          // Incremental per-search batches: accumulate.
           if (Array.isArray(parsed.data))
             collected.documents.push(...parsed.data);
+        } else if (parsed.type === 'sources') {
+          // The final `sources` event re-emits the agent's COMPLETE document
+          // set (the same docs already streamed via `sources_added`), so treat
+          // it as authoritative and replace — appending here would double-count
+          // every source (inflating sourceCount and duplicating URL-less docs).
+          if (Array.isArray(parsed.data)) collected.documents = parsed.data;
         }
       } catch {
         // ignore malformed event
@@ -281,9 +285,10 @@ export class PanelCoordinator {
         messageImageIds,
       );
 
-      // Let any trailing isolated events flush.
-      await new Promise((resolve) => setTimeout(resolve, 50));
-
+      // `searchAndAnswer` emits all of its events (response tokens, the final
+      // `sources` set, model stats, then `end`) synchronously before it
+      // resolves, and the isolated listeners above are synchronous, so by this
+      // point `collected` is fully populated — no flush delay is needed.
       const text = removeThinkingBlocks(collected.text).trim();
       this.emit('panel_executor_completed', {
         executorIdx: idx,

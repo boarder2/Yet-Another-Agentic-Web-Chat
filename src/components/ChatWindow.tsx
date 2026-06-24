@@ -12,7 +12,13 @@ import {
   applyPanelExecutorStarted,
   applyPanelExecutorResponseToken,
   applyPanelExecutorStatus,
+  panelExecutorTokens,
 } from '@/lib/utils/panelMarkup';
+import {
+  PANEL_SELECTION_KEY,
+  isPanelSelectionReady,
+  type PanelSelection,
+} from '@/lib/panel/panelSelection';
 import { ChartSpecContext } from '@/lib/chart/ChartSpecContext';
 import { ChartSpec, ChartSpecSchema } from '@/lib/chart/chartSpec';
 import { Document } from '@langchain/core/documents';
@@ -991,6 +997,7 @@ const ChatWindow = ({
           if (data.type === 'panel_executor_completed') {
             return applyPanelExecutorStatus(content, idx, 'success', {
               sourceCount: data.sourceCount,
+              tokens: panelExecutorTokens(data.usage),
               model: data.model,
             });
           }
@@ -1495,6 +1502,11 @@ const ChatWindow = ({
     };
 
     await readStream(reader, attachHandler);
+    // Stream finished — drop the completed controller so a later tab-hide
+    // doesn't treat it as an in-flight run (see the send path for details).
+    if (streamAbortRef.current === abortController) {
+      streamAbortRef.current = null;
+    }
   };
 
   // Re-subscribe to the active run after answering an approval. Needed when the
@@ -1550,18 +1562,27 @@ const ChatWindow = ({
         setPinned,
         setSelectedWorkspaceId,
         setLoading,
-      ).then(({ activeRunMessageId, loadedMessages } = {}) => {
-        if (activeRunMessageId) {
-          attachToRun(activeRunMessageId, loadedMessages);
-        } else {
-          // Finished while hidden — clear the spinner the aborted stream left on
-          // and mark the chat seen now that the user is looking at the result.
-          // (The server only auto-marks seen when a subscriber was connected at
-          // completion; we deliberately disconnected on hide, so do it here.)
+      )
+        .then(({ activeRunMessageId, loadedMessages } = {}) => {
+          if (activeRunMessageId) {
+            attachToRun(activeRunMessageId, loadedMessages);
+          } else {
+            // Finished while hidden — clear the spinner the aborted stream left
+            // on and mark the chat seen now that the user is looking at the
+            // result. (The server only auto-marks seen when a subscriber was
+            // connected at completion; we deliberately disconnected on hide, so
+            // do it here.)
+            setLoading(false);
+            markSeen.mutate(chatId);
+          }
+        })
+        .catch((err) => {
+          // A failed reload (network blip on wake, server error) must still
+          // clear the spinner the aborted stream left behind, or it hangs
+          // forever; leave the chat unseen so the next visit retries.
+          console.error('Resume-from-hidden reload failed:', err);
           setLoading(false);
-          markSeen.mutate(chatId);
-        }
-      });
+        });
     };
   });
   useEffect(() => {
@@ -2358,6 +2379,7 @@ const ChatWindow = ({
           if (data.type === 'panel_executor_completed') {
             return applyPanelExecutorStatus(content, idx, 'success', {
               sourceCount: data.sourceCount,
+              tokens: panelExecutorTokens(data.usage),
               model: data.model,
             });
           }
@@ -2990,23 +3012,10 @@ const ChatWindow = ({
     // turn out across the selected executor models; the chat model synthesizes.
     if (focusMode === 'webSearch' || focusMode === 'localResearch') {
       try {
-        const raw = localStorage.getItem('panelSelection');
+        const raw = localStorage.getItem(PANEL_SELECTION_KEY);
         if (raw) {
-          const sel = JSON.parse(raw) as {
-            enabled?: boolean;
-            executors?: Array<{
-              provider: string;
-              name: string;
-              contextWindowSize?: number;
-              imageCapable?: boolean;
-            }>;
-          };
-          if (
-            sel.enabled &&
-            Array.isArray(sel.executors) &&
-            sel.executors.length >= 2 &&
-            sel.executors.length <= 4
-          ) {
+          const sel = JSON.parse(raw) as PanelSelection;
+          if (Array.isArray(sel?.executors) && isPanelSelectionReady(sel)) {
             payload.panel = { executors: sel.executors };
           }
         }
@@ -3038,6 +3047,13 @@ const ChatWindow = ({
     if (!res.body) throw new Error('No response body');
 
     await readStream(res.body.getReader(), messageHandler);
+    // Stream finished normally — drop the (now-complete) controller so a later
+    // tab-hide doesn't mistake this dead controller for an in-flight run and
+    // trigger a needless reload + mark-seen on return. Guard against a newer
+    // send having already replaced it.
+    if (streamAbortRef.current === abortController) {
+      streamAbortRef.current = null;
+    }
   };
 
   const rewrite = (messageId: string) => {

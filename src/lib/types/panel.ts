@@ -7,11 +7,10 @@
  * answer from their results.
  */
 
-export type ModelRef = {
-  provider: string;
-  name: string;
-  contextWindowSize?: number;
-};
+// Canonical model reference (provider + name + optional context window) lives
+// with the resolver; re-export it here so panel code has one definition.
+export type { ModelRef } from '@/lib/providers/resolveModels';
+import type { ModelRef } from '@/lib/providers/resolveModels';
 
 export type PanelExecutorConfig = ModelRef & {
   imageCapable?: boolean;

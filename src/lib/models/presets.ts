@@ -1,4 +1,8 @@
-import { writeLocalStorageBatch } from '@/lib/hooks/useLocalStorage';
+import {
+  writeLocalStorageBatch,
+  readLocalStorage,
+} from '@/lib/hooks/useLocalStorage';
+import { generateId } from '@/lib/utils/id';
 
 export const PRESETS_KEY = 'modelPresets';
 
@@ -46,21 +50,6 @@ export const PREDEFINED_CONTEXT_SIZES: readonly number[] = [
   1024, 2048, 3072, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 1048576,
 ];
 
-function generateId(): string {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-function readRaw(key: string): string | null {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
 function isValidPreset(p: unknown): p is ModelPreset {
   if (typeof p !== 'object' || p === null) return false;
   const r = p as Record<string, unknown>;
@@ -81,7 +70,7 @@ function isValidPreset(p: unknown): p is ModelPreset {
 
 export function loadPresets(): ModelPresetList {
   try {
-    const raw = readRaw(PRESETS_KEY);
+    const raw = readLocalStorage(PRESETS_KEY);
     if (raw === null) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
@@ -165,15 +154,16 @@ export function findMatchingPreset(
 
 export function captureCurrentSelection(): ActiveSelection {
   const cwRaw = parseInt(
-    readRaw(SELECTION_KEYS.contextWindowSize) ?? String(DEFAULT_CONTEXT_WINDOW),
+    readLocalStorage(SELECTION_KEYS.contextWindowSize) ??
+      String(DEFAULT_CONTEXT_WINDOW),
     10,
   );
   return {
-    chatProvider: readRaw(SELECTION_KEYS.chatProvider) ?? '',
-    chatModel: readRaw(SELECTION_KEYS.chatModel) ?? '',
-    systemProvider: readRaw(SELECTION_KEYS.systemProvider) ?? '',
-    systemModel: readRaw(SELECTION_KEYS.systemModel) ?? '',
-    imageCapable: readRaw(SELECTION_KEYS.imageCapable) === 'true',
+    chatProvider: readLocalStorage(SELECTION_KEYS.chatProvider) ?? '',
+    chatModel: readLocalStorage(SELECTION_KEYS.chatModel) ?? '',
+    systemProvider: readLocalStorage(SELECTION_KEYS.systemProvider) ?? '',
+    systemModel: readLocalStorage(SELECTION_KEYS.systemModel) ?? '',
+    imageCapable: readLocalStorage(SELECTION_KEYS.imageCapable) === 'true',
     contextWindowSize: isNaN(cwRaw) ? DEFAULT_CONTEXT_WINDOW : cwRaw,
   };
 }

@@ -3,6 +3,7 @@ import {
   applyPanelExecutorStarted,
   applyPanelExecutorResponseToken,
   applyPanelExecutorStatus,
+  panelExecutorTokens,
 } from '@/lib/utils/panelMarkup';
 import { encodeHtmlAttribute } from '@/lib/utils/html';
 import {
@@ -1118,18 +1119,13 @@ export async function attachRunHost(params: {
           parsedData.token ?? '',
         );
       } else if (parsedData.type === 'panel_executor_completed') {
-        const u = parsedData.usage;
-        const tokens = u
-          ? (u.usageChat?.total_tokens ?? 0) +
-            (u.usageSystem?.total_tokens ?? 0)
-          : undefined;
         recievedMessage = applyPanelExecutorStatus(
           recievedMessage,
           idx,
           'success',
           {
             sourceCount: parsedData.sourceCount,
-            tokens,
+            tokens: panelExecutorTokens(parsedData.usage),
             model: parsedData.model,
           },
         );

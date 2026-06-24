@@ -29,6 +29,7 @@ export type EmbeddingRef = { provider: string; name: string };
  */
 export async function resolveModelRef(
   ref: ModelRef,
+  opts?: { isolate?: boolean },
 ): Promise<BaseChatModel | null> {
   if (ref.provider === 'custom_openai') {
     return new ChatOpenAI({
@@ -41,15 +42,29 @@ export async function resolveModelRef(
   }
 
   const providers = await getAvailableChatModelProviders();
-  const llm = providers[ref.provider]?.[ref.name]?.model as unknown as
+  let llm = providers[ref.provider]?.[ref.name]?.model as unknown as
     | BaseChatModel
     | undefined;
   if (!llm) return null;
 
-  // Only mutate the (shared, catalog-cached) model instance when the caller
-  // explicitly asks for a context window. Callers that don't care (e.g. TTS
-  // narration) leave the instance untouched so they can't clobber the window of
-  // a concurrent agent request using the same singleton.
+  // `isolate` callers (e.g. panel executors) run this model concurrently with
+  // other agents that may share the same cached singleton. Shallow-clone the
+  // instance (preserving its prototype/methods) up front so this caller gets its
+  // own copy — any later numCtx/contextWindowSize write here, or a write by a
+  // concurrent non-panel request to the shared singleton, can't race or clobber
+  // it. Done unconditionally (not gated on contextWindowSize) so isolation holds
+  // even when no context window is supplied.
+  if (opts?.isolate) {
+    llm = Object.assign(
+      Object.create(Object.getPrototypeOf(llm)),
+      llm,
+    ) as BaseChatModel;
+  }
+
+  // Only mutate the model instance when the caller explicitly asks for a context
+  // window. Non-isolate callers that don't care (e.g. TTS narration) leave the
+  // shared instance untouched so they can't clobber the window of a concurrent
+  // agent request using the same singleton.
   if (ref.contextWindowSize) {
     if (llm instanceof ChatOllama && ref.provider === 'ollama') {
       llm.numCtx = ref.contextWindowSize;

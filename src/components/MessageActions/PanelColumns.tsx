@@ -12,6 +12,7 @@ import {
   decodePanelColumns,
   type PanelExecutorView,
 } from '@/lib/utils/panelMarkup';
+import { removeThinkingBlocks } from '@/lib/utils/contentStripping';
 
 /**
  * Renders the agent panel's executor columns. All executors live in a single
@@ -20,17 +21,6 @@ import {
  * mobile. The orchestrator's synthesized answer renders as the normal message
  * body below this block.
  */
-
-const stripThinkContent = (text: string): string => {
-  let result = text.replace(/<think[^>]*>[\s\S]*?<\/think>/g, '');
-  if (result.includes('</think>')) {
-    result = result.replace(
-      /(^|<\/[a-zA-Z][a-zA-Z0-9]*\s*>)[\s\S]*?<\/think>/g,
-      '$1',
-    );
-  }
-  return result.trim();
-};
 
 const columnMarkdownOptions: MarkdownToJSX.Options = {
   overrides: {
@@ -75,7 +65,7 @@ const StatusIcon: React.FC<{ status: string }> = ({ status }) => {
 };
 
 const Column: React.FC<{ ex: PanelExecutorView }> = ({ ex }) => {
-  const text = stripThinkContent(ex.responseText || '');
+  const text = removeThinkingBlocks(ex.responseText || '');
   return (
     <div className="flex flex-col min-w-0 border border-surface-2 rounded-surface bg-surface overflow-hidden">
       <div className="px-3 py-2 flex items-center gap-2 border-b border-surface-2 bg-surface-2/40">

@@ -164,6 +164,11 @@ export class SimplifiedAgent {
   private invokedSkillNames: Set<string> = new Set();
   private isPrivate: boolean;
   private initialSystemUsage: TokenUsage;
+  private initialChatUsage: TokenUsage = {
+    input_tokens: 0,
+    output_tokens: 0,
+    total_tokens: 0,
+  };
   private workspaceSuffix: string;
   private firstChatCallInputTokens = 0;
   private aiMessageId?: string;
@@ -236,8 +241,9 @@ export class SimplifiedAgent {
     this.threadId = threadId;
   }
 
-  /** Add to the pre-seeded system-token usage (e.g. panel executor totals) so
-   *  the run's reported system tokens include work done before this agent ran. */
+  /** Add to the pre-seeded system-token usage (e.g. panel executor system/tool
+   *  totals) so the run's reported system tokens include work done before this
+   *  agent ran. */
   public addInitialSystemUsage(usage: {
     input_tokens: number;
     output_tokens: number;
@@ -248,6 +254,22 @@ export class SimplifiedAgent {
       output_tokens:
         this.initialSystemUsage.output_tokens + usage.output_tokens,
       total_tokens: this.initialSystemUsage.total_tokens + usage.total_tokens,
+    };
+  }
+
+  /** Add to the pre-seeded chat-token usage (e.g. panel executor chat-model
+   *  generation totals) so the run's reported chat tokens reflect the executor
+   *  models' answer generation alongside this agent's own chat tokens, rather
+   *  than misattributing that work to the system bucket. */
+  public addInitialChatUsage(usage: {
+    input_tokens: number;
+    output_tokens: number;
+    total_tokens: number;
+  }) {
+    this.initialChatUsage = {
+      input_tokens: this.initialChatUsage.input_tokens + usage.input_tokens,
+      output_tokens: this.initialChatUsage.output_tokens + usage.output_tokens,
+      total_tokens: this.initialChatUsage.total_tokens + usage.total_tokens,
     };
   }
 
@@ -1173,8 +1195,13 @@ export class SimplifiedAgent {
       const collectedDocuments: Document[] = [];
       let currentResponseBuffer = '';
       // Separate usage trackers for chat (final answer) and system (tools/internal chains).
-      // Pre-seed usageSystem with any pre-agent LLM usage (e.g., query distillation).
-      const usageChat = { input_tokens: 0, output_tokens: 0, total_tokens: 0 };
+      // Pre-seed each with any pre-agent LLM usage (e.g. query distillation into
+      // system; panel executor chat-model generation into chat).
+      const usageChat = {
+        input_tokens: this.initialChatUsage.input_tokens,
+        output_tokens: this.initialChatUsage.output_tokens,
+        total_tokens: this.initialChatUsage.total_tokens,
+      };
       const usageImageGen: {
         modelName: string;
         input_tokens: number;

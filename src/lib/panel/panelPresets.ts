@@ -4,7 +4,11 @@
  * change). A preset captures the executor models of a panel.
  */
 
-import { writeLocalStorageBatch } from '@/lib/hooks/useLocalStorage';
+import {
+  writeLocalStorageBatch,
+  readLocalStorage,
+} from '@/lib/hooks/useLocalStorage';
+import { generateId } from '@/lib/utils/id';
 import type { PanelModelEntry } from '@/lib/panel/panelSelection';
 import { PANEL_MIN, PANEL_MAX, sameModel } from '@/lib/panel/panelSelection';
 
@@ -21,21 +25,6 @@ export type PanelPresetList = PanelPreset[];
 
 export const PANEL_PRESET_MAX = 50;
 export const PANEL_PRESET_NAME_MAX = 60;
-
-function generateId(): string {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-function readRaw(key: string): string | null {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
 
 function isModelEntry(v: unknown): v is PanelModelEntry {
   if (typeof v !== 'object' || v === null) return false;
@@ -60,7 +49,7 @@ export function isValidPanelPreset(p: unknown): p is PanelPreset {
 
 export function loadPanelPresets(): PanelPresetList {
   try {
-    const raw = readRaw(PANEL_PRESETS_KEY);
+    const raw = readLocalStorage(PANEL_PRESETS_KEY);
     if (raw === null) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];

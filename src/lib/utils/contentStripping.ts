@@ -9,8 +9,9 @@
  * before orphaned </think> tags (from providers that don't send opening <think>).
  */
 export const removeThinkingBlocks = (text: string): string => {
-  // First remove properly paired <think>...</think> blocks
-  let result = text.replace(/<think>[\s\S]*?<\/think>/g, '');
+  // First remove properly paired <think>...</think> blocks. Allow attributes on
+  // the opening tag (e.g. <think reasoning="...">) since some providers emit them.
+  let result = text.replace(/<think[^>]*>[\s\S]*?<\/think>/g, '');
 
   // Then handle orphaned </think> (no opening <think>).
   // Remove text between the last closing HTML tag (or start of string) and </think>.

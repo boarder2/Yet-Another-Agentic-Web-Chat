@@ -30,6 +30,20 @@ interface PanelColumnsData {
 
 const BLOCK_RE = /<PanelColumns data="([^"]*)"><\/PanelColumns>/;
 
+/**
+ * Total tokens (chat + system) reported for a completed panel executor, or
+ * `undefined` when no usage is present. Shared by the live/replay handlers and
+ * runHost so every path derives the per-column token badge identically.
+ */
+export function panelExecutorTokens(usage: unknown): number | undefined {
+  if (!usage || typeof usage !== 'object') return undefined;
+  const u = usage as {
+    usageChat?: { total_tokens?: number };
+    usageSystem?: { total_tokens?: number };
+  };
+  return (u.usageChat?.total_tokens ?? 0) + (u.usageSystem?.total_tokens ?? 0);
+}
+
 export function emptyPanelColumnsMarkup(): string {
   return `<PanelColumns data="${encodeData({ executors: [] })}"></PanelColumns>`;
 }

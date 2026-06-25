@@ -23,12 +23,14 @@ Stack: Next.js (App Router) + React 19 + Tailwind 4, TanStack Query (client data
 - Optional composer mode (orthogonal to focus mode; research modes only) that fans one prompt out across **2–4 executor models in parallel**, then has the **turn's chat model** synthesize a single answer from their results. Request shape: `body.panel` (`src/lib/types/panel.ts`) — executors only; no separate synthesizer model is configured.
 - **Phase 1** — `PanelCoordinator` (`src/lib/search/panel/coordinator.ts`) runs each executor as a `SimplifiedAgent` on an isolated emitter with a non-prompting research toolset (`tools/panel/restrictedToolset.ts`), streaming `panel_executor_*` events; sources are merged/deduped by URL. **Phase 2** — the chat model runs as an ordinary agent (full tools, interrupts/resume unchanged), seeded with the merged citation set + a synthesis system turn (`prompts/panel/orchestrator.ts`). Wired in `api/chat/route.ts` inside the `isNew` block (resume never re-runs Phase 1).
 - Columns render via the `<PanelColumns>` markup (`utils/panelMarkup.ts`, `MessageActions/PanelColumns.tsx`); stripped from history by `removeToolCallMarkup`. Composer UI: `MessageInputActions/PanelSelector.tsx` + device-local `panelSelection`. Presets (`lib/panel/panelPresets.ts`) store like model presets and have a settings section.
+- Details + gotchas: `agent-panel` skill.
 
 ## Dashboard Widgets
 
 - Two widget kinds (`src/lib/types/widget.ts`): LLM-transformed and user-JS (Docker sandbox, gated on code execution). Processed via `/api/dashboard/*`; sources fetched server-side (`src/lib/dashboard/sources.ts`), output sanitized (`sanitizeWidgetOutput.ts`) and rendered by `WidgetContent.tsx`.
 - Rendered on two surfaces — `/dashboard` and the home page (`EmptyChat`) — with per-widget placement flags and a layout per surface. Both share `useWidgetBoard` (`src/lib/hooks/`), with board UI in `src/components/dashboard/`.
 - Code-widget contract (`render({ sources, now, location, theme })`) lives in `widgetTheme.ts`; widgets persist localStorage → DB.
+- Details + gotchas (sandbox stdin, no-SSRF decision, builder agent modes): `dashboard-widgets` skill.
 
 ## Settings
 
@@ -36,6 +38,7 @@ Stack: Next.js (App Router) + React 19 + Tailwind 4, TanStack Query (client data
 - Non-secret settings sync localStorage ⇄ DB via `src/lib/settings/persist.ts` (the durable source of truth is the DB); secrets and device-local UI prefs are excluded. Keep using `useLocalStorage*` — call sites are unchanged.
 - Model selection UI: `ModelPicker` (`src/components/models/`); embedding/memory model keys read server-side via helpers in `src/lib/settings/server.ts`.
 - The settings UI is one controlled `SettingsPanel` (`src/app/settings/`) rendered on two surfaces: the `/settings` page (URL-driven section state, deep-link fallback) and a global modal. `SettingsModalProvider` (mounted in `layout.tsx`) exposes `useSettingsModal().openSettings(section?)`; entry points (sidebar/mobile gears, personalization/preset/persona pickers) open it instead of navigating.
+- Adding a setting + the localStorage⇄DB sync internals: `settings-persistence` skill.
 
 ## Conventions
 
@@ -45,11 +48,13 @@ Stack: Next.js (App Router) + React 19 + Tailwind 4, TanStack Query (client data
 - React functional components, one per file; camelCase funcs/vars, PascalCase components
 - try/catch for async, structured error responses from API routes
 - Terse, factual responses; ask when requirements are unclear
+- Evaluate the user's proposals critically — don't reflexively agree. If a suggested approach is weaker than an existing option (or wrong), say so with reasoning before implementing
 - Ask before adding dependencies
-- Scope changes to the specific task; follow existing patterns
+- Scope changes to the specific task; follow existing patterns. When a change leaves code unused (imports, consts, props, fields, files), remove it in the same change — don't leave dead/orphaned code behind
+- No unit tests — the project has no test harness. Don't add unit tests or a test framework, and don't put unit-testing steps in plans; verify by running the app (see Commands)
 - Keep AGENTS.md reflecting the **current** state of the project — but reserve it for architecture and big-picture pointers (subsystems, data flow, where things live). Do **not** add implementation minutiae (specific CSS classes, pixel constants, opacity math, individual handlers, scroll listeners); those belong in the code/comments and become stale fast. If an entry reads like a code comment, it's too detailed.
 - Keep the skills in `.claude/skills/**` up to date as the application changes — when a change affects a subsystem documented by a skill (see Subsystem Skills), update that skill's `SKILL.md` in the same change so it stays accurate
-- DB schema changes: edit `src/lib/db/schema.ts` only; run `yarn db:generate` to emit the drizzle migration — never hand-write files in `drizzle/`
+- DB schema changes: edit `src/lib/db/schema.ts` only; run `yarn db:generate` to emit the drizzle migration — never hand-write files in `drizzle/` (see `db-migrations` skill)
 
 ## Commands
 
@@ -66,7 +71,7 @@ Client-side server state uses **TanStack Query** (provider in `src/app/providers
 
 ## Subsystem Skills
 
-Load on demand: `api-endpoints`, `streaming-events`, `subagent-architecture`, `image-attachments`, `adding-features`, `frontend-architecture`, `prompt-system`, `test-automation`, `playwright-cli`.
+Load on demand: `adding-features`, `api-endpoints`, `streaming-events`, `subagent-architecture`, `agent-panel`, `dashboard-widgets`, `settings-persistence`, `db-migrations`, `image-attachments`, `frontend-architecture`, `design-system`, `prompt-system`, `test-automation`, `run-yaawc`, `playwright-cli`.
 
 ## External Docs
 

@@ -161,6 +161,12 @@ export class McpOAuthProvider
     super(opts.serverId);
     this._scope = opts.scope;
     if (opts.existingState) this._state = opts.existingState;
+    // Logged for troubleshooting redirect_uri rejections (e.g. an OAuth server
+    // that only accepts https/loopback schemes) — this is the exact value sent
+    // during dynamic client registration and authorization.
+    console.log(
+      `[mcp] OAuth redirect_uri for server ${opts.serverName}: ${getRedirectUrl()}`,
+    );
   }
 
   get redirectUrl(): string {

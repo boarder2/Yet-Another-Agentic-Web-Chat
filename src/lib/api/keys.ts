@@ -27,6 +27,9 @@ export const qk = {
   memoriesRoot: MEMORIES_NS,
   memories: (workspaceId?: string | null) =>
     [...MEMORIES_NS, { workspaceId }] as const,
+  mcpServers: ['mcp-servers'] as const,
+  mcpServer: (id: string) => ['mcp-servers', id] as const,
+  mcpServerTools: (id: string) => ['mcp-servers', id, 'tools'] as const,
   scheduledTasks: ['scheduled-tasks'] as const,
   scheduledRuns: ['scheduled-task-runs'] as const,
   scheduledRunsUnread: ['scheduled-task-runs', 'unread'] as const,

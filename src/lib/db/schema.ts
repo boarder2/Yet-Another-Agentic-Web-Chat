@@ -237,6 +237,88 @@ export const workspaceFiles = sqliteTable(
   }),
 );
 
+export const mcpServers = sqliteTable(
+  'mcp_servers',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    name: text('name').notNull(),
+    url: text('url').notNull(),
+    transport: text('transport', {
+      enum: ['auto', 'streamableHttp', 'sse'],
+    })
+      .notNull()
+      .default('auto'),
+    resolvedTransport: text('resolved_transport', {
+      enum: ['streamableHttp', 'sse'],
+    }),
+    authType: text('auth_type', {
+      enum: ['none', 'bearer', 'oauth_client_credentials', 'oauth'],
+    })
+      .notNull()
+      .default('none'),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    // Per-tool overrides keyed by tool name. Absent entry / absent field falls
+    // back to the default (enabled + always ask). Disabled tools are filtered out
+    // at injection time; `approval: 'never'` skips the approval interrupt.
+    toolConfig: text('tool_config', { mode: 'json' }).$type<
+      Record<string, { enabled?: boolean; approval?: 'always' | 'never' }>
+    >(),
+    headerName: text('header_name'),
+    secretToken: text('secret_token'),
+    oauthClientId: text('oauth_client_id'),
+    oauthClientSecret: text('oauth_client_secret'),
+    oauthScope: text('oauth_scope'),
+    lastConnectedAt: integer('last_connected_at'),
+    status: text('status', {
+      enum: ['unknown', 'connected', 'auth_required', 'error', 'disabled'],
+    })
+      .notNull()
+      .default('unknown'),
+    lastError: text('last_error'),
+    authFailureUntil: integer('auth_failure_until'),
+    createdAt: integer('created_at', { mode: 'timestamp' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer('updated_at', { mode: 'timestamp' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => ({
+    nameUnique: uniqueIndex('mcp_servers_name_unique').on(t.name),
+  }),
+);
+
+// Per-server persisted OAuth credentials (access/refresh tokens, DCR result, AS metadata cache)
+export const mcpOauth = sqliteTable('mcp_oauth', {
+  serverId: text('server_id')
+    .primaryKey()
+    .references(() => mcpServers.id, { onDelete: 'cascade' }),
+  clientInformation: text('client_information', { mode: 'json' }),
+  tokens: text('tokens', { mode: 'json' }),
+  // SDK saveDiscoveryState/discoveryState cache (NOT a hand-rolled metadata blob)
+  discoveryState: text('discovery_state', { mode: 'json' }),
+  updatedAt: integer('updated_at', { mode: 'timestamp' })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+// In-flight interactive OAuth authorization attempts — one row per attempt.
+// Each attempt gets its own row so concurrent authorizations for the same server
+// never clobber each other (no shared mutable state/codeVerifier column).
+export const mcpOauthFlows = sqliteTable('mcp_oauth_flows', {
+  // High-entropy (≥128-bit) CSRF token; also the callback lookup key
+  state: text('state').primaryKey(),
+  serverId: text('server_id')
+    .notNull()
+    .references(() => mcpServers.id, { onDelete: 'cascade' }),
+  codeVerifier: text('code_verifier').notNull(),
+  createdAt: integer('created_at').notNull(),
+  // TTL ≤ 10 min; enforced server-side; single-use (deleted on callback success)
+  expiresAt: integer('expires_at').notNull(),
+});
+
 export const approvalRequests = sqliteTable(
   'approval_requests',
   {
@@ -255,6 +337,7 @@ export const approvalRequests = sqliteTable(
         'workspace_edit',
         'workspace_create',
         'skill_edit',
+        'mcp_tool',
       ],
     }).notNull(),
     workspaceId: text('workspace_id'),

@@ -138,6 +138,38 @@ function extractTextContent(
   return '';
 }
 
+/** Max length of an MCP response surfaced in the tool widget (avoids bloating message content). */
+const MCP_RESULT_MAX_LENGTH = 4000;
+
+/**
+ * Pull the response text out of a finished MCP tool's handler output. MCP tools
+ * return a LangGraph `Command` whose `update.messages[0]` is the result `ToolMessage`;
+ * fall back to a raw string / `{ content }` shape for safety. Truncated for display.
+ */
+function extractMcpResultContent(output: unknown): string | null {
+  try {
+    const out = output as
+      | {
+          update?: { messages?: Array<{ content?: unknown }> };
+          content?: unknown;
+        }
+      | string
+      | null
+      | undefined;
+    let content: unknown;
+    if (typeof out === 'string') content = out;
+    else if (out && typeof out === 'object') {
+      content = out.update?.messages?.[0]?.content ?? out.content;
+    }
+    if (typeof content !== 'string' || content.length === 0) return null;
+    return content.length > MCP_RESULT_MAX_LENGTH
+      ? content.slice(0, MCP_RESULT_MAX_LENGTH) + '\n… (truncated)'
+      : content;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * SimplifiedAgent class that provides a streamlined interface for creating and managing an AI agent
  * with customizable focus modes and tools.
@@ -986,6 +1018,22 @@ export class SimplifiedAgent {
                       pushQuestionCallbackRunId(inputObj.name, runId);
                     }
                   }
+                  // For MCP tools, correlate namespacedName → callback runId
+                  // (markupKey = namespacedName in the mcp_tool interrupt) and
+                  // surface the calling arguments in the widget.
+                  if (type.startsWith('mcp__')) {
+                    pushQuestionCallbackRunId(type, runId);
+                    if (input && typeof input === 'object') {
+                      try {
+                        const json = JSON.stringify(input);
+                        if (json && json !== '{}') {
+                          extraAttr += ` mcpArgs="${encodeBase64(json)}"`;
+                        }
+                      } catch {
+                        // ignore arg serialization errors
+                      }
+                    }
+                  }
                 } catch (_attrErr) {
                   // Ignore attribute extraction errors
                 }
@@ -1102,6 +1150,13 @@ export class SimplifiedAgent {
                   }
                 } catch {
                   // If parsing fails, skip extra
+                }
+              }
+              // For MCP tools, surface the response content in the widget.
+              if (toolName.startsWith('mcp__')) {
+                const result = extractMcpResultContent(output);
+                if (result) {
+                  extra = { ...(extra ?? {}), mcpResult: result };
                 }
               }
               if (toolCalls[runId]) delete toolCalls[runId];
@@ -1782,6 +1837,8 @@ ${url ? `<url>${url}</url>` : ''}
     focusMode: string,
     fileIds: string[],
     resumeArg: unknown,
+    pinnedMcpDescriptors: import('@/lib/mcp/types').McpToolDescriptor[] = [],
+    mcpMarkupIds: Record<string, string> = {},
   ): Promise<void> {
     const toolLlmUsageHandler: ((data: string) => void) | null = null;
     let skillRunId: string | null = null;
@@ -1834,6 +1891,47 @@ ${url ? `<url>${url}</url>` : ''}
             messageId: this.messageId ?? '',
           }),
         );
+      }
+
+      // Rebuild MCP tools — outside the workspaceId guard because MCP servers are
+      // global. Must use the same namespaced names as the initial run so that any
+      // in-flight approval (which uses namespacedName as markupKey) can complete.
+      // pinnedMcpDescriptors carries any descriptor snapshots extracted from the
+      // resolving approvals by performResume (in-memory, already resolved in DB
+      // before this method is called). Inject any pinned tool not in the live list
+      // so an interrupted tool can still complete even if the server changed.
+      const { buildMcpLangchainTools, buildToolForDescriptor } =
+        await import('@/lib/mcp/toolFactory');
+      // Live discovery is best-effort: a failure (e.g. degraded DB/tool-config
+      // read) just omits the live MCP tools for this resume.
+      const builtNames = new Set<string>();
+      try {
+        const mcpTools = await buildMcpLangchainTools({
+          emitter: this.emitter,
+          interactiveSession: this.interactiveSession,
+          messageId: this.messageId ?? '',
+        });
+        resumeExtraTools.push(...mcpTools);
+        for (const t of mcpTools) builtNames.add(t.name);
+      } catch (e) {
+        console.warn(
+          '[SimplifiedAgent] doResume: failed to rebuild live MCP tools:',
+          e,
+        );
+      }
+      // Pinned descriptors must ALWAYS be reconstructed, even if live discovery
+      // failed: these tools were already user-approved at interrupt time, so an
+      // already-granted call can complete and its tool_call_id isn't left dangling.
+      for (const snapshot of pinnedMcpDescriptors) {
+        if (!builtNames.has(snapshot.namespacedName)) {
+          resumeExtraTools.push(
+            buildToolForDescriptor(snapshot, {
+              emitter: this.emitter,
+              interactiveSession: this.interactiveSession,
+              messageId: this.messageId ?? '',
+            }),
+          );
+        }
       }
 
       const agent = await this.initializeAgent(
@@ -1907,6 +2005,9 @@ ${url ? `<url>${url}</url>` : ''}
       // cbRunIds of the re-invoked interrupted tools, recorded as they start so
       // handleToolEnd/handleToolError can recognize them by runId.
       const resumedToolRunIds = new Set<string>();
+      // resume cbRunId → original widget markup toolCallId, for re-invoked MCP
+      // tools (so handleToolEnd attaches the response to the correct widget).
+      const resumeMcpMarkupByRunId = new Map<string, string>();
 
       const eventStream = agent.streamEvents(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1938,6 +2039,12 @@ ${url ? `<url>${url}</url>` : ''}
                 if (llmToolCallId && reinvokedToolCallIds.has(llmToolCallId)) {
                   resumedToolRunIds.add(cbRunId);
                   resumeToolCalls.set(cbRunId, toolName);
+                  if (mcpMarkupIds[llmToolCallId]) {
+                    resumeMcpMarkupByRunId.set(
+                      cbRunId,
+                      mcpMarkupIds[llmToolCallId],
+                    );
+                  }
                   return;
                 }
                 if (
@@ -2003,6 +2110,18 @@ ${url ? `<url>${url}</url>` : ''}
                       typeof obj.name === 'string'
                     )
                       pushQuestionCallbackRunId(obj.name, cbRunId);
+                    // MCP tools: correlate namespacedName → callback runId and
+                    // surface the calling arguments in the widget.
+                    if (toolName.startsWith('mcp__')) {
+                      pushQuestionCallbackRunId(toolName, cbRunId);
+                      try {
+                        const json = JSON.stringify(obj);
+                        if (json && json !== '{}')
+                          extraAttr += ` mcpArgs="${encodeBase64(json)}"`;
+                      } catch {
+                        // ignore arg serialization errors
+                      }
+                    }
                     if (
                       toolName === 'workspace_read' &&
                       typeof obj.file === 'string'
@@ -2029,7 +2148,7 @@ ${url ? `<url>${url}</url>` : ''}
                   }),
                 );
               },
-              handleToolEnd: (_output: unknown, cbRunId: string) => {
+              handleToolEnd: (output: unknown, cbRunId: string) => {
                 const name = resumeToolCalls.get(cbRunId);
                 if (!name) return;
                 resumeToolCalls.delete(cbRunId);
@@ -2037,13 +2156,46 @@ ${url ? `<url>${url}</url>` : ''}
                 // entry so a later same-key interrupt doesn't pop this dead id.
                 dropQuestionCallbackRunId(cbRunId);
                 dropCodeCallbackRunId(cbRunId);
-                // resumeRun already emitted tool_call_success for the resumed tools
-                if (resumedToolRunIds.has(cbRunId)) return;
+                // For MCP tools, surface the response. The MCP call's output is
+                // only available here (after the approved tool re-runs on resume),
+                // so even though performResume already closed the widget to success,
+                // re-emit a success carrying the result so it merges into the widget.
+                let extra: Record<string, string> | undefined;
+                if (name.startsWith('mcp__')) {
+                  const result = extractMcpResultContent(output);
+                  if (result) extra = { mcpResult: result };
+                }
+                // resumeRun already emitted tool_call_success for the resumed tools;
+                // only re-emit if we have an MCP result to attach. The widget for a
+                // resumed tool is keyed by the ORIGINAL run's markup toolCallId, not
+                // this resume callback's cbRunId, so target that instead.
+                if (resumedToolRunIds.has(cbRunId)) {
+                  if (extra) {
+                    const markupId =
+                      resumeMcpMarkupByRunId.get(cbRunId) ?? cbRunId;
+                    this.emitter.emit(
+                      'data',
+                      JSON.stringify({
+                        type: 'tool_call_success',
+                        data: {
+                          toolCallId: markupId,
+                          status: 'success',
+                          extra,
+                        },
+                      }),
+                    );
+                  }
+                  return;
+                }
                 this.emitter.emit(
                   'data',
                   JSON.stringify({
                     type: 'tool_call_success',
-                    data: { toolCallId: cbRunId, status: 'success' },
+                    data: {
+                      toolCallId: cbRunId,
+                      status: 'success',
+                      ...(extra ? { extra } : {}),
+                    },
                   }),
                 );
               },

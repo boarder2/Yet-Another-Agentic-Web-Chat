@@ -28,11 +28,13 @@ import { PendingExecution } from './CodeExecution';
 import { PendingQuestion } from './UserQuestionPrompt';
 import { PendingEditApproval } from './WorkspaceEditApproval';
 import { PendingSkillEditApproval } from './SkillEditApproval';
+import type { PendingMcpApproval } from './McpToolApproval';
 import EmptyChat from './EmptyChat';
 import crypto from 'crypto';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { qk } from '@/lib/api/keys';
+import { apiFetch } from '@/lib/api/client';
 import type { ActiveRunsData } from '@/lib/hooks/api/useActiveRuns';
 import { useMarkChatSeen } from '@/lib/hooks/api/useActiveRuns';
 import { useSearchParams, useRouter } from 'next/navigation';
@@ -452,6 +454,32 @@ const ChatWindow = ({
   const queryClient = useQueryClient();
   const { openSettings } = useSettingsModal();
 
+  // Write-through for the MCP approval "Always allow" action: atomically merge
+  // { [toolName]: { approval: 'never' } } into the server's toolConfig (server
+  // does the json_patch merge — no read-modify-write race) so the tool auto-runs
+  // on subsequent calls. Best-effort; failures toast but never block the
+  // in-flight approval.
+  const persistMcpAlwaysAllow = useCallback(
+    async (serverId: string, toolName: string) => {
+      try {
+        await apiFetch(`/api/mcp/servers/${serverId}`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            toolConfigPatch: { [toolName]: { approval: 'never' } },
+          }),
+        });
+        // qk.mcpServers is a prefix of qk.mcpServer/qk.mcpServerTools, so this
+        // invalidates the detail + tools queries too.
+        queryClient.invalidateQueries({ queryKey: qk.mcpServers });
+        toast.success(`Auto-run enabled for ${toolName}`);
+      } catch {
+        toast.error(`Couldn't save auto-run setting for ${toolName}`);
+      }
+    },
+    [queryClient],
+  );
+
   const [chatId, setChatId] = useState<string | undefined>(id);
   const [newChatCreated, setNewChatCreated] = useState(false);
 
@@ -519,6 +547,10 @@ const ChatWindow = ({
 
   const [pendingSkillEditApprovals, setPendingSkillEditApprovals] = useState<
     Record<string, PendingSkillEditApproval[]>
+  >({});
+
+  const [pendingMcpApprovals, setPendingMcpApprovals] = useState<
+    Record<string, PendingMcpApproval[]>
   >({});
 
   // Enabled user skills for slash-command invocation and autocomplete
@@ -1380,6 +1412,50 @@ const ChatWindow = ({
         return;
       }
 
+      if (data.type === 'mcp_tool_pending') {
+        setPendingMcpApprovals((prev) => {
+          const existing = prev[aiMessageId] ?? [];
+          if (existing.some((a) => a.approvalId === data.data.approvalId))
+            return prev;
+          return {
+            ...prev,
+            [aiMessageId]: [
+              ...existing,
+              {
+                approvalId: data.data.approvalId,
+                toolCallId: data.data.toolCallId,
+                serverId: data.data.serverId,
+                serverName: data.data.serverName,
+                toolName: data.data.toolName,
+                namespacedName: data.data.namespacedName,
+                description: data.data.description,
+                arguments: data.data.arguments ?? {},
+                createdAt: data.data.createdAt,
+                status: 'pending' as const,
+              },
+            ],
+          };
+        });
+        return;
+      }
+
+      if (data.type === 'mcp_tool_answered') {
+        setPendingMcpApprovals((prev) => ({
+          ...prev,
+          [aiMessageId]: (prev[aiMessageId] ?? []).map((a) =>
+            a.approvalId === data.data.approvalId
+              ? {
+                  ...a,
+                  status: (data.data.response?.approved === false
+                    ? 'denied'
+                    : 'approved') as 'approved' | 'denied',
+                }
+              : a,
+          ),
+        }));
+        return;
+      }
+
       if (data.type?.endsWith('_stale')) {
         const approvalId = data.data?.approvalId as string | undefined;
         const reason = data.data?.reason as string | undefined;
@@ -1402,6 +1478,17 @@ const ChatWindow = ({
           });
           setPendingSkillEditApprovals((prev) => {
             const updated: Record<string, PendingSkillEditApproval[]> = {};
+            for (const [msgId, items] of Object.entries(prev)) {
+              updated[msgId] = items.map((a) =>
+                a.approvalId === approvalId
+                  ? { ...a, status: 'cancelled' as const }
+                  : a,
+              );
+            }
+            return updated;
+          });
+          setPendingMcpApprovals((prev) => {
+            const updated: Record<string, PendingMcpApproval[]> = {};
             for (const [msgId, items] of Object.entries(prev)) {
               updated[msgId] = items.map((a) =>
                 a.approvalId === approvalId
@@ -1464,6 +1551,17 @@ const ChatWindow = ({
           });
           setPendingSkillEditApprovals((prev) => {
             const updated: Record<string, PendingSkillEditApproval[]> = {};
+            for (const [msgId, items] of Object.entries(prev)) {
+              updated[msgId] = items.map((a) =>
+                a.approvalId === cancelledApprovalId
+                  ? { ...a, status: 'cancelled' as const }
+                  : a,
+              );
+            }
+            return updated;
+          });
+          setPendingMcpApprovals((prev) => {
+            const updated: Record<string, PendingMcpApproval[]> = {};
             for (const [msgId, items] of Object.entries(prev)) {
               updated[msgId] = items.map((a) =>
                 a.approvalId === cancelledApprovalId
@@ -1799,6 +1897,37 @@ const ChatWindow = ({
                           ],
                         };
                       });
+                    } else if (approval.toolKind === 'mcp_tool') {
+                      setPendingMcpApprovals((prev) => {
+                        const existing = prev[key] ?? [];
+                        if (
+                          existing.some(
+                            (e) => e.approvalId === approval.approvalId,
+                          )
+                        )
+                          return prev;
+                        return {
+                          ...prev,
+                          [key]: [
+                            ...existing,
+                            {
+                              approvalId: approval.approvalId,
+                              toolCallId: p.toolCallId as string | undefined,
+                              serverId: p.serverId as string | undefined,
+                              serverName: p.serverName as string,
+                              toolName: p.toolName as string,
+                              namespacedName: p.namespacedName as string,
+                              description: p.description as string,
+                              arguments: (p.arguments ?? {}) as Record<
+                                string,
+                                unknown
+                              >,
+                              createdAt: p.createdAt as number | undefined,
+                              status: 'pending' as const,
+                            },
+                          ],
+                        };
+                      });
                     }
                   }
                 },
@@ -2039,6 +2168,7 @@ const ChatWindow = ({
         setPendingExecutions({});
         setPendingEditApprovals({});
         setPendingSkillEditApprovals({});
+        setPendingMcpApprovals({});
         return;
       }
 
@@ -2082,6 +2212,17 @@ const ChatWindow = ({
           });
           setPendingSkillEditApprovals((prev) => {
             const updated: Record<string, PendingSkillEditApproval[]> = {};
+            for (const [msgId, items] of Object.entries(prev)) {
+              updated[msgId] = items.map((a) =>
+                a.approvalId === cancelledApprovalId
+                  ? { ...a, status: 'cancelled' as const }
+                  : a,
+              );
+            }
+            return updated;
+          });
+          setPendingMcpApprovals((prev) => {
+            const updated: Record<string, PendingMcpApproval[]> = {};
             for (const [msgId, items] of Object.entries(prev)) {
               updated[msgId] = items.map((a) =>
                 a.approvalId === cancelledApprovalId
@@ -2508,6 +2649,17 @@ const ChatWindow = ({
             }
             return updated;
           });
+          setPendingMcpApprovals((prev) => {
+            const updated: Record<string, PendingMcpApproval[]> = {};
+            for (const [msgId, items] of Object.entries(prev)) {
+              updated[msgId] = items.map((a) =>
+                a.approvalId === approvalId
+                  ? { ...a, status: 'cancelled' as const }
+                  : a,
+              );
+            }
+            return updated;
+          });
           setPendingQuestions((prev) => {
             const updated: Record<string, PendingQuestion[]> = {};
             for (const [msgId, items] of Object.entries(prev)) {
@@ -2796,6 +2948,51 @@ const ChatWindow = ({
         ) {
           refreshEnabledSkills();
         }
+        return;
+      }
+
+      if (data.type === 'mcp_tool_pending') {
+        setPendingMcpApprovals((prev) => {
+          const existing = prev[data.messageId] ?? [];
+          if (existing.some((a) => a.approvalId === data.data.approvalId))
+            return prev;
+          return {
+            ...prev,
+            [data.messageId]: [
+              ...existing,
+              {
+                approvalId: data.data.approvalId,
+                toolCallId: data.data.toolCallId,
+                serverId: data.data.serverId,
+                serverName: data.data.serverName,
+                toolName: data.data.toolName,
+                namespacedName: data.data.namespacedName,
+                description: data.data.description,
+                arguments: data.data.arguments ?? {},
+                createdAt: data.data.createdAt,
+                status: 'pending' as const,
+              },
+            ],
+          };
+        });
+        setScrollTrigger((prev) => prev + 1);
+        return;
+      }
+
+      if (data.type === 'mcp_tool_answered') {
+        setPendingMcpApprovals((prev) => ({
+          ...prev,
+          [data.messageId]: (prev[data.messageId] ?? []).map((a) =>
+            a.approvalId === data.data.approvalId
+              ? {
+                  ...a,
+                  status: (data.data.response?.approved === false
+                    ? 'denied'
+                    : 'approved') as 'approved' | 'denied',
+                }
+              : a,
+          ),
+        }));
         return;
       }
 
@@ -3527,6 +3724,62 @@ const ChatWindow = ({
                     } catch {
                       toast.error(
                         'Failed to send skill edit decision. The agent will continue on its own.',
+                      );
+                    }
+                  }}
+                  pendingMcpApprovals={pendingMcpApprovals}
+                  onMcpToolDecide={async (
+                    approvalId: string,
+                    approved: boolean,
+                    opts?: { alwaysAllow?: boolean },
+                  ) => {
+                    // Capture the target tool before we mutate state, so the
+                    // "Always allow" write-through knows which server/tool to flip.
+                    const target = Object.values(pendingMcpApprovals)
+                      .flat()
+                      .find((a) => a.approvalId === approvalId);
+                    setPendingMcpApprovals((prev) => {
+                      const updated: Record<string, PendingMcpApproval[]> = {};
+                      for (const [msgId, approvals] of Object.entries(prev)) {
+                        updated[msgId] = approvals.map((a) =>
+                          a.approvalId === approvalId
+                            ? {
+                                ...a,
+                                status: (approved ? 'approved' : 'denied') as
+                                  | 'approved'
+                                  | 'denied',
+                              }
+                            : a,
+                        );
+                      }
+                      return updated;
+                    });
+                    // Persist auto-run for this tool (best-effort, non-blocking).
+                    if (
+                      opts?.alwaysAllow &&
+                      approved &&
+                      target?.serverId &&
+                      target.toolName
+                    ) {
+                      void persistMcpAlwaysAllow(
+                        target.serverId,
+                        target.toolName,
+                      );
+                    }
+                    try {
+                      const res = await fetch('/api/chat/runs/resume', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          approvalId,
+                          response: { approved },
+                        }),
+                      });
+                      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                      reattachToActiveRun();
+                    } catch {
+                      toast.error(
+                        'Failed to send MCP tool decision. The agent will continue on its own.',
                       );
                     }
                   }}

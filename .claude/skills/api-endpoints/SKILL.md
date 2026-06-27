@@ -70,6 +70,8 @@ description: Use when adding, modifying, or debugging API endpoints, request/res
 {"type":"workspace_create_answered","data":{...},"messageId":"..."}
 {"type":"skill_edit_pending","data":{...},"messageId":"..."}
 {"type":"skill_edit_answered","data":{...},"messageId":"..."}
+{"type":"mcp_tool_pending","data":{...},"messageId":"..."}
+{"type":"mcp_tool_answered","data":{...},"messageId":"..."}
 {"type":"context_grew","kind":"...","tokens":...,"totalEstimated":...,"messageId":"..."}
 {"type":"workspace_file_changed","data":{...},"messageId":"..."}
 {"type":"progress","data":"...","messageId":"..."}
@@ -190,6 +192,17 @@ Note: The old `{"type":"init"}`, `{"type":"modelStats"}`, and `{"type":"end"}` e
 | Endpoint                        | Method | Purpose                           |
 | ------------------------------- | ------ | --------------------------------- |
 | `/api/dashboard/process-widget` | POST   | Process/render a dashboard widget |
+
+## MCP Servers
+
+| Endpoint                          | Method           | Purpose                                                                                     |
+| --------------------------------- | ---------------- | ------------------------------------------------------------------------------------------- |
+| `/api/mcp/servers`                | GET/POST         | List or create MCP servers. Secrets redacted; `hasToken`/`hasSecret` booleans returned      |
+| `/api/mcp/servers/[id]`           | GET/PATCH/DELETE | Get, update, or delete a server                                                             |
+| `/api/mcp/servers/[id]/test`      | POST             | Test connection (no cache side-effects). Returns `{ status, toolCount, toolNames, error? }` |
+| `/api/mcp/servers/[id]/tools`     | GET              | Return cached tool descriptors for the server                                               |
+| `/api/mcp/servers/[id]/authorize` | POST             | Start OAuth flow. Returns `{ authorizationUrl }` or `{ alreadyAuthorized: true }`           |
+| `/api/mcp/oauth/callback`         | GET              | OAuth callback handler. Sends origin-pinned postMessage to opener on success/failure        |
 
 ## Other
 

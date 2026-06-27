@@ -71,7 +71,8 @@ type ToolKind =
   | 'code_execution'
   | 'workspace_edit'
   | 'workspace_create'
-  | 'skill_edit';
+  | 'skill_edit'
+  | 'mcp_tool';
 
 interface InterruptValue {
   kind: ToolKind;
@@ -248,6 +249,12 @@ function isRejection(toolKind: ToolKind, response: unknown): boolean {
   }
   if (toolKind === 'skill_edit') {
     return decision === 'reject';
+  }
+  if (toolKind === 'mcp_tool') {
+    return (
+      (response as { approved?: boolean } | null | undefined)?.approved ===
+      false
+    );
   }
   return false;
 }
@@ -599,12 +606,43 @@ async function performResume(items: ResumeItem[]): Promise<void> {
       resumeArg = effectiveItems[0].response;
     }
 
+    // Extract pinned MCP descriptor snapshots from the approvals being resumed.
+    // The approvals Map still holds the full row data here even though the DB
+    // rows were already marked resolved above — so we read from memory, not DB.
+    const pinnedMcpDescriptors = effectiveItems
+      .map(({ approvalId }) => approvals.get(approvalId)!)
+      .filter((a) => a.toolKind === 'mcp_tool')
+      .map(
+        (a) =>
+          (a.payload as Record<string, unknown> | null)?._descriptorSnapshot as
+            | import('@/lib/mcp/types').McpToolDescriptor
+            | undefined,
+      )
+      .filter(
+        (s): s is import('@/lib/mcp/types').McpToolDescriptor => s != null,
+      );
+
+    // Map each resumed MCP approval's LLM toolCallId → the widget's markup
+    // toolCallId, so doResume can attach the tool's response to the correct
+    // <ToolCall> widget (the widget is keyed by the original run's id, not the
+    // resume callback's runId). Keyed by LLM toolCallId for collision-safety
+    // when the same MCP tool is called multiple times in one message.
+    const mcpMarkupIds: Record<string, string> = {};
+    for (const { approvalId } of effectiveItems) {
+      const a = approvals.get(approvalId)!;
+      if (a.toolKind !== 'mcp_tool' || !a.toolCallId) continue;
+      const markupId = findMarkupToolCallId(run, a);
+      if (markupId) mcpMarkupIds[a.toolCallId] = markupId;
+    }
+
     const resumedRun = run;
     handler
       .doResume(
         (snapshot.focusMode as string) ?? 'webSearch',
         (snapshot.fileIds as string[]) ?? [],
         resumeArg,
+        pinnedMcpDescriptors,
+        mcpMarkupIds,
       )
       .catch((err: unknown) => {
         console.error('[resumeRun] doResume error:', err);

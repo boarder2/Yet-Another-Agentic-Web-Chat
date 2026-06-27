@@ -21,7 +21,13 @@ export function escapeAttribute(value: string): string {
  * Attributes that use base64 encoding instead of HTML entity escaping.
  * These are long content attributes that would otherwise break the markdown parser.
  */
-const BASE64_ATTRIBUTES = new Set(['code', 'stdout', 'stderr']);
+const BASE64_ATTRIBUTES = new Set([
+  'code',
+  'stdout',
+  'stderr',
+  'mcpArgs',
+  'mcpResult',
+]);
 
 export interface UpdateToolCallOptions {
   status?: string; // running | success | error — if omitted, preserves existing status

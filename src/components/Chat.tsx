@@ -17,6 +17,7 @@ import {
   PendingSkillEditApproval,
   SkillEditApproval,
 } from './SkillEditApproval';
+import { PendingMcpApproval, McpToolApproval } from './McpToolApproval';
 
 const Chat = ({
   loading,
@@ -56,6 +57,8 @@ const Chat = ({
   onEditDecide,
   pendingSkillEditApprovals = {},
   onSkillEditDecide,
+  pendingMcpApprovals = {},
+  onMcpToolDecide,
   pendingImages,
   setPendingImages,
   imageCapable = false,
@@ -154,6 +157,12 @@ const Chat = ({
     approvalId: string,
     decision: 'accept' | 'reject',
     freeformText?: string,
+  ) => void;
+  pendingMcpApprovals?: Record<string, PendingMcpApproval[]>;
+  onMcpToolDecide?: (
+    approvalId: string,
+    approved: boolean,
+    opts?: { alwaysAllow?: boolean },
   ) => void;
   pendingImages: ImageAttachment[];
   setPendingImages: (images: ImageAttachment[]) => void;
@@ -523,6 +532,31 @@ const Chat = ({
               newContent={current.newContent}
               scope={current.scope}
               onDecide={onSkillEditDecide}
+              onDismiss={() => {
+                setTimeout(() => {
+                  document.getElementById('message-input')?.focus();
+                }, 0);
+              }}
+            />
+          );
+        })()}
+        {/* MCP tool approval queue */}
+        {(() => {
+          const allPending = Object.values(pendingMcpApprovals)
+            .flat()
+            .filter((a) => a.status === 'pending');
+          if (allPending.length === 0 || !onMcpToolDecide) return null;
+          const current = allPending[0];
+          return (
+            <McpToolApproval
+              key={current.approvalId}
+              approvalId={current.approvalId}
+              serverId={current.serverId}
+              serverName={current.serverName}
+              toolName={current.toolName}
+              description={current.description}
+              arguments={current.arguments}
+              onDecide={onMcpToolDecide}
               onDismiss={() => {
                 setTimeout(() => {
                   document.getElementById('message-input')?.focus();

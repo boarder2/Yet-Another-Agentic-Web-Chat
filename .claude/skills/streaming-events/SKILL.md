@@ -69,6 +69,7 @@ These events are emitted by tools that interrupt the LangGraph run for user appr
 | `user_question_pending` / `ask_user_pending` / `user_question_answered` / `ask_user_answered`                 | `ask_user` tool                                  | Question widget             |
 | `workspace_edit_approval_pending` / `workspace_edit_pending` / `workspace_create_pending` + `*_answered`      | `workspace_edit` / `workspace_create_file` tools | File diff approval card     |
 | `skill_edit_approval_pending` / `skill_edit_pending` + `skill_edit_approval_answered` / `skill_edit_answered` | `edit_skill` tool                                | Skill diff approval card    |
+| `mcp_tool_pending` / `mcp_tool_answered`                                                                      | MCP tools (`mcp__*` namespaced)                  | `McpToolApproval` card      |
 
 `runHost.ts` emits `*_pending` events on first observation (using `kind_pending` pattern at line ~192). The frontend deduplicates these against the `/api/approvals/pending` fetch path using `approvalId`.
 

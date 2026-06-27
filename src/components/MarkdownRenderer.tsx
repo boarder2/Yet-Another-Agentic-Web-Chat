@@ -27,6 +27,7 @@ import {
   MessageSquare,
   ChevronRight,
   BookOpen,
+  Plug,
 } from 'lucide-react';
 import { useState } from 'react';
 import Markdown, { MarkdownToJSX } from 'markdown-to-jsx';
@@ -215,6 +216,8 @@ const ToolCall = ({
   freeformText,
   skipped,
   imageId,
+  mcpArgs,
+  mcpResult,
   children,
 }: {
   type?: string;
@@ -238,9 +241,39 @@ const ToolCall = ({
   freeformText?: string;
   skipped?: string;
   imageId?: string;
+  mcpArgs?: string;
+  mcpResult?: string;
   children?: React.ReactNode;
 }) => {
   const [expanded, setExpanded] = useState(false);
+
+  // MCP tools render with a `mcp__<server>__<tool>` type and surface their
+  // calling arguments + response (base64) in an expandable section.
+  const isMcp = !!type?.startsWith('mcp__');
+  const mcpParts = isMcp ? type!.split('__') : [];
+  const mcpServer = isMcp ? (mcpParts[1] ?? '') : '';
+  const mcpTool = isMcp ? mcpParts.slice(2).join('__') : '';
+  const mcpExpandable = isMcp && !!(mcpArgs || mcpResult);
+  const decodedMcpArgs = (() => {
+    if (!mcpArgs) return '';
+    try {
+      return JSON.stringify(JSON.parse(decodeBase64(mcpArgs)), null, 2);
+    } catch {
+      try {
+        return decodeBase64(mcpArgs);
+      } catch {
+        return '';
+      }
+    }
+  })();
+  const decodedMcpResult = (() => {
+    if (!mcpResult) return '';
+    try {
+      return decodeBase64(mcpResult);
+    } catch {
+      return '';
+    }
+  })();
 
   const messageId =
     type === 'get_message' && query ? decodeHtmlEntities(query) : '';
@@ -262,6 +295,9 @@ const ToolCall = ({
             : { status: 'idle' as const };
 
   const getIcon = (toolType: string) => {
+    if (toolType?.startsWith('mcp__')) {
+      return <Plug size={16} className="text-accent" />;
+    }
     switch (toolType) {
       case 'search':
       case 'web_search':
@@ -686,6 +722,21 @@ const ToolCall = ({
       );
     }
 
+    if (isMcp) {
+      return (
+        <>
+          <span className="mr-2">{getIcon(type || 'default')}</span>
+          <span>MCP tool:</span>
+          <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm border border-surface-2">
+            {mcpTool || type}
+          </span>
+          {mcpServer && (
+            <span className="ml-1 text-xs text-fg/50">on {mcpServer}</span>
+          )}
+        </>
+      );
+    }
+
     // Fallback for unknown tool types
     return (
       <>
@@ -698,25 +749,26 @@ const ToolCall = ({
     );
   };
 
+  const isExpandable =
+    (type === 'code_execution' && !!code) ||
+    type === 'get_message' ||
+    mcpExpandable;
+
   return (
     <div className="my-3 bg-surface border border-surface-2 rounded-surface overflow-hidden">
       <div
         className={`flex items-start justify-between gap-2 text-sm font-medium px-4 py-3 ${
-          (type === 'code_execution' && code) || type === 'get_message'
+          isExpandable
             ? 'cursor-pointer hover:bg-surface-2/50 transition-colors'
             : ''
         }`}
-        onClick={
-          (type === 'code_execution' && code) || type === 'get_message'
-            ? () => setExpanded(!expanded)
-            : undefined
-        }
+        onClick={isExpandable ? () => setExpanded(!expanded) : undefined}
       >
         <div className="flex items-center flex-wrap gap-1">
           {formatToolMessage()}
         </div>
         <div className="flex items-center gap-2 h-5">
-          {((type === 'code_execution' && code) || type === 'get_message') && (
+          {isExpandable && (
             <ChevronRight
               size={16}
               className={`text-fg/50 transition-transform ${expanded ? 'rotate-90' : ''}`}
@@ -800,6 +852,28 @@ const ToolCall = ({
               </div>
               <CodeBlock className="language-text">
                 {decodeBase64(stderr)}
+              </CodeBlock>
+            </div>
+          )}
+        </div>
+      )}
+      {isMcp && expanded && mcpExpandable && (
+        <div className="border-t border-surface-2">
+          {decodedMcpArgs && (
+            <div>
+              <div className="px-4 py-1 text-xs text-fg/50 font-mono bg-surface-2/50">
+                Arguments
+              </div>
+              <CodeBlock className="language-json">{decodedMcpArgs}</CodeBlock>
+            </div>
+          )}
+          {decodedMcpResult && (
+            <div className="border-t border-surface-2">
+              <div className="px-4 py-1 text-xs text-fg/50 font-mono bg-surface-2/50">
+                Response
+              </div>
+              <CodeBlock className="language-text">
+                {decodedMcpResult}
               </CodeBlock>
             </div>
           )}

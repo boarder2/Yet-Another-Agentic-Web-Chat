@@ -42,6 +42,7 @@ export type SectionKey =
   | 'personalization'
   | 'voice'
   | 'memory'
+  | 'mcp-servers'
   | 'retention'
   | 'skills'
   | 'persona-prompts'
@@ -64,6 +65,7 @@ export const SETTINGS_SECTIONS: {
   group: string;
 }[] = [
   { key: 'automatic-search', label: 'Automatic Search', group: 'General' },
+  { key: 'mcp-servers', label: 'MCP Servers', group: 'General' },
   { key: 'memory', label: 'Memory', group: 'General' },
   { key: 'persona-prompts', label: 'Persona Prompts', group: 'General' },
   { key: 'personalization', label: 'Personalization', group: 'General' },

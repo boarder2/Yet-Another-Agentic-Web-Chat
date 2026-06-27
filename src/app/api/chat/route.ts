@@ -50,6 +50,7 @@ import {
 } from '@/lib/search/panel/coordinator';
 import { buildOrchestratorSynthesisContext } from '@/lib/prompts/panel/orchestrator';
 import { validatePanelConfig, type PanelConfig } from '@/lib/types/panel';
+import { buildMcpLangchainTools } from '@/lib/mcp/toolFactory';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -605,8 +606,21 @@ export const POST = async (req: Request) => {
         throw err;
       }
 
-      const workspaceTools =
-        workspaceExtraTools.length > 0 ? workspaceExtraTools : undefined;
+      // Build combined extra tools: workspace tools + MCP tools.
+      // MCP discovery is non-fatal; a failure omits those tools for this turn only.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const extraTools: any[] = [...workspaceExtraTools];
+      try {
+        const mcpTools = await buildMcpLangchainTools({
+          emitter: stream,
+          interactiveSession: true,
+          messageId: message.messageId,
+        });
+        extraTools.push(...mcpTools);
+      } catch (e) {
+        console.warn('[mcp] Failed to build MCP tools for this turn:', e);
+      }
+      const workspaceTools = extraTools.length > 0 ? extraTools : undefined;
 
       if (panelConfig) {
         // Panel mode: run executors to completion, merge their sources, then

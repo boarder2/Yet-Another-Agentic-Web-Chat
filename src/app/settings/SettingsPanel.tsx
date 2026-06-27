@@ -51,6 +51,7 @@ import ModelVisibilitySection from './sections/ModelVisibilitySection';
 import ImageGenerationSection from './sections/ImageGenerationSection';
 import ApiKeysSection from './sections/ApiKeysSection';
 import SkillsSection from './sections/SkillsSection';
+import McpServersSection from './sections/McpServersSection';
 
 // Stable default reference for useLocalStorageJSON (required by useSyncExternalStore).
 const EMPTY_HIDDEN_MODELS: string[] = [];
@@ -824,6 +825,8 @@ export default function SettingsPanel({
                 )}
 
                 {activeSection === 'skills' && <SkillsSection />}
+
+                {activeSection === 'mcp-servers' && <McpServersSection />}
 
                 {activeSection === 'persona-prompts' && (
                   <PersonaPromptsSection

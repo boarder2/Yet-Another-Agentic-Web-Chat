@@ -39,6 +39,7 @@
     "@langchain/ollama": "^1.2.2",
     "@langchain/openai": "^1.2.7",
     "@langchain/textsplitters": "^1.0.1",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@mozilla/readability": "^0.6.0",
     "@tanstack/react-query": "^5.100.14",
     "@tanstack/react-query-devtools": "^5.100.14",

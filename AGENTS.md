@@ -25,6 +25,12 @@ Stack: Next.js (App Router) + React 19 + Tailwind 4, TanStack Query (client data
 - Columns render via the `<PanelColumns>` markup (`utils/panelMarkup.ts`, `MessageActions/PanelColumns.tsx`); stripped from history by `removeToolCallMarkup`. Composer UI: `MessageInputActions/PanelSelector.tsx` + device-local `panelSelection`. Presets (`lib/panel/panelPresets.ts`) store like model presets and have a settings section.
 - Details + gotchas: `agent-panel` skill.
 
+## MCP Servers
+
+- Remote MCP servers connect via Settings → MCP Servers. Enabled servers' tools are injected into every tool-running focus mode. Per-tool config (`mcpServers.toolConfig`) lets users disable individual tools (never injected) and set each one to ask-every-time (default) or auto-run.
+- Connection layer + auth (none/bearer/OAuth CC/interactive OAuth): `src/lib/mcp/`. API: `/api/mcp/servers/*`, `/api/mcp/oauth/callback`. Settings UI: `McpServersSection`.
+- Details + gotchas: `mcp-integration` skill.
+
 ## Dashboard Widgets
 
 - Two widget kinds (`src/lib/types/widget.ts`): LLM-transformed and user-JS (Docker sandbox, gated on code execution). Processed via `/api/dashboard/*`; sources fetched server-side (`src/lib/dashboard/sources.ts`), output sanitized (`sanitizeWidgetOutput.ts`) and rendered by `WidgetContent.tsx`.
@@ -41,6 +47,8 @@ Stack: Next.js (App Router) + React 19 + Tailwind 4, TanStack Query (client data
 - Adding a setting + the localStorage⇄DB sync internals: `settings-persistence` skill.
 
 ## Conventions
+
+**Write like a lead developer. Less is more.** Favor the smallest correct change; one well-formed line over several. DRY — when logic/markup repeats, extract a function, component, or hook and reuse it rather than copy-paste. Reach for existing helpers, hooks, and patterns before inventing new ones; match the idioms of the file you're in. Prefer clear names and composition over cleverness. Comments are rare and earn their place — explain a non-obvious _why_, never restate the code; no banners, no narration, no commented-out code. Delete more than you add when you can.
 
 - TypeScript strict, ES2017, `@/*` → `src/*`
 - Package manager: **yarn** — use `yarn <script>` for all commands
@@ -71,7 +79,7 @@ Client-side server state uses **TanStack Query** (provider in `src/app/providers
 
 ## Subsystem Skills
 
-Load on demand: `adding-features`, `api-endpoints`, `streaming-events`, `subagent-architecture`, `agent-panel`, `dashboard-widgets`, `settings-persistence`, `db-migrations`, `image-attachments`, `frontend-architecture`, `design-system`, `prompt-system`, `test-automation`, `run-yaawc`, `playwright-cli`.
+Load on demand: `adding-features`, `api-endpoints`, `streaming-events`, `subagent-architecture`, `agent-panel`, `dashboard-widgets`, `mcp-integration`, `settings-persistence`, `db-migrations`, `image-attachments`, `frontend-architecture`, `design-system`, `prompt-system`, `test-automation`, `run-yaawc`, `playwright-cli`.
 
 ## External Docs
 

@@ -47,7 +47,18 @@ USER node
 
 RUN sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
 RUN curl -s https://raw.githubusercontent.com/boarder2/utils/refs/heads/main/config/omp/negligible-mine.omp.json -o /home/node/.omp/config/negligible-mine.omp.json
-RUN curl -fsSL https://claude.ai/install.sh | bash && echo 'export PATH="$HOME/.local/bin:$PATH"' >> /home/node/.zshrc
+RUN curl -fsSL https://claude.ai/install.sh | bash \
+  && echo 'export PATH="$HOME/.local/bin:$PATH"' >> /home/node/.zshrc \
+  && cat >> /home/node/.zshrc << 'EOF'
+claude-alt() {
+  (
+    while IFS='=' read -r key value; do
+      export "${key#CCALT_}=$value"
+    done < <(env | grep '^CCALT_')
+    claude "$@"
+  )
+}
+EOF
 RUN curl -s https://ohmyposh.dev/install.sh | bash -s && echo 'eval "$(oh-my-posh init zsh --config /home/node/.omp/config/negligible-mine.omp.json)"' >> /home/node/.zshrc
 RUN curl -fsSL https://gh.io/copilot-install | bash
 

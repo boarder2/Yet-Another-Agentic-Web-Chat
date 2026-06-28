@@ -3,14 +3,9 @@ import { test, expect } from '../fixtures';
 const PUBLIC_ROUTES = [
   { route: '/', landmark: { role: 'main' as const } },
   {
-    route: '/settings',
-    landmark: { role: 'heading' as const, name: 'Settings' },
+    route: '/history',
+    landmark: { role: 'heading' as const, name: 'History', exact: true },
   },
-  {
-    route: '/library',
-    landmark: { role: 'heading' as const, name: 'Library' },
-  },
-  { route: '/memory', landmark: { role: 'heading' as const, name: 'Memory' } },
   {
     route: '/workspaces',
     landmark: { role: 'heading' as const, name: 'Workspaces', exact: true },

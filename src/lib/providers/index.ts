@@ -19,6 +19,7 @@ import {
   loadLMStudioEmbeddingsModels,
 } from './lmstudio';
 import { loadOpenrouterChatModels } from './openrouter';
+import { loadTestChatModels, loadTestEmbeddingModels } from './test';
 import {
   getCachedChatModels,
   getCachedEmbeddingModels,
@@ -66,6 +67,11 @@ export const embeddingModelProviders: Record<
   aimlapi: loadAimlApiEmbeddingModels,
   lmstudio: loadLMStudioEmbeddingsModels,
 };
+
+if (process.env.YAAWC_TEST_MODE === 'true') {
+  chatModelProviders.test = loadTestChatModels;
+  embeddingModelProviders.test = loadTestEmbeddingModels;
+}
 
 export const getAvailableChatModelProviders = async (
   options: { includeHidden?: boolean; forceRefresh?: boolean } = {},

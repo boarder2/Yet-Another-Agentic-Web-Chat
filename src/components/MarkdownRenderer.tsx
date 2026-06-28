@@ -27,15 +27,18 @@ import {
   MessageSquare,
   ChevronRight,
   BookOpen,
+  Plug,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import Markdown, { MarkdownToJSX } from 'markdown-to-jsx';
 import ThinkBox from './ThinkBox';
 import { CodeBlock } from './CodeBlock';
+import { useMessage } from '@/lib/hooks/api/useMessage';
 import { Document } from '@langchain/core/documents';
 import CitationLink from './CitationLink';
 import { decodeHtmlEntities, decodeBase64 } from '@/lib/utils/html';
 import { SubagentExecution } from './MessageActions/SubagentExecution';
+import { PanelColumns } from './MessageActions/PanelColumns';
 import ChartWidget from './ChartWidget';
 import { useChartSpec } from '@/lib/chart/ChartSpecContext';
 
@@ -45,7 +48,8 @@ import { useChartSpec } from '@/lib/chart/ChartSpecContext';
  * Must NOT match arbitrary HTML-like tags that models may produce in their
  * thinking output (e.g. </parameter>, </tool>, </result>).
  */
-const KNOWN_CLOSING_TAG = '<\\/(?:ToolCall|SubagentExecution|Chart)\\s*>';
+const KNOWN_CLOSING_TAG =
+  '<\\/(?:ToolCall|SubagentExecution|PanelColumns|Chart)\\s*>';
 
 /**
  * Ensure custom block elements (ToolCall, SubagentExecution) are surrounded by
@@ -60,6 +64,7 @@ const ensureBlockElements = (text: string): string =>
       /(<SubagentExecution\b[^>]*>[\s\S]*?<\/SubagentExecution>)/g,
       '\n\n$1\n\n',
     )
+    .replace(/(<PanelColumns\b[^>]*>[\s\S]*?<\/PanelColumns>)/g, '\n\n$1\n\n')
     .replace(/(<Chart\b[^>]*\/>)/g, '\n\n$1\n\n');
 
 /**
@@ -175,14 +180,6 @@ const splitByThinkBlocks = (content: string): ContentSegment[] => {
   return segments;
 };
 
-interface FetchedMessage {
-  chatId: string;
-  chatTitle: string | null;
-  role: 'user' | 'assistant' | 'compaction' | null;
-  content: string;
-  createdAt: string | null;
-}
-
 interface MarkdownRendererProps {
   content: string;
   className?: string;
@@ -219,6 +216,8 @@ const ToolCall = ({
   freeformText,
   skipped,
   imageId,
+  mcpArgs,
+  mcpResult,
   children,
 }: {
   type?: string;
@@ -242,59 +241,63 @@ const ToolCall = ({
   freeformText?: string;
   skipped?: string;
   imageId?: string;
+  mcpArgs?: string;
+  mcpResult?: string;
   children?: React.ReactNode;
 }) => {
   const [expanded, setExpanded] = useState(false);
-  const [fetchState, setFetchState] = useState<
-    | { status: 'idle' }
-    | { status: 'loading' }
-    | { status: 'error'; error: string }
-    | { status: 'ok'; data: FetchedMessage }
-  >({ status: 'idle' });
-  const fetchedMessageIdRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    if (type !== 'get_message' || !expanded || !query) return;
-
-    const messageId = decodeHtmlEntities(query);
-    if (!/^\d+$/.test(messageId)) {
-      setFetchState({ status: 'error', error: 'Invalid message id' });
-      return;
-    }
-    if (fetchedMessageIdRef.current === messageId) return;
-    fetchedMessageIdRef.current = messageId;
-
-    const controller = new AbortController();
-    setFetchState({ status: 'loading' });
-
-    (async () => {
+  // MCP tools render with a `mcp__<server>__<tool>` type and surface their
+  // calling arguments + response (base64) in an expandable section.
+  const isMcp = !!type?.startsWith('mcp__');
+  const mcpParts = isMcp ? type!.split('__') : [];
+  const mcpServer = isMcp ? (mcpParts[1] ?? '') : '';
+  const mcpTool = isMcp ? mcpParts.slice(2).join('__') : '';
+  const mcpExpandable = isMcp && !!(mcpArgs || mcpResult);
+  const decodedMcpArgs = (() => {
+    if (!mcpArgs) return '';
+    try {
+      return JSON.stringify(JSON.parse(decodeBase64(mcpArgs)), null, 2);
+    } catch {
       try {
-        const res = await fetch(`/api/messages/${messageId}`, {
-          signal: controller.signal,
-        });
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          throw new Error(body?.message || `Request failed (${res.status})`);
-        }
-        const data: FetchedMessage = await res.json();
-        if (!controller.signal.aborted) setFetchState({ status: 'ok', data });
-      } catch (err) {
-        if (controller.signal.aborted) return;
-        const error =
-          err instanceof Error ? err.message : 'Failed to load message';
-        setFetchState({ status: 'error', error });
+        return decodeBase64(mcpArgs);
+      } catch {
+        return '';
       }
-    })();
+    }
+  })();
+  const decodedMcpResult = (() => {
+    if (!mcpResult) return '';
+    try {
+      return decodeBase64(mcpResult);
+    } catch {
+      return '';
+    }
+  })();
 
-    return () => {
-      controller.abort();
-      if (fetchedMessageIdRef.current === messageId) {
-        fetchedMessageIdRef.current = null;
-      }
-    };
-  }, [type, expanded, query]);
+  const messageId =
+    type === 'get_message' && query ? decodeHtmlEntities(query) : '';
+  const {
+    data: msgData,
+    isLoading: msgLoading,
+    error: msgError,
+  } = useMessage(messageId, type === 'get_message' && expanded && !!messageId);
+
+  const fetchState =
+    !expanded || type !== 'get_message'
+      ? { status: 'idle' as const }
+      : msgLoading
+        ? { status: 'loading' as const }
+        : msgError
+          ? { status: 'error' as const, error: msgError.message }
+          : msgData
+            ? { status: 'ok' as const, data: msgData }
+            : { status: 'idle' as const };
 
   const getIcon = (toolType: string) => {
+    if (toolType?.startsWith('mcp__')) {
+      return <Plug size={16} className="text-accent" />;
+    }
     switch (toolType) {
       case 'search':
       case 'web_search':
@@ -719,6 +722,21 @@ const ToolCall = ({
       );
     }
 
+    if (isMcp) {
+      return (
+        <>
+          <span className="mr-2">{getIcon(type || 'default')}</span>
+          <span>MCP tool:</span>
+          <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm border border-surface-2">
+            {mcpTool || type}
+          </span>
+          {mcpServer && (
+            <span className="ml-1 text-xs text-fg/50">on {mcpServer}</span>
+          )}
+        </>
+      );
+    }
+
     // Fallback for unknown tool types
     return (
       <>
@@ -731,25 +749,26 @@ const ToolCall = ({
     );
   };
 
+  const isExpandable =
+    (type === 'code_execution' && !!code) ||
+    type === 'get_message' ||
+    mcpExpandable;
+
   return (
     <div className="my-3 bg-surface border border-surface-2 rounded-surface overflow-hidden">
       <div
         className={`flex items-start justify-between gap-2 text-sm font-medium px-4 py-3 ${
-          (type === 'code_execution' && code) || type === 'get_message'
+          isExpandable
             ? 'cursor-pointer hover:bg-surface-2/50 transition-colors'
             : ''
         }`}
-        onClick={
-          (type === 'code_execution' && code) || type === 'get_message'
-            ? () => setExpanded(!expanded)
-            : undefined
-        }
+        onClick={isExpandable ? () => setExpanded(!expanded) : undefined}
       >
         <div className="flex items-center flex-wrap gap-1">
           {formatToolMessage()}
         </div>
         <div className="flex items-center gap-2 h-5">
-          {((type === 'code_execution' && code) || type === 'get_message') && (
+          {isExpandable && (
             <ChevronRight
               size={16}
               className={`text-fg/50 transition-transform ${expanded ? 'rotate-90' : ''}`}
@@ -838,6 +857,28 @@ const ToolCall = ({
           )}
         </div>
       )}
+      {isMcp && expanded && mcpExpandable && (
+        <div className="border-t border-surface-2">
+          {decodedMcpArgs && (
+            <div>
+              <div className="px-4 py-1 text-xs text-fg/50 font-mono bg-surface-2/50">
+                Arguments
+              </div>
+              <CodeBlock className="language-json">{decodedMcpArgs}</CodeBlock>
+            </div>
+          )}
+          {decodedMcpResult && (
+            <div className="border-t border-surface-2">
+              <div className="px-4 py-1 text-xs text-fg/50 font-mono bg-surface-2/50">
+                Response
+              </div>
+              <CodeBlock className="language-text">
+                {decodedMcpResult}
+              </CodeBlock>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
@@ -908,8 +949,16 @@ const MarkdownRenderer = ({
       SubagentExecution: {
         component: SubagentExecution,
       },
+      PanelColumns: {
+        component: PanelColumns,
+      },
       Chart: {
         component: ChartElement,
+      },
+      SkillToken: {
+        component: ({ children }) => (
+          <span className="text-accent font-mono">{children}</span>
+        ),
       },
       code: {
         component: ({ className, children }) => {
@@ -957,8 +1006,30 @@ const MarkdownRenderer = ({
             }
           }
 
+          // Rewrite absolute URLs pointing to internal chat paths so the LLM
+          // can't accidentally anchor them to a hallucinated domain.
+          const href = props.href ?? '';
+          let resolvedHref = href;
+          try {
+            const parsed = new URL(href);
+            if (
+              /^\/(workspaces\/[^/]+\/)?c\/[a-f0-9]+\/?$/.test(parsed.pathname)
+            ) {
+              resolvedHref = parsed.pathname;
+            }
+          } catch {
+            // href is already relative — leave it alone
+          }
+
           // Default link behavior
-          return <a {...props} target="_blank" rel="noopener noreferrer" />;
+          return (
+            <a
+              {...props}
+              href={resolvedHref}
+              target="_blank"
+              rel="noopener noreferrer"
+            />
+          );
         },
       },
       // Prevent rendering of certain HTML elements for security

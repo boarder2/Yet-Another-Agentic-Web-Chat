@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { BookOpen, X, Check, Ban } from 'lucide-react';
 
 export type PendingSkillEditApproval = {
@@ -15,8 +15,7 @@ export type PendingSkillEditApproval = {
   scope: 'global' | 'workspace';
   workspaceId?: string | null;
   skillId?: string;
-  createdAt?: number;
-  status: 'pending' | 'accepted' | 'rejected';
+  status: 'pending' | 'accepted' | 'rejected' | 'cancelled';
 };
 
 type DiffLine =
@@ -24,16 +23,56 @@ type DiffLine =
   | { type: 'removed'; text: string; lineNo: number }
   | { type: 'added'; text: string; newLineNo: number };
 
+// Cap the LCS table size; beyond this we fall back to a plain
+// all-removed/all-added rendering rather than risk a huge O(n*m) allocation.
+const MAX_DIFF_CELLS = 4_000_000;
+
 function computeDiff(oldStr: string, newStr: string): DiffLine[] {
-  const oldLines = oldStr.split('\n');
-  const newLines = newStr.split('\n');
+  const a = oldStr.split('\n');
+  const b = newStr.split('\n');
+  const n = a.length;
+  const m = b.length;
   const lines: DiffLine[] = [];
-  for (let i = 0; i < oldLines.length; i++) {
-    lines.push({ type: 'removed', text: oldLines[i], lineNo: i + 1 });
+
+  if ((n + 1) * (m + 1) > MAX_DIFF_CELLS) {
+    for (let i = 0; i < n; i++)
+      lines.push({ type: 'removed', text: a[i], lineNo: i + 1 });
+    for (let j = 0; j < m; j++)
+      lines.push({ type: 'added', text: b[j], newLineNo: j + 1 });
+    return lines;
   }
-  for (let i = 0; i < newLines.length; i++) {
-    lines.push({ type: 'added', text: newLines[i], newLineNo: i + 1 });
+
+  // Longest-common-subsequence table over lines, then backtrack to emit
+  // context / removed / added rows.
+  const dp: number[][] = Array.from({ length: n + 1 }, () =>
+    new Array(m + 1).fill(0),
+  );
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i][j] =
+        a[i] === b[j]
+          ? dp[i + 1][j + 1] + 1
+          : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
   }
+
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) {
+      lines.push({ type: 'context', text: a[i], lineNo: i + 1 });
+      i++;
+      j++;
+    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+      lines.push({ type: 'removed', text: a[i], lineNo: i + 1 });
+      i++;
+    } else {
+      lines.push({ type: 'added', text: b[j], newLineNo: j + 1 });
+      j++;
+    }
+  }
+  while (i < n) lines.push({ type: 'removed', text: a[i], lineNo: i++ + 1 });
+  while (j < m) lines.push({ type: 'added', text: b[j], newLineNo: j++ + 1 });
   return lines;
 }
 
@@ -102,7 +141,6 @@ export function SkillEditApproval({
   oldContent,
   newContent,
   scope,
-  createdAt,
   onDecide,
   onDismiss,
 }: {
@@ -114,7 +152,6 @@ export function SkillEditApproval({
   oldContent: string;
   newContent: string;
   scope: 'global' | 'workspace';
-  createdAt?: number;
   onDecide: (
     approvalId: string,
     decision: 'accept' | 'reject',
@@ -122,39 +159,10 @@ export function SkillEditApproval({
   ) => void;
   onDismiss?: () => void;
 }) {
-  const TIMEOUT_MS = 15 * 60 * 1000;
-  const [remainingSeconds, setRemainingSeconds] = useState(() => {
-    if (createdAt) {
-      const elapsed = Date.now() - createdAt;
-      return Math.max(0, Math.floor((TIMEOUT_MS - elapsed) / 1000));
-    }
-    return 15 * 60;
-  });
+  // No countdown timer — with interrupt-based flow, runs persist until user responds.
   const [submitted, setSubmitted] = useState(false);
   const [rejectText, setRejectText] = useState('');
   const [showRejectInput, setShowRejectInput] = useState(false);
-
-  useEffect(() => {
-    if (submitted) return;
-    const interval = setInterval(() => {
-      setRemainingSeconds((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          handleDecide('reject');
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [submitted]);
-
-  const formatTime = (s: number) => {
-    const m = Math.floor(s / 60);
-    const sec = s % 60;
-    return `${m}:${sec.toString().padStart(2, '0')}`;
-  };
 
   const handleDecide = useCallback(
     (decision: 'accept' | 'reject', text?: string) => {
@@ -198,10 +206,9 @@ export function SkillEditApproval({
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-fg/40 font-mono tabular-nums">
-            {formatTime(remainingSeconds)}
-          </span>
+          <span className="text-xs text-fg/40">Waiting on input</span>
           <button
+            type="button"
             onClick={() => handleDecide('reject')}
             className="p-1 rounded-control hover:bg-surface-2 transition-colors text-fg/50 hover:text-fg"
             aria-label="Dismiss"
@@ -241,6 +248,7 @@ export function SkillEditApproval({
           <div className="px-5 py-3 border-b border-surface-2">
             <textarea
               autoFocus
+              aria-label="Rejection reason"
               value={rejectText}
               onChange={(e) => setRejectText(e.target.value)}
               onKeyDown={(e) => {
@@ -262,6 +270,7 @@ export function SkillEditApproval({
       <div className="shrink-0 flex flex-wrap gap-2 justify-end px-5 py-3 bg-surface border-t border-surface-2">
         {showRejectInput ? (
           <button
+            type="button"
             onClick={handleRejectSubmit}
             className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-surface bg-danger-soft text-danger hover:bg-danger-soft border border-danger transition-colors"
           >
@@ -270,6 +279,7 @@ export function SkillEditApproval({
           </button>
         ) : (
           <button
+            type="button"
             onClick={() => setShowRejectInput(true)}
             className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-surface bg-surface-2 text-fg/70 hover:text-fg hover:bg-surface-2/80 transition-colors"
           >
@@ -278,6 +288,7 @@ export function SkillEditApproval({
           </button>
         )}
         <button
+          type="button"
           onClick={() => handleDecide('accept')}
           className="flex items-center gap-1.5 px-5 py-2 text-sm font-medium rounded-surface bg-accent text-accent-fg hover:bg-accent/90 transition-colors"
         >

@@ -1,7 +1,8 @@
 'use client';
 
 import { RotateCcw } from 'lucide-react';
-import ModelSelector from '@/components/MessageInputActions/ModelSelector';
+import ModelPicker from '@/components/models/ModelPicker';
+import type { ModelSelection } from '@/lib/models/presets';
 import SettingsSection from '../components/SettingsSection';
 
 export default function DefaultSearchSection({
@@ -15,6 +16,13 @@ export default function DefaultSearchSection({
   onModelChange: (provider: string, model: string) => void;
   onReset: () => void;
 }) {
+  const value: ModelSelection = {
+    chatProvider: searchChatModelProvider,
+    chatModel: searchChatModel,
+    systemProvider: searchChatModelProvider,
+    systemModel: searchChatModel,
+  };
+
   return (
     <SettingsSection title="Default Search Settings">
       <p className="text-xs text-fg/60">
@@ -23,29 +31,25 @@ export default function DefaultSearchSection({
         settings for that search. If not specified, global settings are used.
       </p>
       <div className="flex flex-col space-y-4">
-        <div className="flex flex-col space-y-1">
-          <p className="text-sm">Chat Model</p>
-          <div className="flex justify-start items-center space-x-2">
-            <ModelSelector
-              selectedModel={{
-                provider: searchChatModelProvider,
-                model: searchChatModel,
-              }}
-              setSelectedModel={(model) => {
-                onModelChange(model.provider, model.model);
-              }}
-              truncateModelName={false}
+        <div className="flex items-center gap-2">
+          <div className="flex-1">
+            <ModelPicker
+              value={value}
+              onChange={(next) =>
+                onModelChange(next.chatProvider, next.chatModel)
+              }
             />
-            {(searchChatModelProvider || searchChatModel) && (
-              <button
-                onClick={onReset}
-                className="p-1.5 rounded-control hover:bg-surface-2 transition-colors"
-                title="Reset chat model"
-              >
-                <RotateCcw size={16} />
-              </button>
-            )}
           </div>
+          {(searchChatModelProvider || searchChatModel) && (
+            <button
+              type="button"
+              onClick={onReset}
+              className="p-1.5 rounded-control hover:bg-surface-2 transition-colors self-start mt-5"
+              title="Reset chat model"
+            >
+              <RotateCcw size={16} />
+            </button>
+          )}
         </div>
       </div>
     </SettingsSection>

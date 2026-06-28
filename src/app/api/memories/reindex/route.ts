@@ -5,12 +5,12 @@ import { embedMemoryContent } from '@/lib/utils/memoryEmbedding';
 import { getAvailableEmbeddingModelProviders } from '@/lib/providers';
 import { CachedEmbeddings } from '@/lib/utils/cachedEmbeddings';
 import { eq } from 'drizzle-orm';
-import { getSelectedEmbeddingModel } from '@/lib/config';
+import { getEmbeddingModelSelection } from '@/lib/settings/server';
 
 export async function POST() {
   try {
     const embeddingModelProviders = await getAvailableEmbeddingModelProviders();
-    const selected = getSelectedEmbeddingModel();
+    const selected = getEmbeddingModelSelection();
 
     let embeddingModel: CachedEmbeddings | null = null;
 

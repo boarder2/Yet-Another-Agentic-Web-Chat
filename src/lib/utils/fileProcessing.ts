@@ -95,16 +95,29 @@ export function getRankedDocs(
 
   // Import computeSimilarity utility
 
+  let skipped = 0;
   const similarity = documents.map((doc, i) => {
-    const sim = computeSimilarity(
-      queryEmbedding,
-      doc.metadata?.embeddings || [],
-    );
+    const docEmbedding = doc.metadata?.embeddings;
+    // Skip (don't crash) when a file was indexed under a different embedding
+    // model — its vector length won't match the current query embedding.
+    if (
+      !Array.isArray(docEmbedding) ||
+      docEmbedding.length !== queryEmbedding.length
+    ) {
+      skipped++;
+      return { index: i, similarity: -1 };
+    }
     return {
       index: i,
-      similarity: sim,
+      similarity: computeSimilarity(queryEmbedding, docEmbedding),
     };
   });
+
+  if (skipped > 0) {
+    console.warn(
+      `getRankedDocs: skipped ${skipped}/${documents.length} file section(s) whose embedding dimensions don't match the current embedding model — re-upload those files to re-index them.`,
+    );
+  }
 
   const rankedDocs = similarity
     .filter((sim) => sim.similarity > similarityThreshold)

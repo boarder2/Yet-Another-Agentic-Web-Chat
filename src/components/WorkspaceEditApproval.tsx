@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { FileText, X, Check, CheckCheck, Ban, Bell } from 'lucide-react';
 
 export type PendingEditApproval = {
@@ -17,8 +17,7 @@ export type PendingEditApproval = {
   occurrences?: number;
   workspaceAutoAccept: boolean;
   fileAutoAccept: number | null;
-  createdAt?: number;
-  status: 'pending' | 'accepted' | 'rejected';
+  status: 'pending' | 'accepted' | 'rejected' | 'cancelled';
 };
 
 // ---- Diff renderer ----
@@ -158,7 +157,6 @@ export function WorkspaceEditApproval({
   replaceAll,
   occurrences,
   workspaceAutoAccept,
-  createdAt,
   onDecide,
   onDismiss,
   queuePosition,
@@ -173,7 +171,6 @@ export function WorkspaceEditApproval({
   replaceAll?: boolean;
   occurrences?: number;
   workspaceAutoAccept: boolean;
-  createdAt?: number;
   onDecide: (
     approvalId: string,
     decision: 'accept' | 'accept_always' | 'reject' | 'always_prompt',
@@ -183,39 +180,10 @@ export function WorkspaceEditApproval({
   queuePosition?: number;
   queueTotal?: number;
 }) {
-  const TIMEOUT_MS = 15 * 60 * 1000;
-  const [remainingSeconds, setRemainingSeconds] = useState(() => {
-    if (createdAt) {
-      const elapsed = Date.now() - createdAt;
-      return Math.max(0, Math.floor((TIMEOUT_MS - elapsed) / 1000));
-    }
-    return 15 * 60;
-  });
+  // No countdown timer — with interrupt-based flow, runs persist until user responds.
   const [submitted, setSubmitted] = useState(false);
   const [rejectText, setRejectText] = useState('');
   const [showRejectInput, setShowRejectInput] = useState(false);
-
-  useEffect(() => {
-    if (submitted) return;
-    const interval = setInterval(() => {
-      setRemainingSeconds((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          handleDecide('reject');
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [submitted]);
-
-  const formatTime = (s: number) => {
-    const m = Math.floor(s / 60);
-    const sec = s % 60;
-    return `${m}:${sec.toString().padStart(2, '0')}`;
-  };
 
   const handleDecide = useCallback(
     (
@@ -255,10 +223,9 @@ export function WorkspaceEditApproval({
           )}
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-fg/40 font-mono tabular-nums">
-            {formatTime(remainingSeconds)}
-          </span>
+          <span className="text-xs text-fg/40">Waiting on input</span>
           <button
+            type="button"
             onClick={() => handleDecide('reject')}
             className="p-1 rounded-control hover:bg-surface-2 transition-colors text-fg/50 hover:text-fg"
             aria-label="Dismiss"
@@ -290,6 +257,7 @@ export function WorkspaceEditApproval({
           <div className="px-5 py-3 border-b border-surface-2">
             <textarea
               autoFocus
+              aria-label="Rejection reason"
               value={rejectText}
               onChange={(e) => setRejectText(e.target.value)}
               onKeyDown={(e) => {
@@ -312,6 +280,7 @@ export function WorkspaceEditApproval({
         {/* Reject */}
         {showRejectInput ? (
           <button
+            type="button"
             onClick={handleRejectSubmit}
             className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-surface bg-danger-soft text-danger hover:bg-danger-soft border border-danger transition-colors"
           >
@@ -320,6 +289,7 @@ export function WorkspaceEditApproval({
           </button>
         ) : (
           <button
+            type="button"
             onClick={() => setShowRejectInput(true)}
             className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-surface bg-surface-2 text-fg/70 hover:text-fg hover:bg-surface-2/80 transition-colors"
           >
@@ -331,6 +301,7 @@ export function WorkspaceEditApproval({
         {/* Always prompt for this file — only when workspace auto-accept is on */}
         {workspaceAutoAccept && (
           <button
+            type="button"
             onClick={() => handleDecide('always_prompt')}
             className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-surface bg-surface-2 text-fg/70 hover:text-fg hover:bg-surface-2/80 transition-colors"
             title="Always ask before editing this file, even when the workspace is set to auto-accept"
@@ -342,6 +313,7 @@ export function WorkspaceEditApproval({
 
         {/* Accept once */}
         <button
+          type="button"
           onClick={() => handleDecide('accept')}
           className="flex items-center gap-1.5 px-5 py-2 text-sm font-medium rounded-surface bg-accent text-accent-fg hover:bg-accent/90 transition-colors"
         >
@@ -351,6 +323,7 @@ export function WorkspaceEditApproval({
 
         {/* Always accept this file */}
         <button
+          type="button"
           onClick={() => handleDecide('accept_always')}
           className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-surface border border-accent/40 text-accent hover:bg-accent/10 transition-colors"
           title="Always accept edits to this file without prompting"

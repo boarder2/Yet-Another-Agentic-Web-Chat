@@ -6,20 +6,36 @@ import {
   Edit,
   Trash2,
   AlertCircle,
-  ChevronDown,
-  ChevronRight,
   GripVertical,
+  Code2,
+  Home,
+  LayoutDashboard,
 } from 'lucide-react';
+import {
+  Description,
+  Dialog,
+  DialogBackdrop,
+  DialogPanel,
+  DialogTitle,
+  Transition,
+  TransitionChild,
+} from '@headlessui/react';
+import { Fragment, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import MarkdownRenderer from '@/components/MarkdownRenderer';
 import { Widget } from '@/lib/types/widget';
-import { useState } from 'react';
+import { useConfig } from '@/lib/hooks/api/useConfig';
+import WidgetContent from './WidgetContent';
 
 interface WidgetDisplayProps {
   widget: Widget;
   onEdit: (widget: Widget) => void;
   onDelete: (widgetId: string) => void;
   onRefresh: (widgetId: string) => void;
+  onConvert?: (widget: Widget) => void;
+  /** Toggle which surface (home/dashboard) the widget appears on. */
+  onTogglePlacement?: (widget: Widget, key: 'home' | 'dashboard') => void;
+  /** Edit mode shows the header, footer, and actions; normal mode shows only content. */
+  isEditMode?: boolean;
 }
 
 const WidgetDisplay = ({
@@ -27,8 +43,29 @@ const WidgetDisplay = ({
   onEdit,
   onDelete,
   onRefresh,
+  onConvert,
+  onTogglePlacement,
+  isEditMode = false,
 }: WidgetDisplayProps) => {
-  const [isFooterExpanded, setIsFooterExpanded] = useState(false);
+  const { data: appConfig } = useConfig();
+  const ceEnabled = !!(
+    appConfig?.codeExecution as { enabled?: boolean } | undefined
+  )?.enabled;
+  const isCode = widget.widgetType === 'code';
+  const inert = isCode && !ceEnabled;
+
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+
+  // Surfaces this widget currently appears on — surfaced in the delete
+  // confirmation so users understand a delete removes it everywhere, not just
+  // from the page they're looking at (placement toggles handle per-page hiding).
+  const surfaces: string[] = [];
+  if (widget.showOnHome) surfaces.push('the home page');
+  if (widget.showOnDashboard !== false) surfaces.push('the dashboard');
+  const surfacesText =
+    surfaces.length === 2
+      ? `${surfaces[0]} and ${surfaces[1]}`
+      : surfaces[0] || 'this page';
 
   const formatLastUpdated = (date: Date | null) => {
     if (!date) return 'Never';
@@ -50,51 +87,145 @@ const WidgetDisplay = ({
   };
 
   return (
-    <Card className="flex flex-col h-full w-full">
-      <CardHeader className="pb-3 shrink-0">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2 flex-1 min-w-0">
-            {/* Drag Handle */}
-            <div
-              className="widget-drag-handle shrink-0 p-1 rounded-control hover:bg-surface-2 cursor-move transition-colors"
-              title="Drag to move widget"
-            >
-              <GripVertical size={16} className="text-fg/50" />
+    <Card
+      className={`flex flex-col h-full w-full ${
+        isEditMode ? '' : 'border-0 bg-transparent shadow-none rounded-none'
+      }`}
+    >
+      {isEditMode && (
+        <CardHeader className="pb-3 shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2 flex-1 min-w-0">
+              {/* Drag Handle */}
+              <div
+                className="widget-drag-handle shrink-0 p-1 rounded-control hover:bg-surface-2 cursor-move transition-colors"
+                title="Drag to move widget"
+              >
+                <GripVertical size={16} className="text-fg/50" />
+              </div>
+
+              <CardTitle className="text-lg font-medium truncate">
+                {widget.title}
+              </CardTitle>
+              {isCode && (
+                <span
+                  className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-control bg-surface-2 text-fg/60 text-[10px]"
+                  title="Code widget"
+                >
+                  <Code2 size={11} />
+                  JS
+                </span>
+              )}
             </div>
 
-            <CardTitle className="text-lg font-medium truncate">
-              {widget.title}
-            </CardTitle>
-          </div>
+            <div className="flex items-center space-x-2 shrink-0">
+              {/* Last updated date with refresh frequency tooltip */}
+              <span
+                className="text-xs text-fg/60"
+                title={getRefreshFrequencyText()}
+              >
+                {formatLastUpdated(widget.lastUpdated)}
+              </span>
 
-          <div className="flex items-center space-x-2 shrink-0">
-            {/* Last updated date with refresh frequency tooltip */}
-            <span
-              className="text-xs text-fg/60"
-              title={getRefreshFrequencyText()}
-            >
-              {formatLastUpdated(widget.lastUpdated)}
-            </span>
+              {/* Refresh button */}
+              <button
+                type="button"
+                onClick={() => onRefresh(widget.id)}
+                disabled={widget.isLoading || inert}
+                className="p-1.5 hover:bg-surface-2 rounded-control transition-colors disabled:opacity-50"
+                title={
+                  inert
+                    ? 'Code execution is disabled — cannot refresh'
+                    : 'Refresh Widget'
+                }
+              >
+                {widget.isLoading ? (
+                  <LoaderCircle
+                    size={16}
+                    className="animate-spin text-accent"
+                  />
+                ) : (
+                  <RefreshCw size={16} className="text-fg/70" />
+                )}
+              </button>
 
-            {/* Refresh button */}
-            <button
-              type="button"
-              onClick={() => onRefresh(widget.id)}
-              disabled={widget.isLoading}
-              className="p-1.5 hover:bg-surface-2 rounded-control transition-colors disabled:opacity-50"
-              title="Refresh Widget"
-            >
-              {widget.isLoading ? (
-                <LoaderCircle size={16} className="animate-spin text-accent" />
-              ) : (
-                <RefreshCw size={16} className="text-fg/70" />
+              {/* Placement toggles — which surface(s) the widget appears on */}
+              {onTogglePlacement && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => onTogglePlacement(widget, 'home')}
+                    className={`p-1.5 rounded-control transition-colors ${
+                      widget.showOnHome
+                        ? 'bg-accent text-accent-fg hover:bg-accent-700'
+                        : 'hover:bg-surface-2 text-fg/70'
+                    }`}
+                    title={
+                      widget.showOnHome
+                        ? 'Showing on home — click to hide'
+                        : 'Show on home page'
+                    }
+                  >
+                    <Home size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onTogglePlacement(widget, 'dashboard')}
+                    className={`p-1.5 rounded-control transition-colors ${
+                      widget.showOnDashboard !== false
+                        ? 'bg-accent text-accent-fg hover:bg-accent-700'
+                        : 'hover:bg-surface-2 text-fg/70'
+                    }`}
+                    title={
+                      widget.showOnDashboard !== false
+                        ? 'Showing on dashboard — click to hide'
+                        : 'Show on dashboard'
+                    }
+                  >
+                    <LayoutDashboard size={16} />
+                  </button>
+                </>
               )}
-            </button>
-          </div>
-        </div>
-      </CardHeader>
 
-      <CardContent className="flex-1 overflow-hidden">
+              {/* Edit */}
+              <button
+                type="button"
+                onClick={() => onEdit(widget)}
+                className="p-1.5 hover:bg-surface-2 rounded-control transition-colors"
+                title="Edit Widget"
+              >
+                <Edit size={16} className="text-fg/70" />
+              </button>
+
+              {/* Convert AI → Code */}
+              {!isCode && ceEnabled && onConvert && (
+                <button
+                  type="button"
+                  onClick={() => onConvert(widget)}
+                  className="p-1.5 hover:bg-surface-2 rounded-control transition-colors"
+                  title="Convert to Code Widget"
+                >
+                  <Code2 size={16} className="text-fg/70" />
+                </button>
+              )}
+
+              {/* Delete */}
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteOpen(true)}
+                className="p-1.5 hover:bg-surface-2 rounded-control transition-colors"
+                title="Delete Widget"
+              >
+                <Trash2 size={16} className="text-danger" />
+              </button>
+            </div>
+          </div>
+        </CardHeader>
+      )}
+
+      <CardContent
+        className={`flex-1 overflow-hidden ${isEditMode ? '' : 'p-0'}`}
+      >
         <div className="h-full overflow-y-auto">
           {widget.isLoading ? (
             <div className="flex items-center justify-center py-8 text-fg/60">
@@ -115,8 +246,22 @@ const WidgetDisplay = ({
               </div>
             </div>
           ) : widget.content ? (
-            <div className="prose prose-sm max-w-none">
-              <MarkdownRenderer content={widget.content} showThinking={false} />
+            <>
+              <WidgetContent
+                content={widget.content}
+                charts={widget.charts}
+                className="max-w-none"
+              />
+              {inert && (
+                <p className="mt-3 text-xs text-fg/50 italic">
+                  Code execution disabled — showing last result from{' '}
+                  {formatLastUpdated(widget.lastUpdated)}.
+                </p>
+              )}
+            </>
+          ) : inert ? (
+            <div className="flex items-center justify-center py-8 text-fg/60 text-center text-sm">
+              Code execution is disabled — this widget cannot run.
             </div>
           ) : (
             <div className="flex items-center justify-center py-8 text-fg/60">
@@ -129,65 +274,60 @@ const WidgetDisplay = ({
         </div>
       </CardContent>
 
-      {/* Collapsible footer with sources and actions */}
-      <div className="bg-surface/30 shrink-0">
-        <button
-          type="button"
-          onClick={() => setIsFooterExpanded(!isFooterExpanded)}
-          className="w-full px-4 py-2 flex items-center space-x-2 text-xs text-fg/60 hover:bg-surface-2 transition-colors"
+      <Transition appear show={confirmDeleteOpen} as={Fragment}>
+        <Dialog
+          as="div"
+          className="relative z-50"
+          onClose={() => setConfirmDeleteOpen(false)}
         >
-          {isFooterExpanded ? (
-            <ChevronDown size={14} />
-          ) : (
-            <ChevronRight size={14} />
-          )}
-          <span>Sources & Actions</span>
-        </button>
-
-        {isFooterExpanded && (
-          <div className="px-4 pb-4 space-y-3">
-            {/* Sources */}
-            {widget.sources.length > 0 && (
-              <div>
-                <p className="text-xs text-fg/60 mb-2">Sources:</p>
-                <div className="space-y-1">
-                  {widget.sources.map((source, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center space-x-2 text-xs"
+          <DialogBackdrop className="fixed inset-0 bg-overlay" />
+          <div className="fixed inset-0 overflow-y-auto">
+            <div className="flex min-h-full items-center justify-center p-4 text-center">
+              <TransitionChild
+                as={Fragment}
+                enter="ease-out duration-200"
+                enterFrom="opacity-0 scale-95"
+                enterTo="opacity-100 scale-100"
+                leave="ease-in duration-100"
+                leaveFrom="opacity-100 scale-100"
+                leaveTo="opacity-0 scale-95"
+              >
+                <DialogPanel className="w-full max-w-md transform rounded-floating bg-surface border border-surface-2 p-6 text-left align-middle shadow-floating transition-all">
+                  <DialogTitle className="text-lg font-medium leading-6">
+                    Delete widget
+                  </DialogTitle>
+                  <Description className="text-sm text-fg/70 mt-2">
+                    Permanently delete{' '}
+                    <span className="font-medium text-fg">{widget.title}</span>?
+                    It currently appears on {surfacesText}, and deleting removes
+                    it everywhere — this cannot be undone. To hide it from a
+                    single page instead, use the home/dashboard toggles.
+                  </Description>
+                  <div className="flex flex-row items-end justify-end space-x-4 mt-6">
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDeleteOpen(false)}
+                      className="text-sm transition-colors duration-150"
                     >
-                      <span className="inline-block w-2 h-2 bg-accent rounded-pill"></span>
-                      <span className="text-fg/70 truncate">{source.url}</span>
-                      <span className="text-fg/60">({source.type})</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Action buttons */}
-            <div className="flex items-center space-x-2 pt-2">
-              <button
-                type="button"
-                onClick={() => onEdit(widget)}
-                className="flex items-center space-x-1 px-2 py-1 text-xs text-fg/70 hover:bg-surface-2 rounded-control transition-colors"
-              >
-                <Edit size={12} />
-                <span>Edit</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => onDelete(widget.id)}
-                className="flex items-center space-x-1 px-2 py-1 text-xs text-danger hover:bg-surface-2 rounded-control transition-colors"
-              >
-                <Trash2 size={12} />
-                <span>Delete</span>
-              </button>
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setConfirmDeleteOpen(false);
+                        onDelete(widget.id);
+                      }}
+                      className="text-danger text-sm font-medium transition-colors duration-150"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </DialogPanel>
+              </TransitionChild>
             </div>
           </div>
-        )}
-      </div>
+        </Dialog>
+      </Transition>
     </Card>
   );
 };

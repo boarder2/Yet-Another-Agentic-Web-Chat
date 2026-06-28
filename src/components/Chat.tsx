@@ -17,6 +17,7 @@ import {
   PendingSkillEditApproval,
   SkillEditApproval,
 } from './SkillEditApproval';
+import { PendingMcpApproval, McpToolApproval } from './McpToolApproval';
 
 const Chat = ({
   loading,
@@ -56,6 +57,8 @@ const Chat = ({
   onEditDecide,
   pendingSkillEditApprovals = {},
   onSkillEditDecide,
+  pendingMcpApprovals = {},
+  onMcpToolDecide,
   pendingImages,
   setPendingImages,
   imageCapable = false,
@@ -67,6 +70,7 @@ const Chat = ({
   onCompact,
   compacting,
   enabledSkills,
+  skillNames,
 }: {
   messages: Message[];
   sendMessage: (
@@ -154,6 +158,12 @@ const Chat = ({
     decision: 'accept' | 'reject',
     freeformText?: string,
   ) => void;
+  pendingMcpApprovals?: Record<string, PendingMcpApproval[]>;
+  onMcpToolDecide?: (
+    approvalId: string,
+    approved: boolean,
+    opts?: { alwaysAllow?: boolean },
+  ) => void;
   pendingImages: ImageAttachment[];
   setPendingImages: (images: ImageAttachment[]) => void;
   imageCapable?: boolean;
@@ -171,6 +181,7 @@ const Chat = ({
   onCompact?: (instructions?: string) => void;
   compacting?: boolean;
   enabledSkills?: Array<{ name: string; description: string }>;
+  skillNames?: Set<string>;
 }) => {
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [manuallyScrolledUp, setManuallyScrolledUp] = useState(false);
@@ -180,9 +191,10 @@ const Chat = ({
   const isAtBottomRef = useRef(isAtBottom);
   const manuallyScrolledUpRef = useRef(manuallyScrolledUp);
   const SCROLL_THRESHOLD = 100; // pixels from bottom to consider "at bottom"
-  const [currentMessageId, setCurrentMessageId] = useState<string | undefined>(
-    undefined,
-  );
+  // The in-flight message is the last user message while a response is loading.
+  const currentMessageId = loading
+    ? [...messages].reverse().find((m) => m.role === 'user')?.messageId
+    : undefined;
 
   // Check if user is at bottom of page
   useEffect(() => {
@@ -258,12 +270,14 @@ const Chat = ({
       document.title = `${messages[0].content.substring(0, 30)} - YAAWC`;
     }
 
-    // Always scroll when user sends a message
+    // Always scroll when user sends a message, resetting the scroll-tracking
+    // state that the scroll listeners maintain. These resets are coupled to the
+    // scroll side-effect performed here.
     if (messages[messages.length - 1]?.role === 'user') {
       scroll();
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setIsAtBottom(true); // Reset to true when user sends a message
-      setManuallyScrolledUp(false); // Reset manually scrolled flag when user sends a message
+      setIsAtBottom(true);
+      setManuallyScrolledUp(false);
     }
   }, [messages]);
 
@@ -310,21 +324,6 @@ const Chat = ({
       window.removeEventListener('resize', updateInputStyle);
     };
   }, []);
-
-  // Track the last user messageId when loading starts
-  useEffect(() => {
-    if (loading) {
-      // Find the last user message
-      const lastUserMsg = [...messages]
-        .reverse()
-        .find((m) => m.role === 'user');
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setCurrentMessageId(lastUserMsg?.messageId);
-      //console.log('Set currentMessageId to', lastUserMsg?.messageId, messages);
-    } else {
-      setCurrentMessageId(undefined);
-    }
-  }, [loading, messages]);
 
   // Cancel handler
   const handleCancel = async () => {
@@ -377,6 +376,7 @@ const Chat = ({
               actionMessageId={currentMessageId}
               isPrivateSession={isPrivateSession}
               searchCapabilities={searchCapabilities}
+              skillNames={skillNames}
               editInputProps={{
                 fileIds,
                 setFileIds,
@@ -406,6 +406,7 @@ const Chat = ({
         {manuallyScrolledUp && !isAtBottom && (
           <div className="absolute -top-14 right-2 z-10">
             <button
+              type="button"
               onClick={() => {
                 setManuallyScrolledUp(false);
                 setIsAtBottom(true);
@@ -469,7 +470,6 @@ const Chat = ({
               multiSelect={current.multiSelect}
               allowFreeformInput={current.allowFreeformInput}
               context={current.context}
-              createdAt={current.createdAt}
               onSubmit={onQuestionAnswer}
               onSkip={onQuestionSkip}
               onDismiss={() => {
@@ -502,7 +502,6 @@ const Chat = ({
               replaceAll={current.replaceAll}
               occurrences={current.occurrences}
               workspaceAutoAccept={current.workspaceAutoAccept}
-              createdAt={current.createdAt}
               onDecide={onEditDecide}
               onDismiss={() => {
                 setTimeout(() => {
@@ -532,8 +531,32 @@ const Chat = ({
               oldContent={current.oldContent}
               newContent={current.newContent}
               scope={current.scope}
-              createdAt={current.createdAt}
               onDecide={onSkillEditDecide}
+              onDismiss={() => {
+                setTimeout(() => {
+                  document.getElementById('message-input')?.focus();
+                }, 0);
+              }}
+            />
+          );
+        })()}
+        {/* MCP tool approval queue */}
+        {(() => {
+          const allPending = Object.values(pendingMcpApprovals)
+            .flat()
+            .filter((a) => a.status === 'pending');
+          if (allPending.length === 0 || !onMcpToolDecide) return null;
+          const current = allPending[0];
+          return (
+            <McpToolApproval
+              key={current.approvalId}
+              approvalId={current.approvalId}
+              serverId={current.serverId}
+              serverName={current.serverName}
+              toolName={current.toolName}
+              description={current.description}
+              arguments={current.arguments}
+              onDecide={onMcpToolDecide}
               onDismiss={() => {
                 setTimeout(() => {
                   document.getElementById('message-input')?.focus();

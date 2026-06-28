@@ -123,6 +123,7 @@ const WorkspacePicker = ({ value, onChange }: Props) => {
             />
             <input
               autoFocus
+              aria-label="Search workspaces"
               value={filter}
               onChange={(e) => {
                 setFilter(e.target.value);

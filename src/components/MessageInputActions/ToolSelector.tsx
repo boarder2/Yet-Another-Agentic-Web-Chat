@@ -12,12 +12,8 @@ import {
   PopoverPanel,
   Transition,
 } from '@headlessui/react';
-import { Fragment, useEffect, useState } from 'react';
-
-interface Tool {
-  name: string;
-  description: string;
-}
+import { Fragment, useEffect } from 'react';
+import { useTools } from '@/lib/hooks/api/useTools';
 
 interface ToolSelectorProps {
   selectedToolNames: string[];
@@ -28,42 +24,19 @@ const ToolSelector = ({
   selectedToolNames,
   onSelectedToolNamesChange,
 }: ToolSelectorProps) => {
-  const [availableTools, setAvailableTools] = useState<Tool[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { data: availableTools = [], isLoading } = useTools();
 
   useEffect(() => {
-    const fetchTools = async () => {
-      try {
-        setIsLoading(true);
-        const response = await fetch('/api/tools');
-        if (response.ok) {
-          const tools = await response.json();
-          setAvailableTools(tools);
-
-          // Check if any currently selected tool names are not in the API response
-          const availableToolNames = tools.map((tool: Tool) => tool.name);
-          const validSelectedNames = selectedToolNames.filter((name) =>
-            availableToolNames.includes(name),
-          );
-
-          // If some selected names are no longer available, update the selection
-          if (validSelectedNames.length !== selectedToolNames.length) {
-            onSelectedToolNamesChange(validSelectedNames);
-          }
-        } else {
-          console.error('Failed to load tools.');
-        }
-      } catch (error) {
-        console.error('Error loading tools.');
-        console.error(error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    // Only fetch tools once when the component mounts
-    fetchTools();
-  }, [selectedToolNames, onSelectedToolNamesChange]);
+    if (availableTools.length === 0) return;
+    const availableToolNames = availableTools.map((t) => t.name);
+    const validSelectedNames = selectedToolNames.filter((name) =>
+      availableToolNames.includes(name),
+    );
+    if (validSelectedNames.length !== selectedToolNames.length) {
+      onSelectedToolNamesChange(validSelectedNames);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [availableTools]);
 
   const handleToggleTool = (toolName: string) => {
     const newSelectedNames = selectedToolNames.includes(toolName)

@@ -8,6 +8,9 @@ export interface DashboardConfig {
     parallelLoading: boolean;
     autoRefresh: boolean;
     theme: 'auto' | 'light' | 'dark';
+    // Home only: when true, the widget board is pushed below the fold so only
+    // its top edge peeks above the bottom of the screen (defaults to false).
+    homeWidgetsPeek?: boolean;
   };
   lastExport?: Date;
   version: string;

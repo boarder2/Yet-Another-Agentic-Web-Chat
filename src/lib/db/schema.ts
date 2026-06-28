@@ -5,6 +5,7 @@ import {
   sqliteTable,
   primaryKey,
   uniqueIndex,
+  index,
 } from 'drizzle-orm/sqlite-core';
 
 export const messages = sqliteTable('messages', {
@@ -12,7 +13,9 @@ export const messages = sqliteTable('messages', {
   content: text('content').notNull(),
   chatId: text('chatId').notNull(),
   messageId: text('messageId').notNull(),
-  role: text('type', { enum: ['assistant', 'user', 'compaction'] }),
+  role: text('type', {
+    enum: ['assistant', 'user', 'compaction', 'system'],
+  }),
   metadata: text('metadata', {
     mode: 'json',
   }),
@@ -22,6 +25,36 @@ interface File {
   name: string;
   fileId: string;
 }
+
+// Cached Mode-2 (LLM) narration for a message's read-aloud. Narration is
+// voice/speed-independent text, so one row per message. `contentHash` folds in
+// the message content *and* the narration model identity, so editing the message
+// or switching the narration model invalidates and regenerates. Kept in its own
+// table (not a messages column) so this potentially-large text never loads on the
+// hot chat-fetch path — only the TTS route reads it.
+export const ttsNarrations = sqliteTable('tts_narrations', {
+  messageId: text('message_id').primaryKey(),
+  contentHash: text('content_hash').notNull(),
+  narration: text('narration').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp' })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+// Instance-wide app settings, stored as a flat key→string map. Mirrors the
+// browser localStorage key space exactly (values are the same serialized
+// strings the client cache holds) so the DB is the durable, cross-device source
+// of truth while localStorage acts as a synchronous local cache. Only the keys
+// in MIGRATED_SETTING_KEYS (src/lib/settings/keys.ts) ever land here — secrets
+// (custom_openai creds, provider API keys) stay in config.toml and device-local
+// UI prefs (theme, chat width) stay in localStorage only.
+export const appSettings = sqliteTable('app_settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
 
 export const systemPrompts = sqliteTable('system_prompts', {
   id: text('id')
@@ -57,6 +90,17 @@ export const chats = sqliteTable('chats', {
     .notNull()
     .default(sql`0`),
   workspaceId: text('workspace_id'),
+  activeRunMessageId: text('active_run_message_id'),
+  activeRunStartedAt: integer('active_run_started_at'),
+  activeRunStatus: text('active_run_status', {
+    enum: ['running', 'awaiting_user'],
+  }),
+  activeRunThreadId: text('active_run_thread_id'),
+  activeRunConfigSnapshot: text('active_run_config_snapshot', { mode: 'json' }),
+  lastRunStatus: text('last_run_status', {
+    enum: ['completed', 'errored', 'cancelled', 'interrupted', 'awaiting_user'],
+  }),
+  lastRunViewed: integer('last_run_viewed'),
 });
 
 export const memories = sqliteTable('memories', {
@@ -101,9 +145,6 @@ export const scheduledTasks = sqliteTable('scheduled_tasks', {
     name: string;
     contextWindowSize?: number;
   } | null>(),
-  embeddingModel: text('embedding_model', { mode: 'json' })
-    .$type<{ provider: string; name: string }>()
-    .notNull(),
   selectedSystemPromptIds: text('selected_system_prompt_ids', { mode: 'json' })
     .$type<string[]>()
     .default(sql`'[]'`),
@@ -190,6 +231,146 @@ export const workspaceFiles = sqliteTable(
       t.workspaceId,
       t.name,
     ),
+  }),
+);
+
+export const mcpServers = sqliteTable(
+  'mcp_servers',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    name: text('name').notNull(),
+    url: text('url').notNull(),
+    transport: text('transport', {
+      enum: ['auto', 'streamableHttp', 'sse'],
+    })
+      .notNull()
+      .default('auto'),
+    resolvedTransport: text('resolved_transport', {
+      enum: ['streamableHttp', 'sse'],
+    }),
+    authType: text('auth_type', {
+      enum: ['none', 'bearer', 'oauth_client_credentials', 'oauth'],
+    })
+      .notNull()
+      .default('none'),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    // Per-tool overrides keyed by tool name. Absent entry / absent field falls
+    // back to the default (enabled + always ask). Disabled tools are filtered out
+    // at injection time; `approval: 'never'` skips the approval interrupt.
+    toolConfig: text('tool_config', { mode: 'json' }).$type<
+      Record<string, { enabled?: boolean; approval?: 'always' | 'never' }>
+    >(),
+    headerName: text('header_name'),
+    secretToken: text('secret_token'),
+    oauthClientId: text('oauth_client_id'),
+    oauthClientSecret: text('oauth_client_secret'),
+    oauthScope: text('oauth_scope'),
+    lastConnectedAt: integer('last_connected_at'),
+    status: text('status', {
+      enum: ['unknown', 'connected', 'auth_required', 'error', 'disabled'],
+    })
+      .notNull()
+      .default('unknown'),
+    lastError: text('last_error'),
+    authFailureUntil: integer('auth_failure_until'),
+    createdAt: integer('created_at', { mode: 'timestamp' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer('updated_at', { mode: 'timestamp' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => ({
+    nameUnique: uniqueIndex('mcp_servers_name_unique').on(t.name),
+  }),
+);
+
+// Per-server persisted OAuth credentials (access/refresh tokens, DCR result, AS metadata cache)
+export const mcpOauth = sqliteTable('mcp_oauth', {
+  serverId: text('server_id')
+    .primaryKey()
+    .references(() => mcpServers.id, { onDelete: 'cascade' }),
+  clientInformation: text('client_information', { mode: 'json' }),
+  tokens: text('tokens', { mode: 'json' }),
+  // SDK saveDiscoveryState/discoveryState cache (NOT a hand-rolled metadata blob)
+  discoveryState: text('discovery_state', { mode: 'json' }),
+  updatedAt: integer('updated_at', { mode: 'timestamp' })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+// In-flight interactive OAuth authorization attempts — one row per attempt.
+// Each attempt gets its own row so concurrent authorizations for the same server
+// never clobber each other (no shared mutable state/codeVerifier column).
+export const mcpOauthFlows = sqliteTable('mcp_oauth_flows', {
+  // High-entropy (≥128-bit) CSRF token; also the callback lookup key
+  state: text('state').primaryKey(),
+  serverId: text('server_id')
+    .notNull()
+    .references(() => mcpServers.id, { onDelete: 'cascade' }),
+  codeVerifier: text('code_verifier').notNull(),
+  createdAt: integer('created_at').notNull(),
+  // TTL ≤ 10 min; enforced server-side; single-use (deleted on callback success)
+  expiresAt: integer('expires_at').notNull(),
+});
+
+export const approvalRequests = sqliteTable(
+  'approval_requests',
+  {
+    id: text('id').primaryKey(),
+    chatId: text('chat_id')
+      .notNull()
+      .references(() => chats.id, { onDelete: 'cascade' }),
+    messageId: text('message_id').notNull(),
+    threadId: text('thread_id').notNull(),
+    toolCallId: text('tool_call_id').notNull(),
+    engineInterruptId: text('engine_interrupt_id'),
+    toolKind: text('tool_kind', {
+      enum: [
+        'ask_user',
+        'code_execution',
+        'workspace_edit',
+        'workspace_create',
+        'skill_edit',
+        'mcp_tool',
+      ],
+    }).notNull(),
+    workspaceId: text('workspace_id'),
+    payload: text('payload', { mode: 'json' }).notNull(),
+    snapshot: text('snapshot', { mode: 'json' }),
+    createdAt: integer('created_at').notNull(),
+    resolvedAt: integer('resolved_at'),
+    resolutionKind: text('resolution_kind', {
+      enum: ['user', 'cancelled', 'interrupted', 'stale_snapshot'],
+    }),
+    response: text('response', { mode: 'json' }),
+  },
+  (t) => ({
+    byMessage: index('approvals_message_idx').on(t.messageId),
+    byPending: index('approvals_pending_idx').on(t.resolvedAt),
+    byChat: index('approvals_chat_idx').on(t.chatId),
+  }),
+);
+
+export const runEvents = sqliteTable(
+  'run_events',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    chatId: text('chat_id')
+      .notNull()
+      .references(() => chats.id, { onDelete: 'cascade' }),
+    messageId: text('message_id').notNull(),
+    seq: integer('seq').notNull(),
+    type: text('type').notNull(),
+    data: text('data', { mode: 'json' }).notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => ({
+    byMessage: index('run_events_message_idx').on(t.messageId),
+    bySeq: index('run_events_seq_idx').on(t.messageId, t.seq),
+    byChat: index('run_events_chat_idx').on(t.chatId),
   }),
 );
 

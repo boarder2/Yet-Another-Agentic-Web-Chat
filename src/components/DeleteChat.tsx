@@ -65,6 +65,7 @@ const DeleteChat = ({
     <>
       {asMenuItem ? (
         <button
+          type="button"
           onClick={() => setConfirmationDialogOpen(true)}
           className="flex items-center gap-2 px-4 py-2 text-left hover:bg-surface-2 transition-colors rounded-surface font-medium text-sm text-danger w-full"
         >
@@ -73,6 +74,7 @@ const DeleteChat = ({
         </button>
       ) : isPrivate ? (
         <button
+          type="button"
           onClick={() => setConfirmationDialogOpen(true)}
           className="flex items-center gap-1.5 px-2 py-1 rounded-surface bg-danger-soft border border-danger text-danger hover:bg-danger-soft transition duration-200 text-xs"
         >
@@ -82,6 +84,7 @@ const DeleteChat = ({
         </button>
       ) : (
         <button
+          type="button"
           onClick={() => {
             setConfirmationDialogOpen(true);
           }}
@@ -100,7 +103,7 @@ const DeleteChat = ({
             }
           }}
         >
-          <DialogBackdrop className="fixed inset-0 bg-fg/30" />
+          <DialogBackdrop className="fixed inset-0 bg-overlay" />
           <div className="fixed inset-0 overflow-y-auto">
             <div className="flex min-h-full items-center justify-center p-4 text-center">
               <TransitionChild
@@ -121,6 +124,7 @@ const DeleteChat = ({
                   </Description>
                   <div className="flex flex-row items-end justify-end space-x-4 mt-6">
                     <button
+                      type="button"
                       onClick={() => {
                         if (!loading) {
                           setConfirmationDialogOpen(false);
@@ -131,6 +135,7 @@ const DeleteChat = ({
                       Cancel
                     </button>
                     <button
+                      type="button"
                       onClick={handleDelete}
                       className="text-danger text-sm hover:text-danger transition duration200"
                     >

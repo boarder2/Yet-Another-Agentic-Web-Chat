@@ -37,10 +37,6 @@ export default function EditTaskPage() {
     provider: string;
     name: string;
   } | null;
-  const embeddingModel = task.embeddingModel as {
-    provider: string;
-    name: string;
-  } | null;
 
   return (
     <TaskForm
@@ -55,9 +51,6 @@ export default function EditTaskPage() {
           : null,
         systemModel: systemModel
           ? { provider: systemModel.provider, name: systemModel.name }
-          : null,
-        embeddingModel: embeddingModel
-          ? { provider: embeddingModel.provider, name: embeddingModel.name }
           : null,
         selectedSystemPromptIds:
           (task.selectedSystemPromptIds as string[]) || [],

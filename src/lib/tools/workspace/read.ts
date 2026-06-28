@@ -5,6 +5,7 @@ import { HumanMessage, ToolMessage } from '@langchain/core/messages';
 import { Command } from '@langchain/langgraph';
 import { getFileByName, readFileBytes } from '@/lib/workspaces/files';
 import { getText, isImageMime } from '@/lib/workspaces/extract';
+import { persistFromToolConfig } from '@/lib/utils/persistToolContext';
 
 export function workspaceReadTool(opts: {
   workspaceId: string;
@@ -69,12 +70,21 @@ export function workspaceReadTool(opts: {
       }
       const a = Math.max(1, startLine ?? 1);
       const b = Math.min(lines.length, endLine ?? lines.length);
+      const sliced = lines.slice(a - 1, b).join('\n');
+
+      await persistFromToolConfig({
+        config,
+        kind: 'workspace_read',
+        body: `[workspace_read ${row.name}:${a}-${b}/${lines.length}]\n${sliced}`,
+        metadataExtras: { path: row.name, startLine: a, endLine: b },
+      });
+
       return JSON.stringify({
         file: row.name,
         totalLines: lines.length,
         startLine: a,
         endLine: b,
-        content: lines.slice(a - 1, b).join('\n'),
+        content: sliced,
       });
     },
     {

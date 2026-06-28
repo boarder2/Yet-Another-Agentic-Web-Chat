@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   FileText,
@@ -10,20 +10,15 @@ import {
   LoaderCircle,
   FilePen,
 } from 'lucide-react';
+import {
+  useWorkspaceFiles,
+  useUploadWorkspaceFile,
+  useDeleteWorkspaceFile,
+  usePatchWorkspaceFile,
+  type FileMeta,
+} from '@/lib/hooks/api/useWorkspaceFiles';
 
-type FileRow = {
-  id: string;
-  name: string;
-  mime?: string | null;
-  size: number;
-  isBinary?: boolean;
-  autoAcceptEdits?: number | null;
-  updatedAt: number;
-};
-
-// Authoritative: server-side NUL-byte sniff. Default to editable when the
-// flag is missing (older API responses).
-function isEditableFile(f: FileRow): boolean {
+function isEditableFile(f: FileMeta): boolean {
   return !f.isBinary;
 }
 
@@ -57,41 +52,30 @@ function AutoAcceptPill({
   workspaceId,
   fileId,
   value,
-  onChange,
 }: {
   workspaceId: string;
   fileId: string;
   value: number | null | undefined;
-  onChange: (next: number | null) => void;
 }) {
-  const [saving, setSaving] = useState(false);
+  const patch = usePatchWorkspaceFile(workspaceId);
   const current = value === undefined ? null : value;
 
-  async function select(next: number | null) {
-    if (next === current || saving) return;
-    setSaving(true);
-    try {
-      await fetch(`/api/workspaces/${workspaceId}/files/${fileId}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ autoAcceptEdits: next }),
-      });
-      onChange(next);
-    } finally {
-      setSaving(false);
-    }
+  function select(next: number | null) {
+    if (next === current || patch.isPending) return;
+    patch.mutate({ fileId, data: { autoAcceptEdits: next } });
   }
 
   return (
     <div className="inline-flex items-center gap-1.5">
       <FilePen size={11} className="text-fg/30 shrink-0" />
       <div
-        className={`inline-flex items-center rounded-pill border border-surface-2 bg-bg overflow-hidden transition-opacity ${saving ? 'opacity-50 pointer-events-none' : ''}`}
+        className={`inline-flex items-center rounded-pill border border-surface-2 bg-bg overflow-hidden transition-opacity ${patch.isPending ? 'opacity-50 pointer-events-none' : ''}`}
       >
         {AUTO_ACCEPT_SEGMENTS.map((seg, i) => {
           const isActive = current === seg.value;
           return (
             <button
+              type="button"
               key={String(seg.value)}
               onClick={() => select(seg.value)}
               title={seg.title}
@@ -119,92 +103,60 @@ export default function FilesTab({
   onCountChange?: (n: number) => void;
   compact?: boolean;
 }) {
-  const [files, setFiles] = useState<FileRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: files = [], isLoading } = useWorkspaceFiles(workspaceId);
+  const upload = useUploadWorkspaceFile(workspaceId);
+  const del = useDeleteWorkspaceFile(workspaceId);
+
   const [creatingNote, setCreatingNote] = useState(false);
   const [noteName, setNoteName] = useState('note.md');
-  const [uploading, setUploading] = useState(false);
-
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    const data = await fetch(`/api/workspaces/${workspaceId}/files`).then((r) =>
-      r.json(),
-    );
-    const list = data.files ?? [];
-    setFiles(list);
-    onCountChange?.(list.length);
-    setLoading(false);
-  }, [workspaceId, onCountChange]);
 
   useEffect(() => {
-    refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId]);
-
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent<{ workspaceId: string }>).detail;
-      if (detail?.workspaceId === workspaceId) refresh();
-    };
-    window.addEventListener('workspace-updated', handler);
-    return () => window.removeEventListener('workspace-updated', handler);
-  }, [workspaceId, refresh]);
+    onCountChange?.(files.length);
+  }, [files.length, onCountChange]);
 
   async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
-    setUploading(true);
-    const fd = new FormData();
-    fd.append('file', f);
-    await fetch(`/api/workspaces/${workspaceId}/files`, {
-      method: 'POST',
-      body: fd,
+    upload.mutate(f, {
+      onSettled: () => {
+        e.target.value = '';
+      },
     });
-    e.target.value = '';
-    setUploading(false);
-    refresh();
   }
 
-  async function createNote() {
-    await fetch(`/api/workspaces/${workspaceId}/files`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        name: noteName,
-        content: '',
-        mime: 'text/markdown',
-      }),
-    });
-    setCreatingNote(false);
-    setNoteName('note.md');
-    refresh();
-  }
-
-  async function remove(id: string) {
-    if (!confirm('Delete file?')) return;
-    await fetch(`/api/workspaces/${workspaceId}/files/${id}`, {
-      method: 'DELETE',
-    });
-    refresh();
-  }
-
-  function updateFileAutoAccept(fileId: string, next: number | null) {
-    setFiles((prev) =>
-      prev.map((f) => (f.id === fileId ? { ...f, autoAcceptEdits: next } : f)),
+  function createNote() {
+    upload.mutate(
+      { name: noteName, content: '', mime: 'text/markdown' },
+      {
+        onSuccess: () => {
+          setCreatingNote(false);
+          setNoteName('note.md');
+        },
+      },
     );
+  }
+
+  function remove(id: string) {
+    if (!confirm('Delete file?')) return;
+    del.mutate(id);
   }
 
   return (
     <div className="space-y-4">
       <div className="flex gap-2 items-center flex-wrap">
         <label className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-surface border border-surface-2 bg-surface hover:bg-surface-2 cursor-pointer transition">
-          {uploading ? (
+          {upload.isPending ? (
             <LoaderCircle size={14} className="animate-spin text-accent" />
           ) : (
             <Upload size={14} />
           )}
           Upload
-          <input type="file" className="hidden" onChange={onUpload} />
+          <input
+            type="file"
+            aria-label="Upload file"
+            className="hidden"
+            onChange={onUpload}
+          />
         </label>
         {creatingNote ? (
           <span
@@ -213,6 +165,7 @@ export default function FilesTab({
             }
           >
             <input
+              aria-label="Note name"
               className="min-w-0 w-full border border-surface-2 rounded-surface px-2 py-1.5 text-sm bg-bg focus:outline-none focus:border-accent"
               value={noteName}
               onChange={(e) => setNoteName(e.target.value)}
@@ -224,12 +177,14 @@ export default function FilesTab({
             />
             <span className={compact ? 'flex gap-2' : 'contents'}>
               <button
+                type="button"
                 onClick={createNote}
                 className={`px-3 py-1.5 text-sm rounded-surface bg-accent text-accent-fg hover:bg-accent/90 transition ${compact ? 'flex-1' : ''}`}
               >
                 Create
               </button>
               <button
+                type="button"
                 onClick={() => setCreatingNote(false)}
                 className={`px-3 py-1.5 text-sm rounded-surface border border-surface-2 hover:bg-surface-2 transition ${compact ? 'flex-1' : ''}`}
               >
@@ -239,6 +194,7 @@ export default function FilesTab({
           </span>
         ) : (
           <button
+            type="button"
             onClick={() => setCreatingNote(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-surface border border-surface-2 bg-surface hover:bg-surface-2 transition"
           >
@@ -248,7 +204,7 @@ export default function FilesTab({
         )}
       </div>
 
-      {loading ? (
+      {isLoading ? (
         <div className="flex items-center justify-center py-8">
           <LoaderCircle size={20} className="animate-spin text-accent" />
         </div>
@@ -290,6 +246,7 @@ export default function FilesTab({
                       </Link>
                     )}
                     <button
+                      type="button"
                       onClick={() => remove(f.id)}
                       className="p-1 rounded-control hover:bg-danger-soft text-danger transition shrink-0"
                       title="Delete"
@@ -303,7 +260,6 @@ export default function FilesTab({
                         workspaceId={workspaceId}
                         fileId={f.id}
                         value={f.autoAcceptEdits}
-                        onChange={(next) => updateFileAutoAccept(f.id, next)}
                       />
                     )}
                     <span>{(f.size / 1024).toFixed(1)}KB</span>
@@ -338,12 +294,12 @@ export default function FilesTab({
                       workspaceId={workspaceId}
                       fileId={f.id}
                       value={f.autoAcceptEdits}
-                      onChange={(next) => updateFileAutoAccept(f.id, next)}
                     />
                   )}
                   <span>{f.mime ?? '—'}</span>
                   <span>{(f.size / 1024).toFixed(1)}KB</span>
                   <button
+                    type="button"
                     onClick={() => remove(f.id)}
                     className="p-1 rounded-control hover:bg-danger-soft text-danger transition"
                     title="Delete"

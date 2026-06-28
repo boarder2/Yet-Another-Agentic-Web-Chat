@@ -15,20 +15,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
-
-interface Run {
-  id: string;
-  title: string;
-  createdAt: number;
-  focusMode: string;
-  scheduledTaskId: string | null;
-  scheduledRunViewed: number | null;
-  taskName: string;
-  lastRunStatus: string | null;
-  preview: string;
-  sourcesCount: number;
-}
+import { useScheduledRunsList } from '@/lib/hooks/api/useScheduledTasks';
 
 const focusModeIcons: Record<string, React.ReactNode> = {
   webSearch: <Globe size={14} className="text-accent" />,
@@ -37,26 +24,8 @@ const focusModeIcons: Record<string, React.ReactNode> = {
 };
 
 const Page = () => {
-  const [runs, setRuns] = useState<Run[]>([]);
-  const [loading, setLoading] = useState(true);
   const router = useRouter();
-
-  useEffect(() => {
-    const fetchRuns = async () => {
-      try {
-        const res = await fetch('/api/scheduled-tasks/runs?limit=50');
-        if (res.ok) {
-          const data = await res.json();
-          setRuns(data);
-        }
-      } catch {
-        // Ignore
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchRuns();
-  }, []);
+  const { data: runs = [], isLoading: loading } = useScheduledRunsList(50);
 
   return (
     <div>
@@ -121,8 +90,15 @@ const Page = () => {
                 <span className="lg:text-xl font-medium truncate">
                   {run.taskName}
                 </span>
-                {run.scheduledRunViewed === 0 && (
-                  <span className="w-2.5 h-2.5 rounded-pill bg-accent shrink-0" />
+                {run.activeRunMessageId ? (
+                  <span className="flex items-center gap-1 text-accent text-xs shrink-0">
+                    <LoaderCircle size={12} className="animate-spin" />
+                    Running…
+                  </span>
+                ) : (
+                  run.scheduledRunViewed === 0 && (
+                    <span className="w-2.5 h-2.5 rounded-pill bg-accent shrink-0" />
+                  )
                 )}
                 {run.lastRunStatus === 'error' && (
                   <AlertCircle size={14} className="text-danger shrink-0" />

@@ -81,6 +81,7 @@ export default function PersonaPromptsSection({
                   />
                   <div className="flex space-x-2 justify-end">
                     <button
+                      type="button"
                       onClick={() => setEditingPrompt(null)}
                       className="px-3 py-2 text-sm rounded-control bg-surface hover:bg-surface-2 flex items-center gap-1.5"
                     >
@@ -88,6 +89,7 @@ export default function PersonaPromptsSection({
                       Cancel
                     </button>
                     <button
+                      type="button"
                       onClick={onAddOrUpdate}
                       className="px-3 py-2 text-sm rounded-control bg-accent flex items-center gap-1.5"
                     >
@@ -114,6 +116,7 @@ export default function PersonaPromptsSection({
                   </div>
                   <div className="flex space-x-1 flex-shrink-0 ml-2">
                     <button
+                      type="button"
                       onClick={() => setEditingPrompt({ ...prompt })}
                       title="Edit"
                       className="p-1.5 rounded-control hover:bg-surface-2"
@@ -121,6 +124,7 @@ export default function PersonaPromptsSection({
                       <Edit3 size={18} />
                     </button>
                     <button
+                      type="button"
                       onClick={() => onDelete(prompt.id)}
                       title="Delete"
                       className="p-1.5 rounded-control hover:bg-surface-2 text-danger hover:text-danger"
@@ -153,6 +157,7 @@ export default function PersonaPromptsSection({
             />
             <div className="flex space-x-2 justify-end">
               <button
+                type="button"
                 onClick={() => {
                   setIsAddingNewPrompt(false);
                   setNewPromptName('');
@@ -164,6 +169,7 @@ export default function PersonaPromptsSection({
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={onAddOrUpdate}
                 className="px-3 py-2 text-sm rounded-control bg-accent flex items-center gap-1.5"
               >
@@ -175,6 +181,7 @@ export default function PersonaPromptsSection({
         )}
         {!isAddingNewPrompt && (
           <button
+            type="button"
             onClick={() => setIsAddingNewPrompt(true)}
             className="self-start px-3 py-2 text-sm rounded-control border border-surface-2 hover:bg-surface-2 flex items-center gap-1.5"
           >

@@ -1,4 +1,5 @@
-import { getMojeekApiKey, getSearchLocale } from '@/lib/config';
+import { getMojeekApiKey } from '@/lib/config';
+import { getSearchLocale } from '@/lib/settings/server';
 import { SearchProvider, SearchResult, WebSearchOpts } from './types';
 
 const MOJEEK_ENDPOINT = 'https://api.mojeek.com/search';

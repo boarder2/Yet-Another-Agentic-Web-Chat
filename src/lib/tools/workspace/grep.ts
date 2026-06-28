@@ -1,14 +1,19 @@
 import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
+import { RunnableConfig } from '@langchain/core/runnables';
 import { listFiles } from '@/lib/workspaces/files';
 import { getText, isImageMime } from '@/lib/workspaces/extract';
 import { grepText } from '@/lib/workspaces/grep';
+import { persistFromToolConfig } from '@/lib/utils/persistToolContext';
 
 const RESULT_BYTES_CAP = 64 * 1024;
 
 export function workspaceGrepTool(workspaceId: string) {
   return tool(
-    async ({ pattern, regex = false, maxMatches = 50 }) => {
+    async (
+      { pattern, regex = false, maxMatches = 50 },
+      config?: RunnableConfig,
+    ) => {
       const files = await listFiles(workspaceId);
       const out: { file: string; line: number; snippet: string }[] = [];
       let bytes = 0;
@@ -42,7 +47,14 @@ export function workspaceGrepTool(workspaceId: string) {
         if (out.length >= maxMatches) break;
       }
       if (out.length === 0) return JSON.stringify({ error: 'no_match' });
-      return JSON.stringify({ matches: out });
+      const result = JSON.stringify({ matches: out });
+      await persistFromToolConfig({
+        config,
+        kind: 'workspace_grep',
+        body: `[workspace_grep pattern="${pattern}" regex=${regex}]\n${result}`,
+        metadataExtras: { pattern, regex },
+      });
+      return result;
     },
     {
       name: 'workspace_grep',

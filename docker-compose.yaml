@@ -10,15 +10,20 @@ services:
     restart: unless-stopped
 
   app:
-    build:
-      context: .
-      dockerfile: app.dockerfile
+    image: boarder2/yaawc:latest
     cap_add:
       - SYS_ADMIN # Required for Playwright sandboxing
     init: true
     environment:
       - SEARXNG_API_URL=http://searxng:8080
       - DATA_DIR=/home/yaawc/data
+      # TTS (Kokoro) runs in a separate, low-priority worker process so speech
+      # synthesis can't starve the web server. Tune (or remove) as needed:
+      # - TTS_RESERVED_CORES=4     # cores kept TTS-free for serving (default ~25%)
+      # - TTS_WORKER_NICE=15       # niceness of the TTS process (0-19, higher=nicer)
+      # - TTS_WORKER_CPUS=0-9      # explicit taskset cpu-list (overrides reserved)
+      # - TTS_WORKER_IDLE_MS=600000 # unload the model after N ms idle (0=never)
+      # - TTS_WORKER_DISABLED=1    # run synthesis in-process instead (no isolation)
     ports:
       - 3000:3000
     networks:

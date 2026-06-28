@@ -29,3 +29,18 @@ export function popCallbackRunId(code: string): string | undefined {
   if (queue.length === 0) codeRunIdQueues.delete(code);
   return runId;
 }
+
+/**
+ * Remove a runId from every queue. Called when a code_execution tool that
+ * pushed a correlation entry finishes WITHOUT interrupting, so a stale entry
+ * does not mis-correlate a later code_execution_pending event. See the matching
+ * comment in questionCorrelation.ts.
+ */
+export function dropCallbackRunId(runId: string): void {
+  for (const [key, queue] of codeRunIdQueues) {
+    const idx = queue.indexOf(runId);
+    if (idx === -1) continue;
+    queue.splice(idx, 1);
+    if (queue.length === 0) codeRunIdQueues.delete(key);
+  }
+}

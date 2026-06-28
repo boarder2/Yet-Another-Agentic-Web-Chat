@@ -73,6 +73,8 @@ export default function ThemeController({ children }: Props) {
   };
 
   useEffect(() => {
+    // Mount flag gates rendering until the client takes over, preventing a
+    // theme flash during hydration. The one-time setState here is intentional.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
   }, []);

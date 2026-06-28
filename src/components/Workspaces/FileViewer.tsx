@@ -5,6 +5,10 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import { Edit3, Save, X, LoaderCircle } from 'lucide-react';
 import MarkdownRenderer from '@/components/MarkdownRenderer';
+import {
+  useWorkspaceFileContent,
+  useSaveWorkspaceFileContent,
+} from '@/lib/hooks/api/useWorkspaceFiles';
 
 function langFromName(name: string): string {
   const ext = name.split('.').pop()?.toLowerCase() ?? '';
@@ -36,13 +40,6 @@ function isMarkdownFile(name: string): boolean {
   return ext === 'md' || ext === 'markdown';
 }
 
-interface FileMeta {
-  id: string;
-  name: string;
-  mime: string | null;
-  size: number;
-}
-
 export default function FileViewer({
   workspaceId,
   fileId,
@@ -50,47 +47,28 @@ export default function FileViewer({
   workspaceId: string;
   fileId: string;
 }) {
-  const [meta, setMeta] = useState<FileMeta | null>(null);
-  const [content, setContent] = useState<string>('');
-  const [draft, setDraft] = useState<string>('');
+  const { data, isLoading } = useWorkspaceFileContent(workspaceId, fileId);
+  const saveContent = useSaveWorkspaceFileContent(workspaceId, fileId);
+
+  const [draft, setDraft] = useState('');
   const [editing, setEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [isBinary, setIsBinary] = useState(false);
-  const [loading, setLoading] = useState(true);
 
-  async function load() {
-    setLoading(true);
-    const data = await fetch(
-      `/api/workspaces/${workspaceId}/files/${fileId}`,
-    ).then((r) => r.json());
-    setMeta(data.file);
-    setContent(data.content ?? '');
-    setDraft(data.content ?? '');
-    setIsBinary(!!data.isBinary);
-    setLoading(false);
-  }
-
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId, fileId]);
-
-  async function save() {
-    setSaving(true);
-    try {
-      await fetch(`/api/workspaces/${workspaceId}/files/${fileId}`, {
-        method: 'PUT',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ content: draft }),
-      });
-      setContent(draft);
+    if (data?.content !== undefined) {
+      setDraft(data.content);
       setEditing(false);
-    } finally {
-      setSaving(false);
     }
+  }, [data?.content]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  function save() {
+    saveContent.mutate(draft, {
+      onSuccess: () => setEditing(false),
+    });
   }
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
         <LoaderCircle size={24} className="animate-spin text-accent" />
@@ -98,9 +76,11 @@ export default function FileViewer({
     );
   }
 
-  if (!meta) {
+  if (!data?.file) {
     return <p className="text-fg/50 text-sm">File not found.</p>;
   }
+
+  const { file: meta, content, isBinary } = data;
 
   return (
     <div className="space-y-4">
@@ -113,6 +93,7 @@ export default function FileViewer({
           {isBinary ? null : editing ? (
             <>
               <button
+                type="button"
                 onClick={() => {
                   setDraft(content);
                   setEditing(false);
@@ -123,11 +104,12 @@ export default function FileViewer({
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={save}
-                disabled={saving}
+                disabled={saveContent.isPending}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-surface bg-accent text-accent-fg hover:bg-accent/90 transition disabled:opacity-50"
               >
-                {saving ? (
+                {saveContent.isPending ? (
                   <LoaderCircle size={14} className="animate-spin" />
                 ) : (
                   <Save size={14} />
@@ -137,6 +119,7 @@ export default function FileViewer({
             </>
           ) : (
             <button
+              type="button"
               onClick={() => setEditing(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-surface border border-surface-2 bg-surface hover:bg-surface-2 transition"
             >
@@ -165,6 +148,7 @@ export default function FileViewer({
         )
       ) : editing ? (
         <textarea
+          aria-label="File content"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           className="w-full min-h-[60vh] font-mono text-sm border border-surface-2 rounded-floating p-4 bg-surface focus:outline-none focus:border-accent resize-y"

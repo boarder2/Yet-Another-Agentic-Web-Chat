@@ -6,6 +6,7 @@ import { Command, getCurrentTaskInput } from '@langchain/langgraph';
 import { z } from 'zod';
 import { SubagentExecutor } from '@/lib/search/subagents/executor';
 import { getSubagentDefinition } from '@/lib/search/subagents/definitions';
+import { persistFromToolConfig } from '@/lib/utils/persistToolContext';
 
 // Schema for deep research tool input
 const DeepResearchToolSchema = z.object({
@@ -17,7 +18,7 @@ const DeepResearchToolSchema = z.object({
  *
  * This tool creates a SubagentExecutor that runs an independent SimplifiedAgent
  * instance with web research tools (web_search, url_fetch, image_search,
- * youtube_transcript, pdf_loader). The subagent does NOT have access to deep_research
+ * pdf_loader). The subagent does NOT have access to deep_research
  * itself, preventing recursion.
  *
  * Use this when the main agent discovers that a sub-problem requires significantly
@@ -122,6 +123,18 @@ export const deepResearchTool = tool(
             }),
           );
         }
+      }
+
+      if (execution.status === 'success' && execution.summary) {
+        await persistFromToolConfig({
+          config,
+          kind: 'deep_research',
+          body: `[deep_research task="${task}"]\n${execution.summary}`,
+          metadataExtras: {
+            query: task,
+            documentCount: execution.documents?.length ?? 0,
+          },
+        });
       }
 
       // Return results via Command pattern

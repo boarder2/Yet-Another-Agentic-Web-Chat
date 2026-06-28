@@ -25,7 +25,11 @@ const notify = (key: string) => {
   );
 };
 
-const readRaw = (key: string): string | null => {
+/**
+ * Read a localStorage key, swallowing access/security errors (returns null).
+ * Exported so non-reactive callers (e.g. preset stores) share one safe reader.
+ */
+export const readLocalStorage = (key: string): string | null => {
   try {
     return localStorage.getItem(key);
   } catch {
@@ -47,10 +51,31 @@ export const writeLocalStorage = (key: string, value: string | null) => {
   notify(key);
 };
 
+/**
+ * Write multiple localStorage keys atomically and fire a single wildcard
+ * notification so all subscribers update in one React render cycle instead of
+ * one render per key.
+ */
+export const writeLocalStorageBatch = (entries: [string, string | null][]) => {
+  for (const [key, value] of entries) {
+    try {
+      if (value === null) localStorage.removeItem(key);
+      else localStorage.setItem(key, value);
+    } catch {
+      // ignore quota / access errors
+    }
+  }
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(
+    new CustomEvent<ChangeDetail>(EVENT, { detail: { key: '*' } }),
+  );
+};
+
 const makeSubscribe = (key: string) => (cb: () => void) => {
   const handleCustom = (e: Event) => {
     const detail = (e as CustomEvent<ChangeDetail>).detail;
-    if (!detail || detail.key === key) cb();
+    // '*' is a wildcard fired by writeLocalStorageBatch
+    if (!detail || detail.key === key || detail.key === '*') cb();
   };
   const handleStorage = (e: StorageEvent) => {
     if (e.key === null || e.key === key) cb();
@@ -62,6 +87,23 @@ const makeSubscribe = (key: string) => (cb: () => void) => {
     window.removeEventListener('storage', handleStorage);
   };
 };
+
+/**
+ * Subscribe to changes of a single localStorage key without the `useState`
+ * binding the hooks provide. Fires on same-tab writes routed through the setters
+ * here (the `local-storage-change` CustomEvent, including the `'*'` wildcard from
+ * `writeLocalStorageBatch`) and on cross-tab native `storage` events. Returns an
+ * unsubscribe function.
+ *
+ * Use this when a value must live in plain `useState` (e.g. it is threaded
+ * through props and owned by a parent) yet still needs to react to external
+ * cache updates — most notably the cross-device settings re-sync that runs on
+ * tab focus and writes fresh DB values into localStorage.
+ */
+export const subscribeLocalStorage = (
+  key: string,
+  cb: () => void,
+): (() => void) => makeSubscribe(key)(cb);
 
 /**
  * React to a string-valued localStorage key. Returns `[value, setValue]`.
@@ -76,7 +118,7 @@ export function useLocalStorageString(
     [key],
   );
   const getSnapshot = useCallback(
-    () => readRaw(key) ?? defaultValue,
+    () => readLocalStorage(key) ?? defaultValue,
     [key, defaultValue],
   );
   const getServerSnapshot = useCallback(() => defaultValue, [defaultValue]);
@@ -100,7 +142,7 @@ export function useLocalStorageBoolean(
     [key],
   );
   const getSnapshot = useCallback(() => {
-    const raw = readRaw(key);
+    const raw = readLocalStorage(key);
     if (raw === null) return defaultValue;
     return raw === 'true';
   }, [key, defaultValue]);
@@ -132,7 +174,7 @@ export function useLocalStorageJSON<T>(
     [key],
   );
   const getSnapshot = useCallback((): T => {
-    const raw = readRaw(key);
+    const raw = readLocalStorage(key);
     const cached = jsonCache.get(key);
     if (cached && cached.raw === raw) return cached.parsed as T;
     let parsed: T = defaultValue;

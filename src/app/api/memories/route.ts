@@ -14,13 +14,13 @@ import {
 } from '@/lib/providers';
 import { CachedEmbeddings } from '@/lib/utils/cachedEmbeddings';
 import {
-  getSelectedSystemModel,
-  getSelectedEmbeddingModel,
-} from '@/lib/config';
+  getEmbeddingModelSelection,
+  getMemoryModelSelection,
+} from '@/lib/settings/server';
 
 async function getEmbeddingModel(): Promise<CachedEmbeddings | null> {
   const embeddingModelProviders = await getAvailableEmbeddingModelProviders();
-  const selected = getSelectedEmbeddingModel();
+  const selected = getEmbeddingModelSelection();
 
   // Use configured selection if available
   if (selected.provider && selected.name) {
@@ -47,9 +47,9 @@ async function getEmbeddingModel(): Promise<CachedEmbeddings | null> {
   );
 }
 
-async function getSystemModel() {
+async function getMemoryModel() {
   const chatModelProviders = await getAvailableChatModelProviders();
-  const selected = getSelectedSystemModel();
+  const selected = getMemoryModelSelection();
 
   // Use configured selection if available
   if (selected.provider && selected.name) {
@@ -169,7 +169,7 @@ export async function POST(req: Request) {
     }
 
     const embeddingModel = await getEmbeddingModel();
-    const systemModel = await getSystemModel();
+    const systemModel = await getMemoryModel();
 
     let embedding: number[] | null = null;
     let embeddingIdentifier: string | null = null;

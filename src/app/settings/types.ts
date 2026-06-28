@@ -18,21 +18,7 @@ export interface SettingsType {
   customOpenaiApiUrl: string;
   customOpenaiModelName: string;
   contextWindowSize: number;
-  selectedSystemModelProvider: string;
-  selectedSystemModel: string;
-  selectedEmbeddingModelProvider: string;
-  selectedEmbeddingModel: string;
-  linkSystemToChat: boolean;
   privateSessionDurationMinutes: number;
-  retentionChatsMode: 'days' | 'count' | 'disabled';
-  retentionChatsValue: number;
-  retentionScheduledRunsMode: 'days' | 'count' | 'disabled';
-  retentionScheduledRunsValue: number;
-  searchProvider: string;
-  searchPrivateProvider: string;
-  searchFallbackProvider: string;
-  searchLanguage: string;
-  searchRegion: string;
   searxngApiUrl: string;
   braveSearchApiKey: string;
   braveLLMApiKey: string;
@@ -49,14 +35,14 @@ export interface SettingsType {
     videos: boolean;
     autocomplete: boolean;
   };
-  hiddenModels: string[];
 }
 
 export type SectionKey =
-  | 'preferences'
   | 'automatic-search'
   | 'personalization'
+  | 'voice'
   | 'memory'
+  | 'mcp-servers'
   | 'retention'
   | 'skills'
   | 'persona-prompts'
@@ -64,30 +50,38 @@ export type SectionKey =
   | 'default-search'
   | 'search-providers'
   | 'model-settings'
+  | 'model-presets'
+  | 'panel-presets'
   | 'model-visibility'
   | 'image-generation'
   | 'api-keys';
 
+// Sections are sorted alphabetically by label within each group. Keep it that
+// way: when adding a new section, insert it in alphabetical order within its
+// group (groups stay in their existing first-appearance order).
 export const SETTINGS_SECTIONS: {
   key: SectionKey;
   label: string;
   group: string;
 }[] = [
-  { key: 'preferences', label: 'Preferences', group: 'General' },
   { key: 'automatic-search', label: 'Automatic Search', group: 'General' },
-  { key: 'personalization', label: 'Personalization', group: 'General' },
+  { key: 'mcp-servers', label: 'MCP Servers', group: 'General' },
   { key: 'memory', label: 'Memory', group: 'General' },
-  { key: 'retention', label: 'Retention', group: 'General' },
-  { key: 'skills', label: 'Skills', group: 'General' },
   { key: 'persona-prompts', label: 'Persona Prompts', group: 'General' },
+  { key: 'personalization', label: 'Personalization', group: 'General' },
   {
     key: 'research-methodologies',
     label: 'Research Methodologies',
     group: 'General',
   },
+  { key: 'retention', label: 'Retention', group: 'General' },
+  { key: 'skills', label: 'Skills', group: 'General' },
+  { key: 'voice', label: 'Voice', group: 'General' },
   { key: 'default-search', label: 'Default Search', group: 'AI Models' },
   { key: 'search-providers', label: 'Search Providers', group: 'Search' },
   { key: 'model-settings', label: 'Model Settings', group: 'AI Models' },
+  { key: 'model-presets', label: 'Model Presets', group: 'AI Models' },
+  { key: 'panel-presets', label: 'Agent Panel Presets', group: 'AI Models' },
   { key: 'model-visibility', label: 'Model Visibility', group: 'AI Models' },
   {
     key: 'image-generation',

@@ -13,7 +13,7 @@ import {
   PanelRightClose,
   PanelRightOpen,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import FilesTab from './FilesTab';
@@ -23,7 +23,11 @@ import WorkspaceMemoryTab from './WorkspaceMemoryTab';
 import SettingsTab from './SettingsTab';
 import FileViewer from './FileViewer';
 import WorkspaceModal from './WorkspaceModal';
-import { useWorkspace } from '@/lib/hooks/useWorkspace';
+import { useWorkspace } from '@/lib/hooks/api/useWorkspaces';
+import { useWorkspaceFiles } from '@/lib/hooks/api/useWorkspaceFiles';
+import { useWorkspaceUrls } from '@/lib/hooks/api/useWorkspaceUrls';
+import { useWorkspaceMemory } from '@/lib/hooks/api/useWorkspaceMemory';
+import { useWorkspaceSystemPrompts } from '@/lib/hooks/api/useWorkspaceSystemPrompts';
 
 type SectionKey = 'files' | 'sources' | 'instructions' | 'memory';
 
@@ -45,6 +49,7 @@ function CollapsibleSection({
   return (
     <section className="border border-surface-2 rounded-floating bg-surface overflow-hidden">
       <button
+        type="button"
         onClick={onToggle}
         className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-surface-2 transition text-left"
       >
@@ -77,116 +82,46 @@ export default function WorkspaceSidebar({
   collapsed?: boolean;
   onToggleCollapse?: () => void;
 }) {
-  const { workspace } = useWorkspace(workspaceId);
+  const { data: workspace } = useWorkspace(workspaceId);
+  const { data: files } = useWorkspaceFiles(workspaceId);
+  const { data: urls } = useWorkspaceUrls(workspaceId);
+  const { data: memories } = useWorkspaceMemory(workspaceId);
+  const { data: linkedPromptIds } = useWorkspaceSystemPrompts(workspaceId);
+
   const [open, setOpen] = useState<Record<SectionKey, boolean>>({
     files: false,
     sources: false,
     instructions: false,
     memory: false,
   });
-  const [counts, setCounts] = useState({
-    files: null as number | null,
-    sources: null as number | null,
-    memory: null as number | null,
-    instructionsLength: null as number | null,
-    instructionsLinked: null as number | null,
-  });
 
   const [openFileId, setOpenFileId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
-
-  // Listen for workspace-updated events to re-fetch counts
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent<{ workspaceId: string }>).detail;
-      if (detail?.workspaceId === workspaceId) {
-        setCounts({
-          files: null,
-          sources: null,
-          memory: null,
-          instructionsLength: null,
-          instructionsLinked: null,
-        });
-        setRefreshKey((k) => k + 1);
-      }
-    };
-    window.addEventListener('workspace-updated', handler);
-    return () => window.removeEventListener('workspace-updated', handler);
-  }, [workspaceId]);
-
-  // When a section is collapsed, fetch its count once so the summary is meaningful.
-  useEffect(() => {
-    if (counts.files === null) {
-      fetch(`/api/workspaces/${workspaceId}/files`)
-        .then((r) => r.json())
-        .then((d) =>
-          setCounts((c) => ({ ...c, files: (d.files ?? []).length })),
-        )
-        .catch(() => {});
-    }
-    if (counts.sources === null) {
-      fetch(`/api/workspaces/${workspaceId}/urls`)
-        .then((r) => r.json())
-        .then((d) =>
-          setCounts((c) => ({ ...c, sources: (d.urls ?? []).length })),
-        )
-        .catch(() => {});
-    }
-    if (counts.memory === null) {
-      fetch(`/api/memories?workspaceId=${workspaceId}&limit=1`)
-        .then((r) => r.json())
-        .then((d) =>
-          setCounts((c) => ({
-            ...c,
-            memory:
-              typeof d.total === 'number' ? d.total : (d.data ?? []).length,
-          })),
-        )
-        .catch(() => {});
-    }
-    if (counts.instructionsLength === null) {
-      Promise.all([
-        fetch(`/api/workspaces/${workspaceId}`).then((r) => r.json()),
-        fetch(`/api/workspaces/${workspaceId}/system-prompts`).then((r) =>
-          r.json(),
-        ),
-      ])
-        .then(([ws, links]) =>
-          setCounts((c) => ({
-            ...c,
-            instructionsLength: (ws.workspace?.instructions ?? '').length,
-            instructionsLinked: (links.links ?? []).length,
-          })),
-        )
-        .catch(() => {});
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId, refreshKey]);
 
   function toggle(k: SectionKey) {
     setOpen((o) => ({ ...o, [k]: !o[k] }));
   }
 
+  const fileCount = files?.length ?? null;
+  const urlCount = urls?.length ?? null;
+  const memoryCount = memories?.length ?? null;
+  const instructionsLength = workspace?.instructions?.length ?? null;
+  const linkedCount = linkedPromptIds?.length ?? null;
+
   const filesSummary =
-    counts.files === null
-      ? '…'
-      : `${counts.files} file${counts.files === 1 ? '' : 's'}`;
+    fileCount === null ? '…' : `${fileCount} file${fileCount === 1 ? '' : 's'}`;
   const sourcesSummary =
-    counts.sources === null
-      ? '…'
-      : `${counts.sources} URL${counts.sources === 1 ? '' : 's'}`;
+    urlCount === null ? '…' : `${urlCount} URL${urlCount === 1 ? '' : 's'}`;
   const memorySummary =
-    counts.memory === null
+    memoryCount === null
       ? '…'
-      : `${counts.memory} ${counts.memory === 1 ? 'memory' : 'memories'}`;
+      : `${memoryCount} ${memoryCount === 1 ? 'memory' : 'memories'}`;
   const instructionsSummary = (() => {
-    if (counts.instructionsLength === null) return '…';
-    const len = counts.instructionsLength;
-    const linked = counts.instructionsLinked ?? 0;
-    if (len === 0 && linked === 0) return 'empty';
+    if (instructionsLength === null) return '…';
+    const linked = linkedCount ?? 0;
+    if (instructionsLength === 0 && linked === 0) return 'empty';
     const parts: string[] = [];
-    if (len > 0) parts.push(`${len} chars`);
+    if (instructionsLength > 0) parts.push(`${instructionsLength} chars`);
     if (linked > 0) parts.push(`${linked} prompt${linked === 1 ? '' : 's'}`);
     return parts.join(' · ');
   })();
@@ -294,7 +229,6 @@ export default function WorkspaceSidebar({
                 workspaceId={workspaceId}
                 compact
                 onOpenFile={(id) => setOpenFileId(id)}
-                onCountChange={(n) => setCounts((c) => ({ ...c, files: n }))}
               />
             </CollapsibleSection>
 
@@ -305,11 +239,7 @@ export default function WorkspaceSidebar({
               open={open.sources}
               onToggle={() => toggle('sources')}
             >
-              <UrlsTab
-                workspaceId={workspaceId}
-                compact
-                onCountChange={(n) => setCounts((c) => ({ ...c, sources: n }))}
-              />
+              <UrlsTab workspaceId={workspaceId} compact />
             </CollapsibleSection>
 
             <CollapsibleSection
@@ -319,16 +249,7 @@ export default function WorkspaceSidebar({
               open={open.instructions}
               onToggle={() => toggle('instructions')}
             >
-              <InstructionsTab
-                workspaceId={workspaceId}
-                onSummaryChange={({ length, linkedCount }) =>
-                  setCounts((c) => ({
-                    ...c,
-                    instructionsLength: length,
-                    instructionsLinked: linkedCount,
-                  }))
-                }
-              />
+              <InstructionsTab workspaceId={workspaceId} />
             </CollapsibleSection>
 
             <CollapsibleSection
@@ -338,11 +259,7 @@ export default function WorkspaceSidebar({
               open={open.memory}
               onToggle={() => toggle('memory')}
             >
-              <WorkspaceMemoryTab
-                workspaceId={workspaceId}
-                compact
-                onCountChange={(n) => setCounts((c) => ({ ...c, memory: n }))}
-              />
+              <WorkspaceMemoryTab workspaceId={workspaceId} compact />
             </CollapsibleSection>
           </div>
 

@@ -98,7 +98,7 @@ The attach button supports two categories of files:
 ### Document Attachments
 
 - **Accepted formats**: `.pdf`, `.docx`, `.txt`
-- Upload triggers a `POST /api/uploads` with embedding model configuration from localStorage.
+- Upload triggers a `POST /api/uploads`; the embedding model is resolved server-side from the DB (system setting), not sent by the client.
 - Attached files appear as a popover list with an "Add" button, "Clear" button, and individual file entries showing filenames.
 
 ### Image Attachments
@@ -115,7 +115,7 @@ When files are uploading, a spinning loader icon with "Uploading.." text replace
 
 ## Model Configuration
 
-The model configurator opens a **full-screen modal dialog** with two model selectors and two toggles:
+The model configurator opens a **full-screen modal dialog** with two model selectors and a toggle:
 
 ### Chat Model Selector
 
@@ -123,11 +123,10 @@ An accordion-style popover listing all available AI providers (alphabetically so
 
 ### System Model Selector
 
-Identical to the chat model selector but controls the system/internal model. Visually disabled (grayed out) when "Link System to Chat" is active.
+Identical to the chat model selector but controls the system/internal model. Selected independently of the chat model. When left unset, the system model falls back to the chat model server-side. Use **Model Presets** to save paired chat+system combinations.
 
-### Toggles
+### Toggle
 
-- **Link System to Chat**: When enabled, the system model automatically mirrors the chat model. Defaults to ON for new users.
 - **Vision Capable**: When enabled, allows image attachments in the chat input.
 
 All selections persist to **localStorage** and take effect immediately.

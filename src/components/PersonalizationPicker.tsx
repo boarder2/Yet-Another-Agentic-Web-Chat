@@ -1,8 +1,8 @@
 'use client';
 
 import { Fragment, useEffect, useMemo, useRef } from 'react';
-import Link from 'next/link';
 import {
+  CloseButton,
   Popover,
   PopoverButton,
   PopoverPanel,
@@ -11,6 +11,7 @@ import {
 } from '@headlessui/react';
 import { Settings as SettingsIcon, UserCog } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useSettingsModal } from '@/components/settings/SettingsModalProvider';
 
 type PersonalizationPickerProps = {
   hasLocation: boolean;
@@ -56,6 +57,7 @@ const PopoverContent = ({
   onRefresh,
 }: PopoverContentProps) => {
   const previousOpen = useRef(open);
+  const { openSettings } = useSettingsModal();
 
   useEffect(() => {
     if (open && !previousOpen.current) {
@@ -97,13 +99,14 @@ const PopoverContent = ({
                   Choose what to send with this message.
                 </p>
               </div>
-              <Link
-                href="/settings#personalization"
+              <CloseButton
+                type="button"
+                onClick={() => openSettings('personalization')}
                 className="text-xs inline-flex items-center gap-1 text-accent hover:underline"
                 title="Open personalization settings"
               >
                 <SettingsIcon size={14} />
-              </Link>
+              </CloseButton>
             </div>
 
             <div className="px-4 py-3 space-y-4 text-sm">

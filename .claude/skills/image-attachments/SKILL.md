@@ -7,15 +7,18 @@ description: Use when working on image upload/display, the uploads API, MessageI
 
 Users can attach images to chat messages via clipboard paste or file picker. Images are stored on disk in the `uploads/` directory (not in SQLite) to avoid database bloat. The feature works across all focus modes.
 
+## Vision gating (`imageCapable`)
+
+Image attach is gated by the `imageCapable` localStorage flag (read reactively in `ChatWindow` via `useLocalStorageBoolean('imageCapable', ...)`; sent as `payload.imageCapable`). The toggle lives in the chat **`ModelConfigurator`** dialog, rendered by the unified `ModelPicker`'s `VisionToggle` (`src/components/models/VisionToggle.tsx`) when `fields.vision` is set. Presets also carry `imageCapable`. The flag uses key `SELECTION_KEYS.imageCapable` — write via `writeLocalStorage`/`writeSelectionToStorage` so subscribers update.
+
 ## Data Flow
 
 1. User pastes/picks image(s) → `POST /api/uploads/images` → saved to `uploads/` with random hex filename → returns `{ images: [{ imageId, fileName, mimeType }] }`
 2. Thumbnails shown in MessageInput; user can remove individual images before sending
-3. On send, `messageImageIds` and `messageImages` are included in the API payload
-4. `chat/route.ts` converts image-bearing messages to multimodal `HumanMessage` with `image_url` content parts (base64 data URLs)
-5. Image references are passed directly to `SimplifiedAgent`
-6. Images are persisted in the user message's `metadata` JSON column for history replay
-7. Chat history tuples are extended to `[human, ai, imageIds?]` to carry images across conversation turns
+3. On send, `messageImageIds` (string[]) and `messageImages` (full `{imageId, fileName, mimeType}[]`) are included in the API payload
+4. `chat/route.ts` saves the user message to DB with `metadata.images = messageImages` (full objects, not just IDs) and passes `messageImageIds` to `SimplifiedAgent.searchAndAnswer()`
+5. `SimplifiedAgent.searchAndAnswer()` calls `buildMultimodalHumanMessage(query, messageImageIds)` to construct the multimodal `HumanMessage` with base64 `image_url` content parts
+6. For history replay, `buildHistoryFromDb()` in `src/lib/utils/buildHistory.ts` reads `metadata.images` from DB rows and calls `buildMultimodalHumanMessage()` directly — no tuple format used
 
 ## API Endpoints
 
@@ -27,6 +30,8 @@ Users can attach images to chat messages via clipboard paste or file picker. Ima
 - `src/app/api/uploads/images/route.ts` — Upload endpoint
 - `src/app/api/uploads/images/[imageId]/route.ts` — Serving endpoint
 - `src/lib/utils/images.ts` — `loadImageAsBase64()` and `buildMultimodalHumanMessage()` utilities
+- `src/lib/utils/buildHistory.ts` — `buildHistoryFromDb()`: reconstructs LangChain messages from DB rows, calling `buildMultimodalHumanMessage()` for rows with `metadata.images`
+- `src/lib/search/simplifiedAgent.ts` — `searchAndAnswer()` receives `messageImageIds` and builds multimodal HumanMessage
 - `src/components/MessageInput.tsx` — Paste handler, thumbnail strip, upload logic
 - `src/components/MessageInputActions/Attach.tsx` — File picker routes images vs documents
 - `src/components/MessageBox.tsx` — Renders image gallery in user messages
@@ -51,4 +56,4 @@ The `buildMultimodalHumanMessage()` utility in `src/lib/utils/images.ts`:
 
 ## Chat History Threading
 
-Chat history tuples are extended from `[human, ai]` to `[human, ai, imageIds?]` so images carry across conversation turns. When replaying history, `buildMultimodalHumanMessage()` is called for messages that have associated image IDs.
+Images are threaded through history via the DB. User messages are saved with `metadata.images` containing the full `{imageId, fileName, mimeType}[]` array. `buildHistoryFromDb()` reads these rows and calls `buildMultimodalHumanMessage(content, imageIds)` for any user message whose metadata includes images. No tuple format is used — the DB row is the single source of truth.

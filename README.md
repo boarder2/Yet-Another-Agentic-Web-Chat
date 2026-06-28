@@ -11,6 +11,10 @@ YAAWC (**Pronounced: "yawck"** — as in the sound you make when yet another AI 
 - [Why Does This Exist?](#why-does-this-exist)
 - [Features at a Glance](#features-at-a-glance)
 - [Focus Modes](#focus-modes)
+- [Background Chats](#background-chats)
+- [Skills](#skills)
+- [Charts](#charts)
+- [Read Aloud (Text-to-Speech)](#read-aloud-text-to-speech)
 - [Agent Tools](#agent-tools)
 - [Code Execution (Sandbox)](#code-execution-sandbox)
   - [Enabling Code Execution](#enabling-code-execution)
@@ -47,7 +51,6 @@ YAAWC (**Pronounced: "yawck"** — as in the sound you make when yet another AI 
   - [Manual Setup](#manual-setup)
   - [Ollama Connection Errors](#ollama-connection-errors)
 - [Using as a Browser Search Engine](#using-as-a-browser-search-engine)
-- [API](#api)
 - [Network \& Reverse Proxy](#network--reverse-proxy)
 - [Observability](#observability)
 - [Contributing](#contributing)
@@ -62,66 +65,110 @@ Want to know more about the architecture? See [docs/architecture/README.md](docs
 
 ## Features at a Glance
 
-| Category                    | Highlights                                                                                                                                                                                        |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Agentic Search**          | LangGraph React agent with tool use, research planning, and multi-step reasoning                                                                                                                  |
-| **Deep Research**           | Spawns focused sub-agents that search → read → refine → search again                                                                                                                              |
-| **14 Agent Tools**          | Web search, URL summarization, image search, analysis & generation, YouTube transcripts, PDF loading, file search, deep research, sandboxed code execution, todo lists, memory (save/delete/list) |
-| **10 LLM Providers**        | OpenAI, Anthropic, Groq, Ollama, Gemini, DeepSeek, LM Studio, OpenRouter, AI/ML API, Custom OpenAI                                                                                                |
-| **6 Embedding Providers**   | OpenAI, Ollama, Gemini, Xenova Transformers (local), AI/ML API, LM Studio                                                                                                                         |
-| **Dashboard Widgets**       | AI-powered info widgets with auto-refresh, drag-and-drop layout, export/import                                                                                                                    |
-| **Personas**                | Custom system prompts with built-in templates (scholarly, conversational, etc.)                                                                                                                   |
-| **Research Methodologies**  | Per-message selectable research playbooks (Comparative Analysis, Literature Review, Fact-Check) with custom methodology authoring                                                                 |
-| **Scheduled Tasks**         | Cron-scheduled recurring agent runs with presets, per-task models/tools, run history, and unread-result badges                                                                                    |
-| **Chat Retention**          | Configurable auto-delete policies for old chats and scheduled-task run history, with pinning to exempt individual chats                                                                           |
-| **Search Providers**        | Pluggable backends — SearXNG, Brave Search, and Mojeek                                                                                                                                            |
-| **Personalization**         | Per-message location and profile context injection                                                                                                                                                |
-| **Memory**                  | Long-term memory with semantic retrieval, automatic extraction, deduplication, and a full management UI                                                                                           |
-| **Private Sessions**        | Temporary conversations with auto-expiry — no personalization, no memory, no trace left behind                                                                                                    |
-| **Workspaces**              | Project-centric containers with per-workspace chats, files, source URLs, instructions, agent tools, and isolated memory                                                                           |
-| **Privacy**                 | Self-hosted SearXNG — no tracking, no data brokering, no "we updated our privacy policy" emails                                                                                                   |
-| **Browser Integration**     | OpenSearch XML, autocomplete, `?q=` URL queries with saved preferences                                                                                                                            |
-| **Streaming UI**            | Real-time tool calls, sub-agent progress, todo widgets, thinking/reasoning display                                                                                                                |
-| **Image & Video Search**    | Dedicated search with gallery views and video embeds                                                                                                                                              |
-| **File Research**           | Upload documents and research them with cited excerpts                                                                                                                                            |
-| **Respond Now**             | Interrupt ongoing retrieval and get an immediate answer from what's been gathered so far                                                                                                          |
-| **Interactive Questions**   | The agent can pause mid-research to ask clarifying questions with single/multi-select options or freeform input                                                                                   |
-| **Model Visibility**        | Admins can hide models from the UI to prevent accidental usage                                                                                                                                    |
-| **Dual Model Architecture** | Separate Chat and System models, linkable or independent                                                                                                                                          |
+| Category                    | Highlights                                                                                                                                                                                           |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Agentic Search**          | LangGraph React agent with tool use, research planning, and multi-step reasoning                                                                                                                     |
+| **Deep Research**           | Spawns focused sub-agents that search → read → refine → search again                                                                                                                                 |
+| **Background Chats**        | Conversations keep running server-side after you navigate away, with live progress, resumption, and unread badges                                                                                    |
+| **18 Agent Tools**          | Web search, URL summarization, image search/analysis/generation, PDF loading, file search, deep research, sandboxed code execution, charts, chat-history search, skills, todo lists, memory          |
+| **Skills**                  | On-demand instruction sets (global or per-workspace) the agent loads automatically or you invoke with `/slash` commands                                                                              |
+| **Charts**                  | Interactive bar, line, area, and pie/donut charts rendered inline in the conversation                                                                                                                |
+| **Chat History Search**     | The agent can search and quote your past conversations to answer follow-ups                                                                                                                          |
+| **10 LLM Providers**        | OpenAI, Anthropic, Groq, Ollama, Gemini, DeepSeek, LM Studio, OpenRouter, AI/ML API, Custom OpenAI                                                                                                   |
+| **6 Embedding Providers**   | OpenAI, Ollama, Gemini, Xenova Transformers (local), AI/ML API, LM Studio                                                                                                                            |
+| **Dashboard Widgets**       | LLM- and code-based widgets on the dashboard and home screen, with auto-refresh, drag-and-drop layout, and export/import                                                                             |
+| **Personas**                | Custom system prompts with built-in templates (scholarly, conversational, etc.)                                                                                                                      |
+| **Research Methodologies**  | Per-message selectable research playbooks (Comparative Analysis, Literature Review, Fact-Check) with custom methodology authoring                                                                    |
+| **Scheduled Tasks**         | Cron-scheduled recurring agent runs with presets, per-task models/tools, run history, and unread-result badges                                                                                       |
+| **Chat Retention**          | Configurable auto-delete policies for old chats and scheduled-task run history, with pinning to exempt individual chats                                                                              |
+| **Search Providers**        | Pluggable backends — SearXNG, Brave Search, and Mojeek                                                                                                                                               |
+| **Personalization**         | Per-message location and profile context injection                                                                                                                                                   |
+| **Memory**                  | Long-term memory with semantic retrieval, automatic extraction, deduplication, and a full management UI                                                                                              |
+| **Private Sessions**        | Temporary conversations with auto-expiry — no personalization, no memory, no trace left behind                                                                                                       |
+| **Workspaces**              | Project-centric containers with per-workspace chats, files, source URLs, instructions, agent tools, and isolated memory                                                                              |
+| **Privacy**                 | Self-hosted SearXNG — no tracking, no data brokering, no "we updated our privacy policy" emails                                                                                                      |
+| **Browser Integration**     | OpenSearch XML, autocomplete, `?q=` URL queries with saved preferences                                                                                                                               |
+| **Read Aloud (TTS)**        | Local neural voices (Kokoro) or your device's built-in speech, with play/pause/resume, live speed control, an LLM "narrate" mode that describes tables and charts, and optional auto-read of replies |
+| **Streaming UI**            | Real-time tool calls, sub-agent progress, todo widgets, thinking/reasoning display                                                                                                                   |
+| **Image & Video Search**    | Dedicated search with gallery views and video embeds                                                                                                                                                 |
+| **File Research**           | Upload documents and research them with cited excerpts                                                                                                                                               |
+| **Respond Now**             | Interrupt ongoing retrieval and get an immediate answer from what's been gathered so far                                                                                                             |
+| **Interactive Questions**   | The agent can pause mid-research to ask clarifying questions with single/multi-select options or freeform input                                                                                      |
+| **Model Visibility**        | Admins can hide models from the UI to prevent accidental usage                                                                                                                                       |
+| **Dual Model Architecture** | Separate Chat and System models, linkable or independent                                                                                                                                             |
+| **Model Presets**           | Save named bundles of chat/system models, vision, and context window, then switch between them from the chat input or Settings                                                                       |
 
 ## Focus Modes
 
 Switch modes at any time during a conversation:
 
-| Mode               | Description                                                | Tools                         |
-| ------------------ | ---------------------------------------------------------- | ----------------------------- |
-| **Web Search**     | Full agentic search across the internet                    | All tools                     |
-| **Chat**           | Creative conversation with image generation                | Image generation              |
-| **Local Research** | Research uploaded files with semantic search and citations | File search, image generation |
+| Mode               | Description                                                | Tools                                 |
+| ------------------ | ---------------------------------------------------------- | ------------------------------------- |
+| **Web Search**     | Full agentic search across the internet                    | All tools                             |
+| **Chat**           | Creative conversation with image generation                | Image generation, charts              |
+| **Local Research** | Research uploaded files with semantic search and citations | File search, charts, image generation |
 
 Firefox AI prompts are auto-detected and handled conversationally.
+
+## Background Chats
+
+Conversations run on the server, independent of your browser, so the agent keeps working even if you switch chats, open another page, or close the tab.
+
+- **Fire and forget** — send a message and walk away; the run continues and is saved as it goes.
+- **Seamless resumption** — return to a running chat and the live stream re-attaches where it left off; paused approvals survive even a server restart.
+- **Live status in the sidebar** — the History item shows an animated progress bar while background chats are working, plus a badge counting chats that need your input and chats that finished unread.
+- **Per-chat status in History** — each row shows "Working…" with a live timer, "Needs input", error/interrupted/stopped states, and an unread dot, with a Stop button to cancel from the list.
+
+## Skills
+
+Skills are named, reusable instruction sets (Markdown) that tell the agent _how_ to behave for a task — formatting, citation style, tone, methodology — and take precedence over its built-in defaults.
+
+- **Create your own** from Settings → Skills, scoped **globally** or to a specific **workspace**.
+- **Two ways to invoke** — the agent loads a relevant skill automatically, or you trigger one explicitly by typing `/skill-name` (with autocomplete in the message box).
+- **Slash-only skills** — mark a skill to be hidden from automatic use so it only runs when you ask for it by name.
+- **Built-in system skills** ship for charting, code execution, asking clarifying questions, and deep research.
+- **Agent-proposed edits** — the agent can suggest creating, updating, or deleting your skills, but every change requires your approval via an inline diff.
+
+## Charts
+
+The agent can render interactive data visualizations inline in the conversation:
+
+- **Chart types** — bar (horizontal/vertical, stackable), line (with optional zoomed axis), area, and pie/donut.
+- **Interactive** — hover for exact values; click legend entries to toggle series on multi-series charts.
+- **Two creation paths** — the agent emits a chart directly, or generates one from computed data in the code-execution sandbox.
+
+## Read Aloud (Text-to-Speech)
+
+Every assistant response has a **Read aloud** button with play/pause/resume, stop, and live speed control (0.5× – 3×). Configure it in **Settings → Preferences**:
+
+- **Two engines** — **Neural** runs [Kokoro-82M](https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX) fully offline on CPU (28 US/UK voices, higher quality, downloads on first use); **System** uses your device's built-in voices (instant, no download). Neural falls back to System if unavailable.
+- **Narration modes** — **Read** speaks the response as written; **Narrate** uses an LLM to add spoken descriptions of tables and charts (cached per message, model overridable).
+- **Auto-read replies** — a composer toggle reads each new response aloud as it finishes.
 
 ## Agent Tools
 
 The LangGraph agent has access to the following tools (individually toggleable per conversation):
 
-| Tool                   | What It Does                                                                                                                                                                 |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Web Search**         | Queries SearXNG, retrieves top results, re-ranks by embedding similarity. Supports `site:` filters.                                                                          |
-| **URL Summarization**  | Fetches a URL's content (via Readability/Cheerio/Playwright) and summarizes it or uses it directly.                                                                          |
-| **Image Search**       | Searches for images via SearXNG (Bing Images, Google Images).                                                                                                                |
-| **Image Analysis**     | Fetches an image and analyzes it using a vision-capable LLM (PNG, JPEG, GIF, WebP up to 10 MB).                                                                              |
-| **Image Generation**   | Generates images from text prompts via OpenRouter's image-capable models. Configurable aspect ratio, resolution, and model selection.                                        |
-| **YouTube Transcript** | Retrieves the full transcript from a YouTube video.                                                                                                                          |
-| **PDF Loader**         | Extracts and returns content from a PDF URL.                                                                                                                                 |
-| **File Search**        | Semantic similarity search across uploaded documents with configurable threshold.                                                                                            |
-| **Deep Research**      | Spawns a focused sub-agent for comprehensive multi-source investigation (see below).                                                                                         |
-| **Code Execution**     | Runs user-approved JavaScript in a sandboxed Docker container (see below).                                                                                                   |
-| **Ask User**           | Pauses the agent to ask the user a clarifying question — supports single/multi-select options and optional freeform input; shows queue position and has a 15-minute timeout. |
-| **Todo List**          | Manages a visible research plan (up to 10 tasks) with live progress in the UI.                                                                                               |
-| **Save Memory**        | Stores a fact or preference to long-term memory with automatic categorization.                                                                                               |
-| **Delete Memory**      | Removes a memory by ID or fuzzy content match.                                                                                                                               |
-| **List Memories**      | Lists all stored memories grouped by category.                                                                                                                               |
+| Tool                    | What It Does                                                                                                                                                                 |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Web Search**          | Queries SearXNG, retrieves top results, re-ranks by embedding similarity. Supports `site:` filters.                                                                          |
+| **URL Summarization**   | Fetches a URL's content (via Readability/Cheerio/Playwright) and summarizes it or uses it directly.                                                                          |
+| **Image Search**        | Searches for images via SearXNG (Bing Images, Google Images).                                                                                                                |
+| **Image Analysis**      | Fetches an image and analyzes it using a vision-capable LLM (PNG, JPEG, GIF, WebP up to 10 MB).                                                                              |
+| **Image Generation**    | Generates images from text prompts via OpenRouter's image-capable models. Configurable aspect ratio, resolution, and model selection.                                        |
+| **PDF Loader**          | Extracts and returns content from a PDF URL.                                                                                                                                 |
+| **File Search**         | Semantic similarity search across uploaded documents with configurable threshold.                                                                                            |
+| **Deep Research**       | Spawns a focused sub-agent for comprehensive multi-source investigation (see below).                                                                                         |
+| **Code Execution**      | Runs user-approved JavaScript in a sandboxed Docker container (see below). Denials can include feedback so the agent can adjust.                                             |
+| **Create Chart**        | Renders an interactive bar, line, area, or pie/donut chart inline in the response.                                                                                           |
+| **Chat History Search** | Searches the user's past conversations by keyword and date for relevant context.                                                                                             |
+| **Get Message**         | Retrieves the full text of a specific past message found via chat-history search.                                                                                            |
+| **Read / Edit Skill**   | Loads a skill's instructions on demand, or proposes creating/updating/deleting a skill (edits require user approval).                                                        |
+| **Ask User**            | Pauses the agent to ask the user a clarifying question — supports single/multi-select options and optional freeform input; shows queue position and has a 15-minute timeout. |
+| **Todo List**           | Manages a visible research plan (up to 10 tasks) with live progress in the UI.                                                                                               |
+| **Save Memory**         | Stores a fact or preference to long-term memory with automatic categorization.                                                                                               |
+| **Delete Memory**       | Removes a memory by ID or fuzzy content match.                                                                                                                               |
+| **List Memories**       | Lists all stored memories grouped by category.                                                                                                                               |
 
 ## Code Execution (Sandbox)
 
@@ -138,7 +185,7 @@ YAAWC can run JavaScript code in isolated Docker containers with strict security
    DOCKER_HOST = "unix:///var/run/docker.sock"
    TIMEOUT_SECONDS = 30
    MEMORY_MB = 128
-   MAX_OUTPUT_CHARS = 10000
+   MAX_OUTPUT_CHARS = 50000
    ```
 
 2. The app needs access to a Docker daemon to create sandbox containers.
@@ -217,20 +264,23 @@ Each sandbox container runs with:
 
 ## Deep Research (Sub-Agents)
 
-When the agent encounters a question that needs serious digging, it can invoke the **Deep Research** tool, which spawns an independent sub-agent with its own system prompt and tool access (`web_search`, `url_fetch`, `image_search`, `youtube_transcript`, `pdf_loader` — but not `deep_research`, because infinite recursion is nobody's friend).
+When the agent encounters a question that needs serious digging, it can invoke the **Deep Research** tool, which spawns an independent sub-agent with its own system prompt and tool access (`web_search`, `url_fetch`, `image_search`, `image_analysis`, `pdf_loader` — but not `deep_research`, because infinite recursion is nobody's friend).
 
 Sub-agent progress streams live to the UI: task description, nested tool calls, and the final synthesized response — all collapsible and inspectable.
 
 ## Dashboard Widgets
 
-The `/dashboard` page provides a configurable grid of AI-powered widgets:
+Configurable grids of AI-powered widgets, shown on both the `/dashboard` page and — opt-in per widget — the home screen, where they peek above the fold. Each surface keeps its own layout.
 
-- Fetch content from **web pages** or **HTTP endpoints**
-- Process fetched content with an **AI prompt** using any configured provider/model
-- **Drag, drop, and resize** widgets on a responsive grid
-- **Auto-refresh** at configurable intervals (minutes/hours)
-- **Export/import** dashboard configurations as JSON
-- Date/time template variables for dynamic prompts (`{{current_utc_datetime}}`, `{{current_local_datetime}}`)
+Two widget kinds:
+
+- **LLM widgets** — fetch content from **web pages** or **HTTP endpoints**, then transform it with an **AI prompt** using any configured provider/model.
+- **Code widgets** — run user-authored JavaScript in the Docker sandbox (requires [Code Execution](#code-execution-sandbox)); the code's `render({ sources, now, location, theme })` returns themed Markdown and can emit inline charts. An AI builder helps draft them conversationally. Output is sanitized before rendering.
+
+- **Drag, drop, and resize** on a responsive grid (per surface).
+- **Auto-refresh** at configurable intervals (minutes/hours).
+- **Export/import** dashboard configurations as JSON.
+- Template variables in LLM prompts: `{{current_utc_datetime}}`, `{{current_local_datetime}}`, `{{source_content_N}}`, `{{location}}`.
 
 ## Workspaces
 
@@ -252,18 +302,18 @@ Configure workspaces from `/workspaces`, or pick one inline while chatting.
 
 ### Chat Models
 
-| Provider      | Config                                                        |
-| ------------- | ------------------------------------------------------------- |
-| OpenAI        | API key                                                       |
-| Anthropic     | API key                                                       |
-| Groq          | API key                                                       |
-| Google Gemini | API key                                                       |
-| DeepSeek      | API key                                                       |
-| OpenRouter    | API key                                                       |
-| AI/ML API     | API key                                                       |
-| Ollama        | Local URL, configurable context window (512 – 131,072 tokens) |
-| LM Studio     | Local URL                                                     |
-| Custom OpenAI | Base URL + API key + model name                               |
+| Provider      | Config                                 |
+| ------------- | -------------------------------------- |
+| OpenAI        | API key                                |
+| Anthropic     | API key                                |
+| Groq          | API key                                |
+| Google Gemini | API key                                |
+| DeepSeek      | API key                                |
+| OpenRouter    | API key                                |
+| AI/ML API     | API key                                |
+| Ollama        | Local URL, configurable context window |
+| LM Studio     | Local URL                              |
+| Custom OpenAI | Base URL + API key + model name        |
 
 ### Embedding Models
 
@@ -288,7 +338,7 @@ Memories are automatically classified into five categories: **Preference**, **Pr
 
 ### Managing Memories
 
-- Navigate to `/memory` to view, search, add, edit, and delete memories.
+- Go to **Settings → Memory** to view, search, add, edit, and delete memories.
 - Filter by category, sort by creation date / last accessed / times used.
 - Memories can be added manually or extracted automatically from conversations.
 - Use the **Re-index** button to regenerate all embeddings after changing your embedding model.
@@ -366,19 +416,20 @@ Configurable policies automatically clean up old data to keep the database lean.
 
 Policies are applied independently to two groups:
 
-- **Regular chats** — global policy under `[GENERAL.RETENTION] CHATS_MODE` / `CHATS_VALUE` (disabled by default)
-- **Scheduled-task runs** — global policy under `[GENERAL.RETENTION] SCHEDULED_RUNS_MODE` / `SCHEDULED_RUNS_VALUE` (disabled by default); individual scheduled tasks may override the global policy with their own mode/value
+- **Regular chats** — global policy (`CHATS_MODE` / `CHATS_VALUE`), disabled by default
+- **Scheduled-task runs** — global policy (`SCHEDULED_RUNS_MODE` / `SCHEDULED_RUNS_VALUE`), disabled by default; individual scheduled tasks may override the global policy with their own mode/value
 - **Private sessions** — deleted on their own expiry schedule (see [Private Sessions](#private-sessions))
-- **Pinning** — individual chats can be pinned from the library to exempt them from all retention policies
+- **Pinning** — individual chats can be pinned from the History page to exempt them from all retention policies
 
-Configure from the Settings page under "Retention", or via `[GENERAL.RETENTION]` in `config.toml`. Cleanup runs on a background cron alongside the private-session cleanup job.
+Configure from the Settings page under "Retention" — these are database-backed settings (legacy `[GENERAL.RETENTION]` config keys are migrated in automatically). Cleanup runs on a background cron alongside the private-session cleanup job.
 
 ## Conversation Compaction
 
-Long conversations eat up context window. Compaction summarizes older messages into a dense briefing while keeping recent turns verbatim, so the agent stays informed without burning tokens.
+Long conversations eat up context window. Compaction replaces the conversation history with a dense LLM-generated summary, so the agent retains the important facts without burning tokens. Re-running compaction extends the previous summary rather than starting over.
 
-- **Context gauge & compaction** — a circular indicator in the message input shows context usage. Click to compact the conversation, optionally with custom instructions for what the summary should capture.
-- **Adjustable context window** — pick a preset size or enter a custom value to match your model.
+- **Context gauge & compaction** — a circular indicator in the message input shows context usage and turns yellow then red as it fills. Click to compact the conversation, optionally with custom instructions for what the summary should capture.
+- **Compaction marker** — a "Conversation compacted" card appears in the timeline showing how many messages were summarized and the token savings, with a toggle to view the summary.
+- **Adjustable context window** — pick a preset size (1K–1M) or enter a custom value to match your model, applied to the current chat.
 
 ## Search Providers
 
@@ -424,7 +475,16 @@ YAAWC supports multiple search backends and lets you choose from the Settings pa
    docker compose up -d
    ```
 
+   This pulls the prebuilt `boarder2/yaawc:latest` image from Docker Hub — no local build required.
+
 5. Open http://localhost:3000.
+
+To update later, pull the latest image and recreate the stack:
+
+```bash
+docker compose pull
+docker compose up -d
+```
 
 ### Manual Setup
 
@@ -433,9 +493,9 @@ YAAWC supports multiple search backends and lets you choose from the Settings pa
 3. Install dependencies and build:
 
    ```bash
-   yarn install
-   yarn build
-   yarn start
+   npm install
+   npm run build
+   npm start
    ```
 
 See [docs/installation](docs/installation) for additional configuration, updating, and tracing setup.
@@ -457,51 +517,6 @@ On Linux, you may also need to set `Environment="OLLAMA_HOST=0.0.0.0"` in `/etc/
 3. YAAWC also exposes an **OpenSearch description** at `/api/opensearch` with autocomplete support, so some browsers can discover and add it automatically.
 
 URL queries via `?q=` automatically apply your saved model preferences for a seamless search-bar experience.
-
-## API
-
-YAAWC exposes a full API for programmatic access:
-
-| Endpoint                                  | Method              | Description                                                    |
-| ----------------------------------------- | ------------------- | -------------------------------------------------------------- |
-| `/api/chat`                               | POST                | Streaming chat with tool calls, sources, and live events (SSE) |
-| `/api/models`                             | GET                 | List available models (`?include_hidden=true` for admin view)  |
-| `/api/config`                             | GET/POST            | Read/write server configuration                                |
-| `/api/chats`                              | GET                 | List all chats (paginated)                                     |
-| `/api/chats/[id]`                         | GET/DELETE/PATCH    | Get, delete, or update (e.g. pin) a specific chat              |
-| `/api/chats/search`                       | GET                 | Full-text search across chat history                           |
-| `/api/suggestions`                        | POST                | Generate follow-up suggestions                                 |
-| `/api/system-prompts`                     | GET/POST/PUT/DELETE | CRUD for persona prompts                                       |
-| `/api/images`                             | POST                | Image search                                                   |
-| `/api/videos`                             | POST                | Video search                                                   |
-| `/api/uploads`                            | POST                | File upload                                                    |
-| `/api/uploads/images`                     | POST/GET            | Image upload and serving                                       |
-| `/api/memories`                           | GET/POST/DELETE     | List, add, or delete all memories                              |
-| `/api/memories/[id]`                      | PUT/DELETE          | Update or delete a specific memory                             |
-| `/api/memories/reindex`                   | POST                | Regenerate all memory embeddings                               |
-| `/api/tools`                              | GET                 | List available agent tools                                     |
-| `/api/dashboard`                          | GET/POST            | Dashboard widget CRUD                                          |
-| `/api/respond-now`                        | POST                | Interrupt retrieval for immediate response                     |
-| `/api/opensearch`                         | GET                 | OpenSearch description XML                                     |
-| `/api/autocomplete`                       | GET                 | Search autocomplete (via configured search provider)           |
-| `/api/scheduled-tasks`                    | GET/POST            | List or create scheduled tasks                                 |
-| `/api/scheduled-tasks/[id]`               | GET/PUT/DELETE      | Get, update, or delete a scheduled task                        |
-| `/api/scheduled-tasks/[id]/run`           | POST                | Trigger an immediate run of a scheduled task                   |
-| `/api/scheduled-tasks/[id]/runs`          | GET                 | List run history for a scheduled task                          |
-| `/api/scheduled-tasks/runs`               | GET                 | List recent runs across all scheduled tasks                    |
-| `/api/scheduled-tasks/runs/unread`        | GET                 | Count of unread scheduled-task run results                     |
-| `/api/workspaces`                         | GET/POST            | List all workspaces or create a new one                        |
-| `/api/workspaces/[id]`                    | GET/PUT/DELETE      | Get, update, or delete a workspace                             |
-| `/api/workspaces/[id]/archive`            | POST                | Archive a workspace                                            |
-| `/api/workspaces/[id]/unarchive`          | POST                | Unarchive a workspace                                          |
-| `/api/workspaces/[id]/files`              | GET/POST            | List or upload workspace files                                 |
-| `/api/workspaces/[id]/files/[fid]`        | GET/PUT/DELETE      | Get, update, or delete a workspace file                        |
-| `/api/workspaces/[id]/urls`               | GET/PUT             | Get or update workspace source URLs                            |
-| `/api/workspaces/[id]/urls/check`         | GET                 | Check reachability of workspace source URLs                    |
-| `/api/workspaces/[id]/system-prompts`     | GET/PUT             | Get or update linked persona prompts                           |
-| `/api/workspaces/[id]/file-edit-approval` | POST                | Approve or reject a pending agent file edit                    |
-
-For detailed payload schemas, see the [API documentation](docs/API/).
 
 ## Network & Reverse Proxy
 

@@ -109,6 +109,7 @@ export interface ChatSearchRow {
   chatId: string;
   chatTitle: string;
   chatCreatedAt: number;
+  workspaceId: string | null;
   messageId: number | null;
   messageRole: string | null;
   messageContent: string | null;
@@ -170,7 +171,7 @@ export async function searchChatsByKeywords(
   if (!opts.includeCompaction) {
     const compactionCond = or(
       isNull(messages.role),
-      ne(messages.role, 'compaction'),
+      and(ne(messages.role, 'compaction'), ne(messages.role, 'system')),
     );
     if (compactionCond) conditions.push(compactionCond);
   }
@@ -188,6 +189,7 @@ export async function searchChatsByKeywords(
       chatId: chats.id,
       chatTitle: chats.title,
       chatCreatedAt: chats.createdAt,
+      workspaceId: chats.workspaceId,
       messageId: messages.id,
       messageRole: messages.role,
       messageContent: messages.content,
@@ -208,6 +210,7 @@ export async function searchChatsByKeywords(
       chatId: row.chatId,
       chatTitle: row.chatTitle,
       chatCreatedAt: row.chatCreatedAt,
+      workspaceId: row.workspaceId,
       messageId: row.messageId,
       messageRole: row.messageRole,
       messageContent: row.messageContent,
@@ -225,6 +228,49 @@ export async function searchChatsByKeywords(
   return Array.from(bestByChat.values());
 }
 
+export type HydratedSearchChat = typeof chats.$inferSelect & {
+  matchExcerpt: string | null;
+  messageCount: number;
+};
+
+/**
+ * Turns raw {@link searchChatsByKeywords} hits into full chat rows decorated
+ * with a match excerpt and message count, sorted newest-first. Shared by the
+ * keyword (`/api/chats?q=`) and LLM (`/api/chats/search`) search endpoints so
+ * both return an identically shaped result set.
+ */
+export async function hydrateSearchHits(
+  hits: ChatSearchRow[],
+  excerptKeywords: string | string[],
+): Promise<{ chats: HydratedSearchChat[]; totalMessages: number }> {
+  const ids = hits.map((h) => h.chatId);
+  if (ids.length === 0) return { chats: [], totalMessages: 0 };
+
+  const [fullChats, messageCounts] = await Promise.all([
+    db.select().from(chats).where(inArray(chats.id, ids)),
+    getMessageCounts(ids),
+  ]);
+  const chatById = new Map(fullChats.map((c) => [c.id, c]));
+
+  const hydrated = hits
+    .map((h) => {
+      const chat = chatById.get(h.chatId);
+      if (!chat) return null;
+      return {
+        ...chat,
+        matchExcerpt: h.messageContent
+          ? extractExcerpt(h.messageContent, excerptKeywords)
+          : null,
+        messageCount: messageCounts.get(h.chatId) ?? 0,
+      };
+    })
+    .filter((c): c is HydratedSearchChat => c !== null)
+    .sort((a, b) => b.createdAt - a.createdAt);
+
+  const totalMessages = hydrated.reduce((sum, c) => sum + c.messageCount, 0);
+  return { chats: hydrated, totalMessages };
+}
+
 export async function getMessageCounts(
   chatIds: string[],
 ): Promise<Map<string, number>> {
@@ -236,7 +282,7 @@ export async function getMessageCounts(
       count: sql<number>`count(*)`,
     })
     .from(messages)
-    .where(inArray(messages.chatId, chatIds))
+    .where(and(inArray(messages.chatId, chatIds), eq(messages.role, 'user')))
     .groupBy(messages.chatId);
   for (const r of rows) counts.set(r.chatId, Number(r.count));
   return counts;

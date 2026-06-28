@@ -5,6 +5,8 @@ import { cn } from '@/lib/utils';
 import Sidebar from '@/components/Sidebar';
 import { Toaster } from 'sonner';
 import ThemeController from '@/components/theme/Controller';
+import SettingsModalProvider from '@/components/settings/SettingsModalProvider';
+import Providers from './providers';
 
 const montserrat = Montserrat({
   weight: ['300', '400', '500', '700'],
@@ -35,18 +37,22 @@ export default function RootLayout({
         />
       </head>
       <body className={cn('h-full bg-bg text-fg', montserrat.className)}>
-        <ThemeController>
-          <Sidebar>{children}</Sidebar>
-          <Toaster
-            toastOptions={{
-              unstyled: true,
-              classNames: {
-                toast:
-                  'bg-surface text-fg rounded-surface p-4 flex flex-row items-center space-x-2',
-              },
-            }}
-          />
-        </ThemeController>
+        <Providers>
+          <ThemeController>
+            <SettingsModalProvider>
+              <Sidebar>{children}</Sidebar>
+            </SettingsModalProvider>
+            <Toaster
+              toastOptions={{
+                unstyled: true,
+                classNames: {
+                  toast:
+                    'bg-surface text-fg rounded-surface p-4 flex flex-row items-center space-x-2',
+                },
+              }}
+            />
+          </ThemeController>
+        </Providers>
       </body>
     </html>
   );

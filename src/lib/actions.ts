@@ -1,4 +1,5 @@
 import { Message } from '@/components/ChatWindow';
+import { DEFAULT_CONTEXT_WINDOW } from '@/lib/models/presets';
 
 export const getSuggestions = async (chatHisory: Message[]) => {
   const chatModel = localStorage.getItem('chatModel');
@@ -7,7 +8,7 @@ export const getSuggestions = async (chatHisory: Message[]) => {
   const customOpenAIKey = localStorage.getItem('openAIApiKey');
   const customOpenAIBaseURL = localStorage.getItem('openAIBaseURL');
   const contextWindowSize = parseInt(
-    localStorage.getItem('contextWindowSize') || '32768',
+    localStorage.getItem('contextWindowSize') || String(DEFAULT_CONTEXT_WINDOW),
     10,
   );
 

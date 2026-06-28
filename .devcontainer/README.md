@@ -7,7 +7,7 @@ This project includes a VS Code Dev Container configuration that runs YAAWC + Se
 1. Install **Docker Desktop**.
 2. In VS Code, run: **Dev Containers: Reopen in Container**.
 3. Once the container is ready, start the dev server inside the container:
-   - `yarn dev`
+   - `npm run dev`
 
 Then open:
 

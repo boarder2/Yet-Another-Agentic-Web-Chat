@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import WorkspaceIcon from './WorkspaceIcon';
 import { workspaceColorClasses } from '@/lib/workspaces/appearance';
-import type { Workspace } from '@/lib/hooks/useWorkspace';
+import type { Workspace } from '@/lib/hooks/api/useWorkspaces';
 
 /**
  * Shared workspace header — small "Workspaces" breadcrumb above a prominent

@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils';
+import { DEFAULT_CONTEXT_WINDOW } from '@/lib/models/presets';
 import {
   Popover,
   PopoverButton,
@@ -74,17 +75,14 @@ const Attach = ({
       const data = new FormData();
       docFiles.forEach((f) => data.append('files', f));
 
-      const embeddingModelProvider = localStorage.getItem(
-        'embeddingModelProvider',
-      );
-      const embeddingModel = localStorage.getItem('embeddingModel');
+      // Embedding model is resolved server-side from the DB (system setting);
+      // only the chat model (for topic generation) is request-supplied.
       const chatModelProvider = localStorage.getItem('chatModelProvider');
       const chatModel = localStorage.getItem('chatModel');
       const contextWindowSize =
-        localStorage.getItem('contextWindowSize') || '32768';
+        localStorage.getItem('contextWindowSize') ||
+        String(DEFAULT_CONTEXT_WINDOW);
 
-      data.append('embedding_model_provider', embeddingModelProvider!);
-      data.append('embedding_model', embeddingModel!);
       data.append('chat_model_provider', chatModelProvider!);
       data.append('chat_model', chatModel!);
       data.append('context_window_size', contextWindowSize);
@@ -172,6 +170,7 @@ const Attach = ({
                   >
                     <input
                       type="file"
+                      aria-label="Attach files"
                       onChange={handleChange}
                       ref={fileInputRef}
                       accept={
@@ -186,6 +185,7 @@ const Attach = ({
                     <p className="text-xs">Add</p>
                   </button>
                   <button
+                    type="button"
                     onClick={() => {
                       setFiles([]);
                       setFileIds([]);
@@ -231,6 +231,7 @@ const Attach = ({
       >
         <input
           type="file"
+          aria-label="Attach files"
           onChange={handleChange}
           ref={fileInputRef}
           accept={imageCapable ? `${DOC_ACCEPT},${IMAGE_ACCEPT}` : DOC_ACCEPT}

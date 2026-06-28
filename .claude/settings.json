@@ -1,5 +1,74 @@
 {
   "enabledPlugins": {
     "typescript-lsp@claude-plugins-official": true
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(jq -r '.tool_input.file_path // empty'); case \"$f\" in */config.toml|config.toml) if [ -f \"$f\" ]; then printf '%s' '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"config.toml holds hand-managed secrets/infra — never overwrite an existing one. Only cp sample.config.toml when config.toml is absent.\"}}'; fi ;; esac; exit 0"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cmd=$(jq -r '.tool_input.command // empty'); if printf '%s' \"$cmd\" | grep -qE '(>|>>|tee |cp |mv )[^|;&]*config\\.toml' && [ -f config.toml ]; then printf '%s' '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Refusing to overwrite existing config.toml (secrets/infra). Remove this guard intentionally if you really mean to.\"}}'; fi; exit 0"
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(jq -r '.tool_input.file_path // empty'); case \"$f\" in *CLAUDE.md) printf '%s' '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\",\"additionalContext\":\"Reserve CLAUDE.md for architecture/big-picture pointers only — no implementation minutiae (CSS classes, handlers, pixel constants). Match existing terse style.\"}}'; exit 0 ;; esac; exit 0"
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(jq -r '.tool_input.file_path // empty'); case \"$f\" in */drizzle/*.sql|drizzle/*.sql|*/drizzle/meta/*|drizzle/meta/*) printf '%s' '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"drizzle/ holds Drizzle-generated migrations — never hand-edit. Change src/lib/db/schema.ts then run npm run db:generate.\"}}' ;; esac; exit 0"
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(jq -r '.tool_input.file_path // empty'); case \"$f\" in */src/lib/db/schema.ts) printf '%s' '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":\"After editing schema.ts, run npm run db:generate to emit the Drizzle migration (never hand-write files in drizzle/).\"}}' ;; esac; exit 0"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(jq -r '.tool_input.file_path // empty'); [ -n \"$f\" ] && npx prettier --write --ignore-unknown \"$f\" >/dev/null 2>&1; exit 0"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(jq -r '.tool_input.file_path // empty'); case \"$f\" in *.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs) out=$(npx eslint \"$f\" 2>&1); rc=$?; if [ $rc -ne 0 ]; then echo \"ESLint errors in $f — fix before continuing:\" >&2; echo \"$out\" >&2; exit 2; fi ;; esac"
+          }
+        ]
+      }
+    ]
   }
 }

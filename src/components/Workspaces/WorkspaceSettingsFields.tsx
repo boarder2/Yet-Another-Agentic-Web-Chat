@@ -56,6 +56,7 @@ export default function WorkspaceSettingsFields({
           <label className="text-xs text-fg/60">Name</label>
           <input
             type="text"
+            aria-label="Workspace name"
             value={name}
             onChange={(e) => onNameChange(e.target.value)}
             onBlur={onNameBlur}
@@ -65,6 +66,7 @@ export default function WorkspaceSettingsFields({
       ) : (
         <input
           type="text"
+          aria-label="Workspace name"
           placeholder="Workspace name"
           value={name}
           onChange={(e) => onNameChange(e.target.value)}
@@ -78,6 +80,7 @@ export default function WorkspaceSettingsFields({
         <div className="space-y-2">
           <label className="text-xs text-fg/60">Description</label>
           <textarea
+            aria-label="Workspace description"
             value={description}
             onChange={(e) => onDescriptionChange(e.target.value)}
             onBlur={onDescriptionBlur}
@@ -87,6 +90,7 @@ export default function WorkspaceSettingsFields({
         </div>
       ) : (
         <textarea
+          aria-label="Workspace description"
           placeholder="Description (optional)"
           value={description}
           onChange={(e) => onDescriptionChange(e.target.value)}

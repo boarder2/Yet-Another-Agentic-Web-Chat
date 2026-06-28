@@ -2,11 +2,8 @@ import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { RunnableConfig } from '@langchain/core/runnables';
 import { ToolMessage } from '@langchain/core/messages';
-import { Command } from '@langchain/langgraph';
-import crypto from 'crypto';
+import { Command, interrupt } from '@langchain/langgraph';
 import { isSoftStop } from '@/lib/utils/runControl';
-import { waitForUserResponse } from '@/lib/userQuestion/pendingQuestions';
-import { popCallbackRunId } from '@/lib/userQuestion/questionCorrelation';
 
 const AskUserToolSchema = z.object({
   question: z.string().max(500).describe('One focused question.'),
@@ -36,9 +33,9 @@ const AskUserToolSchema = z.object({
 export const askUserTool = tool(
   async (input: z.infer<typeof AskUserToolSchema>, config?: RunnableConfig) => {
     const messageId = config?.configurable?.messageId;
-    const emitter = config?.configurable?.emitter;
     const interactiveSession =
       config?.configurable?.interactiveSession === true;
+    const emitter = config?.configurable?.emitter;
     const toolCallId =
       (config as unknown as { toolCall?: { id?: string } })?.toolCall?.id ??
       'ask_user';
@@ -70,75 +67,64 @@ export const askUserTool = tool(
       });
     }
 
-    const questionId = crypto.randomUUID();
     const { question, options, multiSelect, allowFreeformInput, context } =
       input;
 
-    // Get the callback runId for ToolCall markup correlation
-    const markupToolCallId = popCallbackRunId(question);
+    // interrupt() pauses the graph; the agent resumes when the user responds.
+    // It throws GraphInterrupt to suspend, which must propagate uncaught.
+    // markupKey enables runHost to resolve the ToolCall markup ID.
+    const response: unknown = interrupt({
+      kind: 'ask_user',
+      toolCallId,
+      markupKey: question,
+      payload: {
+        question,
+        options,
+        multiSelect,
+        allowFreeformInput,
+        context,
+        createdAt: Date.now(),
+      },
+      snapshot: null,
+    });
 
-    emitter.emit(
-      'data',
-      JSON.stringify({
-        type: 'user_question_pending',
-        data: {
-          questionId,
-          question,
-          options,
-          multiSelect,
-          allowFreeformInput,
-          context,
-          toolCallId,
-          markupToolCallId,
-          createdAt: Date.now(),
+    // Cancellation discriminator — runHost resumes with {__cancelled: true} on Stop
+    if (response && (response as Record<string, unknown>).__cancelled) {
+      return new Command({
+        update: {
+          messages: [
+            new ToolMessage({
+              content: 'Cancelled by user.',
+              tool_call_id: toolCallId,
+            }),
+          ],
         },
-      }),
-    );
+      });
+    }
 
-    const response = await waitForUserResponse(
-      questionId,
-      15 * 60 * 1000,
-      messageId,
-    );
+    const r = response as {
+      selectedOptions?: string[];
+      freeformText?: string;
+      skipped?: boolean;
+    };
 
-    // Build response text for the agent
     let responseText: string;
-
-    if (response.timedOut) {
-      responseText =
-        'The user did not respond within the allotted time. Continue with your best judgment.';
-    } else if (response.skipped) {
+    if (r.skipped) {
       responseText =
         'The user skipped this question and wants you to decide on your own. Continue with your best judgment.';
     } else {
       const parts: string[] = [];
-      if (response.selectedOptions && response.selectedOptions.length > 0) {
-        parts.push(`Selected: ${response.selectedOptions.join(', ')}`);
+      if (r.selectedOptions && r.selectedOptions.length > 0) {
+        parts.push(`Selected: ${r.selectedOptions.join(', ')}`);
       }
-      if (response.freeformText) {
-        parts.push(`User response: "${response.freeformText}"`);
+      if (r.freeformText) {
+        parts.push(`User response: "${r.freeformText}"`);
       }
       responseText =
         parts.length > 0
           ? `User responded to "${question}":\n${parts.join('\n')}`
           : 'The user submitted an empty response. Continue with your best judgment.';
     }
-
-    // Emit answered event for frontend persistence
-    emitter.emit(
-      'data',
-      JSON.stringify({
-        type: 'user_question_answered',
-        data: {
-          questionId,
-          selectedOptions: response.selectedOptions,
-          freeformText: response.freeformText,
-          skipped: response.skipped,
-          timedOut: response.timedOut,
-          toolCallId,
-        },
-      }),
-    );
 
     return new Command({
       update: {

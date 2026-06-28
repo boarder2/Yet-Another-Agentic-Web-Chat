@@ -9,6 +9,7 @@ const Rewrite = ({
 }) => {
   return (
     <button
+      type="button"
       onClick={() => rewrite(messageId)}
       className="py-2 px-3 rounded-floating hover:bg-secondary transition duration-200 flex flex-row items-center space-x-1"
     >

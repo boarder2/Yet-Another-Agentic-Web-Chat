@@ -22,7 +22,7 @@ import { getCurrentTaskInput } from '@langchain/langgraph';
 import { Command } from '@langchain/langgraph';
 import { Document } from '@langchain/core/documents';
 import { ToolMessage } from '@langchain/core/messages';
-import { SimplifiedAgentState } from '@/lib/state/chatAgentState';
+import { SimplifiedAgentStateType } from '@/lib/state/chatAgentState';
 import { isSoftStop } from '@/lib/utils/runControl';
 
 const myToolSchema = z.object({
@@ -35,19 +35,20 @@ export const myTool = tool(
     const systemLlm = config.configurable?.systemLlm;
     const embeddings = config.configurable?.embeddings;
     const emitter = config.configurable?.emitter;
-    const messageId = config.configurable?.messageId;
+    const messageId = config.configurable?.messageId as string | undefined;
 
     // Access current agent state
-    const state = getCurrentTaskInput() as typeof SimplifiedAgentState.State;
+    const currentState = getCurrentTaskInput() as SimplifiedAgentStateType;
 
     // Check soft-stop before doing expensive work
-    if (isSoftStop(messageId)) {
+    if (messageId && isSoftStop(messageId)) {
       return new Command({
         update: {
           messages: [
             new ToolMessage({
               content: 'Aborted',
-              tool_call_id: config.toolCallId!,
+              tool_call_id: (config as unknown as { toolCall: { id: string } })
+                ?.toolCall.id,
             }),
           ],
         },
@@ -65,7 +66,8 @@ export const myTool = tool(
         messages: [
           new ToolMessage({
             content: summary,
-            tool_call_id: config.toolCallId!,
+            tool_call_id: (config as unknown as { toolCall: { id: string } })
+              ?.toolCall.id,
           }),
         ],
       },
@@ -84,39 +86,37 @@ export const myTool = tool(
 ```typescript
 import { myTool } from './myTool';
 
-// Add to appropriate arrays:
+// Add to the appropriate static arrays:
 export const allAgentTools = [...existing, myTool];
 export const webSearchTools = [...existing, myTool]; // if web-search relevant
 ```
 
-Tool arrays and their focus modes:
+Tool arrays and their usage:
 
-- `allAgentTools` — all tools (webSearch mode default)
-- `webSearchTools` — web search mode (excludes file_search)
-- `fileSearchTools` — local research mode (just file_search)
-- `coreTools` — chat mode (empty — no tools)
+- `allAgentTools` — all tools (used by webSearch mode when no files attached)
+- `webSearchTools` — web search mode (excludes fileSearchTool)
+- `fileSearchTools` — `[fileSearchTool]` only; appended to other sets when files are present
+- `coreTools` — chat mode; includes `imageGenerationTool`, `chatHistorySearchTool`, `getChatMessagesTool`, `readSkillTool` (NOT empty)
 
-3. **Add icon mapping** in `src/components/MarkdownRenderer.tsx` (in the `ToolCall` component):
+Interactive tools (`codeExecutionTool`, `askUserTool`, `editSkillTool`) are NOT in the static arrays. They are appended at runtime by `withInteractiveTools()`. Use the dynamic getters (`getAllAgentTools()`, `getWebSearchTools()`, `getCoreTools()`, `getLocalResearchTools()`) when building tool lists at runtime.
 
-```typescript
-const iconMap: Record<string, any> = {
-  // ...existing
-  my_tool: SomeIcon,
-};
-```
+3. **Add icon/label handling** in `src/components/MarkdownRenderer.tsx`:
+
+   The `ToolCall` component uses two `switch`/`if` blocks — `getIcon()` (returns an icon JSX for the tool type string) and `formatToolMessage()` (returns the full label row). Add cases for your tool's `type` string in both. There is no `iconMap` object; the icon is selected via a `switch` statement in `getIcon()`.
 
 ### Key conventions
 
+- Import state type as `SimplifiedAgentStateType` from `@/lib/state/chatAgentState` (type alias, not `SimplifiedAgentState.State`)
 - Use `config.configurable.systemLlm` for any internal LLM calls (NOT the chat LLM)
 - Return `Command` with `update: { relevantDocuments, messages }` — documents merge into agent state via append reducer
-- Always include a `ToolMessage` in the returned messages with `tool_call_id: config.toolCallId!`
-- Check `isSoftStop(messageId)` before starting expensive operations
+- Always include a `ToolMessage` in the returned messages; get the id via `(config as unknown as { toolCall: { id: string } })?.toolCall.id` (there is no `config.toolCallId`)
+- Check `messageId && isSoftStop(messageId)` before starting expensive operations
 - Check `config.configurable.retrievalSignal?.aborted` for hard cancellation
-- Tool call UI rendering is automatic via the `ToolCall` component in MarkdownRenderer — tool attributes (`query`, `url`, etc.) are extracted by `handleToolStart` in simplifiedAgent.ts
+- Tool call UI rendering is automatic via the `ToolCall` component in `MarkdownRenderer.tsx` — tool attributes (`query`, `url`, etc.) are extracted by `handleToolStart` in `simplifiedAgent.ts`
 
 ### Emitting extra data from tools
 
-If your tool needs to emit additional events (like `todo_list` emits `todo_update`):
+If your tool needs to emit additional events (like `todoListTool` emits `todo_update`):
 
 ```typescript
 const emitter = config.configurable?.emitter;
@@ -171,8 +171,8 @@ export const loadMyProviderChatModels = async () => {
    - Export a getter function: `export const getMyProviderApiKey = () => loadConfig().MODELS.MYPROVIDER?.API_KEY;`
 
 3. **Register in provider index** (`src/lib/providers/index.ts`):
-   - Import and add to `chatModelProviders` map
-   - Import `PROVIDER_INFO` and add to `PROVIDER_METADATA` array
+   - Import `PROVIDER_INFO` and add to `PROVIDER_METADATA` object (it's a keyed object, not an array)
+   - Import the loader and add to `chatModelProviders` map
    - Optionally add to `embeddingModelProviders` if the provider supports embeddings
 
 4. **Add TOML config section** in `config.toml`:
@@ -188,6 +188,7 @@ API_KEY = ""
 - Return `{}` on any error (graceful degradation)
 - Filter out non-chat models (audio, embedding, etc.) in the loader
 - Use LangChain's provider-specific classes (`ChatOpenAI`, `ChatAnthropic`, etc.)
+- `PROVIDER_METADATA` in `src/lib/providers/index.ts` is a plain object keyed by provider key, not an array
 
 ## Adding a New API Route
 
@@ -231,15 +232,18 @@ Focus modes control which tools and prompts the agent uses.
 
 ### Step-by-step
 
-1. **Create prompt** (`src/lib/prompts/simplifiedAgent/myMode.ts`):
+1. **Register the mode** in `src/lib/focusModes.ts`:
+   - Add an entry to the `focusModes` array with `key`, `title`, and `description`
+
+2. **Create prompt** (`src/lib/prompts/simplifiedAgent/myMode.ts`):
    - Export a system prompt string for the new mode
    - Import and use templates from `src/lib/prompts/templates.ts` for citation formatting
 
-2. **Add tool selection** in `src/lib/search/simplifiedAgent.ts`:
-   - In `getToolsForFocusMode()`, add a case for your focus mode returning the appropriate tool set
+3. **Add tool selection** in `src/lib/search/simplifiedAgent.ts`:
+   - In the private `getToolsForFocusMode()` method, add a `case` for your focus mode returning the appropriate tool set from `getAllAgentTools()`, `getWebSearchTools()`, `getCoreTools()`, or `getLocalResearchTools()`
+   - In the prompt selection block (search for the `switch (focusMode)` that sets the system prompt), add a case returning your new prompt
 
-3. **Add UI button** in `src/components/MessageInputActions/Focus.tsx`:
-   - Add the new mode to the focus mode selector with icon and label
+4. **Add UI button** in `src/components/MessageInputActions/Focus.tsx`:
+   - Focus modes are rendered from the `focusModes` array imported from `src/lib/focusModes.ts` — adding an entry there is sufficient; no manual button code required
 
-4. **Update API validation** in `src/app/api/chat/route.ts`:
-   - Ensure the new focus mode string is accepted
+5. **Update API validation** in `src/app/api/chat/route.ts` if you need strict validation of the focus mode string (currently the route passes the string through without an allow-list check)

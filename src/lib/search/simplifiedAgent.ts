@@ -19,8 +19,16 @@ import {
 //   getLangfuseHandler,
 // } from '@/lib/tracing/langfuse';
 import { encodeHtmlAttribute, encodeBase64 } from '@/lib/utils/html';
-import { pushCallbackRunId } from '@/lib/sandbox/codeExecutionCorrelation';
-import { pushCallbackRunId as pushQuestionCallbackRunId } from '@/lib/userQuestion/questionCorrelation';
+import {
+  pushCallbackRunId,
+  dropCallbackRunId as dropCodeCallbackRunId,
+} from '@/lib/sandbox/codeExecutionCorrelation';
+import {
+  pushCallbackRunId as pushQuestionCallbackRunId,
+  dropCallbackRunId as dropQuestionCallbackRunId,
+} from '@/lib/userQuestion/questionCorrelation';
+import { getLanggraphCheckpointer } from '@/lib/runs/checkpointer';
+import { isGraphInterrupt } from '@langchain/langgraph';
 import { isSoftStop } from '@/lib/utils/runControl';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { BaseMessage, HumanMessage } from '@langchain/core/messages';
@@ -39,7 +47,7 @@ import { buildPersonalizationSection } from '../utils/personalization';
 import { TokenUsage } from '../utils/queryDistillation';
 import { resolveSkillsForChat } from '@/lib/skills/resolve';
 import { buildSkillsPromptSection } from '@/lib/skills/promptSection';
-import { storeSkillsForRun, cleanupSkillsForRun } from '@/lib/skills/runStore';
+import { setRunContext, cleanupSkillsForRun } from '@/lib/skills/runStore';
 import type { Skill } from '@/lib/skills/types';
 
 /**
@@ -130,6 +138,38 @@ function extractTextContent(
   return '';
 }
 
+/** Max length of an MCP response surfaced in the tool widget (avoids bloating message content). */
+const MCP_RESULT_MAX_LENGTH = 4000;
+
+/**
+ * Pull the response text out of a finished MCP tool's handler output. MCP tools
+ * return a LangGraph `Command` whose `update.messages[0]` is the result `ToolMessage`;
+ * fall back to a raw string / `{ content }` shape for safety. Truncated for display.
+ */
+function extractMcpResultContent(output: unknown): string | null {
+  try {
+    const out = output as
+      | {
+          update?: { messages?: Array<{ content?: unknown }> };
+          content?: unknown;
+        }
+      | string
+      | null
+      | undefined;
+    let content: unknown;
+    if (typeof out === 'string') content = out;
+    else if (out && typeof out === 'object') {
+      content = out.update?.messages?.[0]?.content ?? out.content;
+    }
+    if (typeof content !== 'string' || content.length === 0) return null;
+    return content.length > MCP_RESULT_MAX_LENGTH
+      ? content.slice(0, MCP_RESULT_MAX_LENGTH) + '\n… (truncated)'
+      : content;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * SimplifiedAgent class that provides a streamlined interface for creating and managing an AI agent
  * with customizable focus modes and tools.
@@ -153,10 +193,29 @@ export class SimplifiedAgent {
   private workspaceId?: string | null;
   private interactiveSession: boolean;
   private resolvedSkills: Skill[] = [];
+  private invokedSkillNames: Set<string> = new Set();
   private isPrivate: boolean;
   private initialSystemUsage: TokenUsage;
+  private initialChatUsage: TokenUsage = {
+    input_tokens: 0,
+    output_tokens: 0,
+    total_tokens: 0,
+  };
   private workspaceSuffix: string;
   private firstChatCallInputTokens = 0;
+  private aiMessageId?: string;
+  private threadId?: string;
+  private chatModelRef?: {
+    provider: string;
+    name: string;
+    contextWindowSize?: number;
+  };
+  private systemModelRef?: {
+    provider: string;
+    name: string;
+    contextWindowSize?: number;
+  } | null;
+  private panelConfig: Record<string, unknown> | null = null;
 
   constructor(
     chatLlm: BaseChatModel,
@@ -178,6 +237,7 @@ export class SimplifiedAgent {
     initialSystemUsage?: TokenUsage,
     workspaceSuffix: string = '',
     workspaceId?: string | null,
+    aiMessageId?: string,
   ) {
     this.chatLlm = chatLlm;
     this.systemLlm = systemLlm;
@@ -202,6 +262,94 @@ export class SimplifiedAgent {
     };
     this.workspaceSuffix = workspaceSuffix;
     this.workspaceId = workspaceId;
+    this.aiMessageId = aiMessageId;
+  }
+
+  public setInvokedSkillNames(names: Set<string> | Iterable<string>) {
+    this.invokedSkillNames = new Set(names);
+  }
+
+  public setThreadId(threadId: string) {
+    this.threadId = threadId;
+  }
+
+  /** Add to the pre-seeded system-token usage (e.g. panel executor system/tool
+   *  totals) so the run's reported system tokens include work done before this
+   *  agent ran. */
+  public addInitialSystemUsage(usage: {
+    input_tokens: number;
+    output_tokens: number;
+    total_tokens: number;
+  }) {
+    this.initialSystemUsage = {
+      input_tokens: this.initialSystemUsage.input_tokens + usage.input_tokens,
+      output_tokens:
+        this.initialSystemUsage.output_tokens + usage.output_tokens,
+      total_tokens: this.initialSystemUsage.total_tokens + usage.total_tokens,
+    };
+  }
+
+  /** Add to the pre-seeded chat-token usage (e.g. panel executor chat-model
+   *  generation totals) so the run's reported chat tokens reflect the executor
+   *  models' answer generation alongside this agent's own chat tokens, rather
+   *  than misattributing that work to the system bucket. */
+  public addInitialChatUsage(usage: {
+    input_tokens: number;
+    output_tokens: number;
+    total_tokens: number;
+  }) {
+    this.initialChatUsage = {
+      input_tokens: this.initialChatUsage.input_tokens + usage.input_tokens,
+      output_tokens: this.initialChatUsage.output_tokens + usage.output_tokens,
+      total_tokens: this.initialChatUsage.total_tokens + usage.total_tokens,
+    };
+  }
+
+  /** Stash the panel config so it lands in the resume config snapshot. */
+  public setPanelConfig(panel: Record<string, unknown> | null) {
+    this.panelConfig = panel;
+  }
+
+  public setModelRefs(
+    chatModelRef: {
+      provider: string;
+      name: string;
+      contextWindowSize?: number;
+    },
+    systemModelRef?: {
+      provider: string;
+      name: string;
+      contextWindowSize?: number;
+    } | null,
+  ) {
+    this.chatModelRef = chatModelRef;
+    this.systemModelRef = systemModelRef;
+  }
+
+  /** Returns serializable config state for DB persistence (for resume after restart). */
+  public buildConfigSnapshot(
+    focusMode: string,
+    fileIds: string[],
+  ): Record<string, unknown> {
+    return {
+      chatModelRef: this.chatModelRef,
+      systemModelRef: this.systemModelRef,
+      focusMode,
+      fileIds,
+      personaInstructions: this.personaInstructions,
+      methodologyInstructions: this.methodologyInstructions,
+      userLocation: this.userLocation,
+      userProfile: this.userProfile,
+      workspaceId: this.workspaceId,
+      isPrivate: this.isPrivate,
+      chatId: this.chatId,
+      messageId: this.messageId,
+      aiMessageId: this.aiMessageId,
+      interactiveSession: this.interactiveSession,
+      workspaceSuffix: this.workspaceSuffix,
+      memoryEnabled: this.memoryEnabled,
+      panel: this.panelConfig,
+    };
   }
 
   private emitResponse(text: string) {
@@ -315,12 +463,19 @@ export class SimplifiedAgent {
         );
 
     try {
-      // Create the React agent with custom state
+      // Attach the LangGraph checkpointer only for top-level interactive runs
+      // (those that set a thread_id). Non-interactive contexts — scheduled tasks
+      // and subagents — gate out every interrupting tool, so a checkpointer there
+      // only writes checkpoints that are never resumed nor cleaned up.
       const agent = createAgent({
         model: this.chatLlm,
         tools: allTools,
         stateSchema: SimplifiedAgentState,
         systemPrompt: enhancedSystemPrompt,
+        checkpointer:
+          this.interactiveSession && this.threadId
+            ? getLanggraphCheckpointer()
+            : undefined,
       });
 
       console.log(
@@ -482,9 +637,11 @@ export class SimplifiedAgent {
       basePrompt += this.workspaceSuffix;
     }
 
-    // Append skills section if skills are available (exclude slash-only skills)
+    // Append skills section if skills are available. Exclude slash-only skills
+    // and skills already invoked by the user — their bodies are injected into
+    // history, so re-listing them in the prompt would be redundant.
     const modelVisibleSkills = this.resolvedSkills.filter(
-      (s) => !s.disableModelInvocation,
+      (s) => !s.disableModelInvocation && !this.invokedSkillNames.has(s.name),
     );
     if (modelVisibleSkills.length > 0) {
       basePrompt += '\n\n' + buildSkillsPromptSection(modelVisibleSkills);
@@ -506,6 +663,7 @@ export class SimplifiedAgent {
     messageImageIds?: string[],
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     extraTools?: any[],
+    initialDocuments?: Document[],
   ): Promise<void> {
     // Declared outside try so the catch block can clean it up
     let toolLlmUsageHandler: ((data: string) => void) | null = null;
@@ -549,7 +707,7 @@ export class SimplifiedAgent {
         humanMsg,
       ];
 
-      // Run-ID attribution sets (see AGENTS.md — Run-ID Attribution section)
+      // Run-ID attribution sets (see CLAUDE.md — Run-ID Attribution section)
       // LangChain's AsyncLocalStorage propagates the parent's callback context into child
       // tool executions, so child SimplifiedAgent LLM events also appear in this stream.
       // These sets let us distinguish the parent agent's own events from nested child events.
@@ -575,25 +733,33 @@ export class SimplifiedAgent {
         extraTools,
       );
 
-      // Prepare initial state
+      // Prepare initial state. `initialDocuments` (panel orchestrator) seeds the
+      // citation set so the agent's [n] references align with the pre-merged
+      // sources, and further searches append after them.
+      const seededDocuments = initialDocuments ?? [];
       const initialState = {
         messages: messagesHistory,
         query,
         focusMode,
         fileIds,
-        relevantDocuments: [],
+        relevantDocuments: seededDocuments,
         subagentExecutions: [],
       };
 
-      // Stash resolved skills for this run so read_skill can look them up
+      // Stash resolved skills + per-run context (chatId/parentMessageId) so
+      // read_skill and other context-bearing tools can persist their reads.
       const runId = `run_${Date.now()}_${Math.random().toString(36).slice(2)}`;
       skillRunId = runId;
-      storeSkillsForRun(runId, this.resolvedSkills);
+      setRunContext(runId, {
+        chatId: this.chatId ?? '',
+        parentMessageId: this.aiMessageId ?? '',
+        skills: this.resolvedSkills,
+      });
 
       // Configure the agent run
       const config: RunnableConfig = {
         configurable: {
-          thread_id: `simplified_agent_${Date.now()}`,
+          thread_id: this.threadId ?? `simplified_agent_${Date.now()}`,
           llm: this.chatLlm,
           systemLlm: this.systemLlm,
           embeddings: this.embeddings,
@@ -833,6 +999,39 @@ export class SimplifiedAgent {
                       typeof inputObj.file === 'string'
                     ) {
                       extraAttr += ` query="${encodeHtmlAttribute(inputObj.file.slice(0, TOOL_ARG_MAX_LENGTH))}"`;
+                      // Correlate filename → callback runId so the interrupt's
+                      // *_pending event carries the chip's markupToolCallId and
+                      // the chip can be closed to success on resume (markupKey =
+                      // input.file in workspace edit/create tools).
+                      pushQuestionCallbackRunId(inputObj.file, runId);
+                    }
+                  }
+                  // For skill edits, correlate skill name → callback runId
+                  // (markupKey = input.name in editSkillTool) so the chip closes.
+                  if (
+                    type === 'edit_skill' &&
+                    input &&
+                    typeof input === 'object'
+                  ) {
+                    const inputObj = input as Record<string, unknown>;
+                    if (typeof inputObj.name === 'string') {
+                      pushQuestionCallbackRunId(inputObj.name, runId);
+                    }
+                  }
+                  // For MCP tools, correlate namespacedName → callback runId
+                  // (markupKey = namespacedName in the mcp_tool interrupt) and
+                  // surface the calling arguments in the widget.
+                  if (type.startsWith('mcp__')) {
+                    pushQuestionCallbackRunId(type, runId);
+                    if (input && typeof input === 'object') {
+                      try {
+                        const json = JSON.stringify(input);
+                        if (json && json !== '{}') {
+                          extraAttr += ` mcpArgs="${encodeBase64(json)}"`;
+                        }
+                      } catch {
+                        // ignore arg serialization errors
+                      }
                     }
                   }
                 } catch (_attrErr) {
@@ -867,6 +1066,15 @@ export class SimplifiedAgent {
 
               // Skip if the tool was never registered (e.g. filtered out as a child-graph call)
               if (!toolName) return;
+
+              // Reaching here means the tool finished without interrupting (the
+              // interrupt path is the isGraphInterrupt branch in handleToolError),
+              // so any correlation entry it pushed speculatively in handleToolStart
+              // is stale. Drop it; otherwise a later interrupt for the same key
+              // (e.g. an edit_skill create that early-errors, then an update) would
+              // pop this dead runId and target the wrong markup widget.
+              dropQuestionCallbackRunId(runId);
+              dropCodeCallbackRunId(runId);
 
               // Skip generic tool events for tools with specialized inline rendering
               if (
@@ -944,6 +1152,13 @@ export class SimplifiedAgent {
                   // If parsing fails, skip extra
                 }
               }
+              // For MCP tools, surface the response content in the widget.
+              if (toolName.startsWith('mcp__')) {
+                const result = extractMcpResultContent(output);
+                if (result) {
+                  extra = { ...(extra ?? {}), mcpResult: result };
+                }
+              }
               if (toolCalls[runId]) delete toolCalls[runId];
 
               // Emit success update so UI can swap spinner for checkmark
@@ -964,6 +1179,14 @@ export class SimplifiedAgent {
               }
             },
             handleToolError: (err, runId, parentRunId, tags) => {
+              // LangGraph interrupts propagate as errors through the callback system — they
+              // are not actual tool failures. Skip the error event so the widget stays "running"
+              // rather than showing the raw interrupt payload as an error message.
+              if (isGraphInterrupt(err)) {
+                if (toolCalls[runId]) delete toolCalls[runId];
+                return;
+              }
+
               console.error('SimplifiedAgent: Tool error:', {
                 error: err,
                 runId,
@@ -975,6 +1198,15 @@ export class SimplifiedAgent {
 
               // Skip if the tool was never registered (e.g. filtered out as a child-graph call)
               if (!toolName) return;
+
+              // Reaching here means the tool finished without interrupting (the
+              // interrupt path is the isGraphInterrupt branch in handleToolError),
+              // so any correlation entry it pushed speculatively in handleToolStart
+              // is stale. Drop it; otherwise a later interrupt for the same key
+              // (e.g. an edit_skill create that early-errors, then an update) would
+              // pop this dead runId and target the wrong markup widget.
+              dropQuestionCallbackRunId(runId);
+              dropCodeCallbackRunId(runId);
 
               // Skip generic tool events for tools with specialized inline rendering
               if (
@@ -1016,10 +1248,29 @@ export class SimplifiedAgent {
         relevantDocuments?: Document[];
       } | null = null;
       const collectedDocuments: Document[] = [];
+      // Reference-identity dedupe for collected docs. The `relevantDocuments`
+      // graph channel uses a concat reducer, so seeded panel sources (placed in
+      // initialState) and tool-added docs reappear in `finalResult` as the SAME
+      // object references already collected from incremental events — without
+      // this they would be pushed (and re-emitted as sources_added) twice,
+      // duplicating citations and corrupting [n] numbering. Returns only the
+      // docs not seen before so callers emit each source exactly once.
+      const seenDocs = new Set<Document>();
+      const collectNewDocs = (docs: Document[]): Document[] => {
+        const fresh = docs.filter((d) => !seenDocs.has(d));
+        for (const d of fresh) seenDocs.add(d);
+        collectedDocuments.push(...fresh);
+        return fresh;
+      };
       let currentResponseBuffer = '';
       // Separate usage trackers for chat (final answer) and system (tools/internal chains).
-      // Pre-seed usageSystem with any pre-agent LLM usage (e.g., query distillation).
-      const usageChat = { input_tokens: 0, output_tokens: 0, total_tokens: 0 };
+      // Pre-seed each with any pre-agent LLM usage (e.g. query distillation into
+      // system; panel executor chat-model generation into chat).
+      const usageChat = {
+        input_tokens: this.initialChatUsage.input_tokens,
+        output_tokens: this.initialChatUsage.output_tokens,
+        total_tokens: this.initialChatUsage.total_tokens,
+      };
       const usageImageGen: {
         modelName: string;
         input_tokens: number;
@@ -1064,6 +1315,21 @@ export class SimplifiedAgent {
         }
       };
       this.emitter.on('tool_llm_usage', toolLlmUsageHandler);
+
+      // Seed pre-merged citation set (panel orchestrator) into the collected
+      // documents + emit them so the UI numbers them ahead of any new searches.
+      if (seededDocuments.length > 0) {
+        collectNewDocs(seededDocuments);
+        this.emitter.emit(
+          'data',
+          JSON.stringify({
+            type: 'sources_added',
+            data: seededDocuments,
+            searchQuery: 'Panel sources',
+            searchUrl: '',
+          }),
+        );
+      }
 
       try {
         // Process the event stream
@@ -1191,10 +1457,13 @@ export class SimplifiedAgent {
             event.name === 'RunnableSequence'
           ) {
             finalResult = event.data.output;
-            // Collect relevant documents from the final result
+            // Collect relevant documents from the final result. Dedupe by
+            // reference so seeded/tool docs already collected from incremental
+            // events (the concat reducer keeps the same object refs here) aren't
+            // counted or re-emitted a second time.
             if (finalResult && finalResult.relevantDocuments) {
-              collectedDocuments.push(...finalResult.relevantDocuments);
-              emitNewDocs(finalResult.relevantDocuments);
+              const fresh = collectNewDocs(finalResult.relevantDocuments);
+              if (fresh.length > 0) emitNewDocs(fresh);
             }
           }
 
@@ -1214,8 +1483,8 @@ export class SimplifiedAgent {
                   item.update.relevantDocuments &&
                   Array.isArray(item.update.relevantDocuments)
                 ) {
-                  collectedDocuments.push(...item.update.relevantDocuments);
-                  emitNewDocs(item.update.relevantDocuments);
+                  const fresh = collectNewDocs(item.update.relevantDocuments);
+                  if (fresh.length > 0) emitNewDocs(fresh);
 
                   // Log for deep_research to verify sources are being emitted
                   if (event.name === 'deep_research') {
@@ -1329,6 +1598,41 @@ export class SimplifiedAgent {
               currentResponseBuffer += textContent;
               this.emitResponse(textContent);
             }
+          }
+        }
+
+        // After the stream loop ends normally, check for pending LangGraph interrupts.
+        // When interrupt() is called inside a tool, LangGraph pauses the graph and writes
+        // a checkpoint; the stream ends cleanly but tasks[*].interrupts is populated.
+        if (!this.signal.aborted && this.threadId) {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const agentState = await (agent as any).getState({
+              configurable: { thread_id: this.threadId },
+            });
+            const pendingInterrupts = (agentState?.tasks ?? []).flatMap(
+              (t: { interrupts?: unknown[] }) => t.interrupts ?? [],
+            );
+            if (pendingInterrupts.length > 0) {
+              // runHost listens for 'interrupts' and handles DB persistence + status transition
+              this.emitter.emit(
+                'interrupts',
+                JSON.stringify(pendingInterrupts),
+              );
+              if (toolLlmUsageHandler) {
+                this.emitter.removeListener(
+                  'tool_llm_usage',
+                  toolLlmUsageHandler,
+                );
+              }
+              if (skillRunId) cleanupSkillsForRun(skillRunId);
+              return; // Do NOT emit 'end' — run is now paused at an interrupt
+            }
+          } catch (stateErr) {
+            console.warn(
+              '[simplifiedAgent] interrupt state check failed:',
+              stateErr,
+            );
           }
         }
       } catch (err: unknown) {
@@ -1522,6 +1826,452 @@ ${url ? `<url>${url}</url>` : ''}
       }
 
       this.emitter.emit('end');
+    }
+  }
+
+  /**
+   * Resume a paused run from a LangGraph checkpoint.
+   * Called by the resume endpoint after an interrupt is answered.
+   */
+  async doResume(
+    focusMode: string,
+    fileIds: string[],
+    resumeArg: unknown,
+    pinnedMcpDescriptors: import('@/lib/mcp/types').McpToolDescriptor[] = [],
+    mcpMarkupIds: Record<string, string> = {},
+  ): Promise<void> {
+    const toolLlmUsageHandler: ((data: string) => void) | null = null;
+    let skillRunId: string | null = null;
+
+    try {
+      const runId = `run_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      skillRunId = runId;
+      setRunContext(runId, {
+        chatId: this.chatId ?? '',
+        parentMessageId: this.aiMessageId ?? '',
+        skills: this.resolvedSkills,
+      });
+
+      // Reconstruct workspace tools so the resumed agent can execute workspace_edit etc.
+      // These tools are normally injected by route.ts as extraTools, but doResume creates
+      // a fresh agent that has no knowledge of the original route's context.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const resumeExtraTools: any[] = [];
+      if (this.workspaceId) {
+        const [
+          { workspaceLsTool },
+          { workspaceGrepTool },
+          { workspaceReadTool },
+          { workspaceEditTool },
+          { workspaceCreateFileTool },
+        ] = await Promise.all([
+          import('@/lib/tools/workspace/ls'),
+          import('@/lib/tools/workspace/grep'),
+          import('@/lib/tools/workspace/read'),
+          import('@/lib/tools/workspace/edit'),
+          import('@/lib/tools/workspace/create'),
+        ]);
+        resumeExtraTools.push(
+          workspaceLsTool(this.workspaceId),
+          workspaceGrepTool(this.workspaceId),
+          workspaceReadTool({
+            workspaceId: this.workspaceId,
+            visionCapable: false,
+          }),
+          workspaceEditTool({
+            workspaceId: this.workspaceId,
+            emitter: this.emitter,
+            interactiveSession: this.interactiveSession,
+            messageId: this.messageId ?? '',
+          }),
+          workspaceCreateFileTool({
+            workspaceId: this.workspaceId,
+            emitter: this.emitter,
+            interactiveSession: this.interactiveSession,
+            messageId: this.messageId ?? '',
+          }),
+        );
+      }
+
+      // Rebuild MCP tools — outside the workspaceId guard because MCP servers are
+      // global. Must use the same namespaced names as the initial run so that any
+      // in-flight approval (which uses namespacedName as markupKey) can complete.
+      // pinnedMcpDescriptors carries any descriptor snapshots extracted from the
+      // resolving approvals by performResume (in-memory, already resolved in DB
+      // before this method is called). Inject any pinned tool not in the live list
+      // so an interrupted tool can still complete even if the server changed.
+      const { buildMcpLangchainTools, buildToolForDescriptor } =
+        await import('@/lib/mcp/toolFactory');
+      // Live discovery is best-effort: a failure (e.g. degraded DB/tool-config
+      // read) just omits the live MCP tools for this resume.
+      const builtNames = new Set<string>();
+      try {
+        const mcpTools = await buildMcpLangchainTools({
+          emitter: this.emitter,
+          interactiveSession: this.interactiveSession,
+          messageId: this.messageId ?? '',
+        });
+        resumeExtraTools.push(...mcpTools);
+        for (const t of mcpTools) builtNames.add(t.name);
+      } catch (e) {
+        console.warn(
+          '[SimplifiedAgent] doResume: failed to rebuild live MCP tools:',
+          e,
+        );
+      }
+      // Pinned descriptors must ALWAYS be reconstructed, even if live discovery
+      // failed: these tools were already user-approved at interrupt time, so an
+      // already-granted call can complete and its tool_call_id isn't left dangling.
+      for (const snapshot of pinnedMcpDescriptors) {
+        if (!builtNames.has(snapshot.namespacedName)) {
+          resumeExtraTools.push(
+            buildToolForDescriptor(snapshot, {
+              emitter: this.emitter,
+              interactiveSession: this.interactiveSession,
+              messageId: this.messageId ?? '',
+            }),
+          );
+        }
+      }
+
+      const agent = await this.initializeAgent(
+        focusMode,
+        fileIds,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        resumeExtraTools.length > 0 ? resumeExtraTools : undefined,
+      );
+
+      const config: RunnableConfig = {
+        configurable: {
+          thread_id: this.threadId ?? '',
+          llm: this.chatLlm,
+          systemLlm: this.systemLlm,
+          embeddings: this.embeddings,
+          fileIds,
+          personaInstructions: this.personaInstructions,
+          focusMode,
+          emitter: this.emitter,
+          firefoxAIDetected: false,
+          messageId: this.messageId,
+          runId,
+          retrievalSignal: this.retrievalSignal,
+          userLocation: this.userLocation,
+          userProfile: this.userProfile,
+          chatId: this.chatId,
+          workspaceId: this.workspaceId,
+          interactiveSession: this.interactiveSession,
+          isPrivate: this.isPrivate,
+        },
+        recursionLimit: 150,
+        signal: this.retrievalSignal,
+      };
+
+      const { Command } = await import('@langchain/langgraph');
+
+      // Track active tool call run IDs so handleToolEnd can update the right widget.
+      const resumeToolCalls = new Map<string, string>();
+      // On resume LangGraph re-runs EVERY interrupted tool node from scratch (one
+      // per pending interrupt), not just the one being answered. Each already has a
+      // markup widget from the original run, so emitting tool_call_started for them
+      // would create duplicates (and the un-answered ones, which re-interrupt, would
+      // leave an orphaned spinner). Identify those re-invocations by the LLM
+      // tool_call_id, which is stable across replays (the callback runId is not).
+      // handleToolStart receives it as its 8th arg (config.toolCall.id); the pending
+      // interrupts expose the same id at interrupt.value.toolCallId.
+      const reinvokedToolCallIds = new Set<string>();
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const preState = await (agent as any).getState({
+          configurable: { thread_id: this.threadId ?? '' },
+        });
+        for (const task of preState?.tasks ?? []) {
+          for (const intr of (task as { interrupts?: unknown[] }).interrupts ??
+            []) {
+            const id = (intr as { value?: { toolCallId?: string } })?.value
+              ?.toolCallId;
+            if (id) reinvokedToolCallIds.add(id);
+          }
+        }
+      } catch (preStateErr) {
+        console.warn(
+          '[simplifiedAgent] resume pre-state interrupt scan failed:',
+          preStateErr,
+        );
+      }
+      // cbRunIds of the re-invoked interrupted tools, recorded as they start so
+      // handleToolEnd/handleToolError can recognize them by runId.
+      const resumedToolRunIds = new Set<string>();
+      // resume cbRunId → original widget markup toolCallId, for re-invoked MCP
+      // tools (so handleToolEnd attaches the response to the correct widget).
+      const resumeMcpMarkupByRunId = new Map<string, string>();
+
+      const eventStream = agent.streamEvents(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        new Command({ resume: resumeArg }) as any,
+        {
+          ...config,
+          version: 'v2',
+          callbacks: [
+            {
+              handleToolStart: (
+                _tool: unknown,
+                input: unknown,
+                cbRunId: string,
+                _parentRunId?: string,
+                _tags?: string[],
+                _metadata?: Record<string, unknown>,
+                runName?: string,
+                llmToolCallId?: string,
+              ) => {
+                const toolName =
+                  runName ||
+                  (_tool as { name?: string } | undefined)?.name ||
+                  '';
+                if (!toolName) return;
+                // Skip the re-invocations of the interrupted tools, matched by
+                // their stable LLM tool_call_id. Their widgets already exist from
+                // the original run; emitting another tool_call_started would
+                // duplicate them (and orphan the un-answered ones' spinners).
+                if (llmToolCallId && reinvokedToolCallIds.has(llmToolCallId)) {
+                  resumedToolRunIds.add(cbRunId);
+                  resumeToolCalls.set(cbRunId, toolName);
+                  if (mcpMarkupIds[llmToolCallId]) {
+                    resumeMcpMarkupByRunId.set(
+                      cbRunId,
+                      mcpMarkupIds[llmToolCallId],
+                    );
+                  }
+                  return;
+                }
+                if (
+                  toolName === 'deep_research' ||
+                  toolName === 'todo_list' ||
+                  toolName === 'create_chart'
+                )
+                  return;
+                resumeToolCalls.set(cbRunId, toolName);
+
+                const TOOL_ARG_MAX_LENGTH = 350;
+                let extraAttr = '';
+                try {
+                  let parsed = input;
+                  if (typeof input === 'string') {
+                    const t = input.trim();
+                    if (t.startsWith('{') && t.endsWith('}'))
+                      parsed = JSON.parse(t);
+                  }
+                  if (parsed && typeof parsed === 'object') {
+                    const obj = parsed as Record<string, unknown>;
+                    if (typeof obj.query === 'string')
+                      extraAttr += ` query="${encodeHtmlAttribute(obj.query.slice(0, TOOL_ARG_MAX_LENGTH))}"`;
+                    if (
+                      toolName === 'read_skill' &&
+                      typeof obj.name === 'string'
+                    )
+                      extraAttr += ` query="${encodeHtmlAttribute(obj.name.slice(0, TOOL_ARG_MAX_LENGTH))}"`;
+                    if (Array.isArray(obj.urls))
+                      extraAttr += ` count="${obj.urls.length}"`;
+                    if (typeof obj.url === 'string')
+                      extraAttr += ` url="${encodeHtmlAttribute(obj.url.slice(0, TOOL_ARG_MAX_LENGTH))}"`;
+                    if (typeof obj.pdfUrl === 'string')
+                      extraAttr += ` url="${encodeHtmlAttribute(obj.pdfUrl.slice(0, TOOL_ARG_MAX_LENGTH))}"`;
+                    if (typeof obj.content === 'string' && !obj.query)
+                      extraAttr += ` query="${encodeHtmlAttribute(obj.content.slice(0, TOOL_ARG_MAX_LENGTH))}"`;
+                    if (toolName === 'code_execution') {
+                      if (typeof obj.code === 'string') {
+                        extraAttr += ` code="${encodeBase64(obj.code)}"`;
+                        pushCallbackRunId(obj.code, cbRunId);
+                      }
+                      if (typeof obj.description === 'string')
+                        extraAttr += ` description="${encodeHtmlAttribute(obj.description.slice(0, 100))}"`;
+                    }
+                    if (toolName === 'ask_user') {
+                      if (typeof obj.question === 'string') {
+                        extraAttr += ` query="${encodeHtmlAttribute(obj.question.slice(0, 200))}"`;
+                        pushQuestionCallbackRunId(obj.question, cbRunId);
+                      }
+                      if (typeof obj.context === 'string')
+                        extraAttr += ` context="${encodeHtmlAttribute(obj.context.slice(0, 200))}"`;
+                    }
+                    if (
+                      (toolName === 'workspace_edit' ||
+                        toolName === 'workspace_create_file') &&
+                      typeof obj.file === 'string'
+                    ) {
+                      extraAttr += ` query="${encodeHtmlAttribute(obj.file.slice(0, TOOL_ARG_MAX_LENGTH))}"`;
+                      pushQuestionCallbackRunId(obj.file, cbRunId);
+                    }
+                    if (
+                      toolName === 'edit_skill' &&
+                      typeof obj.name === 'string'
+                    )
+                      pushQuestionCallbackRunId(obj.name, cbRunId);
+                    // MCP tools: correlate namespacedName → callback runId and
+                    // surface the calling arguments in the widget.
+                    if (toolName.startsWith('mcp__')) {
+                      pushQuestionCallbackRunId(toolName, cbRunId);
+                      try {
+                        const json = JSON.stringify(obj);
+                        if (json && json !== '{}')
+                          extraAttr += ` mcpArgs="${encodeBase64(json)}"`;
+                      } catch {
+                        // ignore arg serialization errors
+                      }
+                    }
+                    if (
+                      toolName === 'workspace_read' &&
+                      typeof obj.file === 'string'
+                    )
+                      extraAttr += ` query="${encodeHtmlAttribute(obj.file.slice(0, TOOL_ARG_MAX_LENGTH))}"`;
+                    if (
+                      toolName === 'workspace_grep' &&
+                      typeof obj.pattern === 'string'
+                    )
+                      extraAttr += ` query="${encodeHtmlAttribute(obj.pattern.slice(0, TOOL_ARG_MAX_LENGTH))}"`;
+                  }
+                } catch {
+                  // ignore attribute extraction errors
+                }
+                this.emitter.emit(
+                  'data',
+                  JSON.stringify({
+                    type: 'tool_call_started',
+                    data: {
+                      content: `<ToolCall type="${encodeHtmlAttribute(toolName)}" status="running" toolCallId="${encodeHtmlAttribute(cbRunId)}"${extraAttr}></ToolCall>`,
+                      toolCallId: cbRunId,
+                      status: 'running',
+                    },
+                  }),
+                );
+              },
+              handleToolEnd: (output: unknown, cbRunId: string) => {
+                const name = resumeToolCalls.get(cbRunId);
+                if (!name) return;
+                resumeToolCalls.delete(cbRunId);
+                // Finished without interrupting → drop any stale correlation
+                // entry so a later same-key interrupt doesn't pop this dead id.
+                dropQuestionCallbackRunId(cbRunId);
+                dropCodeCallbackRunId(cbRunId);
+                // For MCP tools, surface the response. The MCP call's output is
+                // only available here (after the approved tool re-runs on resume),
+                // so even though performResume already closed the widget to success,
+                // re-emit a success carrying the result so it merges into the widget.
+                let extra: Record<string, string> | undefined;
+                if (name.startsWith('mcp__')) {
+                  const result = extractMcpResultContent(output);
+                  if (result) extra = { mcpResult: result };
+                }
+                // resumeRun already emitted tool_call_success for the resumed tools;
+                // only re-emit if we have an MCP result to attach. The widget for a
+                // resumed tool is keyed by the ORIGINAL run's markup toolCallId, not
+                // this resume callback's cbRunId, so target that instead.
+                if (resumedToolRunIds.has(cbRunId)) {
+                  if (extra) {
+                    const markupId =
+                      resumeMcpMarkupByRunId.get(cbRunId) ?? cbRunId;
+                    this.emitter.emit(
+                      'data',
+                      JSON.stringify({
+                        type: 'tool_call_success',
+                        data: {
+                          toolCallId: markupId,
+                          status: 'success',
+                          extra,
+                        },
+                      }),
+                    );
+                  }
+                  return;
+                }
+                this.emitter.emit(
+                  'data',
+                  JSON.stringify({
+                    type: 'tool_call_success',
+                    data: {
+                      toolCallId: cbRunId,
+                      status: 'success',
+                      ...(extra ? { extra } : {}),
+                    },
+                  }),
+                );
+              },
+              handleToolError: (err: unknown, cbRunId: string) => {
+                if (isGraphInterrupt(err)) {
+                  resumeToolCalls.delete(cbRunId);
+                  return;
+                }
+                const name = resumeToolCalls.get(cbRunId);
+                if (!name) return;
+                resumeToolCalls.delete(cbRunId);
+                dropQuestionCallbackRunId(cbRunId);
+                dropCodeCallbackRunId(cbRunId);
+                if (resumedToolRunIds.has(cbRunId)) return;
+                const msg =
+                  (err instanceof Error ? err.message : String(err)) ||
+                  'Unknown tool error';
+                this.emitter.emit(
+                  'data',
+                  JSON.stringify({
+                    type: 'tool_call_error',
+                    data: {
+                      toolCallId: cbRunId,
+                      status: 'error',
+                      error: msg.substring(0, 500),
+                    },
+                  }),
+                );
+              },
+            },
+          ],
+        },
+      );
+
+      for await (const event of eventStream) {
+        if (this.signal.aborted) break;
+
+        if (event.event === 'on_chat_model_stream' && event.data?.chunk) {
+          const chunk = event.data.chunk;
+          const textContent = extractTextContent(chunk.content);
+          if (textContent) this.emitResponse(textContent);
+        }
+      }
+
+      // Check for further interrupts after resume stream
+      if (!this.signal.aborted && this.threadId) {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const agentState = await (agent as any).getState({
+            configurable: { thread_id: this.threadId },
+          });
+          const pendingInterrupts = (agentState?.tasks ?? []).flatMap(
+            (t: { interrupts?: unknown[] }) => t.interrupts ?? [],
+          );
+          if (pendingInterrupts.length > 0) {
+            this.emitter.emit('interrupts', JSON.stringify(pendingInterrupts));
+            if (skillRunId) cleanupSkillsForRun(skillRunId);
+            return;
+          }
+        } catch (stateErr) {
+          console.warn(
+            '[simplifiedAgent] resume interrupt state check failed:',
+            stateErr,
+          );
+        }
+      }
+
+      if (skillRunId) cleanupSkillsForRun(skillRunId);
+      this.emitter.emit('end');
+    } catch (error: unknown) {
+      if (toolLlmUsageHandler) {
+        this.emitter.removeListener('tool_llm_usage', toolLlmUsageHandler);
+      }
+      if (skillRunId) cleanupSkillsForRun(skillRunId);
+      console.error('[SimplifiedAgent] doResume error:', error);
+      this.emitter.emit('error', JSON.stringify({ data: String(error) }));
     }
   }
 

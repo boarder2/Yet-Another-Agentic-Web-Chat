@@ -1,54 +1,24 @@
 import { Embeddings } from '@langchain/core/embeddings';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import {
-  loadOpenAIChatModels,
-  loadOpenAIEmbeddingModels,
-  PROVIDER_INFO as OpenAIInfo,
-} from './openai';
+import { loadOpenAIChatModels, loadOpenAIEmbeddingModels } from './openai';
 import {
   getCustomOpenaiApiKey,
   getCustomOpenaiApiUrl,
   getCustomOpenaiModelName,
-  getHiddenModels,
 } from '../config';
 import { ChatOpenAI } from '@langchain/openai';
-import {
-  loadOllamaChatModels,
-  loadOllamaEmbeddingModels,
-  PROVIDER_INFO as OllamaInfo,
-} from './ollama';
-import { loadGroqChatModels, PROVIDER_INFO as GroqInfo } from './groq';
-import {
-  loadAnthropicChatModels,
-  PROVIDER_INFO as AnthropicInfo,
-} from './anthropic';
-import {
-  loadGeminiChatModels,
-  loadGeminiEmbeddingModels,
-  PROVIDER_INFO as GeminiInfo,
-} from './gemini';
-import {
-  loadTransformersEmbeddingsModels,
-  PROVIDER_INFO as TransformersInfo,
-} from './transformers';
-import {
-  loadDeepseekChatModels,
-  PROVIDER_INFO as DeepseekInfo,
-} from './deepseek';
-import {
-  loadAimlApiChatModels,
-  loadAimlApiEmbeddingModels,
-  PROVIDER_INFO as AimlApiInfo,
-} from './aimlapi';
+import { loadOllamaChatModels, loadOllamaEmbeddingModels } from './ollama';
+import { loadGroqChatModels } from './groq';
+import { loadAnthropicChatModels } from './anthropic';
+import { loadGeminiChatModels, loadGeminiEmbeddingModels } from './gemini';
+import { loadTransformersEmbeddingsModels } from './transformers';
+import { loadDeepseekChatModels } from './deepseek';
+import { loadAimlApiChatModels, loadAimlApiEmbeddingModels } from './aimlapi';
 import {
   loadLMStudioChatModels,
   loadLMStudioEmbeddingsModels,
-  PROVIDER_INFO as LMStudioInfo,
 } from './lmstudio';
-import {
-  loadOpenrouterChatModels,
-  PROVIDER_INFO as OpenRouterInfo,
-} from './openrouter';
+import { loadOpenrouterChatModels } from './openrouter';
 import {
   getCachedChatModels,
   getCachedEmbeddingModels,
@@ -56,23 +26,9 @@ import {
   setCachedEmbeddingModels,
   NEGATIVE_CACHE_TTL_MS,
 } from './modelCache';
+import { PROVIDER_METADATA } from './metadata';
 
-export const PROVIDER_METADATA = {
-  openai: OpenAIInfo,
-  ollama: OllamaInfo,
-  groq: GroqInfo,
-  anthropic: AnthropicInfo,
-  gemini: GeminiInfo,
-  transformers: TransformersInfo,
-  deepseek: DeepseekInfo,
-  aimlapi: AimlApiInfo,
-  lmstudio: LMStudioInfo,
-  openrouter: OpenRouterInfo,
-  custom_openai: {
-    key: 'custom_openai',
-    displayName: 'Custom OpenAI',
-  },
-};
+export { PROVIDER_METADATA };
 
 export interface ChatModel {
   displayName: string;
@@ -175,8 +131,11 @@ export const getAvailableChatModelProviders = async (
     };
   }
 
-  // Filter out hidden models if includeHidden is false
+  // Filter out hidden models if includeHidden is false. Dynamic import keeps the
+  // DB-backed (server-only) settings reader out of any client bundle that pulls
+  // PROVIDER_METADATA from this module.
   if (!includeHidden) {
+    const { getHiddenModels } = await import('@/lib/settings/server');
     const hiddenModels = getHiddenModels();
     if (hiddenModels.length > 0) {
       for (const provider in models) {
@@ -238,8 +197,11 @@ export const getAvailableEmbeddingModelProviders = async (
     }
   }
 
-  // Filter out hidden models if includeHidden is false
+  // Filter out hidden models if includeHidden is false. Dynamic import keeps the
+  // DB-backed (server-only) settings reader out of any client bundle that pulls
+  // PROVIDER_METADATA from this module.
   if (!includeHidden) {
+    const { getHiddenModels } = await import('@/lib/settings/server');
     const hiddenModels = getHiddenModels();
     if (hiddenModels.length > 0) {
       for (const provider in models) {

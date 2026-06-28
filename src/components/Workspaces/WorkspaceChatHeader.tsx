@@ -1,6 +1,6 @@
 'use client';
 
-import { useWorkspace } from '@/lib/hooks/useWorkspace';
+import { useWorkspace } from '@/lib/hooks/api/useWorkspaces';
 import { useLocalStorageBoolean } from '@/lib/hooks/useLocalStorage';
 import { cn } from '@/lib/utils';
 import WorkspaceDetailHeader from './WorkspaceDetailHeader';
@@ -20,7 +20,7 @@ export const WORKSPACE_HEADER_HEIGHT = 105;
  * positioning so it sits at the very top of the viewport.
  */
 const WorkspaceChatHeader = ({ workspaceId }: { workspaceId: string }) => {
-  const { workspace } = useWorkspace(workspaceId);
+  const { data: workspace } = useWorkspace(workspaceId);
   const [sidebarCollapsed] = useLocalStorageBoolean(
     'workspaceSidebarCollapsed',
     false,

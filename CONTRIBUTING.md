@@ -11,7 +11,7 @@ YAAWC's codebase is organized as follows:
 - **UI Components and Pages**:
   - **Components (`src/components`)**: Reusable UI components.
   - **Pages and Routes (`src/app`)**: Next.js app directory structure with page components.
-    - Main app routes include: home (`/`), chat (`/c`), discover (`/discover`), library (`/library`), and settings (`/settings`).
+    - Main app routes include: home (`/`), chat (`/c`), discover (`/discover`), history (`/history`), and settings (`/settings`).
   - **API Routes (`src/app/api`)**: API endpoints implemented with Next.js API routes.
     - `/api/chat`: Handles chat interactions.
     - Other endpoints for models, files, and suggestions.
@@ -21,10 +21,6 @@ YAAWC's codebase is organized as follows:
   - Database functionality is in `src/lib/db`.
   - Chat model and embedding model providers are managed in `src/lib/providers`.
   - Prompt templates and LLM chain definitions are in `src/lib/prompts` and `src/lib/chains` respectively.
-
-## API Documentation
-
-YAAWC exposes API endpoints for programmatic access. The primary endpoint is `/api/chat` for streaming chat interactions. See the README for a full endpoint listing.
 
 ## Setting Up Your Environment
 

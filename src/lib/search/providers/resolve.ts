@@ -1,4 +1,4 @@
-import { getSearchProviderSelection } from '@/lib/config';
+import { getSearchProviderSelection } from '@/lib/settings/server';
 import { getProviderById } from './registry';
 import {
   SearchCapabilities,

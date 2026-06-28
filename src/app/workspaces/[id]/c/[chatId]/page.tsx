@@ -5,21 +5,18 @@ import { useWideWidth } from '@/components/Layout';
 import { cn } from '@/lib/utils';
 import { useEffect } from 'react';
 import { useParams } from 'next/navigation';
+import { useMarkChatSeen } from '@/lib/hooks/api/useActiveRuns';
 
 export default function Page() {
   const params = useParams<{ id: string; chatId: string }>();
   const { id, chatId } = params;
   const wide = useWideWidth();
+  const markSeen = useMarkChatSeen();
 
   useEffect(() => {
-    fetch(`/api/scheduled-tasks/runs/${chatId}/view`, { method: 'POST' })
-      .then((r) => r.json())
-      .then((d) => {
-        window.dispatchEvent(
-          new CustomEvent('scheduled-runs-unread-changed', { detail: d }),
-        );
-      })
-      .catch(() => {});
+    markSeen.mutate(chatId);
+    // markSeen is stable; only re-run when the chat changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatId]);
 
   return (

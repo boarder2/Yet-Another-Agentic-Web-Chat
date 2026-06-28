@@ -9,8 +9,10 @@ import {
   LayoutDashboard,
   Layers,
   List,
+  Pencil,
+  Eye,
 } from 'lucide-react';
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useMemo } from 'react';
 import { Responsive, WidthProvider } from 'react-grid-layout';
 import {
   Card,
@@ -20,15 +22,11 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import WidgetConfigModal from '@/components/dashboard/WidgetConfigModal';
 import WidgetDisplay from '@/components/dashboard/WidgetDisplay';
+import WidgetModals from '@/components/dashboard/WidgetModals';
 import PageHeader from '@/components/PageHeader';
-import { useDashboard } from '@/lib/hooks/useDashboard';
-import { Widget, WidgetConfig } from '@/lib/types/widget';
-import { DashboardLayouts } from '@/lib/types/dashboard';
+import { useWidgetBoard } from '@/lib/hooks/useWidgetBoard';
 import { DASHBOARD_CONSTRAINTS } from '@/lib/constants/dashboard';
-import { toast } from 'sonner';
-import { Layout, Layouts } from 'react-grid-layout';
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
@@ -51,6 +49,7 @@ const EmptyDashboard = ({ onAddWidget }: { onAddWidget: () => void }) => (
 
       <CardFooter className="justify-center">
         <button
+          type="button"
           onClick={onAddWidget}
           className="px-4 py-2 bg-accent text-accent-fg rounded-control hover:bg-accent-700 transition duration-200 flex items-center space-x-2"
         >
@@ -63,128 +62,51 @@ const EmptyDashboard = ({ onAddWidget }: { onAddWidget: () => void }) => (
 );
 
 const DashboardPage = () => {
+  const board = useWidgetBoard('dashboard');
   const {
-    widgets,
+    surfaceWidgets,
     isLoading,
-    addWidget,
-    updateWidget,
-    deleteWidget,
-    refreshWidget,
-    refreshAllWidgets,
-    exportDashboard,
-    importDashboard,
+    isEditMode,
+    setIsEditMode,
     settings,
-    updateSettings,
+    handleAddWidget,
+    handleEditWidget,
+    handleConvertWidget,
+    handleDelete,
+    handleRefresh,
+    handleRefreshAll,
+    handleTogglePlacement,
+    persistLayout,
+    handleExport,
+    handleImport,
+    handleToggleProcessingMode,
     getLayouts,
-    updateLayouts,
-  } = useDashboard();
-
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [editingWidget, setEditingWidget] = useState<Widget | null>(null);
-  const hasAutoRefreshed = useRef(false);
-
-  // Memoize the ResponsiveGridLayout to prevent re-renders
-  const ResponsiveGrid = useMemo(() => ResponsiveGridLayout, []);
-
-  // Auto-refresh stale widgets when dashboard loads (only once)
-  useEffect(() => {
-    if (!isLoading && widgets.length > 0 && !hasAutoRefreshed.current) {
-      hasAutoRefreshed.current = true;
-      refreshAllWidgets();
-    }
-  }, [isLoading, widgets, refreshAllWidgets]);
-
-  const handleAddWidget = () => {
-    setEditingWidget(null);
-    setShowAddModal(true);
-  };
-
-  const handleEditWidget = (widget: Widget) => {
-    setEditingWidget(widget);
-    setShowAddModal(true);
-  };
-
-  const handleSaveWidget = (widgetConfig: WidgetConfig) => {
-    if (editingWidget) {
-      // Update existing widget
-      updateWidget(editingWidget.id, widgetConfig);
-    } else {
-      // Add new widget
-      addWidget(widgetConfig);
-    }
-    setShowAddModal(false);
-    setEditingWidget(null);
-  };
-
-  const handleCloseModal = () => {
-    setShowAddModal(false);
-    setEditingWidget(null);
-  };
-
-  const handleDeleteWidget = useCallback(
-    (widgetId: string) => {
-      deleteWidget(widgetId);
-    },
-    [deleteWidget],
-  );
-
-  const handleRefreshWidget = useCallback(
-    (widgetId: string) => {
-      refreshWidget(widgetId, true); // Force refresh when manually triggered
-    },
-    [refreshWidget],
-  );
-
-  const handleRefreshAll = () => {
-    refreshAllWidgets(true);
-  };
-
-  const handleExport = async () => {
-    try {
-      const configJson = await exportDashboard();
-      await navigator.clipboard.writeText(configJson);
-      toast.success('Dashboard configuration copied to clipboard');
-      console.log('Dashboard configuration copied to clipboard');
-    } catch (error) {
-      console.error('Export failed:', error);
-      toast.error('Failed to copy dashboard configuration');
-    }
-  };
-
-  const handleImport = async () => {
-    try {
-      const configJson = await navigator.clipboard.readText();
-      await importDashboard(configJson);
-      toast.success('Dashboard configuration imported successfully');
-      console.log('Dashboard configuration imported successfully');
-    } catch (error) {
-      console.error('Import failed:', error);
-      toast.error('Failed to import dashboard configuration');
-    }
-  };
-
-  const handleToggleProcessingMode = () => {
-    updateSettings({ parallelLoading: !settings.parallelLoading });
-  };
-
-  // Handle layout changes from react-grid-layout
-  const handleLayoutChange = (_layout: Layout[], layouts: Layouts) => {
-    updateLayouts(layouts as DashboardLayouts);
-  };
+  } = board;
 
   // Memoize grid children to prevent unnecessary re-renders
   const gridChildren = useMemo(() => {
-    return widgets.map((widget) => (
+    return surfaceWidgets.map((widget) => (
       <div key={widget.id}>
         <WidgetDisplay
           widget={widget}
           onEdit={handleEditWidget}
-          onDelete={handleDeleteWidget}
-          onRefresh={handleRefreshWidget}
+          onDelete={handleDelete}
+          onRefresh={handleRefresh}
+          onConvert={handleConvertWidget}
+          onTogglePlacement={handleTogglePlacement}
+          isEditMode={isEditMode}
         />
       </div>
     ));
-  }, [widgets, handleDeleteWidget, handleRefreshWidget]);
+  }, [
+    surfaceWidgets,
+    handleEditWidget,
+    handleDelete,
+    handleRefresh,
+    handleConvertWidget,
+    handleTogglePlacement,
+    isEditMode,
+  ]);
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -194,6 +116,20 @@ const DashboardPage = () => {
         actions={
           <>
             <button
+              type="button"
+              onClick={() => setIsEditMode((v) => !v)}
+              className={`p-2 rounded-surface transition duration-200 ${
+                isEditMode
+                  ? 'bg-accent text-accent-fg hover:bg-accent-700'
+                  : 'hover:bg-surface-2'
+              }`}
+              title={isEditMode ? 'Switch to View Mode' : 'Switch to Edit Mode'}
+            >
+              {isEditMode ? <Eye size={18} /> : <Pencil size={18} />}
+            </button>
+
+            <button
+              type="button"
               onClick={handleRefreshAll}
               className="p-2 hover:bg-surface-2 rounded-surface transition duration-200"
               title="Refresh All Widgets"
@@ -201,41 +137,49 @@ const DashboardPage = () => {
               <RefreshCw size={18} />
             </button>
 
-            <button
-              onClick={handleToggleProcessingMode}
-              className="p-2 hover:bg-surface-2 rounded-surface transition duration-200"
-              title={`Switch to ${settings.parallelLoading ? 'Sequential' : 'Parallel'} Processing`}
-            >
-              {settings.parallelLoading ? (
-                <Layers size={18} />
-              ) : (
-                <List size={18} />
-              )}
-            </button>
+            {isEditMode && (
+              <>
+                <button
+                  type="button"
+                  onClick={handleToggleProcessingMode}
+                  className="p-2 hover:bg-surface-2 rounded-surface transition duration-200"
+                  title={`Switch to ${settings.parallelLoading ? 'Sequential' : 'Parallel'} Processing`}
+                >
+                  {settings.parallelLoading ? (
+                    <Layers size={18} />
+                  ) : (
+                    <List size={18} />
+                  )}
+                </button>
 
-            <button
-              onClick={handleExport}
-              className="p-2 hover:bg-surface-2 rounded-surface transition duration-200"
-              title="Export Dashboard Configuration"
-            >
-              <Download size={18} />
-            </button>
+                <button
+                  type="button"
+                  onClick={handleExport}
+                  className="p-2 hover:bg-surface-2 rounded-surface transition duration-200"
+                  title="Export Dashboard Configuration"
+                >
+                  <Download size={18} />
+                </button>
 
-            <button
-              onClick={handleImport}
-              className="p-2 hover:bg-surface-2 rounded-surface transition duration-200"
-              title="Import Dashboard Configuration"
-            >
-              <Upload size={18} />
-            </button>
+                <button
+                  type="button"
+                  onClick={handleImport}
+                  className="p-2 hover:bg-surface-2 rounded-surface transition duration-200"
+                  title="Import Dashboard Configuration"
+                >
+                  <Upload size={18} />
+                </button>
 
-            <button
-              onClick={handleAddWidget}
-              className="p-2 bg-accent hover:bg-accent-700 rounded-surface transition duration-200"
-              title="Add New Widget"
-            >
-              <Plus size={18} />
-            </button>
+                <button
+                  type="button"
+                  onClick={handleAddWidget}
+                  className="p-2 bg-accent hover:bg-accent-700 rounded-surface transition duration-200"
+                  title="Add New Widget"
+                >
+                  <Plus size={18} />
+                </button>
+              </>
+            )}
           </>
         }
       />
@@ -252,10 +196,10 @@ const DashboardPage = () => {
               <p className="text-fg/60">Loading dashboard...</p>
             </div>
           </div>
-        ) : widgets.length === 0 ? (
+        ) : surfaceWidgets.length === 0 ? (
           <EmptyDashboard onAddWidget={handleAddWidget} />
         ) : (
-          <ResponsiveGrid
+          <ResponsiveGridLayout
             className="layout"
             layouts={getLayouts()}
             breakpoints={DASHBOARD_CONSTRAINTS.GRID_BREAKPOINTS}
@@ -263,25 +207,20 @@ const DashboardPage = () => {
             rowHeight={DASHBOARD_CONSTRAINTS.GRID_ROW_HEIGHT}
             margin={DASHBOARD_CONSTRAINTS.GRID_MARGIN}
             containerPadding={DASHBOARD_CONSTRAINTS.GRID_CONTAINER_PADDING}
-            onLayoutChange={handleLayoutChange}
-            isDraggable={true}
-            isResizable={true}
+            onDragStop={persistLayout}
+            onResizeStop={persistLayout}
+            isDraggable={isEditMode}
+            isResizable={isEditMode}
             compactType="vertical"
             preventCollision={false}
             draggableHandle=".widget-drag-handle"
           >
             {gridChildren}
-          </ResponsiveGrid>
+          </ResponsiveGridLayout>
         )}
       </div>
 
-      {/* Widget Configuration Modal */}
-      <WidgetConfigModal
-        isOpen={showAddModal}
-        onClose={handleCloseModal}
-        onSave={handleSaveWidget}
-        editingWidget={editingWidget}
-      />
+      <WidgetModals board={board} />
     </div>
   );
 };

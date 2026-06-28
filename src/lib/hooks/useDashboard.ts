@@ -10,9 +10,15 @@ import {
 } from '@/lib/types/dashboard';
 import { WidgetCache } from '@/lib/types/cache';
 import {
+  isSettingsHydrated,
+  subscribeSettingsHydrated,
+  subscribeSettingsSynced,
+} from '@/lib/settings/persist';
+import {
   DASHBOARD_CONSTRAINTS,
   getResponsiveConstraints,
 } from '@/lib/constants/dashboard';
+import { resolveWidgetTheme } from '@/lib/widgets/widgetTheme';
 
 // Helper function to request location permission and get user's location
 const requestLocationPermission = async (): Promise<string | undefined> => {
@@ -74,6 +80,10 @@ const replaceDateTimeVariables = (prompt: string): string => {
   return processedPrompt;
 };
 
+// Widgets render on two independent surfaces. Layout + placement operations are
+// surface-aware so a widget shown on both keeps a separate position per surface.
+export type DashboardSurface = 'home' | 'dashboard';
+
 interface UseDashboardReturn {
   // State
   widgets: Widget[];
@@ -82,24 +92,72 @@ interface UseDashboardReturn {
   settings: DashboardConfig['settings'];
 
   // Widget management
-  addWidget: (config: WidgetConfig) => void;
+  addWidget: (config: WidgetConfig, surface?: DashboardSurface) => void;
   updateWidget: (id: string, config: WidgetConfig) => void;
   deleteWidget: (id: string) => void;
   refreshWidget: (id: string, forceRefresh?: boolean) => Promise<void>;
   refreshAllWidgets: (forceRefresh?: boolean) => Promise<void>;
+  setWidgetPlacement: (
+    id: string,
+    patch: { showOnHome?: boolean; showOnDashboard?: boolean },
+  ) => void;
 
-  // Layout management
-  updateLayouts: (layouts: DashboardLayouts) => void;
-  getLayouts: () => DashboardLayouts;
+  // Layout management. `layout` is the currently-active breakpoint's layout
+  // (react-grid-layout's first onLayoutChange arg) — using it, rather than a
+  // fixed breakpoint, lets edits made at any width persist.
+  updateLayouts: (surface: DashboardSurface, layout: Layout[]) => void;
+  getLayouts: (surface: DashboardSurface) => DashboardLayouts;
 
   // Storage management
   exportDashboard: () => Promise<string>;
   importDashboard: (configJson: string) => Promise<void>;
   clearCache: () => void;
+  invalidateWidgetCache: (id: string) => void;
 
   // Settings
   updateSettings: (newSettings: Partial<DashboardConfig['settings']>) => void;
 }
+
+// `showOnDashboard === undefined` means "show" (back-compat with widgets created
+// before home placement existed). Home is strictly opt-in.
+const isOnSurface = (w: Widget, surface: DashboardSurface): boolean =>
+  surface === 'home' ? !!w.showOnHome : w.showOnDashboard !== false;
+
+// The per-surface position field. Home falls back to the dashboard layout when a
+// home layout hasn't been seeded yet (e.g. imported widgets).
+const surfaceLayout = (w: Widget, surface: DashboardSurface): WidgetLayout =>
+  surface === 'home' ? (w.homeLayout ?? w.layout) : w.layout;
+
+// First free grid slot among the given layouts (half-width widgets, scanning
+// top-to-bottom). Mirrors the original dashboard placement heuristic.
+const findOpenPosition = (
+  layouts: WidgetLayout[],
+): { x: number; y: number } => {
+  for (let row = 0; row < 20; row++) {
+    for (let col = 0; col < 12; col += 6) {
+      const position = { x: col, y: row };
+      const hasCollision = layouts.some(
+        (l) =>
+          l.x < position.x + 6 &&
+          l.x + l.w > position.x &&
+          l.y < position.y + 3 &&
+          l.y + l.h > position.y,
+      );
+      if (!hasCollision) return position;
+    }
+  }
+  const maxY = Math.max(0, ...layouts.map((l) => l.y + l.h));
+  return { x: 0, y: maxY };
+};
+
+const getWidgetCache = (): WidgetCache => {
+  try {
+    const cached = localStorage.getItem(DASHBOARD_STORAGE_KEYS.CACHE);
+    return cached ? JSON.parse(cached) : {};
+  } catch {
+    return {};
+  }
+};
 
 export const useDashboard = (): UseDashboardReturn => {
   const [state, setState] = useState<DashboardState>({
@@ -113,6 +171,14 @@ export const useDashboard = (): UseDashboardReturn => {
     },
   });
 
+  // Dashboard storage is DB-backed (app_settings) with localStorage as a cache.
+  // We must not persist our loaded state until settings hydration has reconciled
+  // with the DB, or a stale local-on-mount snapshot could clobber newer values
+  // another device wrote. Until then, write-backs are gated off.
+  const [settingsHydrated, setSettingsHydrated] = useState<boolean>(() =>
+    isSettingsHydrated(),
+  );
+
   const loadDashboardData = useCallback(() => {
     try {
       // Migrate legacy Perplexica localStorage keys if present
@@ -124,6 +190,10 @@ export const useDashboard = (): UseDashboardReturn => {
 
       // Convert date strings back to Date objects and ensure layout exists
       widgets.forEach((widget, index) => {
+        // Migration: legacy widgets predate the discriminated union.
+        const w = widget as unknown as { widgetType?: 'llm' | 'code' };
+        if (!w.widgetType) w.widgetType = 'llm';
+
         if (widget.lastUpdated) {
           widget.lastUpdated = new Date(widget.lastUpdated);
         }
@@ -158,7 +228,11 @@ export const useDashboard = (): UseDashboardReturn => {
         ...prev,
         widgets,
         settings,
-        isLoading: false,
+        // Stay "loading" until settings hydration has reconciled with the DB.
+        // Reporting ready on the pre-hydration (stale) snapshot lets the
+        // dashboard's auto-refresh fire against old cache and race the
+        // freshly-hydrated values, intermittently re-applying stale renders.
+        isLoading: !isSettingsHydrated(),
       }));
     } catch (error) {
       console.error('Error loading dashboard data:', error);
@@ -170,65 +244,58 @@ export const useDashboard = (): UseDashboardReturn => {
     }
   }, []);
 
-  // Load dashboard data from localStorage on mount
+  // Load dashboard data from localStorage on mount. The synchronous setState
+  // is intentional: it hydrates the dashboard from persisted storage in a
+  // single pass before first paint.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadDashboardData();
   }, [loadDashboardData]);
 
-  // Save widgets to localStorage whenever they change (but not on initial load)
+  // When settings hydration reconciles with the DB, pull the freshly-hydrated
+  // values into state and unblock write-backs. Fires immediately if hydration
+  // already completed before this hook mounted.
   useEffect(() => {
-    if (!state.isLoading) {
+    return subscribeSettingsHydrated(() => {
+      setSettingsHydrated(true);
+      loadDashboardData();
+    });
+  }, [loadDashboardData]);
+
+  // Re-read the cache whenever a focus/visibility re-sync pulls newer values
+  // from the DB, so a long-lived tab reflects changes made on another device.
+  useEffect(() => {
+    return subscribeSettingsSynced(loadDashboardData);
+  }, [loadDashboardData]);
+
+  // Save widgets to localStorage whenever they change (not on initial load, and
+  // not before hydration — see settingsHydrated note above).
+  useEffect(() => {
+    if (!state.isLoading && settingsHydrated) {
       localStorage.setItem(
         DASHBOARD_STORAGE_KEYS.WIDGETS,
         JSON.stringify(state.widgets),
       );
     }
-  }, [state.widgets, state.isLoading]);
+  }, [state.widgets, state.isLoading, settingsHydrated]);
 
-  // Save settings to localStorage whenever they change
+  // Save settings to localStorage whenever they change (gated the same way).
   useEffect(() => {
-    localStorage.setItem(
-      DASHBOARD_STORAGE_KEYS.SETTINGS,
-      JSON.stringify(state.settings),
-    );
-  }, [state.settings]);
+    if (!state.isLoading && settingsHydrated) {
+      localStorage.setItem(
+        DASHBOARD_STORAGE_KEYS.SETTINGS,
+        JSON.stringify(state.settings),
+      );
+    }
+  }, [state.settings, state.isLoading, settingsHydrated]);
 
   const addWidget = useCallback(
-    (config: WidgetConfig) => {
-      // Find the next available position in the grid
-      const getNextPosition = () => {
-        const existingWidgets = state.widgets;
-        const _x = 0;
-        const _y = 0;
-
-        // Simple algorithm: try to place in first available spot
-        for (let row = 0; row < 20; row++) {
-          for (let col = 0; col < 12; col += 6) {
-            // Start with half-width widgets
-            const position = { x: col, y: row };
-            const hasCollision = existingWidgets.some(
-              (widget) =>
-                widget.layout.x < position.x + 6 &&
-                widget.layout.x + widget.layout.w > position.x &&
-                widget.layout.y < position.y + 3 &&
-                widget.layout.y + widget.layout.h > position.y,
-            );
-
-            if (!hasCollision) {
-              return { x: position.x, y: position.y };
-            }
-          }
-        }
-
-        // Fallback: place at bottom
-        const maxY = Math.max(
-          0,
-          ...existingWidgets.map((w) => w.layout.y + w.layout.h),
-        );
-        return { x: 0, y: maxY };
-      };
-
-      const position = getNextPosition();
+    (config: WidgetConfig, surface: DashboardSurface = 'dashboard') => {
+      // Position only against widgets already on the target surface.
+      const occupied = state.widgets
+        .filter((w) => isOnSurface(w, surface))
+        .map((w) => surfaceLayout(w, surface));
+      const position = findOpenPosition(occupied);
       const defaultLayout: WidgetLayout = {
         x: position.x,
         y: position.y,
@@ -238,14 +305,26 @@ export const useDashboard = (): UseDashboardReturn => {
         isResizable: true,
       };
 
+      // New widgets get BOTH placement flags set explicitly so a home-created
+      // widget isn't accidentally treated as "show on dashboard" by the
+      // undefined-means-true back-compat rule.
       const newWidget: Widget = {
         ...config,
+        showOnHome: surface === 'home' ? true : (config.showOnHome ?? false),
+        showOnDashboard:
+          surface === 'dashboard' ? true : (config.showOnDashboard ?? false),
         id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
         lastUpdated: null,
         isLoading: false,
         content: null,
         error: null,
-        layout: config.layout || defaultLayout,
+        layout:
+          config.layout ??
+          (surface === 'dashboard' ? defaultLayout : { ...defaultLayout }),
+        homeLayout:
+          surface === 'home'
+            ? (config.homeLayout ?? defaultLayout)
+            : config.homeLayout,
       };
 
       setState((prev) => ({
@@ -256,17 +335,26 @@ export const useDashboard = (): UseDashboardReturn => {
     [state.widgets],
   );
 
+  // Replace-not-merge: take ALL config-bearing fields from the new
+  // discriminated `config`, keeping only runtime status + id + layout from the
+  // prior widget. A spread-merge would leave stale prompt/provider/model on a
+  // widget switched to `code`, corrupting the persisted union. Callers must
+  // therefore pass a COMPLETE discriminated config, not a partial patch.
   const updateWidget = useCallback((id: string, config: WidgetConfig) => {
     setState((prev) => ({
       ...prev,
       widgets: prev.widgets.map((widget) =>
         widget.id === id
-          ? {
-              ...widget,
+          ? ({
               ...config,
-              id, // Preserve the ID
-              layout: config.layout || widget.layout, // Preserve existing layout if not provided
-            }
+              id,
+              layout: config.layout || widget.layout,
+              lastUpdated: widget.lastUpdated,
+              isLoading: widget.isLoading,
+              content: widget.content,
+              error: widget.error,
+              charts: widget.charts,
+            } as Widget)
           : widget,
       ),
     }));
@@ -280,18 +368,53 @@ export const useDashboard = (): UseDashboardReturn => {
 
     // Also remove from cache
     const cache = getWidgetCache();
-    delete cache[id];
-    localStorage.setItem(DASHBOARD_STORAGE_KEYS.CACHE, JSON.stringify(cache));
+    const { [id]: _, ...newCache } = cache;
+    localStorage.setItem(
+      DASHBOARD_STORAGE_KEYS.CACHE,
+      JSON.stringify(newCache),
+    );
   }, []);
 
-  const getWidgetCache = (): WidgetCache => {
-    try {
-      const cached = localStorage.getItem(DASHBOARD_STORAGE_KEYS.CACHE);
-      return cached ? JSON.parse(cached) : {};
-    } catch {
-      return {};
-    }
-  };
+  // Flip placement flags only (never reconstruct the discriminated config — see
+  // updateWidget's replace-not-merge note). When a widget is newly placed on
+  // home and has no home layout yet, seed one in a free slot.
+  const setWidgetPlacement = useCallback(
+    (
+      id: string,
+      patch: { showOnHome?: boolean; showOnDashboard?: boolean },
+    ) => {
+      setState((prev) => {
+        const seedingHome =
+          patch.showOnHome === true &&
+          !prev.widgets.find((w) => w.id === id)?.homeLayout;
+        const homeOccupied = seedingHome
+          ? prev.widgets
+              .filter((w) => isOnSurface(w, 'home'))
+              .map((w) => surfaceLayout(w, 'home'))
+          : [];
+        return {
+          ...prev,
+          widgets: prev.widgets.map((w) => {
+            if (w.id !== id) return w;
+            const next: Widget = { ...w, ...patch };
+            if (seedingHome) {
+              const position = findOpenPosition(homeOccupied);
+              next.homeLayout = {
+                x: position.x,
+                y: position.y,
+                w: DASHBOARD_CONSTRAINTS.DEFAULT_WIDGET_WIDTH,
+                h: DASHBOARD_CONSTRAINTS.DEFAULT_WIDGET_HEIGHT,
+                isDraggable: true,
+                isResizable: true,
+              };
+            }
+            return next;
+          }),
+        };
+      });
+    },
+    [],
+  );
 
   const isWidgetCacheValid = useCallback((widget: Widget): boolean => {
     const cache = getWidgetCache();
@@ -329,6 +452,7 @@ export const useDashboard = (): UseDashboardReturn => {
               ? {
                   ...w,
                   content: cachedData.content,
+                  charts: cachedData.charts,
                   lastUpdated: new Date(cachedData.lastFetched),
                 }
               : w,
@@ -345,35 +469,60 @@ export const useDashboard = (): UseDashboardReturn => {
         ),
       }));
 
+      // Resolve the user's current theme so the widget output matches it.
+      const theme = resolveWidgetTheme();
+
       try {
-        // Check if prompt uses location variable and request permission if needed
-        let location: string | undefined;
-        if (widget.prompt.includes('{{location}}')) {
-          location = await requestLocationPermission();
+        // Branch on widgetType BEFORE touching any llm-only field (prompt).
+        let response: Response;
+        if (widget.widgetType === 'code') {
+          // Only request geolocation when the saved code actually references
+          // `location`. Strip comments first (so the template's docs or a stray
+          // "// ...location..." note never prompt) and match it as a whole word
+          // (so "allocation"/"relocation" don't either). The seed template omits
+          // `location` from render()'s args, making it strictly opt-in.
+          const codeSansComments = widget.code
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .replace(/\/\/[^\n]*/g, '');
+          const location = /\blocation\b/.test(codeSansComments)
+            ? await requestLocationPermission()
+            : undefined;
+          response = await fetch('/api/dashboard/process-code-widget', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              code: widget.code,
+              sources: widget.sources,
+              location,
+              theme,
+            }),
+          });
+        } else {
+          let location: string | undefined;
+          if (widget.prompt.includes('{{location}}')) {
+            location = await requestLocationPermission();
+          }
+          const processedPrompt = replaceDateTimeVariables(widget.prompt);
+          response = await fetch('/api/dashboard/process-widget', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              sources: widget.sources,
+              prompt: processedPrompt,
+              provider: widget.provider,
+              model: widget.model,
+              tool_names: widget.tool_names,
+              location,
+              theme,
+            }),
+          });
         }
-
-        // Replace date/time variables on the client side
-        const processedPrompt = replaceDateTimeVariables(widget.prompt);
-
-        const response = await fetch('/api/dashboard/process-widget', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            sources: widget.sources,
-            prompt: processedPrompt,
-            provider: widget.provider,
-            model: widget.model,
-            tool_names: widget.tool_names,
-            location,
-          }),
-        });
 
         const result = await response.json();
         const now = new Date();
 
         if (result.success) {
+          const charts = result.charts as Widget['charts'];
           // Update widget
           setState((prev) => ({
             ...prev,
@@ -383,6 +532,7 @@ export const useDashboard = (): UseDashboardReturn => {
                     ...w,
                     isLoading: false,
                     content: result.content,
+                    charts,
                     lastUpdated: now,
                     error: null,
                   }
@@ -394,6 +544,7 @@ export const useDashboard = (): UseDashboardReturn => {
           const cache = getWidgetCache();
           cache[id] = {
             content: result.content,
+            charts,
             lastFetched: now,
             expiresAt: getCacheExpiryTime(widget),
           };
@@ -476,16 +627,25 @@ export const useDashboard = (): UseDashboardReturn => {
         }
 
         // Process widgets and ensure they have valid IDs
-        const processedWidgets: Widget[] = config.widgets.map((widget) => ({
-          ...widget,
-          id:
-            widget.id ||
-            Date.now().toString() + Math.random().toString(36).substr(2, 9),
-          lastUpdated: widget.lastUpdated ? new Date(widget.lastUpdated) : null,
-          isLoading: false,
-          content: widget.content || null,
-          error: null,
-        }));
+        const processedWidgets: Widget[] = config.widgets.map(
+          (widget) =>
+            ({
+              ...widget,
+              // Migration: backfill widgetType on legacy exported JSON.
+              widgetType:
+                (widget as unknown as { widgetType?: 'llm' | 'code' })
+                  .widgetType ?? 'llm',
+              id:
+                widget.id ||
+                Date.now().toString() + Math.random().toString(36).substr(2, 9),
+              lastUpdated: widget.lastUpdated
+                ? new Date(widget.lastUpdated)
+                : null,
+              isLoading: false,
+              content: widget.content || null,
+              error: null,
+            }) as Widget,
+        );
 
         setState((prev) => ({
           ...prev,
@@ -505,6 +665,12 @@ export const useDashboard = (): UseDashboardReturn => {
     localStorage.removeItem(DASHBOARD_STORAGE_KEYS.CACHE);
   }, []);
 
+  const invalidateWidgetCache = useCallback((id: string) => {
+    const cache = getWidgetCache();
+    const { [id]: _, ...rest } = cache;
+    localStorage.setItem(DASHBOARD_STORAGE_KEYS.CACHE, JSON.stringify(rest));
+  }, []);
+
   const updateSettings = useCallback(
     (newSettings: Partial<DashboardConfig['settings']>) => {
       setState((prev) => ({
@@ -515,56 +681,62 @@ export const useDashboard = (): UseDashboardReturn => {
     [],
   );
 
-  const getLayouts = useCallback((): DashboardLayouts => {
-    const createBreakpointLayout = (
-      breakpoint: keyof typeof DASHBOARD_CONSTRAINTS.GRID_COLUMNS,
-    ) => {
-      const constraints = getResponsiveConstraints(breakpoint);
-      const maxCols = DASHBOARD_CONSTRAINTS.GRID_COLUMNS[breakpoint];
+  const getLayouts = useCallback(
+    (surface: DashboardSurface): DashboardLayouts => {
+      const onSurface = state.widgets.filter((w) => isOnSurface(w, surface));
+      const createBreakpointLayout = (
+        breakpoint: keyof typeof DASHBOARD_CONSTRAINTS.GRID_COLUMNS,
+      ) => {
+        const constraints = getResponsiveConstraints(breakpoint);
+        const maxCols = DASHBOARD_CONSTRAINTS.GRID_COLUMNS[breakpoint];
 
-      return state.widgets.map((widget) => ({
-        i: widget.id,
-        x: widget.layout.x,
-        y: widget.layout.y,
-        w: Math.min(widget.layout.w, maxCols), // Constrain width to available columns
-        h: widget.layout.h,
-        minW: constraints.minW,
-        maxW: constraints.maxW,
-        minH: constraints.minH,
-        maxH: constraints.maxH,
-        static: widget.layout.static,
-        isDraggable: widget.layout.isDraggable,
-        isResizable: widget.layout.isResizable,
-      }));
-    };
+        return onSurface.map((widget) => {
+          const layout = surfaceLayout(widget, surface);
+          return {
+            i: widget.id,
+            x: layout.x,
+            y: layout.y,
+            w: Math.min(layout.w, maxCols), // Constrain width to available columns
+            h: layout.h,
+            minW: constraints.minW,
+            maxW: constraints.maxW,
+            minH: constraints.minH,
+            maxH: constraints.maxH,
+            static: layout.static,
+            isDraggable: layout.isDraggable,
+            isResizable: layout.isResizable,
+          };
+        });
+      };
 
-    return {
-      lg: createBreakpointLayout('lg'),
-      md: createBreakpointLayout('md'),
-      sm: createBreakpointLayout('sm'),
-      xs: createBreakpointLayout('xs'),
-      xxs: createBreakpointLayout('xxs'),
-    };
-  }, [state.widgets]);
+      return {
+        lg: createBreakpointLayout('lg'),
+        md: createBreakpointLayout('md'),
+        sm: createBreakpointLayout('sm'),
+        xs: createBreakpointLayout('xs'),
+        xxs: createBreakpointLayout('xxs'),
+      };
+    },
+    [state.widgets],
+  );
 
   const updateLayouts = useCallback(
-    (layouts: DashboardLayouts) => {
+    (surface: DashboardSurface, layout: Layout[]) => {
+      const field = surface === 'home' ? 'homeLayout' : 'layout';
       const updatedWidgets = state.widgets.map((widget) => {
-        // Use lg layout as the primary layout for position and size updates
-        const newLayout = layouts.lg.find(
-          (layout: Layout) => layout.i === widget.id,
-        );
+        const newLayout = layout.find((l: Layout) => l.i === widget.id);
         if (newLayout) {
+          const prevLayout = surfaceLayout(widget, surface);
           return {
             ...widget,
-            layout: {
+            [field]: {
               x: newLayout.x,
               y: newLayout.y,
               w: newLayout.w,
               h: newLayout.h,
-              static: newLayout.static || widget.layout.static,
-              isDraggable: newLayout.isDraggable ?? widget.layout.isDraggable,
-              isResizable: newLayout.isResizable ?? widget.layout.isResizable,
+              static: newLayout.static || prevLayout.static,
+              isDraggable: newLayout.isDraggable ?? prevLayout.isDraggable,
+              isResizable: newLayout.isResizable ?? prevLayout.isResizable,
             },
           };
         }
@@ -592,6 +764,7 @@ export const useDashboard = (): UseDashboardReturn => {
     deleteWidget,
     refreshWidget,
     refreshAllWidgets,
+    setWidgetPlacement,
 
     // Layout management
     updateLayouts,
@@ -601,6 +774,7 @@ export const useDashboard = (): UseDashboardReturn => {
     exportDashboard,
     importDashboard,
     clearCache,
+    invalidateWidgetCache,
 
     // Settings
     updateSettings,

@@ -2,6 +2,7 @@ import { tool } from '@langchain/core/tools';
 import { RunnableConfig } from '@langchain/core/runnables';
 import { z } from 'zod';
 import { extractExcerpt, searchChatsByKeywords } from '@/lib/db/chatSearch';
+import { persistFromToolConfig } from '@/lib/utils/persistToolContext';
 
 const schema = z.object({
   keywords: z
@@ -57,8 +58,13 @@ export const chatHistorySearchTool = tool(
           }
         }
 
+        const chatUrl = row.workspaceId
+          ? `/workspaces/${row.workspaceId}/c/${row.chatId}`
+          : `/c/${row.chatId}`;
+
         output += `\n### ${row.chatTitle || '(untitled)'}\n`;
         output += `- chatId: \`${row.chatId}\`\n`;
+        output += `- path (relative, use verbatim in markdown links): ${chatUrl}\n`;
         output += `- chatDate: ${chatDate}\n`;
         output += `- score: ${row.score}\n`;
         output += `- matchedKeywords: ${row.matchedKeywords.length ? row.matchedKeywords.join(', ') : '(none)'}\n`;
@@ -72,6 +78,13 @@ export const chatHistorySearchTool = tool(
           output += `- (title match only)\n`;
         }
       }
+
+      await persistFromToolConfig({
+        config,
+        kind: 'chat_history_search',
+        body: output,
+        metadataExtras: { query: input.keywords.join(' ') },
+      });
 
       return output;
     } catch (error) {

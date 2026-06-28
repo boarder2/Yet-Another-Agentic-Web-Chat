@@ -1,8 +1,8 @@
 import { NextRequest } from 'next/server';
 import { validateCronExpression } from 'cron';
 import db from '@/lib/db';
-import { scheduledTasks } from '@/lib/db/schema';
-import { desc } from 'drizzle-orm';
+import { chats, scheduledTasks } from '@/lib/db/schema';
+import { and, desc, isNotNull } from 'drizzle-orm';
 import { registerTask } from '@/lib/scheduledTasks/scheduler';
 
 export const runtime = 'nodejs';
@@ -12,23 +12,32 @@ export async function GET() {
     .select()
     .from(scheduledTasks)
     .orderBy(desc(scheduledTasks.createdAt));
-  return Response.json(rows);
+
+  // A task is running if one of its run chats still has the in-progress marker.
+  const runningRows = await db
+    .selectDistinct({ taskId: chats.scheduledTaskId })
+    .from(chats)
+    .where(
+      and(
+        isNotNull(chats.scheduledTaskId),
+        isNotNull(chats.activeRunMessageId),
+      ),
+    );
+  const runningIds = new Set(runningRows.map((r) => r.taskId));
+
+  return Response.json(
+    rows.map((row) => ({ ...row, running: runningIds.has(row.id) })),
+  );
 }
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
 
-  if (
-    !body.name ||
-    !body.prompt ||
-    !body.cronExpression ||
-    !body.chatModel ||
-    !body.embeddingModel
-  ) {
+  if (!body.name || !body.prompt || !body.cronExpression || !body.chatModel) {
     return Response.json(
       {
         error:
-          'Missing required fields: name, prompt, cronExpression, chatModel, embeddingModel',
+          'Missing required fields: name, prompt, cronExpression, chatModel',
       },
       { status: 400 },
     );
@@ -47,7 +56,6 @@ export async function POST(req: NextRequest) {
     sourceUrls: body.sourceUrls || [],
     chatModel: body.chatModel,
     systemModel: body.systemModel || null,
-    embeddingModel: body.embeddingModel,
     selectedSystemPromptIds: body.selectedSystemPromptIds || [],
     selectedMethodologyId: body.selectedMethodologyId || null,
     cronExpression: body.cronExpression,

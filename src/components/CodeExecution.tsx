@@ -14,7 +14,7 @@ export type PendingExecution = {
   code: string;
   description?: string;
   toolCallId?: string;
-  status: 'pending' | 'approved' | 'denied' | 'completed';
+  status: 'pending' | 'approved' | 'denied' | 'completed' | 'cancelled';
   result?: {
     stdout?: string;
     stderr?: string;
@@ -53,10 +53,13 @@ export function CodeExecutionApproval({
     setActionTaken(true);
     if (onActionTaken) onActionTaken(executionId, approved);
     try {
-      await fetch('/api/sandbox/approve', {
+      await fetch('/api/chat/runs/resume', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ executionId, approved, reason }),
+        body: JSON.stringify({
+          approvalId: executionId,
+          response: { approved, reason },
+        }),
       });
     } catch (err) {
       console.error('Failed to send approval:', err);
@@ -98,6 +101,7 @@ export function CodeExecutionApproval({
           )}
         </div>
         <button
+          type="button"
           onClick={() => sendApproval(false)}
           className="p-1 rounded-control hover:bg-surface-2 transition-colors text-fg/50 hover:text-fg"
           aria-label="Dismiss"
@@ -120,6 +124,7 @@ export function CodeExecutionApproval({
           </label>
           <textarea
             autoFocus
+            aria-label="Reason for denial"
             value={denyReason}
             onChange={(e) => setDenyReason(e.target.value)}
             onKeyDown={(e) => {
@@ -138,6 +143,7 @@ export function CodeExecutionApproval({
         {denying ? (
           <>
             <button
+              type="button"
               onClick={() => {
                 setDenying(false);
                 setDenyReason('');
@@ -147,6 +153,7 @@ export function CodeExecutionApproval({
               Cancel
             </button>
             <button
+              type="button"
               onClick={() =>
                 sendApproval(false, denyReason.trim() || undefined)
               }
@@ -158,12 +165,14 @@ export function CodeExecutionApproval({
         ) : (
           <>
             <button
+              type="button"
               onClick={() => setDenying(true)}
               className="px-5 py-2 text-sm font-medium rounded-surface bg-danger-soft text-danger hover:bg-danger-soft border border-danger transition-colors"
             >
               Deny
             </button>
             <button
+              type="button"
               onClick={() => sendApproval(true)}
               className="px-5 py-2 text-sm font-medium rounded-surface bg-success-soft text-success hover:bg-success-soft border border-success transition-colors"
             >

@@ -3,15 +3,12 @@ import {
   purgeWebCache,
   writeCachedRecord,
 } from '@/lib/utils/webCache';
-import { CheerioWebBaseLoader } from '@langchain/community/document_loaders/web/cheerio';
-import { YoutubeLoader } from '@langchain/community/document_loaders/web/youtube';
+import { extractText } from '@/lib/workspaces/extractAdapter';
 import { Document } from '@langchain/core/documents';
 import { Readability } from '@mozilla/readability';
 import { JSDOM } from 'jsdom';
 import { chromium, Page, Browser, BrowserContext } from 'playwright';
-import { WebPDFLoader } from '@langchain/community/document_loaders/web/pdf';
 import TurndownService from 'turndown';
-import { getSearchLocale } from '@/lib/config';
 
 function htmlToMarkdown(html: string): string {
   const turndown = new TurndownService({
@@ -86,17 +83,15 @@ export const retrievePdfDoc = async (url: string): Promise<Document | null> => {
     }
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const pdfBuffer = await res.arrayBuffer();
-    const pdfBlob = new Blob([pdfBuffer], { type: 'application/pdf' });
-    const pdfLoader = new WebPDFLoader(pdfBlob, { splitPages: false });
-    const docs = await pdfLoader.load();
-    console.log('[retrievePdfDoc] PDF content retrieved successfully:', docs);
-    if (docs.length > 0) {
-      docs[0].metadata.url = url;
-      docs[0].metadata.title = docs[0].metadata.title || 'PDF Document';
-      // Write to cache
-      await writeCachedRecord(url + '_pdf', docs[0]);
-      return docs[0];
+    const pdfBuffer = Buffer.from(await res.arrayBuffer());
+    const pageContent = (await extractText(pdfBuffer, 'application/pdf')) ?? '';
+    if (pageContent) {
+      const doc = new Document({
+        pageContent,
+        metadata: { url, title: 'PDF Document' },
+      });
+      await writeCachedRecord(url + '_pdf', doc);
+      return doc;
     }
   } catch (error) {
     console.error('[retrievePdfDoc] Error retrieving PDF content:', error);
@@ -104,60 +99,60 @@ export const retrievePdfDoc = async (url: string): Promise<Document | null> => {
   return null;
 };
 
-export const retrieveYoutubeTranscript = async (
-  url: string,
-): Promise<Document | null> => {
-  try {
-    console.log(
-      '[retrieveYoutubeTranscript] Retrieving YouTube transcript for URL:',
-      url,
-    );
-    const cached = await loadCachedRecord(url + '_youtube');
-    if (cached) {
-      console.log(
-        '[retrieveYoutubeTranscript] Typed content found in cache for URL:',
-        url,
-      );
-      return new Document({
-        pageContent: cached.pageContent || '',
-        metadata: {
-          title: cached.title || '',
-          url: cached.url,
-          ...cached.metadata,
-        },
-      });
-    }
+// export const retrieveYoutubeTranscript = async (
+//   url: string,
+// ): Promise<Document | null> => {
+//   try {
+//     console.log(
+//       '[retrieveYoutubeTranscript] Retrieving YouTube transcript for URL:',
+//       url,
+//     );
+//     const cached = await loadCachedRecord(url + '_youtube');
+//     if (cached) {
+//       console.log(
+//         '[retrieveYoutubeTranscript] Typed content found in cache for URL:',
+//         url,
+//       );
+//       return new Document({
+//         pageContent: cached.pageContent || '',
+//         metadata: {
+//           title: cached.title || '',
+//           url: cached.url,
+//           ...cached.metadata,
+//         },
+//       });
+//     }
 
-    const transcriptLoader = YoutubeLoader.createFromUrl(url, {
-      language: getSearchLocale().language,
-      addVideoInfo: true,
-    });
-    const transcript = await transcriptLoader.load();
-    console.log(
-      '[retrieveYoutubeTranscript] YouTube transcript retrieved successfully:',
-      transcript,
-    );
-    if (transcript.length > 0) {
-      transcript[0].metadata.url = url;
-      transcript[0].metadata.title =
-        transcript[0].metadata.title || 'YouTube Video Transcript';
-      transcript[0].metadata.source =
-        transcript[0].metadata.source || undefined;
-      // Write to cache
-      await writeCachedRecord(url + '_youtube', transcript[0]);
-      return transcript[0];
-    }
-  } catch (error) {
-    console.error('Error retrieving YouTube transcript:', error);
-  }
-  return null;
-};
+//     const transcriptLoader = YoutubeLoader.createFromUrl(url, {
+//       language: getSearchLocale().language,
+//       addVideoInfo: true,
+//     });
+//     const transcript = await transcriptLoader.load();
+//     console.log(
+//       '[retrieveYoutubeTranscript] YouTube transcript retrieved successfully:',
+//       transcript,
+//     );
+//     if (transcript.length > 0) {
+//       transcript[0].metadata.url = url;
+//       transcript[0].metadata.title =
+//         transcript[0].metadata.title || 'YouTube Video Transcript';
+//       transcript[0].metadata.source =
+//         transcript[0].metadata.source || undefined;
+//       // Write to cache
+//       await writeCachedRecord(url + '_youtube', transcript[0]);
+//       return transcript[0];
+//     }
+//   } catch (error) {
+//     console.error('Error retrieving YouTube transcript:', error);
+//   }
+//   return null;
+// };
 
 export const retrieveTypedContentFunc = async (
   url: string,
 ): Promise<Document | null> => {
   if (url.includes('youtube.com/watch') || url.includes('youtu.be/')) {
-    return await retrieveYoutubeTranscript(url);
+    // return await retrieveYoutubeTranscript(url);
   } else if (url.endsWith('.pdf')) {
     return await retrievePdfDoc(url);
   }
@@ -369,20 +364,22 @@ export const getWebContent = async (
   } catch (error) {
     console.error(`Error fetching/parsing URL ${url}:`, error);
 
-    // Fallback to CheerioWebBaseLoader for simpler content extraction
+    // Fallback to a plain fetch for simpler content extraction
     try {
-      console.log(`Fallback to Cheerio for URL: ${url}`);
-      const cheerioLoader = new CheerioWebBaseLoader(url, { maxRetries: 2 });
+      console.log(`Fallback to direct fetch for URL: ${url}`);
       if (signal?.aborted) return null;
-      const docs = await cheerioLoader.load();
+      const res = await fetch(url, {
+        signal,
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; YAAWC/1.0)' },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const rawHtml = await res.text();
 
-      if (docs && docs.length > 0) {
-        const doc = docs[0];
+      if (rawHtml) {
+        // Apply Readability to extract meaningful content from the fetched HTML
+        const dom = new JSDOM(rawHtml, { url });
 
-        // Apply Readability to extract meaningful content from Cheerio HTML
-        const dom = new JSDOM(doc.pageContent, { url });
-
-        // Resolve relative URLs to absolute in the Cheerio-loaded DOM
+        // Resolve relative URLs to absolute in the fetched DOM
         dom.window.document
           .querySelectorAll('a[href]')
           .forEach((a: Element) => {
@@ -415,7 +412,7 @@ export const getWebContent = async (
             article.title.length < 5)
         ) {
           console.log(
-            `Cheerio fallback also failed Readability validation for URL: ${url}`,
+            `Direct-fetch fallback also failed Readability validation for URL: ${url}`,
           );
           return null;
         }
@@ -423,16 +420,15 @@ export const getWebContent = async (
         // Convert Readability's article HTML to clean markdown with inline links.
         // When Readability returns too little content (common on homepages/SPAs),
         // fall back to converting the raw HTML body directly to preserve links.
-        const cheerioArticleTextLength = article?.textContent?.length || 0;
+        const fallbackArticleTextLength = article?.textContent?.length || 0;
         let markdown: string;
 
-        if (cheerioArticleTextLength < 2000) {
+        if (fallbackArticleTextLength < 2000) {
           console.log(
-            `Readability returned insufficient content (${cheerioArticleTextLength} chars) in Cheerio path, falling back to direct body conversion for URL: ${url}`,
+            `Readability returned insufficient content (${fallbackArticleTextLength} chars) in fallback path, falling back to direct body conversion for URL: ${url}`,
           );
           const bodyHtml =
-            doc.pageContent.match(/<body[^>]*>([\s\S]*)<\/body>/i)?.[1] ||
-            doc.pageContent;
+            rawHtml.match(/<body[^>]*>([\s\S]*)<\/body>/i)?.[1] || rawHtml;
           markdown = htmlToMarkdown(bodyHtml);
         } else {
           markdown = htmlToMarkdown(article?.content || '');
@@ -441,7 +437,7 @@ export const getWebContent = async (
         // Write to cache
         await writeCachedRecord(url, {
           pageContent: markdown,
-          title: article?.title || doc.metadata.title || '',
+          title: article?.title || '',
         });
 
         const returnDoc = new Document({
@@ -450,20 +446,20 @@ export const getWebContent = async (
               ? markdown.slice(0, truncateToLength)
               : markdown,
           metadata: {
-            title: article?.title || doc.metadata.title || '',
+            title: article?.title || '',
             url: url,
           },
         });
 
         console.log(
-          `Got content with Cheerio fallback + Readability, URL: ${url}, Text Length: ${returnDoc.pageContent.length} Truncated: ${markdown.length > truncateToLength}`,
+          `Got content with direct fetch fallback + Readability, URL: ${url}, Text Length: ${returnDoc.pageContent.length} Truncated: ${markdown.length > truncateToLength}`,
         );
 
         return returnDoc;
       }
     } catch (fallbackError) {
       console.error(
-        `Cheerio fallback also failed for URL ${url}:`,
+        `Direct-fetch fallback also failed for URL ${url}:`,
         fallbackError,
       );
     }

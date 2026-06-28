@@ -11,6 +11,10 @@ import {
   LoaderCircle,
   Link2,
 } from 'lucide-react';
+import {
+  useWorkspaceUrls,
+  useSaveWorkspaceUrls,
+} from '@/lib/hooks/api/useWorkspaceUrls';
 
 type Reach = 'unknown' | 'ok' | 'warn' | 'checking';
 
@@ -23,31 +27,26 @@ export default function UrlsTab({
   onCountChange?: (n: number) => void;
   compact?: boolean;
 }) {
+  const { data: serverUrls = [] } = useWorkspaceUrls(workspaceId);
+  const saveUrls = useSaveWorkspaceUrls(workspaceId);
+
   const [urls, setUrls] = useState<string[]>([]);
   const [draft, setDraft] = useState('');
   const [reach, setReach] = useState<Record<string, Reach>>({});
 
-  async function load() {
-    const data = await fetch(`/api/workspaces/${workspaceId}/urls`).then((r) =>
-      r.json(),
-    );
-    const list = data.urls ?? [];
-    setUrls(list);
-    onCountChange?.(list.length);
-  }
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    setUrls(serverUrls);
+  }, [serverUrls]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId]);
+    onCountChange?.(urls.length);
+  }, [urls.length, onCountChange]);
 
-  async function persist(next: string[]) {
+  function persist(next: string[]) {
     setUrls(next);
-    await fetch(`/api/workspaces/${workspaceId}/urls`, {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ urls: next }),
-    });
+    saveUrls.mutate(next);
   }
 
   async function addUrl() {
@@ -55,7 +54,7 @@ export default function UrlsTab({
     if (urls.length >= 20) return void alert('Maximum of 20 URLs.');
     const url = draft.trim();
     const next = [...urls, url];
-    await persist(next);
+    persist(next);
     setDraft('');
     setReach((m) => ({ ...m, [url]: 'checking' }));
     const r = await fetch(`/api/workspaces/${workspaceId}/urls/check`, {
@@ -93,6 +92,7 @@ export default function UrlsTab({
     <div className="space-y-4">
       <div className={compact ? 'flex flex-col gap-2' : 'flex gap-2'}>
         <input
+          aria-label="URL"
           className="flex-1 min-w-0 border border-surface-2 rounded-surface px-3 py-2 text-sm bg-bg focus:outline-none focus:border-accent"
           placeholder="https://…"
           value={draft}
@@ -100,6 +100,7 @@ export default function UrlsTab({
           onKeyDown={(e) => e.key === 'Enter' && addUrl()}
         />
         <button
+          type="button"
           onClick={addUrl}
           className={`flex items-center justify-center gap-1.5 px-3 py-2 text-sm rounded-surface bg-accent text-accent-fg hover:bg-accent/90 transition shrink-0 ${compact ? 'w-full' : ''}`}
         >
@@ -135,6 +136,7 @@ export default function UrlsTab({
               </div>
               <span className="flex items-center gap-1 shrink-0">
                 <button
+                  type="button"
                   onClick={() => move(i, -1)}
                   disabled={i === 0}
                   className="p-1.5 rounded-control hover:bg-surface-2 disabled:opacity-30 transition"
@@ -143,6 +145,7 @@ export default function UrlsTab({
                   <ChevronUp size={14} />
                 </button>
                 <button
+                  type="button"
                   onClick={() => move(i, 1)}
                   disabled={i === urls.length - 1}
                   className="p-1.5 rounded-control hover:bg-surface-2 disabled:opacity-30 transition"
@@ -151,6 +154,7 @@ export default function UrlsTab({
                   <ChevronDown size={14} />
                 </button>
                 <button
+                  type="button"
                   onClick={() => remove(i)}
                   className="p-1.5 rounded-control hover:bg-danger-soft text-danger transition"
                   title="Remove"

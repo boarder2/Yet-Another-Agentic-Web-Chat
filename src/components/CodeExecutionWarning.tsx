@@ -129,6 +129,7 @@ export function CodeExecutionWarning({ onAccept, onDecline }: Props) {
 
         <div className="flex justify-end gap-3 px-6 py-4 border-t border-surface-2">
           <button
+            type="button"
             onClick={() => {
               setDeclining(true);
               onDecline();
@@ -139,6 +140,7 @@ export function CodeExecutionWarning({ onAccept, onDecline }: Props) {
             Decline
           </button>
           <button
+            type="button"
             onClick={() => {
               acceptWarning();
               onAccept();

@@ -1,4 +1,5 @@
-import { getBraveSearchApiKey, getSearchLocale } from '@/lib/config';
+import { getBraveSearchApiKey } from '@/lib/config';
+import { getSearchLocale } from '@/lib/settings/server';
 import {
   ImageSearchOpts,
   SearchProvider,

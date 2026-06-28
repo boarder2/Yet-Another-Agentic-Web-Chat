@@ -2,11 +2,8 @@ import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { RunnableConfig } from '@langchain/core/runnables';
 import { ToolMessage } from '@langchain/core/messages';
-import { Command } from '@langchain/langgraph';
-import crypto from 'crypto';
+import { Command, interrupt } from '@langchain/langgraph';
 import { isSoftStop } from '@/lib/utils/runControl';
-import { waitForApproval } from '@/lib/sandbox/pendingApprovals';
-import { popCallbackRunId } from '@/lib/sandbox/codeExecutionCorrelation';
 import {
   executeCode,
   checkDockerAvailable,
@@ -14,6 +11,7 @@ import {
 } from '@/lib/sandbox/dockerExecutor';
 import { getCodeExecutionConfig } from '@/lib/config';
 import { ChartSpecSchema } from '@/lib/chart/chartSpec';
+import { persistFromToolConfig } from '@/lib/utils/persistToolContext';
 
 const CHART_ENVELOPE_RE = /^__CHART__(\{.*\})$/;
 
@@ -87,6 +85,7 @@ export const codeExecutionTool = tool(
       });
     }
 
+    // Cheap availability check before user approval
     const dockerOk = await checkDockerAvailable();
     if (!dockerOk) {
       return new Command({
@@ -102,6 +101,63 @@ export const codeExecutionTool = tool(
       });
     }
 
+    const { code, description } = input;
+
+    // interrupt() pauses the graph until user approves/denies.
+    // markupKey enables runHost to resolve the ToolCall markup ID.
+    // ensureImage (expensive) runs AFTER approval, on resume.
+    const response: unknown = interrupt({
+      kind: 'code_execution',
+      toolCallId,
+      markupKey: code,
+      payload: { code, description, createdAt: Date.now() },
+      snapshot: null,
+    });
+
+    // Cancellation discriminator
+    if (response && (response as Record<string, unknown>).__cancelled) {
+      return new Command({
+        update: {
+          messages: [
+            new ToolMessage({
+              content: 'Cancelled by user.',
+              tool_call_id: toolCallId,
+            }),
+          ],
+        },
+      });
+    }
+
+    const approval = response as { approved: boolean; reason?: string };
+
+    if (!approval.approved) {
+      // Surface the denial as a result event so the approval modal resolves on
+      // every attached tab (the acting tab already hides via local state).
+      emitter.emit(
+        'data',
+        JSON.stringify({
+          type: 'code_execution_result',
+          data: { denied: true, denyReason: approval.reason, toolCallId },
+        }),
+      );
+
+      const denialMessage = approval.reason
+        ? `Code execution was denied by the user. User feedback: "${approval.reason}"`
+        : 'Code execution was denied by the user.';
+
+      return new Command({
+        update: {
+          messages: [
+            new ToolMessage({
+              content: denialMessage,
+              tool_call_id: toolCallId,
+            }),
+          ],
+        },
+      });
+    }
+
+    // Prepare Docker image (post-approval; expensive — runs only once after approval)
     try {
       await ensureImage(ceConfig.dockerImage);
     } catch (err: unknown) {
@@ -117,58 +173,12 @@ export const codeExecutionTool = tool(
       });
     }
 
-    const executionId = crypto.randomUUID();
-    const { code, description } = input;
-
-    // Get the callback runId that corresponds to the ToolCall markup's toolCallId.
-    // This is needed because parallel code_execution tools may emit pending events
-    // in a different order than handleToolStart fired (due to async Docker checks).
-    const markupToolCallId = popCallbackRunId(code);
-
-    emitter.emit(
-      'data',
-      JSON.stringify({
-        type: 'code_execution_pending',
-        data: { executionId, code, description, toolCallId, markupToolCallId },
-      }),
-    );
-
-    const { approved, reason } = await waitForApproval(
-      executionId,
-      5 * 60 * 1000,
-      messageId,
-    );
-
-    if (!approved) {
-      emitter.emit(
-        'data',
-        JSON.stringify({
-          type: 'code_execution_result',
-          data: { executionId, denied: true, denyReason: reason, toolCallId },
-        }),
-      );
-
-      const denialMessage = reason
-        ? `Code execution was denied by the user. User feedback: "${reason}"`
-        : 'Code execution was denied by the user.';
-
-      return new Command({
-        update: {
-          messages: [
-            new ToolMessage({
-              content: denialMessage,
-              tool_call_id: toolCallId,
-            }),
-          ],
-        },
-      });
-    }
-
     const result = await executeCode(code);
 
     // Scan stdout for __CHART__ envelopes and extract chart specs
     let cleanedStdout = result.stdout;
     const chartIds: string[] = [];
+    const { randomUUID } = await import('crypto');
     if (result.stdout) {
       const lines = result.stdout.split('\n');
       const processedLines: string[] = [];
@@ -182,7 +192,6 @@ export const codeExecutionTool = tool(
         try {
           parsed = JSON.parse(m[1]);
         } catch {
-          // Malformed JSON — leave line untouched
           processedLines.push(line);
           continue;
         }
@@ -194,7 +203,7 @@ export const codeExecutionTool = tool(
           processedLines.push(`Chart skipped: ${reason}`);
           continue;
         }
-        const chartId = crypto.randomUUID();
+        const chartId = randomUUID();
         chartIds.push(chartId);
         const chartTitle = validation.data.title;
         processedLines.push(
@@ -228,7 +237,6 @@ export const codeExecutionTool = tool(
       JSON.stringify({
         type: 'code_execution_result',
         data: {
-          executionId,
           stdout: cleanedStdout,
           stderr: result.stderr,
           exitCode: result.exitCode,
@@ -250,6 +258,13 @@ export const codeExecutionTool = tool(
       if (cleanedStdout) resultText += `\n\nStdout:\n${cleanedStdout}`;
       if (result.stderr) resultText += `\n\nStderr:\n${result.stderr}`;
     }
+
+    await persistFromToolConfig({
+      config,
+      kind: 'code_execution',
+      body: `[code_execution]\nCode:\n${input.code}\n\nResult:\n${resultText}`,
+      metadataExtras: { language: 'javascript' },
+    });
 
     return new Command({
       update: {

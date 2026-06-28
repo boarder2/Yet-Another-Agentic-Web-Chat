@@ -8,12 +8,15 @@ import {
   TransitionChild,
   Switch,
 } from '@headlessui/react';
-import { X, Plus, Trash2, Play, Save, Brain } from 'lucide-react';
+import { X, Play, Save, Brain } from 'lucide-react';
 import { Fragment, useState, useEffect } from 'react';
-import MarkdownRenderer from '@/components/MarkdownRenderer';
-import ModelSelector from '@/components/MessageInputActions/ModelSelector';
+import WidgetContent from '@/components/dashboard/WidgetContent';
+import ModelPicker from '@/components/models/ModelPicker';
 import ToolSelector from '@/components/MessageInputActions/ToolSelector';
-import { WidgetConfig, Source } from '@/lib/types/widget';
+import SourceListEditor from '@/components/dashboard/SourceListEditor';
+import { LlmWidgetConfig } from '@/lib/types/widget';
+import { resolveWidgetTheme } from '@/lib/widgets/widgetTheme';
+import type { ModelSelection } from '@/lib/models/presets';
 
 // Helper function to replace date/time variables in prompts on the client side
 const replaceDateTimeVariables = (prompt: string): string => {
@@ -46,9 +49,20 @@ const replaceDateTimeVariables = (prompt: string): string => {
 interface WidgetConfigModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (config: WidgetConfig) => void;
-  editingWidget?: WidgetConfig | null;
+  onSave: (config: LlmWidgetConfig) => void;
+  editingWidget?: LlmWidgetConfig | null;
 }
+
+const defaultConfig = (): LlmWidgetConfig => ({
+  widgetType: 'llm',
+  title: '',
+  sources: [{ url: '', type: 'Web Page' }],
+  prompt: '',
+  provider: 'openai',
+  model: 'gpt-4',
+  refreshFrequency: 60,
+  refreshUnit: 'minutes',
+});
 
 const WidgetConfigModal = ({
   isOpen,
@@ -56,15 +70,8 @@ const WidgetConfigModal = ({
   onSave,
   editingWidget,
 }: WidgetConfigModalProps) => {
-  const [config, setConfig] = useState<WidgetConfig>({
-    title: '',
-    sources: [{ url: '', type: 'Web Page' }],
-    prompt: '',
-    provider: 'openai',
-    model: 'gpt-4',
-    refreshFrequency: 60,
-    refreshUnit: 'minutes',
-  });
+  const [config, setConfig] = useState<LlmWidgetConfig>(defaultConfig);
+  const [errors, setErrors] = useState<{ title?: string; prompt?: string }>({});
 
   const [previewContent, setPreviewContent] = useState<string>('');
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
@@ -75,10 +82,15 @@ const WidgetConfigModal = ({
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
   const [showThinking, setShowThinking] = useState(false);
 
-  // Update config when editingWidget changes
+  // Reset the form state when the widget being edited changes (or a new widget
+  // is started). Syncing form fields to the editing target is an intentional
+  // setState-in-effect.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
+    setErrors({});
     if (editingWidget) {
       setConfig({
+        widgetType: 'llm',
         title: editingWidget.title,
         sources: editingWidget.sources,
         prompt: editingWidget.prompt,
@@ -94,15 +106,7 @@ const WidgetConfigModal = ({
       setSelectedTools(editingWidget.tool_names || []);
     } else {
       // Reset to default values for new widget
-      setConfig({
-        title: '',
-        sources: [{ url: '', type: 'Web Page' }],
-        prompt: '',
-        provider: 'openai',
-        model: 'gpt-4',
-        refreshFrequency: 60,
-        refreshUnit: 'minutes',
-      });
+      setConfig(defaultConfig());
       setSelectedModel({
         provider: 'openai',
         model: 'gpt-4',
@@ -121,14 +125,19 @@ const WidgetConfigModal = ({
       }));
     }
   }, [selectedModel]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleSave = () => {
-    if (!config.title.trim() || !config.prompt.trim()) {
-      return; // TODO: Add proper validation feedback
+    const nextErrors: { title?: string; prompt?: string } = {};
+    if (!config.title.trim()) nextErrors.title = 'Title is required.';
+    if (!config.prompt.trim()) nextErrors.prompt = 'Prompt is required.';
+    if (nextErrors.title || nextErrors.prompt) {
+      setErrors(nextErrors);
+      return;
     }
 
     // Filter out sources with empty or whitespace-only URLs
-    const filteredConfig = {
+    const filteredConfig: LlmWidgetConfig = {
       ...config,
       sources: config.sources.filter((s) => s.url.trim()),
       tool_names: selectedTools,
@@ -165,6 +174,7 @@ const WidgetConfigModal = ({
           provider: config.provider,
           model: config.model,
           tool_names: selectedTools,
+          theme: resolveWidgetTheme(),
         }),
       });
 
@@ -187,29 +197,6 @@ const WidgetConfigModal = ({
     }
   };
 
-  const addSource = () => {
-    setConfig((prev) => ({
-      ...prev,
-      sources: [...prev.sources, { url: '', type: 'Web Page' }],
-    }));
-  };
-
-  const removeSource = (index: number) => {
-    setConfig((prev) => ({
-      ...prev,
-      sources: prev.sources.filter((_, i) => i !== index),
-    }));
-  };
-
-  const updateSource = (index: number, field: keyof Source, value: string) => {
-    setConfig((prev) => ({
-      ...prev,
-      sources: prev.sources.map((source, i) =>
-        i === index ? { ...source, [field]: value } : source,
-      ),
-    }));
-  };
-
   return (
     <Transition appear show={isOpen} as={Fragment}>
       <Dialog as="div" className="relative z-50" onClose={handleClose}>
@@ -222,7 +209,7 @@ const WidgetConfigModal = ({
           leaveFrom="opacity-100"
           leaveTo="opacity-0"
         >
-          <div className="fixed inset-0 bg-fg/75" />
+          <div className="fixed inset-0 bg-overlay" />
         </TransitionChild>
 
         <div className="fixed inset-0 overflow-y-auto">
@@ -236,13 +223,14 @@ const WidgetConfigModal = ({
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <DialogPanel className="w-full lg:max-w-[85vw]  transform overflow-hidden rounded-floating bg-surface p-6 text-left align-middle shadow-floating transition-all">
+              <DialogPanel className="flex flex-col w-[95vw] max-w-[95vw] h-[92vh] transform overflow-hidden rounded-floating bg-surface p-6 text-left align-middle shadow-floating transition-all">
                 <DialogTitle
                   as="h3"
-                  className="text-lg font-medium leading-6 text-fg flex items-center justify-between"
+                  className="shrink-0 text-lg font-medium leading-6 text-fg flex items-center justify-between"
                 >
                   {editingWidget ? 'Edit Widget' : 'Create New Widget'}
                   <button
+                    type="button"
                     onClick={handleClose}
                     className="p-1 hover:bg-surface-2 rounded-control"
                   >
@@ -250,9 +238,9 @@ const WidgetConfigModal = ({
                   </button>
                 </DialogTitle>
 
-                <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="mt-4 flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-2 gap-6 overflow-hidden">
                   {/* Left Column - Configuration */}
-                  <div className="space-y-4">
+                  <div className="flex flex-col min-h-0 overflow-y-auto space-y-4 pr-2">
                     {/* Widget Title */}
                     <div>
                       <label className="block text-sm font-medium text-fg mb-1">
@@ -260,6 +248,7 @@ const WidgetConfigModal = ({
                       </label>
                       <input
                         type="text"
+                        aria-label="Widget title"
                         value={config.title}
                         onChange={(e) =>
                           setConfig((prev) => ({
@@ -270,6 +259,11 @@ const WidgetConfigModal = ({
                         className="w-full px-3 py-2 border border-surface-2 rounded-control bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
                         placeholder="Enter widget title..."
                       />
+                      {errors.title && (
+                        <p className="text-xs text-danger mt-1">
+                          {errors.title}
+                        </p>
+                      )}
                     </div>
 
                     {/* Source URLs */}
@@ -277,50 +271,12 @@ const WidgetConfigModal = ({
                       <label className="block text-sm font-medium text-fg mb-1">
                         Source URLs
                       </label>
-                      <div className="space-y-2">
-                        {config.sources.map((source, index) => (
-                          <div key={index} className="flex gap-2">
-                            <input
-                              type="url"
-                              value={source.url}
-                              onChange={(e) =>
-                                updateSource(index, 'url', e.target.value)
-                              }
-                              className="flex-1 px-3 py-2 border border-surface-2 rounded-control bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
-                              placeholder="https://example.com"
-                            />
-                            <select
-                              value={source.type}
-                              onChange={(e) =>
-                                updateSource(
-                                  index,
-                                  'type',
-                                  e.target.value as Source['type'],
-                                )
-                              }
-                              className="px-3 py-2 border border-surface-2 rounded-control bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
-                            >
-                              <option value="Web Page">Web Page</option>
-                              <option value="HTTP Data">HTTP Data</option>
-                            </select>
-                            {config.sources.length > 1 && (
-                              <button
-                                onClick={() => removeSource(index)}
-                                className="p-2 text-danger hover:bg-danger-soft rounded-control"
-                              >
-                                <Trash2 size={16} />
-                              </button>
-                            )}
-                          </div>
-                        ))}
-                        <button
-                          onClick={addSource}
-                          className="flex items-center gap-2 px-3 py-2 text-sm text-accent hover:bg-surface-2 rounded-control"
-                        >
-                          <Plus size={16} />
-                          Add Source
-                        </button>
-                      </div>
+                      <SourceListEditor
+                        sources={config.sources}
+                        onChange={(sources) =>
+                          setConfig((prev) => ({ ...prev, sources }))
+                        }
+                      />
                     </div>
 
                     {/* LLM Prompt */}
@@ -329,6 +285,7 @@ const WidgetConfigModal = ({
                         LLM Prompt
                       </label>
                       <textarea
+                        aria-label="LLM prompt"
                         value={config.prompt}
                         onChange={(e) =>
                           setConfig((prev) => ({
@@ -340,6 +297,11 @@ const WidgetConfigModal = ({
                         className="w-full px-3 py-2 border border-surface-2 rounded-control bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
                         placeholder="Enter your prompt here..."
                       />
+                      {errors.prompt && (
+                        <p className="text-xs text-danger mt-1">
+                          {errors.prompt}
+                        </p>
+                      )}
                     </div>
 
                     {/* Provider and Model Selection */}
@@ -347,11 +309,21 @@ const WidgetConfigModal = ({
                       <label className="block text-sm font-medium text-fg mb-2">
                         Model & Provider
                       </label>
-                      <ModelSelector
-                        selectedModel={selectedModel}
-                        setSelectedModel={setSelectedModel}
-                        truncateModelName={false}
-                        showModelName={true}
+                      <ModelPicker
+                        value={
+                          {
+                            chatProvider: selectedModel?.provider ?? '',
+                            chatModel: selectedModel?.model ?? '',
+                            systemProvider: selectedModel?.provider ?? '',
+                            systemModel: selectedModel?.model ?? '',
+                          } satisfies ModelSelection
+                        }
+                        onChange={(next) =>
+                          setSelectedModel({
+                            provider: next.chatProvider,
+                            model: next.chatModel,
+                          })
+                        }
                       />
                       <p className="text-xs text-fg/60 mt-1">
                         Select the AI model and provider to process your widget
@@ -382,6 +354,7 @@ const WidgetConfigModal = ({
                       <div className="flex gap-2">
                         <input
                           type="number"
+                          aria-label="Refresh frequency"
                           min="1"
                           value={config.refreshFrequency}
                           onChange={(e) =>
@@ -412,8 +385,8 @@ const WidgetConfigModal = ({
                   </div>
 
                   {/* Right Column - Preview */}
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
+                  <div className="flex flex-col min-h-0 space-y-4">
+                    <div className="shrink-0 flex items-center justify-between">
                       <h4 className="text-sm font-medium text-fg">Preview</h4>
                       <div className="flex items-center gap-2">
                         <div className="flex items-center gap-2">
@@ -435,6 +408,7 @@ const WidgetConfigModal = ({
                           </Switch>
                         </div>
                         <button
+                          type="button"
                           onClick={handlePreview}
                           disabled={isPreviewLoading}
                           className="flex items-center gap-2 px-3 py-2 bg-accent text-accent-fg rounded-control hover:bg-accent-700 disabled:opacity-50"
@@ -445,14 +419,13 @@ const WidgetConfigModal = ({
                       </div>
                     </div>
 
-                    <div className="h-80 p-4 border border-surface-2 rounded-control bg-surface overflow-y-auto max-w-full">
+                    <div className="flex-1 min-h-0 p-4 border border-surface-2 rounded-control bg-surface overflow-y-auto max-w-full">
                       {previewContent ? (
-                        <div className="prose prose-sm max-w-full">
-                          <MarkdownRenderer
-                            showThinking={showThinking}
-                            content={previewContent}
-                          />
-                        </div>
+                        <WidgetContent
+                          content={previewContent}
+                          showThinking={showThinking}
+                          className="max-w-full"
+                        />
                       ) : (
                         <div className="text-sm text-fg/50 italic">
                           Click &quot;Run Preview&quot; to see how your widget
@@ -462,7 +435,7 @@ const WidgetConfigModal = ({
                     </div>
 
                     {/* Variable Legend */}
-                    <div className="text-xs text-fg/70">
+                    <div className="shrink-0 max-h-44 overflow-y-auto text-xs text-fg/70">
                       <h5 className="font-medium mb-2">Available Variables:</h5>
                       <div className="space-y-1">
                         <div>
@@ -507,14 +480,16 @@ const WidgetConfigModal = ({
                 </div>
 
                 {/* Action Buttons */}
-                <div className="mt-6 flex justify-end gap-3">
+                <div className="shrink-0 mt-4 flex justify-end gap-3">
                   <button
+                    type="button"
                     onClick={handleClose}
                     className="px-4 py-2 text-sm font-medium text-fg bg-surface hover:bg-surface-2 rounded-control"
                   >
                     Cancel
                   </button>
                   <button
+                    type="button"
                     onClick={handleSave}
                     className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-accent-fg bg-accent hover:bg-accent-700 rounded-control"
                   >

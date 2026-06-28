@@ -1,4 +1,4 @@
-import ChatWindow from '@/components/ChatWindow';
+import NewChatWindow from '@/components/NewChatWindow';
 import { Metadata } from 'next';
 import { Suspense } from 'react';
 
@@ -11,7 +11,7 @@ const Home = () => {
   return (
     <div>
       <Suspense>
-        <ChatWindow key="new" />
+        <NewChatWindow rootPath="/" />
       </Suspense>
     </div>
   );

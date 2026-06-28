@@ -7,6 +7,7 @@ import { tool } from '@langchain/core/tools';
 import { Command, getCurrentTaskInput } from '@langchain/langgraph';
 import { Document } from '@langchain/core/documents';
 import { z } from 'zod';
+import { persistFromToolConfig } from '@/lib/utils/persistToolContext';
 
 const MAX_RESULTS = 20;
 
@@ -107,6 +108,18 @@ export const simpleWebSearchTool = tool(
       console.log(
         `SimpleWebSearchTool: Created ${documents.length} documents from search results`,
       );
+
+      await persistFromToolConfig({
+        config,
+        kind: 'web_search',
+        body: `[web_search query="${query}" provider=${provider.id}]\n${documents
+          .map(
+            (d, i) =>
+              `[${i + 1}] ${d.metadata.title} — ${d.metadata.url}\n${d.pageContent}`,
+          )
+          .join('\n\n')}`,
+        metadataExtras: { query, engine: provider.id },
+      });
 
       return new Command({
         update: {

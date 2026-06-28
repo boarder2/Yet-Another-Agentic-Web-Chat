@@ -7,11 +7,14 @@ import {
   describeCron,
 } from '@/lib/scheduledTasks/presets';
 import type { Preset } from '@/lib/scheduledTasks/presets';
-import ModelSelector from '@/components/MessageInputActions/ModelSelector';
+import ModelPicker from '@/components/models/ModelPicker';
+import type { ModelSelection } from '@/lib/models/presets';
 import { ArrowLeft, CalendarClock, Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { qk } from '@/lib/api/keys';
 
 interface TaskFormData {
   name: string;
@@ -20,7 +23,6 @@ interface TaskFormData {
   sourceUrls: string[];
   chatModel: { provider: string; name: string } | null;
   systemModel: { provider: string; name: string } | null;
-  embeddingModel: { provider: string; name: string } | null;
   selectedSystemPromptIds: string[];
   selectedMethodologyId: string | null;
   cronExpression: string;
@@ -44,6 +46,7 @@ export default function TaskForm({
   initialData?: TaskFormData;
 }) {
   const router = useRouter();
+  const qc = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [systemPrompts, setSystemPrompts] = useState<SystemPrompt[]>([]);
@@ -56,7 +59,6 @@ export default function TaskForm({
       sourceUrls: [],
       chatModel: null,
       systemModel: null,
-      embeddingModel: null,
       selectedSystemPromptIds: [],
       selectedMethodologyId: null,
       cronExpression: '0 8 * * *',
@@ -69,6 +71,30 @@ export default function TaskForm({
 
   const preset = cronToPreset(form.cronExpression);
   const [scheduleKind, setScheduleKind] = useState<Preset['kind']>(preset.kind);
+
+  const modelValue: ModelSelection = {
+    chatProvider: form.chatModel?.provider ?? '',
+    chatModel: form.chatModel?.name ?? '',
+    systemProvider:
+      form.systemModel?.provider ?? form.chatModel?.provider ?? '',
+    systemModel: form.systemModel?.name ?? form.chatModel?.name ?? '',
+  };
+
+  const handleModelChange = (next: ModelSelection) => {
+    setForm((prev) => ({
+      ...prev,
+      chatModel:
+        next.chatProvider && next.chatModel
+          ? { provider: next.chatProvider, name: next.chatModel }
+          : null,
+      // Leave systemModel unset when empty so the task defaults to the chat
+      // model server-side.
+      systemModel:
+        next.systemProvider && next.systemModel
+          ? { provider: next.systemProvider, name: next.systemModel }
+          : null,
+    }));
+  };
 
   useEffect(() => {
     fetch('/api/system-prompts')
@@ -175,12 +201,6 @@ export default function TaskForm({
       return;
     }
 
-    if (!form.embeddingModel) {
-      setError('Please select an embedding model');
-      setSaving(false);
-      return;
-    }
-
     const payload = {
       ...form,
       chatModel: form.chatModel
@@ -188,12 +208,6 @@ export default function TaskForm({
         : undefined,
       systemModel: form.systemModel
         ? { provider: form.systemModel.provider, name: form.systemModel.name }
-        : undefined,
-      embeddingModel: form.embeddingModel
-        ? {
-            provider: form.embeddingModel.provider,
-            name: form.embeddingModel.name,
-          }
         : undefined,
       enabled: form.enabled ? 1 : 0,
       timezone: form.timezone || undefined,
@@ -219,6 +233,8 @@ export default function TaskForm({
         return;
       }
 
+      // Bust the cached task list so the manage page reflects the save.
+      qc.invalidateQueries({ queryKey: qk.scheduledTasks });
       router.push('/scheduled-tasks/manage');
     } catch {
       setError('Failed to save task');
@@ -268,6 +284,7 @@ export default function TaskForm({
           <label className="text-sm font-medium text-fg/70">Name</label>
           <input
             type="text"
+            aria-label="Task name"
             value={form.name}
             onChange={(e) => updateField('name', e.target.value)}
             placeholder="Daily AI News Briefing"
@@ -280,6 +297,7 @@ export default function TaskForm({
         <div className="flex flex-col gap-1.5">
           <label className="text-sm font-medium text-fg/70">Prompt</label>
           <textarea
+            aria-label="Task prompt"
             value={form.prompt}
             onChange={(e) => updateField('prompt', e.target.value)}
             placeholder="Summarize the top AI and machine learning news from today..."
@@ -298,6 +316,7 @@ export default function TaskForm({
             <div key={idx} className="flex items-center gap-2">
               <input
                 type="url"
+                aria-label="Source URL"
                 value={url}
                 onChange={(e) =>
                   updateField(
@@ -373,6 +392,7 @@ export default function TaskForm({
                 <span className="text-sm text-fg/60">at minute</span>
                 <input
                   type="number"
+                  aria-label="Minute"
                   min={0}
                   max={59}
                   value={
@@ -393,6 +413,7 @@ export default function TaskForm({
                 <span className="text-sm text-fg/60">at</span>
                 <input
                   type="number"
+                  aria-label="Hour"
                   min={0}
                   max={23}
                   value={
@@ -408,6 +429,7 @@ export default function TaskForm({
                 <span className="text-sm text-fg/60">:</span>
                 <input
                   type="number"
+                  aria-label="Minute"
                   min={0}
                   max={59}
                   value={
@@ -452,6 +474,7 @@ export default function TaskForm({
                 <span className="text-sm text-fg/60">at</span>
                 <input
                   type="number"
+                  aria-label="Hour"
                   min={0}
                   max={23}
                   value={
@@ -467,6 +490,7 @@ export default function TaskForm({
                 <span className="text-sm text-fg/60">:</span>
                 <input
                   type="number"
+                  aria-label="Minute"
                   min={0}
                   max={59}
                   value={
@@ -485,6 +509,7 @@ export default function TaskForm({
             {scheduleKind === 'advanced' && (
               <input
                 type="text"
+                aria-label="Cron expression"
                 value={form.cronExpression}
                 onChange={(e) => {
                   updateField('cronExpression', e.target.value);
@@ -506,6 +531,7 @@ export default function TaskForm({
           </label>
           <input
             type="text"
+            aria-label="Timezone"
             value={form.timezone}
             onChange={(e) => updateField('timezone', e.target.value)}
             placeholder="e.g. America/New_York (leave empty for system timezone)"
@@ -513,62 +539,14 @@ export default function TaskForm({
           />
         </div>
 
-        {/* Chat Model */}
+        {/* Chat & System Models */}
         <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-fg/70">Chat Model</label>
-          <ModelSelector
-            selectedModel={
-              form.chatModel
-                ? {
-                    provider: form.chatModel.provider,
-                    model: form.chatModel.name,
-                  }
-                : null
-            }
-            setSelectedModel={(m) =>
-              updateField('chatModel', {
-                provider: m.provider,
-                name: m.model,
-              })
-            }
-            truncateModelName={false}
-            role="chat"
-          />
-        </div>
-
-        {/* System Model */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-fg/70">
-            System Model (optional, defaults to chat model)
-          </label>
-          <ModelSelector
-            selectedModel={
-              form.systemModel
-                ? {
-                    provider: form.systemModel.provider,
-                    model: form.systemModel.name,
-                  }
-                : null
-            }
-            setSelectedModel={(m) =>
-              updateField('systemModel', {
-                provider: m.provider,
-                name: m.model,
-              })
-            }
-            truncateModelName={false}
-            role="system"
-          />
-        </div>
-
-        {/* Embedding Model */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-fg/70">
-            Embedding Model
-          </label>
-          <EmbeddingModelSelector
-            selectedModel={form.embeddingModel}
-            setSelectedModel={(m) => updateField('embeddingModel', m)}
+          <label className="text-sm font-medium text-fg/70">Models</label>
+          <ModelPicker
+            value={modelValue}
+            onChange={handleModelChange}
+            fields={{ system: true }}
+            presets="apply-save"
           />
         </div>
 
@@ -660,6 +638,7 @@ export default function TaskForm({
               {form.retentionMode !== 'disabled' && (
                 <input
                   type="number"
+                  aria-label="Retention value"
                   min={1}
                   value={form.retentionValue ?? 10}
                   onChange={(e) =>
@@ -677,6 +656,8 @@ export default function TaskForm({
           <label className="text-sm font-medium text-fg/70">Enabled</label>
           <button
             type="button"
+            aria-label="Toggle enabled"
+            aria-pressed={form.enabled}
             onClick={() => updateField('enabled', !form.enabled)}
             className={`relative w-11 h-6 rounded-pill transition ${
               form.enabled ? 'bg-accent' : 'bg-surface-2'
@@ -708,75 +689,5 @@ export default function TaskForm({
         </div>
       </form>
     </div>
-  );
-}
-
-function EmbeddingModelSelector({
-  selectedModel,
-  setSelectedModel,
-}: {
-  selectedModel: { provider: string; name: string } | null;
-  setSelectedModel: (m: { provider: string; name: string }) => void;
-}) {
-  const [models, setModels] = useState<
-    { provider: string; name: string; displayName: string }[]
-  >([]);
-
-  useEffect(() => {
-    fetch('/api/models')
-      .then((r) => r.json())
-      .then((data) => {
-        const embeddingModels: {
-          provider: string;
-          name: string;
-          displayName: string;
-        }[] = [];
-        if (data.embeddingModelProviders) {
-          for (const [provider, models] of Object.entries(
-            data.embeddingModelProviders as Record<
-              string,
-              Record<string, { displayName: string }>
-            >,
-          )) {
-            for (const [name, info] of Object.entries(models)) {
-              embeddingModels.push({
-                provider,
-                name,
-                displayName: info.displayName || `${provider}/${name}`,
-              });
-            }
-          }
-        }
-        setModels(embeddingModels);
-        if (!selectedModel && embeddingModels.length > 0) {
-          setSelectedModel({
-            provider: embeddingModels[0].provider,
-            name: embeddingModels[0].name,
-          });
-        }
-      })
-      .catch(() => {});
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  return (
-    <select
-      value={
-        selectedModel ? `${selectedModel.provider}:${selectedModel.name}` : ''
-      }
-      onChange={(e) => {
-        const [provider, name] = e.target.value.split(':');
-        setSelectedModel({ provider, name });
-      }}
-      className="px-3 py-2 rounded-surface bg-surface border border-surface-2 text-fg focus:outline-none focus:ring-2 focus:ring-accent"
-    >
-      {models.map((m) => (
-        <option
-          key={`${m.provider}:${m.name}`}
-          value={`${m.provider}:${m.name}`}
-        >
-          {m.displayName}
-        </option>
-      ))}
-    </select>
   );
 }

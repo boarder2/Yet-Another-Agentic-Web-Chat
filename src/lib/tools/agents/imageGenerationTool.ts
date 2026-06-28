@@ -6,7 +6,7 @@ import { SimplifiedAgentStateType } from '@/lib/state/chatAgentState';
 import { ToolMessage } from '@langchain/core/messages';
 import { isSoftStop } from '@/lib/utils/runControl';
 import { getOpenrouterApiKey } from '@/lib/config';
-import { getImageGenerationConfig } from '@/lib/config';
+import { getImageGenerationConfig } from '@/lib/settings/server';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';

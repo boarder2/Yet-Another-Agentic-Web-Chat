@@ -2,20 +2,26 @@ FROM node:24-slim AS builder
 
 WORKDIR /home/yaawc
 
-COPY package.json yarn.lock ./
-RUN yarn install --frozen-lockfile --network-timeout 600000
+RUN apt-get update && \
+    apt-get install -y python3 make g++ && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+ENV ONNXRUNTIME_NODE_INSTALL_CUDA=skip
+COPY package.json package-lock.json ./
+RUN npm ci --fetch-timeout=600000
 ENV NEXT_TELEMETRY_DISABLED=1
 
-COPY tsconfig.json next.config.mjs postcss.config.js drizzle.config.ts tailwind.config.ts ./
+COPY tsconfig.json next.config.mjs postcss.config.js drizzle.config.ts tailwind.config.ts eslint.config.mjs ./
 COPY drizzle ./drizzle
 COPY src ./src
 COPY public ./public
 
 RUN mkdir -p /home/yaawc/data
-RUN yarn build
+# Fail the build on lint or type errors so the image build is the single CI gate.
+RUN npm run lint && npx tsc --noEmit
+RUN npm run build
 
-RUN yarn add --dev @vercel/ncc
-RUN yarn ncc build ./src/lib/db/migrate.ts -o migrator
+RUN npx --yes @vercel/ncc build ./src/lib/db/migrate.ts -o migrator
 
 FROM node:24-slim
 
@@ -27,6 +33,11 @@ COPY --from=builder /home/yaawc/public ./public
 COPY --from=builder /home/yaawc/.next/static ./public/_next/static
 
 COPY --from=builder /home/yaawc/.next/standalone ./
+# Next.js standalone tracing copies playwright-core's JS but misses data files
+# like browsers.json (loaded via a runtime path read, not require()), which
+# crashes startup. Overlay the complete packages from the builder.
+COPY --from=builder /home/yaawc/node_modules/playwright ./node_modules/playwright
+COPY --from=builder /home/yaawc/node_modules/playwright-core ./node_modules/playwright-core
 COPY --from=builder /home/yaawc/data ./data
 COPY drizzle ./drizzle
 COPY --from=builder /home/yaawc/migrator/build ./build
@@ -34,22 +45,42 @@ COPY --from=builder /home/yaawc/migrator/index.js ./migrate.js
 
 COPY entrypoint.sh ./entrypoint.sh
 
+# Plain-JS TTS worker (src/lib/tts/ttsWorker.js). It is forked at runtime via a
+# path string, so Next's standalone tracing doesn't see it — copy it explicitly,
+# preserving the cwd-relative path the parent resolves (src/lib/tts/ttsWorker.js).
+COPY src/lib/tts/ttsWorker.js ./src/lib/tts/ttsWorker.js
+
 RUN chown -R node:node /home/yaawc && \
     chmod +x /home/yaawc/entrypoint.sh && \
-    npm install playwright -g --no-fund --no-audit && \
-    npx playwright install-deps chromium && \
+    node node_modules/playwright/cli.js install-deps chromium && \
     apt-get update && \
-    apt-get install -y procps && \
+    apt-get install -y procps util-linux && \
     apt-get clean && rm -rf /var/lib/apt/lists/* && \
     rm -rf ~/.npm
 
 # Configure the container to run in an unprivileged mode
 USER node
 
+# Next.js standalone tracing copies onnxruntime-node's *_binding.node but not the
+# libonnxruntime.so.1 it dlopens at runtime (loaded via path, not require()), so we
+# overlay the full bin/ dir to co-locate the shared lib. A package.json "overrides"
+# pin forces a single onnxruntime-node version across both embeddings and kokoro-js's
+# transformers, so there is exactly one bin/ (and one libonnxruntime.so.1 SONAME) —
+# this avoids the same-SONAME collision that broke in-process TTS synthesis.
 COPY --from=builder /home/yaawc/node_modules/onnxruntime-node/bin /home/yaawc/node_modules/onnxruntime-node/bin
+# kokoro-js reads its voice packs from voices/*.bin via fs.readFile(path.resolve(
+# __dirname, '../voices/...')) — a runtime path read, not a require() — so nft skips
+# the voices/ data dir. Overlay it (the .bin files ship in the package, they are not
+# downloaded server-side; only the ONNX model is fetched at runtime).
+COPY --from=builder /home/yaawc/node_modules/kokoro-js/voices /home/yaawc/node_modules/kokoro-js/voices
 
-# Install Playwright and its dependencies
-RUN npx -y playwright install chromium --only-shell && \
+# Install the browser via the app's BUNDLED Playwright (node_modules/playwright)
+# rather than a global or `npx -y` copy. npx/global may resolve to a newer
+# Playwright that downloads a different chromium revision than the bundled
+# playwright-core resolves at runtime, leaving the expected revision missing
+# (e.g. runtime looks for chromium_headless_shell-1223 but a newer rev is on disk).
+# Driving the install from the same package guarantees the revisions match.
+RUN node node_modules/playwright/cli.js install chromium --only-shell && \
     rm -rf ~/.npm
 
 CMD ["./entrypoint.sh"]

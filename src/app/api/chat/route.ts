@@ -1,6 +1,4 @@
-import { updateToolCallMarkup } from '@/lib/utils/toolCallMarkup';
-import { encodeHtmlAttribute } from '@/lib/utils/html';
-import { cleanupCancelToken, registerCancelToken } from '@/lib/cancel-tokens';
+import { registerCancelToken } from '@/lib/cancel-tokens';
 import db from '@/lib/db';
 import { chats, messages as messagesSchema, workspaces } from '@/lib/db/schema';
 import { getChatMessages, getCompactionRows } from '@/lib/db/queries';
@@ -11,28 +9,22 @@ import {
   getMethodologyInstructions,
 } from '@/lib/utils/prompts';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import {
-  AIMessage,
-  BaseMessage,
-  HumanMessage,
-  SystemMessage,
-} from '@langchain/core/messages';
+import { BaseMessage, SystemMessage } from '@langchain/core/messages';
+import { buildHistoryFromDb } from '@/lib/utils/buildHistory';
 import crypto from 'crypto';
-import { and, eq, gt, ne } from 'drizzle-orm';
+import { and, eq, gte } from 'drizzle-orm';
 import { EventEmitter } from 'stream';
-import {
-  registerRetrieval,
-  cleanupRun,
-  clearSoftStop,
-} from '@/lib/utils/runControl';
+import { registerRetrieval, clearSoftStop } from '@/lib/utils/runControl';
 import { CachedEmbeddings } from '@/lib/utils/cachedEmbeddings';
-import { buildMultimodalHumanMessage } from '@/lib/utils/images';
 import { retrieveRelevantMemories } from '@/lib/utils/memoryRetrieval';
+import {
+  getSettings,
+  getBooleanSetting,
+  getStringSetting,
+} from '@/lib/settings/server';
 import { buildMemorySection } from '@/lib/prompts/memory/memoryContext';
 import { processExtraction } from '@/lib/utils/memoryExtraction';
 import { distillQueryForEmbedding } from '@/lib/utils/queryDistillation';
-import { denyApprovalsForMessage } from '@/lib/sandbox/pendingApprovals';
-import { cancelQuestionsForMessage } from '@/lib/userQuestion/pendingQuestions';
 import { SimplifiedAgent } from '@/lib/search/simplifiedAgent';
 import { buildWorkspaceSystemPromptSuffix } from '@/lib/workspaces/composeSystemPrompt';
 import { workspaceLsTool } from '@/lib/tools/workspace/ls';
@@ -40,9 +32,25 @@ import { workspaceGrepTool } from '@/lib/tools/workspace/grep';
 import { workspaceReadTool } from '@/lib/tools/workspace/read';
 import { workspaceEditTool } from '@/lib/tools/workspace/edit';
 import { workspaceCreateFileTool } from '@/lib/tools/workspace/create';
-import { cancelEditsForMessage } from '@/lib/workspaces/pendingEdits';
-import { cancelEditsForMessage as cancelSkillEditsForMessage } from '@/lib/skills/pendingEdits';
 import { resolveSkillsForChat, getByName } from '@/lib/skills/resolve';
+import { SKILL_TOKEN_SCAN_REGEX } from '@/lib/skills/validation';
+import { persistToolContextRow } from '@/lib/utils/persistToolContext';
+import {
+  startRun,
+  getRun,
+  subscribe,
+  pushEvent,
+  evictByChatId,
+} from '@/lib/runs/runHub';
+import { attachRunHost } from '@/lib/runs/runHost';
+import { resolveModelRef } from '@/lib/providers/resolveModels';
+import {
+  PanelCoordinator,
+  type ResolvedExecutor,
+} from '@/lib/search/panel/coordinator';
+import { buildOrchestratorSynthesisContext } from '@/lib/prompts/panel/orchestrator';
+import { validatePanelConfig, type PanelConfig } from '@/lib/types/panel';
+import { buildMcpLangchainTools } from '@/lib/mcp/toolFactory';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -64,18 +72,12 @@ type SystemModel = {
   contextWindowSize?: number;
 };
 
-type EmbeddingModel = {
-  provider: string;
-  name: string;
-};
-
 type Body = {
   message: Message;
   focusMode: string;
   files: Array<string>;
   chatModel: ChatModel;
   systemModel?: SystemModel; // optional; defaults to chatModel
-  embeddingModel: EmbeddingModel;
   selectedSystemPromptIds: string[]; // legacy name; treated as persona prompt IDs
   selectedMethodologyId?: string;
   userLocation?: string;
@@ -92,523 +94,13 @@ type Body = {
   workspaceId?: string | null;
   imageCapable?: boolean;
   invokedSkills?: string[];
+  panel?: PanelConfig;
 };
 
 type TokenUsage = {
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
-};
-type ModelStats = {
-  modelName: string; // legacy
-  responseTime?: number;
-  usage?: TokenUsage; // legacy total
-  modelNameChat?: string;
-  modelNameSystem?: string;
-  usageChat?: TokenUsage;
-  usageSystem?: TokenUsage;
-  usedLocation?: boolean;
-  usedPersonalization?: boolean;
-  firstChatCallInputTokens?: number;
-};
-
-const handleEmitterEvents = async (
-  stream: EventEmitter,
-  writer: WritableStreamDefaultWriter,
-  encoder: TextEncoder,
-  aiMessageId: string,
-  chatId: string,
-  startTime: number,
-  userMessageId: string,
-  abortController: AbortController,
-  usedLocation: boolean,
-  usedPersonalization: boolean,
-  memoriesUsed: Array<{ id: string; content: string }> = [],
-) => {
-  let recievedMessage = '';
-  // Map executionId → runId for correlating code_execution_result with the correct ToolCall markup
-  const codeExecutionRunIdMap = new Map<string, string>();
-  // Map questionId → runId for correlating user_question_answered with the correct ToolCall markup
-  const userQuestionRunIdMap = new Map<string, string>();
-  // Accumulated chartId → ChartSpec map for persistence in metadata
-  const chartSpecs: Record<string, unknown> = {};
-  let sources: Record<string, unknown>[] = [];
-  let searchQuery: string | undefined;
-  let searchUrl: string | undefined;
-  let isStreamActive = true;
-  let writerClosed = false;
-
-  // Helper to safely write to the stream; aborts processing if the client has disconnected
-  const safeWrite = (data: string) => {
-    if (!isStreamActive || writerClosed || abortController.signal.aborted)
-      return;
-    writer.write(encoder.encode(data)).catch(() => {
-      if (!isStreamActive) return;
-      isStreamActive = false;
-      if (!abortController.signal.aborted) {
-        console.log('Write failed (client disconnected), aborting processing');
-        abortController.abort();
-      }
-    });
-  };
-
-  const safeClose = () => {
-    if (writerClosed) return;
-    writerClosed = true;
-    writer.close().catch(() => {});
-  };
-
-  // Keep-alive ping mechanism to prevent reverse proxy timeouts
-  const pingInterval = setInterval(() => {
-    if (isStreamActive && !abortController.signal.aborted) {
-      safeWrite(
-        JSON.stringify({
-          type: 'ping',
-          timestamp: Date.now(),
-        }) + '\n',
-      );
-    } else {
-      clearInterval(pingInterval);
-    }
-  }, 30000); // Send ping every 30 seconds
-
-  // Clean up ping interval if request is cancelled
-  abortController.signal.addEventListener('abort', () => {
-    isStreamActive = false;
-    clearInterval(pingInterval);
-    // Auto-deny any pending code execution approvals for this message
-    denyApprovalsForMessage(userMessageId);
-    // Auto-cancel any pending user questions for this message
-    cancelQuestionsForMessage(userMessageId);
-    // Auto-cancel any pending workspace edit approvals for this message
-    cancelEditsForMessage(userMessageId);
-    // Auto-cancel any pending skill edit approvals for this message
-    cancelSkillEditsForMessage(userMessageId);
-  });
-
-  stream.on('data', (data) => {
-    if (!isStreamActive || abortController.signal.aborted) return;
-    const parsedData = JSON.parse(data);
-
-    if (parsedData.type === 'response') {
-      safeWrite(
-        JSON.stringify({
-          type: 'response',
-          data: parsedData.data,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-
-      recievedMessage += parsedData.data;
-    } else if (
-      parsedData.type === 'sources' ||
-      parsedData.type === 'sources_added'
-    ) {
-      // Capture the search query if available
-      if (parsedData.searchQuery) {
-        searchQuery = parsedData.searchQuery;
-      }
-      if (parsedData.searchUrl) {
-        searchUrl = parsedData.searchUrl;
-      }
-
-      safeWrite(
-        JSON.stringify({
-          type: parsedData.type,
-          data: parsedData.data,
-          searchQuery: parsedData.searchQuery,
-          messageId: aiMessageId,
-          searchUrl: searchUrl,
-        }) + '\n',
-      );
-
-      sources = parsedData.data;
-    } else if (
-      parsedData.type === 'tool_call_started' ||
-      parsedData.type === 'tool_call_success' ||
-      parsedData.type === 'tool_call_error'
-    ) {
-      // Forward new granular tool lifecycle events
-      safeWrite(
-        JSON.stringify({
-          type: parsedData.type,
-          data: parsedData.data,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-      if (parsedData.type === 'tool_call_started' && parsedData.data?.content) {
-        // Append initial placeholder markup to message content for persistence
-        recievedMessage += parsedData.data.content;
-      } else if (
-        parsedData.type === 'tool_call_success' ||
-        parsedData.type === 'tool_call_error'
-      ) {
-        // Rewrite existing ToolCall tag with final status (and error if applicable)
-        recievedMessage = updateToolCallMarkup(
-          recievedMessage,
-          parsedData.data.toolCallId,
-          {
-            status: parsedData.data.status,
-            error: parsedData.data.error,
-            extra: parsedData.data.extra,
-          },
-        );
-      }
-    } else if (
-      parsedData.type === 'subagent_started' ||
-      parsedData.type === 'subagent_completed' ||
-      parsedData.type === 'subagent_error' ||
-      parsedData.type === 'subagent_data'
-    ) {
-      // Forward subagent events to client
-      // console.log('API: Forwarding subagent event:', parsedData.type);
-      safeWrite(
-        JSON.stringify({
-          ...parsedData,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-
-      // Update received message for persistence if needed
-      if (parsedData.type === 'subagent_started') {
-        const markup = `<SubagentExecution id="${parsedData.executionId}" name="${encodeHtmlAttribute(parsedData.name ?? '')}" task="${encodeHtmlAttribute(parsedData.task ?? '')}" status="running"></SubagentExecution>\n`;
-        recievedMessage += markup;
-      } else if (parsedData.type === 'subagent_data') {
-        // Persist nested tool call markup inside SubagentExecution tags
-        const nestedEvent = parsedData.data;
-        const executionId = parsedData.subagentId;
-
-        if (
-          nestedEvent?.type === 'tool_call_started' &&
-          nestedEvent.data?.content
-        ) {
-          // Insert ToolCall markup inside the SubagentExecution tag
-          const subagentRegex = new RegExp(
-            `(<SubagentExecution\\s+id="${executionId}"[^>]*>)(.*?)(</SubagentExecution>)`,
-            'gs',
-          );
-          recievedMessage = recievedMessage.replace(
-            subagentRegex,
-            (_match, openTag, content, closeTag) => {
-              return `${openTag}${content}${nestedEvent.data.content}\n${closeTag}`;
-            },
-          );
-        } else if (
-          nestedEvent?.type === 'tool_call_success' &&
-          nestedEvent.data?.toolCallId
-        ) {
-          recievedMessage = updateToolCallMarkup(
-            recievedMessage,
-            nestedEvent.data.toolCallId,
-            { status: 'success' },
-          );
-        } else if (
-          nestedEvent?.type === 'tool_call_error' &&
-          nestedEvent.data?.toolCallId
-        ) {
-          recievedMessage = updateToolCallMarkup(
-            recievedMessage,
-            nestedEvent.data.toolCallId,
-            {
-              status: 'error',
-              error: nestedEvent.data.error,
-            },
-          );
-        }
-      } else if (
-        parsedData.type === 'subagent_completed' ||
-        parsedData.type === 'subagent_error'
-      ) {
-        // Update the SubagentExecution markup in received message
-        const status =
-          parsedData.type === 'subagent_completed' ? 'success' : 'error';
-        const executionId = parsedData.id;
-        const subagentRegex = new RegExp(
-          `<SubagentExecution\\s+id="${executionId}"([^>]*)>(.*?)<\\/SubagentExecution>`,
-          'gs',
-        );
-        recievedMessage = recievedMessage.replace(
-          subagentRegex,
-          (_match, attrs, innerContent) => {
-            let updatedAttrs = attrs
-              .replace(/status="[^"]*"/, `status="${status}"`)
-              .trim();
-            if (!updatedAttrs.includes('status=')) {
-              updatedAttrs += ` status="${status}"`;
-            }
-            if (parsedData.summary && status === 'success') {
-              const escapedSummary = parsedData.summary
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;');
-              updatedAttrs += ` summary="${escapedSummary}"`;
-            }
-            if (parsedData.error && status === 'error') {
-              const escapedError = parsedData.error
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;');
-              updatedAttrs += ` error="${escapedError}"`;
-            }
-            // Preserve inner content (ToolCall markup)
-            return `<SubagentExecution ${updatedAttrs}>${innerContent}</SubagentExecution>`;
-          },
-        );
-      }
-    } else if (parsedData.type === 'chart_spec') {
-      // Accumulate chart specs for persistence; forward to client for live rendering
-      const { chartId, spec } = parsedData.data ?? {};
-      if (chartId && spec) {
-        chartSpecs[chartId] = spec;
-      }
-      safeWrite(
-        JSON.stringify({
-          type: 'chart_spec',
-          data: parsedData.data,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-    } else if (parsedData.type === 'todo_update') {
-      // Forward todo_update event to client (transient UI, not persisted in message)
-      safeWrite(
-        JSON.stringify({
-          type: 'todo_update',
-          data: parsedData.data,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-    } else if (parsedData.type === 'code_execution_pending') {
-      // Correlate this execution with the ToolCall markup's toolCallId
-      // (provided by codeExecutionCorrelation module via markupToolCallId).
-      const runId = parsedData.data?.markupToolCallId;
-      if (runId && parsedData.data?.executionId) {
-        codeExecutionRunIdMap.set(parsedData.data.executionId, runId);
-      }
-      // Forward code execution pending event to client
-      safeWrite(
-        JSON.stringify({
-          type: parsedData.type,
-          data: parsedData.data,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-    } else if (parsedData.type === 'code_execution_result') {
-      // Forward to client
-      safeWrite(
-        JSON.stringify({
-          type: parsedData.type,
-          data: parsedData.data,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-      // Persist result data in ToolCall markup
-      // Look up the correct runId for this execution from the correlation map
-      const tcId =
-        codeExecutionRunIdMap.get(parsedData.data?.executionId) ||
-        parsedData.data?.toolCallId;
-      if (tcId) {
-        const d = parsedData.data;
-        const extra: Record<string, string> = {};
-        if (d.exitCode !== undefined) extra.exitCode = String(d.exitCode);
-        if (d.stdout) extra.stdout = d.stdout.slice(0, 2000);
-        if (d.stderr) extra.stderr = d.stderr.slice(0, 1000);
-        if (d.timedOut) extra.timedOut = 'true';
-        if (d.oomKilled) extra.oomKilled = 'true';
-        if (d.denied) extra.denied = 'true';
-        if (Array.isArray(d.chartIds) && d.chartIds.length > 0)
-          extra.chartIds = d.chartIds.join(',');
-        recievedMessage = updateToolCallMarkup(recievedMessage, tcId, {
-          extra,
-        });
-      }
-    } else if (parsedData.type === 'user_question_pending') {
-      // Correlate this question with the ToolCall markup's toolCallId
-      const runId = parsedData.data?.markupToolCallId;
-      if (runId && parsedData.data?.questionId) {
-        userQuestionRunIdMap.set(parsedData.data.questionId, runId);
-      }
-      // Forward to client
-      safeWrite(
-        JSON.stringify({
-          type: parsedData.type,
-          data: parsedData.data,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-    } else if (parsedData.type === 'user_question_answered') {
-      // Forward to client
-      safeWrite(
-        JSON.stringify({
-          type: parsedData.type,
-          data: parsedData.data,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-      // Persist response in ToolCall markup
-      const tcId =
-        userQuestionRunIdMap.get(parsedData.data?.questionId) ||
-        parsedData.data?.toolCallId;
-      if (tcId) {
-        const d = parsedData.data;
-        const extra: Record<string, string> = {};
-        if (d.selectedOptions?.length)
-          extra.selectedOptions = d.selectedOptions.join(', ');
-        if (d.freeformText) extra.freeformText = d.freeformText.slice(0, 500);
-        if (d.skipped) extra.skipped = 'true';
-        if (d.timedOut) extra.timedOut = 'true';
-        recievedMessage = updateToolCallMarkup(recievedMessage, tcId, {
-          extra,
-        });
-      }
-    } else if (parsedData.type === 'workspace_edit_approval_pending') {
-      // Forward workspace edit/create approval request to client
-      safeWrite(
-        JSON.stringify({
-          type: parsedData.type,
-          data: parsedData.data,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-    } else if (parsedData.type === 'workspace_edit_approval_answered') {
-      // Forward workspace edit/create approval answer to client
-      safeWrite(
-        JSON.stringify({
-          type: parsedData.type,
-          data: parsedData.data,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-    } else if (parsedData.type === 'skill_edit_approval_pending') {
-      safeWrite(
-        JSON.stringify({
-          type: parsedData.type,
-          data: parsedData.data,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-    } else if (parsedData.type === 'skill_edit_approval_answered') {
-      safeWrite(
-        JSON.stringify({
-          type: parsedData.type,
-          data: parsedData.data,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-    } else if (parsedData.type === 'workspace_file_changed') {
-      safeWrite(
-        JSON.stringify({
-          type: parsedData.type,
-          data: parsedData.data,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-    }
-  });
-
-  let modelStats: ModelStats = {
-    modelName: '',
-  };
-
-  stream.on('progress', (data) => {
-    if (!isStreamActive || abortController.signal.aborted) return;
-    const parsedData = JSON.parse(data);
-    if (parsedData.type === 'progress') {
-      safeWrite(
-        JSON.stringify({
-          type: 'progress',
-          data: parsedData.data,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-    }
-  });
-
-  stream.on('stats', (data) => {
-    if (!isStreamActive || abortController.signal.aborted) return;
-    const parsedData = JSON.parse(data);
-    if (parsedData.type === 'modelStats') {
-      modelStats = {
-        ...parsedData.data,
-        usedLocation,
-        usedPersonalization,
-      };
-      // Forward stats to client for live updates
-      safeWrite(
-        JSON.stringify({
-          type: 'stats',
-          data: modelStats,
-          messageId: aiMessageId,
-        }) + '\n',
-      );
-    }
-  });
-
-  stream.on('end', () => {
-    clearInterval(pingInterval);
-
-    const endTime = Date.now();
-    const duration = endTime - startTime;
-
-    modelStats = {
-      ...modelStats,
-      responseTime: duration,
-      usedLocation,
-      usedPersonalization,
-    };
-
-    safeWrite(
-      JSON.stringify({
-        type: 'messageEnd',
-        messageId: aiMessageId,
-        modelStats: modelStats,
-        searchQuery: searchQuery,
-        searchUrl: searchUrl,
-        usedLocation,
-        usedPersonalization,
-        memoriesUsed: memoriesUsed.length > 0 ? memoriesUsed : undefined,
-      }) + '\n',
-    );
-    isStreamActive = false;
-    safeClose();
-
-    // Clean up the abort controller reference
-    cleanupCancelToken(userMessageId);
-
-    db.insert(messagesSchema)
-      .values({
-        content: recievedMessage,
-        chatId: chatId,
-        messageId: aiMessageId,
-        role: 'assistant',
-        metadata: JSON.stringify({
-          createdAt: new Date(),
-          ...(sources && sources.length > 0 && { sources }),
-          ...(searchQuery && { searchQuery }),
-          modelStats: modelStats,
-          ...(searchUrl && { searchUrl }),
-          usedLocation,
-          usedPersonalization,
-          ...(memoriesUsed.length > 0 && { memoriesUsed }),
-          ...(Object.keys(chartSpecs).length > 0 && { chartSpecs }),
-        }),
-      })
-      .execute();
-  });
-  stream.on('error', (data) => {
-    clearInterval(pingInterval);
-
-    const parsedData = JSON.parse(data);
-    safeWrite(
-      JSON.stringify({
-        type: 'error',
-        data: parsedData.data,
-      }),
-    );
-    isStreamActive = false;
-    safeClose();
-  });
 };
 
 const handleHistorySave = async (
@@ -647,72 +139,41 @@ const handleHistorySave = async (
     where: eq(messagesSchema.messageId, humanMessageId),
   });
 
-  if (!messageExists) {
-    await db
-      .insert(messagesSchema)
-      .values({
-        content: message.content,
-        chatId: message.chatId,
-        messageId: humanMessageId,
-        role: 'user',
-        metadata: JSON.stringify({
-          createdAt: new Date(),
-          ...(messageImages &&
-            messageImages.length > 0 && { images: messageImages }),
-        }),
-      })
-      .execute();
-  } else {
-    await db
-      .update(messagesSchema)
-      .set({
-        content: message.content,
-        metadata: JSON.stringify({
-          createdAt: new Date(),
-          ...(messageImages &&
-            messageImages.length > 0 && { images: messageImages }),
-        }),
-      })
-      .where(eq(messagesSchema.messageId, humanMessageId))
-      .execute();
-
-    // Delete non-compaction messages after the rewrite point.
-    // Compaction checkpoint rows are handled separately below.
+  if (messageExists) {
+    // Edit equals nuke-and-rebuild from that point. Drops the edited user
+    // row, any newer assistant/system rows, and any compaction checkpoints
+    // whose summarized region the edit invalidates.
     await db
       .delete(messagesSchema)
       .where(
         and(
-          gt(messagesSchema.id, messageExists.id),
           eq(messagesSchema.chatId, message.chatId),
-          ne(messagesSchema.role, 'compaction'),
+          gte(messagesSchema.id, messageExists.id),
         ),
       )
       .execute();
-
-    // Delete any compaction checkpoints invalidated by this rewrite.
-    // A checkpoint is invalid if the rewrite touches any message that
-    // existed when the checkpoint was created. positionId records the
-    // last message in the chat at compaction time — if the rewrite
-    // point falls at or before it, the message set the summary was
-    // generated alongside has changed.
-    // Falls back to compactedUpTo for legacy checkpoints that lack positionId.
-    const compactionRows = await getCompactionRows(message.chatId);
-    for (const row of compactionRows) {
-      const meta = JSON.parse((row.metadata as string) || '{}');
-      const boundary =
-        typeof meta.positionId === 'number'
-          ? meta.positionId
-          : meta.compactedUpTo;
-      const isValid =
-        typeof boundary === 'number' && boundary < messageExists.id;
-      if (!isValid) {
-        await db
-          .delete(messagesSchema)
-          .where(eq(messagesSchema.messageId, row.messageId))
-          .execute();
-      }
-    }
   }
+
+  await db
+    .insert(messagesSchema)
+    .values({
+      content: message.content,
+      chatId: message.chatId,
+      messageId: humanMessageId,
+      role: 'user',
+      metadata: JSON.stringify({
+        createdAt: new Date(),
+        ...(messageImages &&
+          messageImages.length > 0 && { images: messageImages }),
+      }),
+    })
+    .execute();
+};
+
+const SSE_HEADERS = {
+  'Content-Type': 'text/event-stream',
+  Connection: 'keep-alive',
+  'Cache-Control': 'no-cache, no-transform',
 };
 
 export const POST = async (req: Request) => {
@@ -733,6 +194,35 @@ export const POST = async (req: Request) => {
       );
     }
 
+    // Validate panel config up front (when present). An invalid panel is a 400;
+    // an absent panel leaves the single-model path byte-for-byte unchanged.
+    const panelConfig = body.panel;
+    if (panelConfig) {
+      const check = validatePanelConfig(panelConfig);
+      if (!check.ok) {
+        return Response.json({ error: check.error }, { status: 400 });
+      }
+    }
+
+    const humanMessageId =
+      message.messageId ?? crypto.randomBytes(7).toString('hex');
+
+    // Fast-path idempotency: if this messageId already has a live run, re-subscribe
+    // instead of starting a duplicate. Covers both an in-flight run and one paused
+    // at an interrupt (awaiting_user) — a resubmit of the same message must not
+    // orphan the paused checkpoint/approvals by overwriting the run.
+    const existingRun = getRun(humanMessageId);
+    if (
+      existingRun &&
+      (existingRun.status === 'running' ||
+        existingRun.status === 'awaiting_user')
+    ) {
+      const subStream = subscribe(existingRun, 0, req.signal);
+      return new Response(subStream.pipeThrough(new TextEncoderStream()), {
+        headers: SSE_HEADERS,
+      });
+    }
+
     let chatLlm: BaseChatModel | undefined;
     let systemLlm: BaseChatModel | undefined;
     let embedding: CachedEmbeddings;
@@ -741,7 +231,6 @@ export const POST = async (req: Request) => {
       const resolved = await resolveChatAndEmbedding({
         chatModel: body.chatModel,
         systemModel: body.systemModel,
-        embeddingModel: body.embeddingModel,
       });
       chatLlm = resolved.chatLlm;
       systemLlm = resolved.systemLlm;
@@ -751,25 +240,7 @@ export const POST = async (req: Request) => {
       return Response.json({ error: msg }, { status: 400 });
     }
 
-    const humanMessageId =
-      message.messageId ?? crypto.randomBytes(7).toString('hex');
     const aiMessageId = crypto.randomBytes(7).toString('hex');
-
-    // Build LangChain BaseMessage[] from DB rows
-    const buildHistoryFromDb = (
-      rows: (typeof messagesSchema.$inferSelect)[],
-    ): BaseMessage[] => {
-      return rows.map((msg) => {
-        const metadata = JSON.parse((msg.metadata as string) || '{}');
-        if (msg.role === 'user') {
-          if (metadata.images && metadata.images.length > 0) {
-            return buildMultimodalHumanMessage(msg.content, metadata.images);
-          }
-          return new HumanMessage({ content: msg.content });
-        }
-        return new AIMessage({ content: msg.content });
-      });
-    };
 
     // System instructions deprecated; only use persona prompts
     const personaInstructionsContent = await getPersonaInstructionsOnly(
@@ -778,9 +249,6 @@ export const POST = async (req: Request) => {
     const methodologyInstructions = await getMethodologyInstructions(
       body.selectedMethodologyId ?? null,
     );
-    const responseStream = new TransformStream();
-    const writer = responseStream.writable.getWriter();
-    const encoder = new TextEncoder();
 
     // --- Cancellation logic ---
     const abortController = new AbortController();
@@ -791,42 +259,59 @@ export const POST = async (req: Request) => {
     registerRetrieval(message.messageId, retrievalController);
     clearSoftStop(message.messageId);
 
-    // Detect client disconnection via the request's built-in abort signal
-    req.signal.addEventListener('abort', () => {
-      if (!abortController.signal.aborted) {
-        console.log('Client disconnected, aborting all processing');
-        retrievalController.abort();
-        abortController.abort();
-      }
-    });
+    // Note: req.signal no longer aborts the run — client disconnect only
+    // removes the subscriber from the fan-out set. Cancel via POST /api/chat/cancel.
 
-    abortController.signal.addEventListener('abort', () => {
-      console.log('Stream aborted, sending cancel event');
-      // Also abort retrieval to stop LangGraph agent processing
-      if (!retrievalController.signal.aborted) {
-        retrievalController.abort();
-      }
-      writer
-        .write(
-          encoder.encode(
-            JSON.stringify({
-              type: 'error',
-              data: 'Request cancelled by user',
-            }),
-          ),
-        )
-        .catch(() => {});
-      writer.close().catch(() => {});
-      cleanupCancelToken(message.messageId);
-      cleanupRun(message.messageId);
-    });
+    // --- Ambient settings are server-authoritative (read from the DB, not the
+    // request body). Memory toggles and personalization are configured in
+    // Settings and applied passively, so the server owns them; private sessions
+    // strip them entirely. Per-request composer choices (models, prompts, vision)
+    // stay in the body. ---
+    {
+      const settings = getSettings([
+        'memoryEnabled',
+        'memoryRetrievalEnabled',
+        'memoryAutoDetectionEnabled',
+        'personalization.sendLocationEnabled',
+        'personalization.sendProfileEnabled',
+        'personalization.location',
+        'personalization.about',
+      ]);
+      const priv = !!body.isPrivate;
+      // Defaults are OFF to match the Settings UI (which treats an absent key as
+      // unchecked). Memory only runs after the user explicitly opts in.
+      const memoryMaster = getBooleanSetting(settings, 'memoryEnabled', false);
+      const memoryRetrieval = getBooleanSetting(
+        settings,
+        'memoryRetrievalEnabled',
+        false,
+      );
+      const memoryAutoDetection = getBooleanSetting(
+        settings,
+        'memoryAutoDetectionEnabled',
+        false,
+      );
+      const sendLocation = getBooleanSetting(
+        settings,
+        'personalization.sendLocationEnabled',
+        false,
+      );
+      const sendProfile = getBooleanSetting(
+        settings,
+        'personalization.sendProfileEnabled',
+        false,
+      );
 
-    // --- Privacy mode: strip personalization/memory server-side ---
-    if (body.isPrivate) {
-      body.userLocation = undefined;
-      body.userProfile = undefined;
-      body.memoryEnabled = false;
-      body.memoryAutoDetection = false;
+      body.memoryEnabled = !priv && memoryMaster && memoryRetrieval;
+      body.memoryAutoDetection = !priv && memoryMaster && memoryAutoDetection;
+      body.userLocation =
+        !priv && sendLocation
+          ? getStringSetting(settings, 'personalization.location', '')
+          : undefined;
+      body.userProfile =
+        !priv && sendProfile
+          ? getStringSetting(settings, 'personalization.about', '')
+          : undefined;
     }
 
     // --- Workspace context (load early so workspaceId is available for memory scoping) ---
@@ -947,8 +432,45 @@ export const POST = async (req: Request) => {
       body.workspaceId,
     );
 
-    // Read messages from DB (now includes the just-saved user message)
-    const dbMessages = await getChatMessages(message.chatId);
+    // Resolve invoked skill set (UI hints + server-side /skill-name scan).
+    // We need this both for persistence below and for the agent prompt later.
+    const allSkillsForChat = await resolveSkillsForChat(resolvedWorkspaceId);
+    const invokedSkillNames = new Set<string>(body.invokedSkills ?? []);
+    for (const m of message.content.matchAll(SKILL_TOKEN_SCAN_REGEX)) {
+      const name = m[1];
+      if (getByName(allSkillsForChat, name)) {
+        invokedSkillNames.add(name);
+      }
+    }
+
+    // Persist invoked-skill bodies as system rows attached to this turn.
+    // They ride along on subsequent turns via buildHistoryFromDb naturally,
+    // so no in-flight SystemMessage injection is needed.
+    for (const skillName of invokedSkillNames) {
+      const skill = getByName(allSkillsForChat, skillName);
+      if (!skill) continue;
+      try {
+        await persistToolContextRow({
+          chatId: message.chatId,
+          parentMessageId: humanMessageId,
+          kind: 'skill_invocation',
+          invoker: 'user',
+          body: `[Skill "${skillName}" invoked by user]\n${skill.content}`,
+          metadataExtras: { skillName },
+        });
+      } catch (err) {
+        console.warn(
+          `[skills] Failed to persist user-invoked skill "${skillName}":`,
+          err,
+        );
+      }
+    }
+
+    // Read messages from DB (now includes the just-saved user message and
+    // any system rows persisted just above).
+    const dbMessages = await getChatMessages(message.chatId, {
+      includeSystem: true,
+    });
 
     // Exclude the current user message from history: it will be added directly
     // to the agent as the query/humanMsg parameter. Including it here as well
@@ -1023,122 +545,227 @@ export const POST = async (req: Request) => {
       distillationUsage,
       workspaceSuffix,
       resolvedWorkspaceId,
+      aiMessageId,
     );
 
-    // Inject skill bodies for slash-invoked skills
-    let effectiveHistory = history;
-    if (body.invokedSkills && body.invokedSkills.length > 0) {
+    // Tell the agent which skills the user explicitly invoked. The bodies
+    // themselves were already persisted as system rows above and now live
+    // in `history` via buildHistoryFromDb — no in-flight injection needed.
+    handler.setInvokedSkillNames(invokedSkillNames);
+    // Store model refs so the agent can build a config snapshot for resume.
+    handler.setModelRefs(body.chatModel, body.systemModel);
+    if (panelConfig) handler.setPanelConfig(panelConfig);
+
+    // Build a stable thread_id for LangGraph checkpointing: messageId:startedAt
+    // Using startedAt avoids collisions on regenerate/retry of the same user message.
+    const runStartedAt = Date.now();
+    const threadId = `${humanMessageId}:${runStartedAt}`;
+    handler.setThreadId(threadId);
+
+    // Register run in hub (idempotent — isNew=false if already live)
+    const { run, isNew } = startRun({
+      chatId: message.chatId,
+      messageId: humanMessageId,
+      aiMessageId,
+      threadId,
+      emitter: stream,
+      abortController,
+      retrievalController,
+    });
+
+    if (isNew) {
       try {
-        const allSkills = await resolveSkillsForChat(resolvedWorkspaceId);
-        const injectedMessages: BaseMessage[] = [];
-        for (const skillName of body.invokedSkills) {
-          const skill = getByName(allSkills, skillName);
-          if (skill) {
-            injectedMessages.push(
-              new SystemMessage(
-                `[Skill "${skillName}" invoked by user]\n${skill.content}`,
-              ),
-            );
-          }
-        }
-        if (injectedMessages.length > 0) {
-          effectiveHistory = [...injectedMessages, ...history];
-        }
+        // Wire event listeners + insert empty assistant row
+        const configSnapshot = handler.buildConfigSnapshot(
+          body.focusMode,
+          body.files ?? [],
+        );
+        await attachRunHost({
+          run,
+          startTime,
+          userMessageId: message.messageId,
+          usedLocation: body.userLocation
+            ? body.userLocation.length > 0
+            : false,
+          usedPersonalization: body.userProfile
+            ? body.userProfile.length > 0
+            : false,
+          memoriesUsed,
+          configSnapshot,
+        });
       } catch (err) {
-        console.warn('[skills] Failed to inject invoked skills:', err);
+        // Clean up the dangling run entry before rethrowing
+        evictByChatId(run.chatId);
+        throw err;
+      }
+
+      // Build combined extra tools: workspace tools + MCP tools.
+      // MCP discovery is non-fatal; a failure omits those tools for this turn only.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const extraTools: any[] = [...workspaceExtraTools];
+      try {
+        const mcpTools = await buildMcpLangchainTools({
+          emitter: stream,
+          interactiveSession: true,
+          messageId: message.messageId,
+        });
+        extraTools.push(...mcpTools);
+      } catch (e) {
+        console.warn('[mcp] Failed to build MCP tools for this turn:', e);
+      }
+      const workspaceTools = extraTools.length > 0 ? extraTools : undefined;
+
+      if (panelConfig) {
+        // Panel mode: run executors to completion, merge their sources, then
+        // fire the chat model as an ordinary agent run augmented with the
+        // executors' answers + merged citation set, synthesizing the final
+        // answer. Fired in an async IIFE (not awaited) so the HTTP response can
+        // subscribe immediately.
+        (async () => {
+          try {
+            // Resolve all executor models in parallel. `isolate` gives each its
+            // own model instance so concurrent executors (and the Phase-2 chat
+            // model) can't clobber each other's context window on a shared,
+            // catalog-cached singleton.
+            const resolved = await Promise.all(
+              panelConfig.executors.map(async (ref) => ({
+                ref,
+                llm: await resolveModelRef(ref, { isolate: true }),
+              })),
+            );
+            const executors: ResolvedExecutor[] = resolved.filter(
+              (e): e is ResolvedExecutor => e.llm !== null,
+            );
+            if (executors.length < 2) {
+              throw new Error(
+                'Fewer than 2 panel executor models could be resolved.',
+              );
+            }
+
+            const coordinator = new PanelCoordinator({
+              executors,
+              systemLlm: systemLlm!,
+              embeddings: embedding,
+              parentEmitter: stream,
+              signal: abortController.signal,
+              messageId: message.messageId,
+              retrievalSignal: retrievalController.signal,
+              userLocation: body.userLocation,
+              userProfile: body.userProfile,
+              memorySection,
+              personaInstructions: personaInstructionsContent,
+              methodologyInstructions,
+            });
+
+            const { executorResults, mergedSources, totalUsage } =
+              await coordinator.run(
+                message.content,
+                history,
+                body.files,
+                body.focusMode,
+                body.messageImageIds,
+              );
+
+            // Seed the run's token totals with the executors' work, keeping the
+            // chat/system split intact: their chat-model generation counts as
+            // chat tokens, their tool/internal chains as system tokens.
+            handler.addInitialSystemUsage(totalUsage.usageSystem);
+            handler.addInitialChatUsage(totalUsage.usageChat);
+
+            // Inject the synthesis context as a system turn ahead of the query.
+            const synthesisContext = buildOrchestratorSynthesisContext({
+              userPrompt: message.content,
+              executorResults,
+              mergedSources,
+            });
+            const orchestratorHistory = [
+              ...history,
+              new SystemMessage(synthesisContext),
+            ];
+
+            await handler.searchAndAnswer(
+              message.content,
+              orchestratorHistory,
+              body.files,
+              body.focusMode,
+              undefined,
+              undefined,
+              body.messageImageIds,
+              workspaceTools,
+              mergedSources,
+            );
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error('[panel] coordination failed:', err);
+            stream.emit('error', JSON.stringify({ data: msg }));
+          }
+        })();
+      } else {
+        // Fire agent (not awaited — runs independently until end/error)
+        handler.searchAndAnswer(
+          message.content,
+          history,
+          body.files,
+          body.focusMode,
+          undefined,
+          undefined,
+          body.messageImageIds,
+          workspaceTools,
+        );
+      }
+
+      // Post-response automatic memory extraction (fire-and-forget)
+      // If a workspace is active, only run if autoMemoryEnabled is explicitly ON (=1).
+      const autoMemoryAllowed =
+        body.memoryAutoDetection &&
+        (!resolvedWorkspace || resolvedWorkspace.autoMemoryEnabled === 1);
+      if (autoMemoryAllowed && systemLlm) {
+        const capturedChatId = message.chatId;
+        const capturedWorkspaceId = resolvedWorkspaceId;
+        stream.on('end', () => {
+          // Re-query the chat to get the authoritative workspaceId — handleHistorySave
+          // runs fire-and-forget, so by stream end the row should exist.
+          db.query.chats
+            .findFirst({ where: eq(chats.id, capturedChatId) })
+            .then((chat) => {
+              const wsId = chat?.workspaceId ?? capturedWorkspaceId;
+              return processExtraction(
+                message.content,
+                '', // assistant response text is captured in runHost
+                systemLlm!,
+                embedding,
+                capturedChatId,
+                wsId,
+              );
+            })
+            .then((result) => {
+              if (result.saved > 0 || result.updated > 0) {
+                pushEvent(run, {
+                  type: 'memory_updated',
+                  data: {
+                    saved: result.saved,
+                    updated: result.updated,
+                    memoryIds: result.memories.map((m) => m.id),
+                  },
+                });
+              }
+              if (result.blocked > 0) {
+                console.log(
+                  `Memory extraction: ${result.blocked} blocked (sensitive content)`,
+                );
+              }
+            })
+            .catch((err) => {
+              console.warn('Post-response memory extraction failed:', err);
+            });
+        });
       }
     }
 
-    // Pass the abort signal to the search handler
-    // Not awaited since the handler will manage its own lifecycle and emit events as data is processed
-    handler.searchAndAnswer(
-      message.content,
-      effectiveHistory,
-      body.files,
-      body.focusMode,
-      undefined,
-      undefined,
-      body.messageImageIds,
-      workspaceExtraTools.length > 0 ? workspaceExtraTools : undefined,
-    );
-
-    handleEmitterEvents(
-      stream,
-      writer,
-      encoder,
-      aiMessageId,
-      message.chatId,
-      startTime,
-      message.messageId,
-      abortController,
-      body.userLocation ? body.userLocation.length > 0 : false,
-      body.userProfile ? body.userProfile.length > 0 : false,
-      memoriesUsed,
-    );
-
-    // Post-response automatic memory extraction (fire-and-forget)
-    // If a workspace is active, only run if autoMemoryEnabled is explicitly ON (=1).
-    const autoMemoryAllowed =
-      body.memoryAutoDetection &&
-      (!resolvedWorkspace || resolvedWorkspace.autoMemoryEnabled === 1);
-    if (autoMemoryAllowed && systemLlm) {
-      const capturedChatId = message.chatId;
-      const capturedWorkspaceId = resolvedWorkspaceId;
-      stream.on('end', () => {
-        // Re-query the chat to get the authoritative workspaceId — handleHistorySave
-        // runs fire-and-forget, so by stream end the row should exist.
-        db.query.chats
-          .findFirst({ where: eq(chats.id, capturedChatId) })
-          .then((chat) => {
-            const wsId = chat?.workspaceId ?? capturedWorkspaceId;
-            return processExtraction(
-              message.content,
-              '', // assistant response text is captured in handleEmitterEvents
-              systemLlm!,
-              embedding,
-              capturedChatId,
-              wsId,
-            );
-          })
-          .then((result) => {
-            if (result.saved > 0 || result.updated > 0) {
-              // Emit memory_updated event if the writer is hopefully still accessible
-              try {
-                const memoryEvent =
-                  JSON.stringify({
-                    type: 'memory_updated',
-                    data: {
-                      saved: result.saved,
-                      updated: result.updated,
-                      memoryIds: result.memories.map((m) => m.id),
-                    },
-                  }) + '\n';
-                writer.write(encoder.encode(memoryEvent)).catch(() => {});
-              } catch {
-                // Writer already closed, log the result
-                console.log(
-                  `Memory extraction: ${result.saved} saved, ${result.updated} updated`,
-                );
-              }
-            }
-            if (result.blocked > 0) {
-              console.log(
-                `Memory extraction: ${result.blocked} blocked (sensitive content)`,
-              );
-            }
-          })
-          .catch((err) => {
-            console.warn('Post-response memory extraction failed:', err);
-          });
-      });
-    }
-
-    return new Response(responseStream.readable, {
-      headers: {
-        'Content-Type': 'text/event-stream',
-        Connection: 'keep-alive',
-        'Cache-Control': 'no-cache, no-transform',
-      },
+    // Subscribe to the run's event stream and pipe to the HTTP response
+    const subStream = subscribe(run, 0, req.signal);
+    return new Response(subStream.pipeThrough(new TextEncoderStream()), {
+      headers: SSE_HEADERS,
     });
   } catch (err) {
     console.error('An error occurred while processing chat request:', err);

@@ -4,6 +4,7 @@ import { RunnableConfig } from '@langchain/core/runnables';
 import { Document } from '@langchain/core/documents';
 import { getWebContent } from '@/lib/utils/documents';
 import { removeThinkingBlocks } from '@/lib/utils/contentUtils';
+import { persistFromToolConfig } from '@/lib/utils/persistToolContext';
 import { Command, getCurrentTaskInput } from '@langchain/langgraph';
 import { SimplifiedAgentStateType } from '@/lib/state/chatAgentState';
 import { ToolMessage } from '@langchain/core/messages';
@@ -227,6 +228,19 @@ Provide a comprehensive summary of the above web page content, focusing on infor
             });
 
             documents.push(document);
+
+            await persistFromToolConfig({
+              config,
+              kind: 'url_fetch',
+              body: `[url_fetch ${url}]\nTitle: ${
+                webContent.metadata.title || ''
+              }\n\n${finalContent}`,
+              metadataExtras: {
+                url,
+                fetchedAt: new Date().toISOString(),
+                processingType,
+              },
+            });
 
             console.log(
               `URLFetchTool: Successfully processed content from ${url} (${finalContent.length} characters, ${processingType})`,

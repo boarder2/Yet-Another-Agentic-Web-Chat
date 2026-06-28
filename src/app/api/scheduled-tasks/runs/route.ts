@@ -26,6 +26,7 @@ export async function GET(req: NextRequest) {
       focusMode: chats.focusMode,
       scheduledTaskId: chats.scheduledTaskId,
       scheduledRunViewed: chats.scheduledRunViewed,
+      activeRunMessageId: chats.activeRunMessageId,
       taskName: scheduledTasks.name,
       lastRunStatus: scheduledTasks.lastRunStatus,
     })

@@ -6,6 +6,7 @@ import { getImageSearchProvider } from '@/lib/search/providers';
 import { Command, getCurrentTaskInput } from '@langchain/langgraph';
 import { SimplifiedAgentStateType } from '@/lib/state/chatAgentState';
 import { ToolMessage } from '@langchain/core/messages';
+import { persistFromToolConfig } from '@/lib/utils/persistToolContext';
 
 const ImageSearchToolSchema = z.object({
   query: z.string(),
@@ -92,6 +93,15 @@ export const imageSearchTool = tool(
             },
           }),
       );
+
+      await persistFromToolConfig({
+        config,
+        kind: 'image_search',
+        body: `[image_search query="${query}" provider=${provider.id}]\n${images
+          .map((img) => `${img.title || 'Image'}: ${img.url} (${img.img_src})`)
+          .join('\n')}`,
+        metadataExtras: { query, engine: provider.id, type: 'image' },
+      });
 
       return new Command({
         update: {

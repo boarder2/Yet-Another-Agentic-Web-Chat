@@ -4,6 +4,7 @@ import SettingsSection from '../components/SettingsSection';
 import InputComponent from '../components/InputComponent';
 import Select from '../components/Select';
 import { SettingsType } from '../types';
+import { useLocalStorageString } from '@/lib/hooks/useLocalStorage';
 
 const PROVIDER_OPTIONS = [
   { value: 'searxng', label: 'SearXNG' },
@@ -149,11 +150,22 @@ export default function SearchProvidersSection({
     value: string | string[] | number | boolean,
   ) => void;
 }) {
-  const provider = config.searchProvider || 'searxng';
-  const privateProvider = config.searchPrivateProvider || '';
-  const fallbackProvider = config.searchFallbackProvider || 'searxng';
-  const language = config.searchLanguage || 'en';
-  const region = config.searchRegion ?? 'US';
+  // Provider/locale preferences are DB-backed (app_settings, synced from
+  // localStorage). The provider credentials below stay in config.toml.
+  const [provider, setProvider] = useLocalStorageString(
+    'searchProvider',
+    'searxng',
+  );
+  const [privateProvider, setPrivateProvider] = useLocalStorageString(
+    'searchPrivateProvider',
+    '',
+  );
+  const [fallbackProvider, setFallbackProvider] = useLocalStorageString(
+    'searchFallbackProvider',
+    'searxng',
+  );
+  const [language, setLanguage] = useLocalStorageString('searchLanguage', 'en');
+  const [region, setRegion] = useLocalStorageString('searchRegion', 'US');
 
   return (
     <SettingsSection title="Search Providers">
@@ -171,13 +183,7 @@ export default function SearchProvidersSection({
           <Select
             value={provider}
             options={PROVIDER_OPTIONS}
-            onChange={(e) => {
-              setConfig((prev) => ({
-                ...prev!,
-                searchProvider: e.target.value,
-              }));
-              saveConfig('searchProvider', e.target.value);
-            }}
+            onChange={(e) => setProvider(e.target.value)}
           />
         </div>
 
@@ -189,13 +195,7 @@ export default function SearchProvidersSection({
               { value: '', label: 'Same as regular provider' },
               ...PROVIDER_OPTIONS,
             ]}
-            onChange={(e) => {
-              setConfig((prev) => ({
-                ...prev!,
-                searchPrivateProvider: e.target.value,
-              }));
-              saveConfig('searchPrivateProvider', e.target.value);
-            }}
+            onChange={(e) => setPrivateProvider(e.target.value)}
           />
         </div>
 
@@ -204,13 +204,7 @@ export default function SearchProvidersSection({
           <Select
             value={fallbackProvider}
             options={PROVIDER_OPTIONS}
-            onChange={(e) => {
-              setConfig((prev) => ({
-                ...prev!,
-                searchFallbackProvider: e.target.value,
-              }));
-              saveConfig('searchFallbackProvider', e.target.value);
-            }}
+            onChange={(e) => setFallbackProvider(e.target.value)}
           />
           <p className="text-xs text-fg/60">
             Used for any capability the chosen primary provider doesn&apos;t
@@ -223,13 +217,7 @@ export default function SearchProvidersSection({
           <Select
             value={language}
             options={LANGUAGE_OPTIONS}
-            onChange={(e) => {
-              setConfig((prev) => ({
-                ...prev!,
-                searchLanguage: e.target.value,
-              }));
-              saveConfig('searchLanguage', e.target.value);
-            }}
+            onChange={(e) => setLanguage(e.target.value)}
           />
           <p className="text-xs text-fg/60">
             Sent to providers as the preferred result language.
@@ -241,13 +229,7 @@ export default function SearchProvidersSection({
           <Select
             value={region}
             options={[{ value: '', label: 'No region' }, ...REGION_OPTIONS]}
-            onChange={(e) => {
-              setConfig((prev) => ({
-                ...prev!,
-                searchRegion: e.target.value,
-              }));
-              saveConfig('searchRegion', e.target.value);
-            }}
+            onChange={(e) => setRegion(e.target.value)}
           />
           <p className="text-xs text-fg/60">
             ISO 3166-1 alpha-2 country code passed to providers (e.g. country

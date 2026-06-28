@@ -30,10 +30,6 @@ const AVAILABLE_TOOLS = [
     description: 'Analyze and describe image content',
   },
   {
-    name: 'youtube_transcript',
-    description: 'Extract transcripts from YouTube videos',
-  },
-  {
     name: 'pdf_loader',
     description: 'Load and extract content from PDF files',
   },
@@ -126,6 +122,7 @@ export default function ResearchMethodologiesSection({
               options={BUILTIN_TEMPLATES}
             />
             <button
+              type="button"
               onClick={handleCopyTemplate}
               className={`px-3 py-2 text-sm rounded-control border border-surface-2 hover:bg-surface-2 flex items-center gap-1.5 ${copiedTemplate ? 'bg-success-soft text-success border-success' : ''}`}
               title="Copy selected template"
@@ -144,6 +141,7 @@ export default function ResearchMethodologiesSection({
         {/* Tool Reference Panel */}
         <div className="border border-surface-2 rounded-surface bg-surface">
           <button
+            type="button"
             onClick={() => setToolRefOpen(!toolRefOpen)}
             className="flex items-center gap-2 w-full p-3 text-sm text-fg/70 hover:text-fg/90"
           >
@@ -207,6 +205,7 @@ export default function ResearchMethodologiesSection({
                   />
                   <div className="flex space-x-2 justify-end">
                     <button
+                      type="button"
                       onClick={() => setEditingMethodology(null)}
                       className="px-3 py-2 text-sm rounded-control bg-surface hover:bg-surface-2 flex items-center gap-1.5"
                     >
@@ -214,6 +213,7 @@ export default function ResearchMethodologiesSection({
                       Cancel
                     </button>
                     <button
+                      type="button"
                       onClick={onAddOrUpdate}
                       className="px-3 py-2 text-sm rounded-control bg-accent flex items-center gap-1.5"
                     >
@@ -240,6 +240,7 @@ export default function ResearchMethodologiesSection({
                   </div>
                   <div className="flex space-x-1 flex-shrink-0 ml-2">
                     <button
+                      type="button"
                       onClick={() => setEditingMethodology({ ...methodology })}
                       title="Edit"
                       className="p-1.5 rounded-control hover:bg-surface-2"
@@ -247,6 +248,7 @@ export default function ResearchMethodologiesSection({
                       <Edit3 size={18} />
                     </button>
                     <button
+                      type="button"
                       onClick={() => onDelete(methodology.id)}
                       title="Delete"
                       className="p-1.5 rounded-control hover:bg-surface-2 text-danger hover:text-danger"
@@ -279,6 +281,7 @@ export default function ResearchMethodologiesSection({
             />
             <div className="flex space-x-2 justify-end">
               <button
+                type="button"
                 onClick={() => {
                   setIsAddingNewMethodology(false);
                   setNewMethodologyName('');
@@ -290,6 +293,7 @@ export default function ResearchMethodologiesSection({
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={onAddOrUpdate}
                 className="px-3 py-2 text-sm rounded-control bg-accent flex items-center gap-1.5"
               >
@@ -301,6 +305,7 @@ export default function ResearchMethodologiesSection({
         )}
         {!isAddingNewMethodology && (
           <button
+            type="button"
             onClick={() => setIsAddingNewMethodology(true)}
             className="self-start px-3 py-2 text-sm rounded-control border border-surface-2 hover:bg-surface-2 flex items-center gap-1.5"
           >

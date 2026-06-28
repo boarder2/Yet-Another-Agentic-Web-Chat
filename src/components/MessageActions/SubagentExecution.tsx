@@ -140,6 +140,7 @@ export const SubagentExecution: React.FC<SubagentExecutionProps> = ({
     <div className="my-3 border border-surface-2 rounded-surface bg-surface overflow-hidden">
       {/* Main header - always visible */}
       <button
+        type="button"
         onClick={() => setExpanded(!expanded)}
         className="w-full px-4 py-3 flex items-center gap-3 hover:bg-surface-2/50 transition-colors"
       >
@@ -187,6 +188,7 @@ export const SubagentExecution: React.FC<SubagentExecutionProps> = ({
           {responseContent && responseContent.trim() && (
             <div className="space-y-2">
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   setResponseExpanded(!responseExpanded);

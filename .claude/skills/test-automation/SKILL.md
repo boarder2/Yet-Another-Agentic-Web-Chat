@@ -9,7 +9,7 @@ No formal test framework. Verify via LSP diagnostics, `curl`, and `playwright-cl
 
 ## Prerequisites
 
-1. `yarn dev`
+1. `npm run dev`
 2. Wait until `curl -s http://localhost:3000/api/config` returns JSON.
 3. Configure models via the Settings page or localStorage before testing LLM-dependent features.
 

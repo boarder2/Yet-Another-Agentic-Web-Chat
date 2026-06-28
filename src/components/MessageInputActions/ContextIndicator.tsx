@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
   Popover,
   PopoverButton,
@@ -17,36 +17,26 @@ interface ContextIndicatorProps {
   estimatedUsage: number;
   messageCount: number;
   onCompact: (instructions?: string) => void;
-  onChatContextSizeChange: (size: number) => void;
   compacting?: boolean;
 }
 
-const PRESET_SIZES = [32768, 65536, 131072, 262144];
-const MIN_MESSAGES_FOR_COMPACTION = 9; // server requires > KEEP_LAST_N (8)
+const MIN_MESSAGES_FOR_COMPACTION = 2; // one user message + one assistant reply
 
 export default function ContextIndicator({
   chatModelContextWindow,
   estimatedUsage,
   messageCount,
   onCompact,
-  onChatContextSizeChange,
   compacting,
 }: ContextIndicatorProps) {
-  const [chatCustomOpen, setChatCustomOpen] = useState(false);
-  const [chatCustomValue, setChatCustomValue] = useState('');
-  const [localContextWindow, setLocalContextWindow] = useState(
-    chatModelContextWindow,
-  );
   const [compactInstructions, setCompactInstructions] = useState('');
 
-  // Sync from prop when it changes externally (e.g. settings page update)
-  useEffect(() => {
-    setLocalContextWindow(chatModelContextWindow);
-  }, [chatModelContextWindow]);
-
   const pct =
-    localContextWindow > 0
-      ? Math.min(100, Math.round((estimatedUsage / localContextWindow) * 100))
+    chatModelContextWindow > 0
+      ? Math.min(
+          100,
+          Math.round((estimatedUsage / chatModelContextWindow) * 100),
+        )
       : 0;
 
   // Color coding
@@ -64,7 +54,7 @@ export default function ContextIndicator({
   return (
     <Popover className="relative">
       <PopoverButton
-        className="p-1.5 rounded-control hover:bg-surface-2 transition duration-150"
+        className="p-1 rounded-control hover:bg-surface-2 transition duration-150"
         title={`Context usage: ${pct}%`}
       >
         <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
@@ -157,82 +147,10 @@ export default function ContextIndicator({
                 </span>
                 <span className="text-fg font-semibold tabular-nums">
                   {formatTokens(
-                    Math.max(0, localContextWindow - estimatedUsage),
+                    Math.max(0, chatModelContextWindow - estimatedUsage),
                   )}
                 </span>
               </div>
-            </div>
-
-            <hr className="border-surface-2" />
-
-            {/* Chat context size */}
-            <div>
-              <p className="text-xs font-semibold mb-1.5">Context Size</p>
-              <div className="flex flex-wrap gap-1">
-                {PRESET_SIZES.map((size) => (
-                  <button
-                    key={size}
-                    type="button"
-                    className={cn(
-                      'px-2 py-0.5 text-xs rounded-control border transition-colors duration-150',
-                      localContextWindow === size && !chatCustomOpen
-                        ? 'border-accent bg-accent/20 text-accent'
-                        : 'border-surface-2 hover:bg-surface-2',
-                    )}
-                    onClick={() => {
-                      setChatCustomOpen(false);
-                      setChatCustomValue('');
-                      setLocalContextWindow(size);
-                      onChatContextSizeChange(size);
-                    }}
-                  >
-                    {formatTokens(size)}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  className={cn(
-                    'px-2 py-0.5 text-xs rounded-control border transition-colors duration-150',
-                    chatCustomOpen
-                      ? 'border-accent bg-accent/20 text-accent'
-                      : 'border-surface-2 hover:bg-surface-2',
-                  )}
-                  onClick={() => {
-                    setChatCustomOpen(true);
-                    setChatCustomValue(String(localContextWindow));
-                  }}
-                >
-                  Custom
-                </button>
-              </div>
-              {chatCustomOpen && (
-                <div className="flex items-center gap-1.5 mt-1.5">
-                  <input
-                    type="number"
-                    min={512}
-                    value={chatCustomValue}
-                    placeholder={String(localContextWindow)}
-                    onChange={(e) => setChatCustomValue(e.target.value)}
-                    className="w-24 px-2 py-0.5 text-xs rounded-control border border-surface-2 bg-bg"
-                  />
-                  <button
-                    type="button"
-                    className="px-2 py-0.5 text-xs rounded-control bg-accent text-accent-fg hover:bg-accent-700 transition-colors duration-150"
-                    onClick={() => {
-                      const v = Math.max(
-                        512,
-                        parseInt(chatCustomValue) || localContextWindow,
-                      );
-                      setLocalContextWindow(v);
-                      onChatContextSizeChange(v);
-                      setChatCustomOpen(false);
-                      setChatCustomValue('');
-                    }}
-                  >
-                    Set
-                  </button>
-                </div>
-              )}
             </div>
 
             <hr className="border-surface-2" />
@@ -243,6 +161,7 @@ export default function ContextIndicator({
                 Compaction Instructions
               </p>
               <textarea
+                aria-label="Compaction instructions"
                 value={compactInstructions}
                 onChange={(e) => setCompactInstructions(e.target.value)}
                 placeholder="Optional: specify what the summary should capture (key decisions, preferences, code patterns, etc.)"

@@ -54,6 +54,7 @@ export default function WorkspaceModal({
         <div className="flex items-center justify-between px-5 py-3 border-b border-surface-2 shrink-0">
           <div className="text-sm font-medium truncate">{title}</div>
           <button
+            type="button"
             onClick={onClose}
             className="p-1 rounded-control hover:bg-surface-2 transition text-fg/60"
             aria-label="Close"

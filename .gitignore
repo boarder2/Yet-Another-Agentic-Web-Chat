@@ -1,7 +1,6 @@
 # Node.js
 node_modules/
-npm-debug.log
-yarn-error.log
+npm-debug.log*
 
 # Build output
 .next/
@@ -49,7 +48,6 @@ docs/superpowers/
 
 certificates
 storage/
-package-lock.json
 tsconfig.tsbuildinfo
 next-env.d.ts
 

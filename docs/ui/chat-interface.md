@@ -98,7 +98,7 @@ The attach button supports two categories of files:
 ### Document Attachments
 
 - **Accepted formats**: `.pdf`, `.docx`, `.txt`
-- Upload triggers a `POST /api/uploads` with embedding model configuration from localStorage.
+- Upload triggers a `POST /api/uploads`; the embedding model is resolved server-side from the DB (system setting), not sent by the client.
 - Attached files appear as a popover list with an "Add" button, "Clear" button, and individual file entries showing filenames.
 
 ### Image Attachments

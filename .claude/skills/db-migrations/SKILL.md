@@ -5,7 +5,7 @@ description: Use when changing the database — adding or altering a table/colum
 
 # DB Schema & Migrations
 
-SQLite + Drizzle ORM. The DB file is `db.sqlite` at the repo root (a working file is required for `yarn build`).
+SQLite + Drizzle ORM. The DB file is `db.sqlite` at the repo root (a working file is required for `npm run build`).
 
 ## Golden rules
 
@@ -15,8 +15,8 @@ SQLite + Drizzle ORM. The DB file is `db.sqlite` at the repo root (a working fil
 ## Workflow
 
 1. Edit `src/lib/db/schema.ts` (add/change a table or column using Drizzle's `sqliteTable` builders).
-2. Run `yarn db:generate` (`drizzle-kit generate`) → emits a new numbered migration in `drizzle/` (e.g. `0010_*.sql`). Commit the generated file alongside the schema change.
-3. Apply with `yarn db:push` (`drizzle-kit migrate && drizzle-kit push`). `yarn build` runs `db:push` first, so a build also applies pending migrations. `src/lib/db/migrate.ts` runs the migrator against the `drizzle/` folder at startup.
+2. Run `npm run db:generate` (`drizzle-kit generate`) → emits a new numbered migration in `drizzle/` (e.g. `0010_*.sql`). Commit the generated file alongside the schema change.
+3. Apply with `npm run db:push` (`drizzle-kit migrate && drizzle-kit push`). `npm run build` runs `db:push` first, so a build also applies pending migrations. `src/lib/db/migrate.ts` runs the migrator against the `drizzle/` folder at startup.
 
 ## Where things live
 
@@ -28,6 +28,6 @@ SQLite + Drizzle ORM. The DB file is `db.sqlite` at the repo root (a working fil
 ## Notes
 
 - New settings usually do **not** need a schema change — they go in the `app_settings` key/value table via the allowlist (see the `settings-persistence` skill).
-- Client-side server-state reads go through TanStack Query hooks in `src/lib/hooks/api/` (see AGENTS.md "Data Fetching"), not direct DB access.
+- Client-side server-state reads go through TanStack Query hooks in `src/lib/hooks/api/` (see CLAUDE.md "Data Fetching"), not direct DB access.
 
 Related: `settings-persistence`, `api-endpoints`.

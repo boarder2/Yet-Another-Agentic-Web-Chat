@@ -42,7 +42,7 @@ if [ -n "$PORT" ]; then
   echo "[smoke] dev server already running on ${PORT}, reusing it"
 else
   echo "[smoke] starting dev server -> ${LOG}"
-  yarn dev > "$LOG" 2>&1 &
+  npm run dev > "$LOG" 2>&1 &
   started_dev=$!
   echo "[smoke] waiting for a 'Local: http://localhost:PORT' line ..."
   for i in $(seq 1 90); do

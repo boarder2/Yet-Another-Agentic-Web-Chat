@@ -22,7 +22,9 @@ description: Use when adding, modifying, or debugging API endpoints, request/res
   files: string[];       // Attached file references
   chatModel: { provider: string; name: string; contextWindowSize?: number };
   systemModel?: { provider: string; name: string; contextWindowSize?: number };
-  embeddingModel: { provider: string; name: string };
+  // Embedding model is NOT sent: it's a system-level setting resolved
+  // server-side from the DB (app_settings) so indexing and querying always
+  // agree. See resolveChatAndEmbedding / getEmbeddingModelSelection.
   selectedSystemPromptIds: string[];  // Persona prompt IDs (legacy name)
   selectedMethodologyId?: string;
   messageImageIds?: string[];
@@ -176,16 +178,16 @@ Note: The old `{"type":"init"}`, `{"type":"modelStats"}`, and `{"type":"end"}` e
 
 ## Scheduled Tasks
 
-| Endpoint                                  | Method         | Purpose                                                                                                                                                                                                                            |
-| ----------------------------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/api/scheduled-tasks`                    | GET            | List scheduled tasks (with `running: bool` field)                                                                                                                                                                                  |
-| `/api/scheduled-tasks`                    | POST           | Create task. Required: `name, prompt, cronExpression, chatModel, embeddingModel`. Optional: `focusMode, systemModel, sourceUrls, selectedSystemPromptIds, selectedMethodologyId, timezone, enabled, retentionMode, retentionValue` |
-| `/api/scheduled-tasks/[id]`               | GET/PUT/DELETE | Get, update, or delete a scheduled task                                                                                                                                                                                            |
-| `/api/scheduled-tasks/[id]/run`           | POST           | Manually trigger a task run                                                                                                                                                                                                        |
-| `/api/scheduled-tasks/[id]/runs`          | GET            | List run history for a task                                                                                                                                                                                                        |
-| `/api/scheduled-tasks/runs`               | GET            | List all scheduled task runs                                                                                                                                                                                                       |
-| `/api/scheduled-tasks/runs/[chatId]/view` | POST           | Mark a scheduled task run chat as viewed                                                                                                                                                                                           |
-| `/api/scheduled-tasks/runs/unread`        | GET            | Count unread scheduled task runs                                                                                                                                                                                                   |
+| Endpoint                                  | Method         | Purpose                                                                                                                                                                                                                                                           |
+| ----------------------------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/api/scheduled-tasks`                    | GET            | List scheduled tasks (with `running: bool` field)                                                                                                                                                                                                                 |
+| `/api/scheduled-tasks`                    | POST           | Create task. Required: `name, prompt, cronExpression, chatModel`. Optional: `focusMode, systemModel, sourceUrls, selectedSystemPromptIds, selectedMethodologyId, timezone, enabled, retentionMode, retentionValue` (embedding model is system-level, from the DB) |
+| `/api/scheduled-tasks/[id]`               | GET/PUT/DELETE | Get, update, or delete a scheduled task                                                                                                                                                                                                                           |
+| `/api/scheduled-tasks/[id]/run`           | POST           | Manually trigger a task run                                                                                                                                                                                                                                       |
+| `/api/scheduled-tasks/[id]/runs`          | GET            | List run history for a task                                                                                                                                                                                                                                       |
+| `/api/scheduled-tasks/runs`               | GET            | List all scheduled task runs                                                                                                                                                                                                                                      |
+| `/api/scheduled-tasks/runs/[chatId]/view` | POST           | Mark a scheduled task run chat as viewed                                                                                                                                                                                                                          |
+| `/api/scheduled-tasks/runs/unread`        | GET            | Count unread scheduled task runs                                                                                                                                                                                                                                  |
 
 ## Dashboard
 

@@ -1,4 +1,4 @@
-import { HuggingFaceTransformersEmbeddings } from '@langchain/community/embeddings/huggingface_transformers';
+import { HuggingFaceTransformersEmbeddings } from '@/lib/huggingfaceTransformer';
 
 export const PROVIDER_INFO = {
   key: 'transformers',

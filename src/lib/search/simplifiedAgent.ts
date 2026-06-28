@@ -707,7 +707,7 @@ export class SimplifiedAgent {
         humanMsg,
       ];
 
-      // Run-ID attribution sets (see AGENTS.md — Run-ID Attribution section)
+      // Run-ID attribution sets (see CLAUDE.md — Run-ID Attribution section)
       // LangChain's AsyncLocalStorage propagates the parent's callback context into child
       // tool executions, so child SimplifiedAgent LLM events also appear in this stream.
       // These sets let us distinguish the parent agent's own events from nested child events.

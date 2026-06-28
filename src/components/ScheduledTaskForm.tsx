@@ -23,7 +23,6 @@ interface TaskFormData {
   sourceUrls: string[];
   chatModel: { provider: string; name: string } | null;
   systemModel: { provider: string; name: string } | null;
-  embeddingModel: { provider: string; name: string } | null;
   selectedSystemPromptIds: string[];
   selectedMethodologyId: string | null;
   cronExpression: string;
@@ -60,7 +59,6 @@ export default function TaskForm({
       sourceUrls: [],
       chatModel: null,
       systemModel: null,
-      embeddingModel: null,
       selectedSystemPromptIds: [],
       selectedMethodologyId: null,
       cronExpression: '0 8 * * *',
@@ -203,12 +201,6 @@ export default function TaskForm({
       return;
     }
 
-    if (!form.embeddingModel) {
-      setError('Please select an embedding model');
-      setSaving(false);
-      return;
-    }
-
     const payload = {
       ...form,
       chatModel: form.chatModel
@@ -216,12 +208,6 @@ export default function TaskForm({
         : undefined,
       systemModel: form.systemModel
         ? { provider: form.systemModel.provider, name: form.systemModel.name }
-        : undefined,
-      embeddingModel: form.embeddingModel
-        ? {
-            provider: form.embeddingModel.provider,
-            name: form.embeddingModel.name,
-          }
         : undefined,
       enabled: form.enabled ? 1 : 0,
       timezone: form.timezone || undefined,
@@ -564,17 +550,6 @@ export default function TaskForm({
           />
         </div>
 
-        {/* Embedding Model */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-fg/70">
-            Embedding Model
-          </label>
-          <EmbeddingModelSelector
-            selectedModel={form.embeddingModel}
-            setSelectedModel={(m) => updateField('embeddingModel', m)}
-          />
-        </div>
-
         {/* Personas */}
         {personas.length > 0 && (
           <div className="flex flex-col gap-1.5">
@@ -714,75 +689,5 @@ export default function TaskForm({
         </div>
       </form>
     </div>
-  );
-}
-
-function EmbeddingModelSelector({
-  selectedModel,
-  setSelectedModel,
-}: {
-  selectedModel: { provider: string; name: string } | null;
-  setSelectedModel: (m: { provider: string; name: string }) => void;
-}) {
-  const [models, setModels] = useState<
-    { provider: string; name: string; displayName: string }[]
-  >([]);
-
-  useEffect(() => {
-    fetch('/api/models')
-      .then((r) => r.json())
-      .then((data) => {
-        const embeddingModels: {
-          provider: string;
-          name: string;
-          displayName: string;
-        }[] = [];
-        if (data.embeddingModelProviders) {
-          for (const [provider, models] of Object.entries(
-            data.embeddingModelProviders as Record<
-              string,
-              Record<string, { displayName: string }>
-            >,
-          )) {
-            for (const [name, info] of Object.entries(models)) {
-              embeddingModels.push({
-                provider,
-                name,
-                displayName: info.displayName || `${provider}/${name}`,
-              });
-            }
-          }
-        }
-        setModels(embeddingModels);
-        if (!selectedModel && embeddingModels.length > 0) {
-          setSelectedModel({
-            provider: embeddingModels[0].provider,
-            name: embeddingModels[0].name,
-          });
-        }
-      })
-      .catch(() => {});
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  return (
-    <select
-      value={
-        selectedModel ? `${selectedModel.provider}:${selectedModel.name}` : ''
-      }
-      onChange={(e) => {
-        const [provider, name] = e.target.value.split(':');
-        setSelectedModel({ provider, name });
-      }}
-      className="px-3 py-2 rounded-surface bg-surface border border-surface-2 text-fg focus:outline-none focus:ring-2 focus:ring-accent"
-    >
-      {models.map((m) => (
-        <option
-          key={`${m.provider}:${m.name}`}
-          value={`${m.provider}:${m.name}`}
-        >
-          {m.displayName}
-        </option>
-      ))}
-    </select>
   );
 }

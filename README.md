@@ -493,9 +493,9 @@ docker compose up -d
 3. Install dependencies and build:
 
    ```bash
-   yarn install
-   yarn build
-   yarn start
+   npm install
+   npm run build
+   npm start
    ```
 
 See [docs/installation](docs/installation) for additional configuration, updating, and tracing setup.

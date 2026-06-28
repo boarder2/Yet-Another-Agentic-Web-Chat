@@ -10,8 +10,8 @@ import {
   getCustomOpenaiModelName,
 } from '@/lib/config';
 import { UPLOADS_DIR } from '@/lib/dataDir';
-import { PDFLoader } from '@langchain/community/document_loaders/fs/pdf';
-import { DocxLoader } from '@langchain/community/document_loaders/fs/docx';
+import { getEmbeddingModelSelection } from '@/lib/settings/server';
+import { extractText } from '@/lib/workspaces/extractAdapter';
 import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
 import { Document } from '@langchain/core/documents';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
@@ -87,18 +87,9 @@ export async function POST(req: Request) {
     const formData = await req.formData();
 
     const files = formData.getAll('files') as File[];
-    const embedding_model = formData.get('embedding_model');
-    const embedding_model_provider = formData.get('embedding_model_provider');
     const chat_model = formData.get('chat_model');
     const chat_model_provider = formData.get('chat_model_provider');
     const context_window = formData.get('context_window_size');
-
-    if (!embedding_model || !embedding_model_provider) {
-      return NextResponse.json(
-        { message: 'Missing embedding model or provider' },
-        { status: 400 },
-      );
-    }
 
     // Get available providers
     const [chatModelProviders, embeddingModelProviders] = await Promise.all([
@@ -106,14 +97,16 @@ export async function POST(req: Request) {
       getAvailableEmbeddingModelProviders(),
     ]);
 
-    // Setup embedding model
+    // Embedding model is a system-level setting: resolve from the DB (source of
+    // truth) so uploads are indexed with the same model used at query time.
+    const selectedEmbedding = getEmbeddingModelSelection();
     const embeddingProvider =
       embeddingModelProviders[
-        embedding_model_provider as string ?? Object.keys(embeddingModelProviders)[0]
+        selectedEmbedding.provider || Object.keys(embeddingModelProviders)[0]
       ];
     const embeddingModelConfig =
-      embeddingProvider[
-        embedding_model as string ?? Object.keys(embeddingProvider)[0]
+      embeddingProvider?.[
+        selectedEmbedding.name || Object.keys(embeddingProvider || {})[0]
       ];
 
     if (!embeddingModelConfig) {
@@ -179,19 +172,18 @@ export async function POST(req: Request) {
         const buffer = Buffer.from(await file.arrayBuffer());
         fs.writeFileSync(filePath, new Uint8Array(buffer));
 
-        let docs: any[] = [];
-        if (fileExtension === 'pdf') {
-          const loader = new PDFLoader(filePath);
-          docs = await loader.load();
-        } else if (fileExtension === 'docx') {
-          const loader = new DocxLoader(filePath);
-          docs = await loader.load();
-        } else if (fileExtension === 'txt') {
-          const text = fs.readFileSync(filePath, 'utf-8');
-          docs = [
-            new Document({ pageContent: text, metadata: { title: file.name } }),
-          ];
-        }
+        const text =
+          fileExtension === 'txt'
+            ? buffer.toString('utf-8')
+            : ((await extractText(
+                buffer,
+                fileExtension === 'pdf'
+                  ? 'application/pdf'
+                  : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+              )) ?? '');
+        const docs = [
+          new Document({ pageContent: text, metadata: { title: file.name } }),
+        ];
 
         const splitted = await splitter.splitDocuments(docs);
 

@@ -72,18 +72,12 @@ type SystemModel = {
   contextWindowSize?: number;
 };
 
-type EmbeddingModel = {
-  provider: string;
-  name: string;
-};
-
 type Body = {
   message: Message;
   focusMode: string;
   files: Array<string>;
   chatModel: ChatModel;
   systemModel?: SystemModel; // optional; defaults to chatModel
-  embeddingModel: EmbeddingModel;
   selectedSystemPromptIds: string[]; // legacy name; treated as persona prompt IDs
   selectedMethodologyId?: string;
   userLocation?: string;
@@ -237,7 +231,6 @@ export const POST = async (req: Request) => {
       const resolved = await resolveChatAndEmbedding({
         chatModel: body.chatModel,
         systemModel: body.systemModel,
-        embeddingModel: body.embeddingModel,
       });
       chatLlm = resolved.chatLlm;
       systemLlm = resolved.systemLlm;

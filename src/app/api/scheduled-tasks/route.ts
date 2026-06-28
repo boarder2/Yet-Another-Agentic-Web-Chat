@@ -33,17 +33,11 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const body = await req.json();
 
-  if (
-    !body.name ||
-    !body.prompt ||
-    !body.cronExpression ||
-    !body.chatModel ||
-    !body.embeddingModel
-  ) {
+  if (!body.name || !body.prompt || !body.cronExpression || !body.chatModel) {
     return Response.json(
       {
         error:
-          'Missing required fields: name, prompt, cronExpression, chatModel, embeddingModel',
+          'Missing required fields: name, prompt, cronExpression, chatModel',
       },
       { status: 400 },
     );
@@ -62,7 +56,6 @@ export async function POST(req: NextRequest) {
     sourceUrls: body.sourceUrls || [],
     chatModel: body.chatModel,
     systemModel: body.systemModel || null,
-    embeddingModel: body.embeddingModel,
     selectedSystemPromptIds: body.selectedSystemPromptIds || [],
     selectedMethodologyId: body.selectedMethodologyId || null,
     cronExpression: body.cronExpression,

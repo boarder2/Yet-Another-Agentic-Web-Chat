@@ -126,17 +126,11 @@ interface ChatModelProvider {
   provider: string;
 }
 
-interface EmbeddingModelProvider {
-  name: string;
-  provider: string;
-}
-
 const SEND_LOCATION_KEY = 'personalization.sendLocationEnabled';
 const SEND_PROFILE_KEY = 'personalization.sendProfileEnabled';
 
 const checkConfig = async (
   setChatModelProvider: (provider: ChatModelProvider) => void,
-  setEmbeddingModelProvider: (provider: EmbeddingModelProvider) => void,
   setIsConfigReady: (ready: boolean) => void,
   setHasError: (hasError: boolean) => void,
   onOpenApiKeys: () => void,
@@ -144,8 +138,6 @@ const checkConfig = async (
   try {
     let chatModel = localStorage.getItem('chatModel');
     let chatModelProvider = localStorage.getItem('chatModelProvider');
-    let embeddingModel = localStorage.getItem('embeddingModel');
-    let embeddingModelProvider = localStorage.getItem('embeddingModelProvider');
 
     const providers = await fetch(`/api/models`, {
       headers: { 'Content-Type': 'application/json' },
@@ -157,63 +149,38 @@ const checkConfig = async (
       return res.json();
     });
 
-    if (
-      !chatModel ||
-      !chatModelProvider ||
-      !embeddingModel ||
-      !embeddingModelProvider
-    ) {
-      if (!chatModel || !chatModelProvider) {
-        const chatModelProviders = providers.chatModelProviders;
-        const chatModelProvidersKeys = Object.keys(chatModelProviders);
+    if (!chatModel || !chatModelProvider) {
+      const chatModelProviders = providers.chatModelProviders;
+      const chatModelProvidersKeys = Object.keys(chatModelProviders);
 
-        if (!chatModelProviders || chatModelProvidersKeys.length === 0) {
-          return toast.error('No chat models available');
-        }
-
-        chatModelProvider =
-          chatModelProvidersKeys.find(
-            (provider) => Object.keys(chatModelProviders[provider]).length > 0,
-          ) || chatModelProvidersKeys[0];
-
-        if (
-          chatModelProvider === 'custom_openai' &&
-          Object.keys(chatModelProviders[chatModelProvider]).length === 0
-        ) {
-          toast.error(
-            "Looks like you haven't configured any chat model providers. Please configure them in settings or the config file.",
-            {
-              action: { label: 'Open settings', onClick: onOpenApiKeys },
-            },
-          );
-          return setHasError(true);
-        }
-
-        chatModel = Object.keys(chatModelProviders[chatModelProvider])[0];
+      if (!chatModelProviders || chatModelProvidersKeys.length === 0) {
+        return toast.error('No chat models available');
       }
 
-      if (!embeddingModel || !embeddingModelProvider) {
-        const embeddingModelProviders = providers.embeddingModelProviders;
+      chatModelProvider =
+        chatModelProvidersKeys.find(
+          (provider) => Object.keys(chatModelProviders[provider]).length > 0,
+        ) || chatModelProvidersKeys[0];
 
-        if (
-          !embeddingModelProviders ||
-          Object.keys(embeddingModelProviders).length === 0
-        )
-          return toast.error('No embedding models available');
-
-        embeddingModelProvider = Object.keys(embeddingModelProviders)[0];
-        embeddingModel = Object.keys(
-          embeddingModelProviders[embeddingModelProvider],
-        )[0];
+      if (
+        chatModelProvider === 'custom_openai' &&
+        Object.keys(chatModelProviders[chatModelProvider]).length === 0
+      ) {
+        toast.error(
+          "Looks like you haven't configured any chat model providers. Please configure them in settings or the config file.",
+          {
+            action: { label: 'Open settings', onClick: onOpenApiKeys },
+          },
+        );
+        return setHasError(true);
       }
+
+      chatModel = Object.keys(chatModelProviders[chatModelProvider])[0];
 
       localStorage.setItem('chatModel', chatModel!);
       localStorage.setItem('chatModelProvider', chatModelProvider!);
-      localStorage.setItem('embeddingModel', embeddingModel!);
-      localStorage.setItem('embeddingModelProvider', embeddingModelProvider!);
     } else {
       const chatModelProviders = providers.chatModelProviders;
-      const embeddingModelProviders = providers.embeddingModelProviders;
 
       if (
         Object.keys(chatModelProviders).length > 0 &&
@@ -256,34 +223,11 @@ const checkConfig = async (
 
         localStorage.setItem('chatModel', chatModel);
       }
-
-      if (
-        Object.keys(embeddingModelProviders).length > 0 &&
-        !embeddingModelProviders[embeddingModelProvider]
-      ) {
-        embeddingModelProvider = Object.keys(embeddingModelProviders)[0];
-        localStorage.setItem('embeddingModelProvider', embeddingModelProvider);
-      }
-
-      if (
-        embeddingModelProvider &&
-        !embeddingModelProviders[embeddingModelProvider][embeddingModel]
-      ) {
-        embeddingModel = Object.keys(
-          embeddingModelProviders[embeddingModelProvider],
-        )[0];
-        localStorage.setItem('embeddingModel', embeddingModel);
-      }
     }
 
     setChatModelProvider({
       name: chatModel!,
       provider: chatModelProvider!,
-    });
-
-    setEmbeddingModelProvider({
-      name: embeddingModel!,
-      provider: embeddingModelProvider!,
     });
 
     setIsConfigReady(true);
@@ -490,23 +434,16 @@ const ChatWindow = ({
     },
   );
 
-  const [embeddingModelProvider, setEmbeddingModelProvider] =
-    useState<EmbeddingModelProvider>({
-      name: '',
-      provider: '',
-    });
-  // Note: System model is only selectable in Settings; we read from localStorage at send time
+  // Note: embedding and system models are only selectable in Settings (the
+  // embedding model is a system-level setting resolved server-side from the DB);
+  // we read the chat model from localStorage at send time.
 
   const [isConfigReady, setIsConfigReady] = useState(false);
   const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
-    checkConfig(
-      setChatModelProvider,
-      setEmbeddingModelProvider,
-      setIsConfigReady,
-      setHasError,
-      () => openSettings('api-keys'),
+    checkConfig(setChatModelProvider, setIsConfigReady, setHasError, () =>
+      openSettings('api-keys'),
     );
   }, [openSettings]);
 
@@ -3171,10 +3108,6 @@ const ChatWindow = ({
         name: systemModelName,
         provider: systemModelProvider,
         contextWindowSize,
-      },
-      embeddingModel: {
-        name: embeddingModelProvider.name,
-        provider: embeddingModelProvider.provider,
       },
       selectedSystemPromptIds: systemPromptIds || [],
       selectedMethodologyId: selectedMethodologyId || undefined,

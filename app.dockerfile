@@ -7,8 +7,8 @@ RUN apt-get update && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 ENV ONNXRUNTIME_NODE_INSTALL_CUDA=skip
-COPY package.json yarn.lock ./
-RUN yarn install --frozen-lockfile --network-timeout 600000
+COPY package.json package-lock.json ./
+RUN npm ci --fetch-timeout=600000
 ENV NEXT_TELEMETRY_DISABLED=1
 
 COPY tsconfig.json next.config.mjs postcss.config.js drizzle.config.ts tailwind.config.ts eslint.config.mjs ./
@@ -18,11 +18,10 @@ COPY public ./public
 
 RUN mkdir -p /home/yaawc/data
 # Fail the build on lint or type errors so the image build is the single CI gate.
-RUN yarn lint && npx tsc --noEmit
-RUN yarn build
+RUN npm run lint && npx tsc --noEmit
+RUN npm run build
 
-RUN yarn add --dev @vercel/ncc
-RUN yarn ncc build ./src/lib/db/migrate.ts -o migrator
+RUN npx --yes @vercel/ncc build ./src/lib/db/migrate.ts -o migrator
 
 FROM node:24-slim
 
@@ -64,7 +63,7 @@ USER node
 
 # Next.js standalone tracing copies onnxruntime-node's *_binding.node but not the
 # libonnxruntime.so.1 it dlopens at runtime (loaded via path, not require()), so we
-# overlay the full bin/ dir to co-locate the shared lib. A package.json "resolutions"
+# overlay the full bin/ dir to co-locate the shared lib. A package.json "overrides"
 # pin forces a single onnxruntime-node version across both embeddings and kokoro-js's
 # transformers, so there is exactly one bin/ (and one libonnxruntime.so.1 SONAME) —
 # this avoids the same-SONAME collision that broke in-process TTS synthesis.

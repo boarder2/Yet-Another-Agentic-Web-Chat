@@ -3,7 +3,7 @@ name: run-yaawc
 description: Build, run, and drive YAAWC (the Next.js AI search app in this repo). Use when asked to start YAAWC, launch the dev server, build it, smoke-test it, screenshot or inspect the home/dashboard UI, or interact with the running app in a browser.
 ---
 
-YAAWC is a Next.js (App Router) web app: start `yarn dev`, then drive headless Chromium with `playwright-cli`. The harness `.claude/skills/run-yaawc/smoke.sh` wraps the whole loop. Paths are relative to repo root.
+YAAWC is a Next.js (App Router) web app: start `npm run dev`, then drive headless Chromium with `playwright-cli`. The harness `.claude/skills/run-yaawc/smoke.sh` wraps the whole loop. Paths are relative to repo root.
 
 **Observe with `snapshot` (DOM/a11y tree as text — diffable, greppable), not screenshots.** Screenshots are opt-in (`SHOT=1`), only worth it for visual bugs (layout, image-heavy widgets).
 
@@ -11,7 +11,7 @@ YAAWC is a Next.js (App Router) web app: start `yarn dev`, then drive headless C
 
 ## Prerequisites
 
-For a fresh clone: Node ≥ 24, yarn 1.x, `playwright-cli` on PATH (else `npx playwright-cli`), `config.toml` at repo root (if absent, `cp sample.config.toml config.toml` — never overwrite an existing one; secrets/infra only — models are DB-backed in `db.sqlite`), and `yarn install`. macOS has no GNU `timeout`; the harness polls with a `seq`/`sleep` loop.
+For a fresh clone: Node ≥ 24, npm, `playwright-cli` on PATH (else `npx playwright-cli`), `config.toml` at repo root (if absent, `cp sample.config.toml config.toml` — never overwrite an existing one; secrets/infra only — models are DB-backed in `db.sqlite`), and `npm install`. macOS has no GNU `timeout`; the harness polls with a `seq`/`sleep` loop.
 
 ## Run (agent path) — the harness
 
@@ -20,7 +20,7 @@ bash .claude/skills/run-yaawc/smoke.sh          # snapshot-only (default)
 SHOT=1 bash .claude/skills/run-yaawc/smoke.sh   # also save PNGs
 ```
 
-It: reuses or starts `yarn dev` (logs → `/tmp/yaawc-dev.log`, up to 90s for first compile); captures home → `/tmp/yaawc-smoke/home.yaml` and `/settings` → `settings.yaml` (`.png` too with `SHOT=1`); fills the chat input and reads it back to prove React's controlled input took the keystrokes; prints console errors.
+It: reuses or starts `npm run dev` (logs → `/tmp/yaawc-dev.log`, up to 90s for first compile); captures home → `/tmp/yaawc-smoke/home.yaml` and `/settings` → `settings.yaml` (`.png` too with `SHOT=1`); fills the chat input and reads it back to prove React's controlled input took the keystrokes; prints console errors.
 
 **Verify by grepping the YAML, not the exit code.** Home has a textbox `"What would you like to learn today?"`; settings has `heading "Settings"`. Use `SHOT=1` + `Read` the PNG only when the bug is visual.
 
@@ -55,9 +55,9 @@ LLM endpoints (`/api/chat`, `/api/search`) need a chat+system model (DB-backed, 
 ## Run (human path)
 
 ```bash
-yarn dev      # → localhost:3000, hot reload, Ctrl-C to stop (fastest for just viewing)
-yarn build    # db:push (drizzle migrate+push) then next build — needs working db.sqlite
-yarn start    # serve the production build
+npm run dev    # → localhost:3000, hot reload, Ctrl-C to stop (fastest for just viewing)
+npm run build  # db:push (drizzle migrate+push) then next build — needs working db.sqlite
+npm start      # serve the production build
 ```
 
 ## Gotchas

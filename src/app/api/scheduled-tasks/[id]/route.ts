@@ -54,7 +54,6 @@ export async function PATCH(
     'sourceUrls',
     'chatModel',
     'systemModel',
-    'embeddingModel',
     'selectedSystemPromptIds',
     'selectedMethodologyId',
     'cronExpression',

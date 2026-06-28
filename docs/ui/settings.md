@@ -120,7 +120,7 @@ Configuration for the three model roles used by the application:
 Moved out of Model Settings — now lives in **Settings → Memory** ("Memory Processing Model", visible when Memory is enabled).
 
 - **Provider and Model dropdowns**: Picks the server-side model used to extract, deduplicate, classify, and reindex memories (`api/memories/*`).
-- **Persistence**: DB-backed under its own keys `memoryModelProvider` / `memoryModel` (the `app_settings` table, via the settings persistence layer / `localStorage` cache — see [Settings persistence](../../AGENTS.md)). Fully independent of the chat picker's per-chat `systemModelProvider`/`systemModel` keys, so applying a chat model preset never changes it (and vice versa). Read server-side via `getMemoryModelSelection()`, which falls back to the legacy config.toml `SELECTED_MODELS.SYSTEM_MODEL` for installs that predate the split (a one-time migration in the Memory section seeds the new keys from that value on first visit).
+- **Persistence**: DB-backed under its own keys `memoryModelProvider` / `memoryModel` (the `app_settings` table, via the settings persistence layer / `localStorage` cache — see [Settings persistence](../../CLAUDE.md)). Fully independent of the chat picker's per-chat `systemModelProvider`/`systemModel` keys, so applying a chat model preset never changes it (and vice versa). Read server-side via `getMemoryModelSelection()`, which falls back to the legacy config.toml `SELECTED_MODELS.SYSTEM_MODEL` for installs that predate the split (a one-time migration in the Memory section seeds the new keys from that value on first visit).
 
 #### Ollama Context Window
 
@@ -132,8 +132,8 @@ Visible only when the chat model provider is `ollama`.
 
 #### Embedding Model
 
-- **Provider and Model dropdowns**: For selecting the embedding model used during file upload processing.
-- **Persistence**: `embeddingModelProvider`, `embeddingModel` in localStorage.
+- **Provider and Model dropdowns**: Select the system-wide embedding model. Used for all indexing and querying (file upload, file search, memories) — resolved server-side from the DB so they always agree; requests never carry an embedding model.
+- **Persistence**: `embeddingModelProvider`, `embeddingModel` in localStorage (synced to the DB, the source of truth).
 
 ### 7. Model Visibility
 

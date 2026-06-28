@@ -19,7 +19,6 @@ export type ModelRef = {
   name: string;
   contextWindowSize?: number;
 };
-export type EmbeddingRef = { provider: string; name: string };
 
 /**
  * Resolve a single chat model from a `ModelRef` against the live provider
@@ -85,7 +84,6 @@ export async function resolveModelRef(
 export async function resolveChatAndEmbedding(input: {
   chatModel?: ModelRef | null;
   systemModel?: ModelRef | null;
-  embeddingModel?: EmbeddingRef | null;
 }): Promise<{
   chatLlm: BaseChatModel;
   systemLlm: BaseChatModel;
@@ -105,19 +103,15 @@ export async function resolveChatAndEmbedding(input: {
       input.chatModel?.name || Object.keys(chatModelProvider || {})[0]
     ];
 
-  // Embedding model: prefer explicit input, then DB setting, then first available
+  // Embedding model is a system-level setting: always resolve from the DB
+  // (source of truth), never from the request. This keeps indexing, querying,
+  // and the embedding cache on one model so their vectors stay comparable.
   const selectedEmbedding = getEmbeddingModelSelection();
   const embeddingProviderKey =
-    input.embeddingModel?.provider ||
-    selectedEmbedding.provider ||
-    Object.keys(embeddingModelProviders)[0];
+    selectedEmbedding.provider || Object.keys(embeddingModelProviders)[0];
   const embeddingProvider = embeddingModelProviders[embeddingProviderKey];
   const embeddingModelName =
-    input.embeddingModel?.name ||
-    (embeddingProviderKey === selectedEmbedding.provider
-      ? selectedEmbedding.name
-      : undefined) ||
-    Object.keys(embeddingProvider || {})[0];
+    selectedEmbedding.name || Object.keys(embeddingProvider || {})[0];
   const embeddingModelEntry = embeddingProvider?.[embeddingModelName];
 
   let chatLlm: BaseChatModel | undefined;

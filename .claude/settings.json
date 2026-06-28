@@ -27,12 +27,39 @@
         "hooks": [
           {
             "type": "command",
-            "command": "f=$(jq -r '.tool_input.file_path // empty'); case \"$f\" in *AGENTS.md|*CLAUDE.md) printf '%s' '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\",\"additionalContext\":\"Reserve AGENTS.md for architecture/big-picture pointers only — no implementation minutiae (CSS classes, handlers, pixel constants). Keep CLAUDE.md minimal (it just imports AGENTS.md). Match existing terse style.\"}}'; exit 0 ;; esac; exit 0"
+            "command": "f=$(jq -r '.tool_input.file_path // empty'); case \"$f\" in *CLAUDE.md) printf '%s' '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\",\"additionalContext\":\"Reserve CLAUDE.md for architecture/big-picture pointers only — no implementation minutiae (CSS classes, handlers, pixel constants). Match existing terse style.\"}}'; exit 0 ;; esac; exit 0"
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(jq -r '.tool_input.file_path // empty'); case \"$f\" in */drizzle/*.sql|drizzle/*.sql|*/drizzle/meta/*|drizzle/meta/*) printf '%s' '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"drizzle/ holds Drizzle-generated migrations — never hand-edit. Change src/lib/db/schema.ts then run npm run db:generate.\"}}' ;; esac; exit 0"
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(jq -r '.tool_input.file_path // empty'); case \"$f\" in */src/lib/db/schema.ts) printf '%s' '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":\"After editing schema.ts, run npm run db:generate to emit the Drizzle migration (never hand-write files in drizzle/).\"}}' ;; esac; exit 0"
           }
         ]
       }
     ],
     "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(jq -r '.tool_input.file_path // empty'); [ -n \"$f\" ] && npx prettier --write --ignore-unknown \"$f\" >/dev/null 2>&1; exit 0"
+          }
+        ]
+      },
       {
         "matcher": "Edit|Write",
         "hooks": [

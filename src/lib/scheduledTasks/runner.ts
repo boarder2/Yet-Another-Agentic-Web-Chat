@@ -47,7 +47,6 @@ export async function runScheduledTask(
     const { chatLlm, systemLlm, embedding } = await resolveChatAndEmbedding({
       chatModel: task.chatModel,
       systemModel: task.systemModel,
-      embeddingModel: task.embeddingModel,
     });
 
     // 3. Resolve persona + methodology

@@ -145,9 +145,6 @@ export const scheduledTasks = sqliteTable('scheduled_tasks', {
     name: string;
     contextWindowSize?: number;
   } | null>(),
-  embeddingModel: text('embedding_model', { mode: 'json' })
-    .$type<{ provider: string; name: string }>()
-    .notNull(),
   selectedSystemPromptIds: text('selected_system_prompt_ids', { mode: 'json' })
     .$type<string[]>()
     .default(sql`'[]'`),

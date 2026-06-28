@@ -11,7 +11,7 @@ This project includes a VS Code Dev Container configuration that runs YAAWC + Se
 
 Then open:
 
-- YAAWC: http://localhost:3000
+- YAAWC: http://localhost:5005
 - SearXNG: http://localhost:4000
 
 ## Notes

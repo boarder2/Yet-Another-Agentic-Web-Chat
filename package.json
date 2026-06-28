@@ -4,10 +4,10 @@
   "license": "MIT",
   "author": "Boarder2",
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "next dev --turbopack -p 5005",
     "build": "npm run db:push && next build",
     "postbuild": "rm -rf .next/standalone/.next/static && cp -r .next/static .next/standalone/.next/static",
-    "start": "next start",
+    "start": "next start -p 5005",
     "lint": "eslint .",
     "format:write": "prettier . --write",
     "test:e2e": "playwright test",

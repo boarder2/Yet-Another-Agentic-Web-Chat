@@ -54,11 +54,11 @@ Two widget kinds (`src/lib/types/widget.ts`): LLM-transformed and user-JS (Docke
 
 ## Commands
 
-- `npm run dev` — dev server (turbopack); prefers :3000, auto-bumps to next free port — read the bound port from the log
+- `npm run dev` — dev server (turbopack); binds :5005 (`-p 5005`), auto-bumps to next free port if taken — read the bound port from the log
 - `npm run build` — `db:push` (drizzle migrate + push) then `next build`; needs a working `db.sqlite`. `npm start` serves the build
 - `npm run lint` (ESLint) / `npm run format:write` (Prettier, before commits) / `npx tsc --noEmit` (typecheck, no script). Pre-commit hook runs Prettier + ESLint on staged files
 - `npm run db:generate` after editing `src/lib/db/schema.ts`; `npm run db:push` to apply
-- No unit/test suite (`e2e/` is scaffolding only) — verify by running the app: `bash .claude/skills/run-yaawc/smoke.sh` (snapshots home + settings; grep the YAML, not the exit code), or drive it with the `playwright-cli` skill (use `--headed` for substantial UI changes). API smoke: `curl -s localhost:3000/api/config` must contain `chatModelProviders`
+- No unit/test suite (`e2e/` is scaffolding only) — verify by running the app: `bash .claude/skills/run-yaawc/smoke.sh` (snapshots home + settings; grep the YAML, not the exit code), or drive it with the `playwright-cli` skill (use `--headed` for substantial UI changes). API smoke: `curl -s localhost:5005/api/config` must contain `chatModelProviders`
 - Setup: if there's no `config.toml`, `cp sample.config.toml config.toml` (secrets/infra only) — **never overwrite an existing `config.toml`**; then `npm install`. Code execution / code widgets need Docker
 
 ## Data Fetching

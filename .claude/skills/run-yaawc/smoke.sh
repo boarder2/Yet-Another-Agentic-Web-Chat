@@ -12,11 +12,11 @@
 # (those need a configured model + provider key — see SKILL.md).
 set -u
 
-# next dev binds 3000, but auto-bumps to 3001 (then 3002…) when the port
-# is taken — common in the Linux devcontainer. Never hardcode the port:
-# probe both when reusing, and parse the actual one from the dev log when
-# we start it. Override the candidate list with PORTS="3000 3001 8080".
-PORTS="${PORTS:-3000 3001}"
+# next dev binds 5005 (npm run dev passes -p 5005), but can auto-bump when the
+# port is taken — common in the Linux devcontainer. Never hardcode the port:
+# probe candidates when reusing, and parse the actual one from the dev log when
+# we start it. Override the candidate list with PORTS="5005 5006 8080".
+PORTS="${PORTS:-5005 5006}"
 SHOT="${SHOT:-0}"
 SESSION=yaawc-smoke
 ART=/tmp/yaawc-smoke
@@ -46,7 +46,7 @@ else
   started_dev=$!
   echo "[smoke] waiting for a 'Local: http://localhost:PORT' line ..."
   for i in $(seq 1 90); do
-    # next prints e.g. "- Local:  http://localhost:3001" once it's listening
+    # next prints e.g. "- Local:  http://localhost:5005" once it's listening
     PORT=$(grep -oE 'localhost:[0-9]+' "$LOG" 2>/dev/null | grep -oE '[0-9]+$' | head -1)
     [ -n "$PORT" ] && is_yaawc "$PORT" && break
     PORT=""

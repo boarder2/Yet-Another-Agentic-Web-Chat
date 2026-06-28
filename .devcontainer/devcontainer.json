@@ -9,9 +9,9 @@
   "features": {
     "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
   },
-  "forwardPorts": [3000, 4000],
+  "forwardPorts": [5005, 4000],
   "portsAttributes": {
-    "3000": {
+    "5005": {
       "label": "YAAWC (Next.js)"
     },
     "4000": {

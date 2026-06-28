@@ -61,6 +61,9 @@ RUN chown -R node:node /home/yaawc && \
 # Configure the container to run in an unprivileged mode
 USER node
 
+ENV PORT=5005
+EXPOSE 5005
+
 # Next.js standalone tracing copies onnxruntime-node's *_binding.node but not the
 # libonnxruntime.so.1 it dlopens at runtime (loaded via path, not require()), so we
 # overlay the full bin/ dir to co-locate the shared lib. A package.json "overrides"

@@ -19,7 +19,7 @@ A valid `config.toml` must exist at the project root (smoke tests do not call LL
 | `npm run test:e2e:ui`     | Open Playwright UI mode |
 | `npm run test:e2e:report` | Open the HTML report    |
 
-The standard local flow is `npm run build && npm run test:e2e`. Playwright's `webServer` config initializes a fresh SQLite database at `e2e/.test-data/`, runs schema migrations, and launches the standalone server — it does not run `npm run build` for you. If the dev server is already running on port 3000, it will be reused (outside CI).
+The standard local flow is `npm run build && npm run test:e2e`. Playwright's `webServer` config initializes a fresh SQLite database at `e2e/.test-data/`, runs schema migrations, and launches the standalone server — it does not run `npm run build` for you. If the dev server is already running on port 5005, it will be reused (outside CI).
 
 ## Test Database Isolation
 

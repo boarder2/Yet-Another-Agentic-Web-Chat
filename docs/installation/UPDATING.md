@@ -53,7 +53,7 @@ This release merges the old `backend-dbstore`, `uploads`, and `workspace-files` 
    docker compose up -d
    ```
 
-6. Once the command completes, go to http://localhost:3000 and verify the latest changes.
+6. Once the command completes, go to http://localhost:5005 and verify the latest changes.
 
 ## For non-Docker users
 

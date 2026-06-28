@@ -2,7 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 import path from 'path';
 
 const TEST_DATA_DIR = path.resolve('./e2e/.test-data');
-const PORT = process.env.PORT ?? '3000';
+const PORT = process.env.PORT ?? '5005';
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${PORT}`;
 
 export default defineConfig({

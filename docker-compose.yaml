@@ -25,7 +25,7 @@ services:
       # - TTS_WORKER_IDLE_MS=600000 # unload the model after N ms idle (0=never)
       # - TTS_WORKER_DISABLED=1    # run synthesis in-process instead (no isolation)
     ports:
-      - 3000:3000
+      - 5005:5005
     networks:
       - yaawc-network
     volumes:

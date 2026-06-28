@@ -477,7 +477,7 @@ YAAWC supports multiple search backends and lets you choose from the Settings pa
 
    This pulls the prebuilt `boarder2/yaawc:latest` image from Docker Hub — no local build required.
 
-5. Open http://localhost:3000.
+5. Open http://localhost:5005.
 
 To update later, pull the latest image and recreate the stack:
 
@@ -512,8 +512,8 @@ On Linux, you may also need to set `Environment="OLLAMA_HOST=0.0.0.0"` in `/etc/
 ## Using as a Browser Search Engine
 
 1. Open your browser's **Search Engines** settings.
-2. Add a new search engine with URL: `http://localhost:3000/?q=%s`
-   (replace `localhost:3000` with your host and port as needed).
+2. Add a new search engine with URL: `http://localhost:5005/?q=%s`
+   (replace `localhost:5005` with your host and port as needed).
 3. YAAWC also exposes an **OpenSearch description** at `/api/opensearch` with autocomplete support, so some browsers can discover and add it automatically.
 
 URL queries via `?q=` automatically apply your saved model preferences for a seamless search-bar experience.
@@ -533,7 +533,7 @@ server {
   server_name yaawc.yourdomain.com;
 
   location / {
-    proxy_pass http://localhost:3000;
+    proxy_pass http://localhost:5005;
     proxy_set_header Host $host;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;

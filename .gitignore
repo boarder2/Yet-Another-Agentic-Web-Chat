@@ -45,7 +45,6 @@ docs/superpowers/
 
 certificates
 storage/
-package-lock.json
 tsconfig.tsbuildinfo
 next-env.d.ts
 

@@ -12,14 +12,14 @@ A valid `config.toml` must exist at the project root (smoke tests do not call LL
 
 ## Running Tests
 
-| Command                | Description             |
-| ---------------------- | ----------------------- |
-| `yarn test:e2e`        | Run all e2e tests       |
-| `yarn test:e2e:smoke`  | Run smoke tests only    |
-| `yarn test:e2e:ui`     | Open Playwright UI mode |
-| `yarn test:e2e:report` | Open the HTML report    |
+| Command                   | Description             |
+| ------------------------- | ----------------------- |
+| `npm run test:e2e`        | Run all e2e tests       |
+| `npm run test:e2e:smoke`  | Run smoke tests only    |
+| `npm run test:e2e:ui`     | Open Playwright UI mode |
+| `npm run test:e2e:report` | Open the HTML report    |
 
-The standard local flow is `yarn build && yarn test:e2e`. Playwright's `webServer` config initializes a fresh SQLite database at `e2e/.test-data/`, runs schema migrations, and launches the standalone server — it does not run `yarn build` for you. If the dev server is already running on port 3000, it will be reused (outside CI).
+The standard local flow is `npm run build && npm run test:e2e`. Playwright's `webServer` config initializes a fresh SQLite database at `e2e/.test-data/`, runs schema migrations, and launches the standalone server — it does not run `npm run build` for you. If the dev server is already running on port 3000, it will be reused (outside CI).
 
 ## Test Database Isolation
 

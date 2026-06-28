@@ -1,1 +1,1 @@
-yarn build && yarn test:e2e:gate
+npm run build && npm run test:e2e:gate

@@ -29,7 +29,7 @@ Tests run against an isolated SQLite database at `e2e/.test-data/db.sqlite` (git
 
 ```
 e2e/
-  smoke/          Fast, PR-gating smoke tests
+  smoke/          Fast smoke tests
   tests/          Full feature/regression specs
   fixtures/       Extend @playwright/test — always import from here, never @playwright/test directly
   pages/          Page Object Models (add when a flow is reused across 3+ specs)

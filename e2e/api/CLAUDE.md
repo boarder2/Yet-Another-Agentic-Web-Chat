@@ -12,7 +12,7 @@ Pure HTTP tests against route handlers under `src/app/api/**`. No browser is lau
 - Import `test` and `expect` from `../fixtures/api` (not `@playwright/test`).
 - One file per route group (`chats.spec.ts` covers `/api/chats` and `/api/chats/[id]`).
 - Use `request.get`/`request.post` etc. The `baseURL` from `playwright.config.ts` is applied automatically.
-- Prefer asserting on shape (`expect(body).toHaveProperty('chats')`) over exact values where data is dynamic.
+- Assert **expected values**, not just shape — check the actual returned contents (the name/content you created, the computed count, the post-mutation state). Shape/presence/type checks (`toHaveProperty`, `typeof`, non-empty) are reserved only for values you genuinely can't know exactly, like system-generated dates or ids — and even then assert what's knowable (type, format, non-empty).
 - Tests must be independent — create the resources they need, don't rely on ordering.
 
 ## Running

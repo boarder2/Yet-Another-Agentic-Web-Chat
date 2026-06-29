@@ -100,24 +100,25 @@ claude-alt [flags] [prompt]
 
 ### Core flags
 
-| Flag                               | Purpose                                                                                   |
-| ---------------------------------- | ----------------------------------------------------------------------------------------- |
-| `-p "PROMPT"` / `--print "PROMPT"` | Non-interactive mode — print response and exit. Required for scripted use.                |
-| `--session-id UUID`                | Assign a chosen UUID to a **new** session (must be a valid, unused UUID). Use on start.   |
-| `-n` / `--name NAME`               | Display name for the session (shown in `/resume` picker, `claude agents`, title).         |
-| `-r` / `--resume [ID]`             | Resume a conversation by session ID (context intact). No ID opens a picker.               |
-| `-c` / `--continue`                | Resume the most recent conversation in the current directory.                             |
-| `--fork-session`                   | With `--resume`/`--continue`, branch into a new session ID instead of reusing the old.    |
-| `--model MODEL`                    | Override the model (default is the lower-cost model set by the wrapper).                  |
-| `--system-prompt "TEXT"`           | Set a system prompt.                                                                      |
-| `--output-format FORMAT`           | `text` (default), `json`, or `stream-json`. `json` includes `session_id` in the envelope. |
-| `--max-turns N`                    | Limit agentic turns (default: unlimited).                                                 |
-| `--allowedTools TOOLS`             | Comma-separated list of tools to permit (e.g. `Bash,Read`). Restricts tool use.           |
-| `--disallowedTools TOOLS`          | Comma-separated list of tools to deny.                                                    |
-| `--dangerously-skip-permissions`   | Skip all permission prompts. Only use in fully automated, sandboxed contexts.             |
-| `--cwd PATH`                       | Set the working directory for the subprocess.                                             |
-| `--verbose`                        | Emit detailed logs (useful for debugging).                                                |
-| `--no-cache`                       | Disable prompt caching.                                                                   |
+| Flag                               | Purpose                                                                                                                                              |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `-p "PROMPT"` / `--print "PROMPT"` | Non-interactive mode — print response and exit. Required for scripted use.                                                                           |
+| `--session-id UUID`                | Assign a chosen UUID to a **new** session (must be a valid, unused UUID). Use on start.                                                              |
+| `-n` / `--name NAME`               | Display name for the session (shown in `/resume` picker, `claude agents`, title).                                                                    |
+| `-r` / `--resume [ID]`             | Resume a conversation by session ID (context intact). No ID opens a picker.                                                                          |
+| `-c` / `--continue`                | Resume the most recent conversation in the current directory.                                                                                        |
+| `--fork-session`                   | With `--resume`/`--continue`, branch into a new session ID instead of reusing the old.                                                               |
+| `--model MODEL`                    | Override the model (default is the lower-cost model set by the wrapper).                                                                             |
+| `--system-prompt "TEXT"`           | Set a system prompt.                                                                                                                                 |
+| `--output-format FORMAT`           | `text` (default), `json`, or `stream-json`. `json` includes `session_id` in the envelope.                                                            |
+| `--max-turns N`                    | Limit agentic turns (default: unlimited).                                                                                                            |
+| `--allowedTools TOOLS`             | Comma-separated list of tools to permit (e.g. `Bash,Read`). Restricts tool use.                                                                      |
+| `--disallowedTools TOOLS`          | Comma-separated list of tools to deny.                                                                                                               |
+| `--permission-mode MODE`           | Permission mode: `default`, `acceptEdits`, `auto`, `plan`, `bypassPermissions`. Use `auto` for delegated file-editing runs (see harness note below). |
+| `--dangerously-skip-permissions`   | Skip all permission prompts. **Blocked by this harness's auto-approval classifier** — use `--permission-mode auto` instead.                          |
+| `--cwd PATH`                       | Set the working directory for the subprocess.                                                                                                        |
+| `--verbose`                        | Emit detailed logs (useful for debugging).                                                                                                           |
+| `--no-cache`                       | Disable prompt caching.                                                                                                                              |
 
 ### Common patterns
 
@@ -145,6 +146,24 @@ claude-alt -p "Read src/lib/bar.ts and list all exported types" --allowedTools R
 ```bash
 claude-alt -p "Review this code for security issues" --system-prompt "You are a security auditor. Be terse." < src/api/route.ts
 ```
+
+## Running from inside Claude Code (this harness)
+
+Lessons from delegating real work here — follow these to avoid the failures hit last time:
+
+- **It's a shell function, not a binary.** `claude-alt` is defined in the user's zsh profile (it wraps `claude` with alternate-model env vars). The Bash tool may not have it loaded, so invoke through an interactive zsh: `zsh -ic 'claude-alt -p "..." ...'`. The `(eval):1: can't change option: zle` noise on the first line is harmless.
+- **Permissions: use `--permission-mode auto`.** `--dangerously-skip-permissions` and `--permission-mode bypassPermissions` are **rejected by the harness auto-approval classifier** ("Create Unsafe Agents") and the call is denied. `--permission-mode auto` lets the teammate read/edit files non-interactively and is accepted. Don't reach for the bypass flags first.
+- **Run long delegations in the background and capture output.** Redirect to a log and use the Bash tool's `run_in_background`: `zsh -ic 'claude-alt -p "$(cat /tmp/task.txt)" --permission-mode auto --output-format text' > /tmp/task.log 2>&1`. You get notified on completion; tail the log for the teammate's report.
+- **Pass big/multiline prompts from a file**, not inline: write the prompt with the Write tool, then `-p "$(cat /tmp/task.txt)"`. Avoids shell-quoting breakage.
+
+### Parallel fan-out (multiple teammates at once)
+
+For a large task that splits into independent pieces (e.g. one spec/file per route group), launch several teammates in parallel — it's effective and was the right call last time. Guardrails learned the hard way:
+
+- **Give each teammate a disjoint set of files to own.** Tell them explicitly which files to create/edit and to touch nothing else — parallel writers to the same file collide. Verify scope afterward with `git status`.
+- **Have them author/read only; verify centrally.** Tasks that need a shared singleton (one dev server, port 5005, one test DB) can't all run it at once. Instruct teammates **not** to start the server / test runner, then you run the suite once after they finish and fix fallout yourself.
+- **Make each teammate read the real source it's testing/changing** to derive exact contracts (status codes, field names, `message` vs `error`) rather than guessing — their reported "contract surprises" are a useful signal to spot-check.
+- **Don't trust green-by-rebuild.** After teammates change `src/`, run `npm run build` before e2e — the Playwright webServer runs the standalone build, not `src/`. A stale build caused phantom failures last time.
 
 ## Tips
 

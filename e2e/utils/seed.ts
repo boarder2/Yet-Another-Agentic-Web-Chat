@@ -1,4 +1,5 @@
 import type { APIRequestContext } from '@playwright/test';
+import { uid, uniq } from './helpers';
 
 async function postJson(
   request: APIRequestContext,
@@ -14,15 +15,6 @@ async function postJson(
     );
   }
   return res.json();
-}
-
-let _counter = 0;
-function uid(): string {
-  return crypto.randomUUID();
-}
-function uniq(prefix: string): string {
-  _counter++;
-  return `${prefix}-${Date.now()}-${_counter}`;
 }
 
 export async function seedWorkspace(

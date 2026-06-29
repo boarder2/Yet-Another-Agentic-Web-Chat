@@ -55,3 +55,29 @@ export function joinResponseText(events: ChatEvent[]): string {
     .map((e) => (typeof e.data === 'string' ? e.data : ''))
     .join('');
 }
+
+/** A citation source from a `sources` or `sources_added` event. */
+export interface CitationSource {
+  id?: string;
+  title?: string;
+  url?: string;
+  content?: string;
+  [k: string]: unknown;
+}
+
+/**
+ * Extract all citation sources from `sources` and `sources_added` events
+ * in order of occurrence.
+ */
+export function extractSources(events: ChatEvent[]): CitationSource[] {
+  const sources: CitationSource[] = [];
+  for (const e of events) {
+    if (e.type === 'sources' || e.type === 'sources_added') {
+      const data = e.data;
+      if (Array.isArray(data)) {
+        sources.push(...(data as CitationSource[]));
+      }
+    }
+  }
+  return sources;
+}

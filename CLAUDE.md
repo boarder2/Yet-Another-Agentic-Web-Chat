@@ -47,7 +47,7 @@ Two widget kinds (`src/lib/types/widget.ts`): LLM-transformed and user-JS (Docke
 - Evaluate the user's proposals critically — don't reflexively agree. If a suggested approach is weaker than an existing option (or wrong), say so with reasoning before implementing
 - Ask before adding dependencies
 - Scope changes to the specific task; follow existing patterns. When a change leaves code unused (imports, consts, props, fields, files), remove it in the same change — don't leave dead/orphaned code behind
-- No unit tests — the project has no test harness. Don't add unit tests or a test framework, and don't put unit-testing steps in plans; verify by running the app (see Commands)
+- Tests are **integration/e2e only** (Playwright, in `e2e/`) — no unit tests or unit-test framework. New functionality must ship with e2e/API specs covering it; tests assert _correct_ behavior (intended semantics), not whatever the code currently emits, and **never call a real LLM — always the env-gated `test` provider/model that returns predefined outputs** (see `e2e/CLAUDE.md`). Still verify by running the app too (see Commands)
 - Keep CLAUDE.md reflecting the **current** state of the project — but reserve it for architecture and big-picture pointers (subsystems, data flow, where things live). Do **not** add implementation minutiae (specific CSS classes, pixel constants, opacity math, individual handlers, scroll listeners); those belong in the code/comments and become stale fast. If an entry reads like a code comment, it's too detailed.
 - Keep the skills in `.claude/skills/**` up to date as the application changes — when a change affects a subsystem documented by a skill, update that skill's `SKILL.md` in the same change so it stays accurate
 - DB schema changes: edit `src/lib/db/schema.ts` only; run `npm run db:generate` to emit the drizzle migration — never hand-write files in `drizzle/` (see `db-migrations` skill)
@@ -58,7 +58,7 @@ Two widget kinds (`src/lib/types/widget.ts`): LLM-transformed and user-JS (Docke
 - `npm run build` — `db:push` (drizzle migrate + push) then `next build`; needs a working `db.sqlite`. `npm start` serves the build
 - `npm run lint` (ESLint) / `npm run format:write` (Prettier, before commits) / `npx tsc --noEmit` (typecheck, no script). Pre-commit hook runs Prettier + ESLint on staged files
 - `npm run db:generate` after editing `src/lib/db/schema.ts`; `npm run db:push` to apply
-- No unit/test suite (`e2e/` is scaffolding only) — verify by running the app: `bash .claude/skills/run-yaawc/smoke.sh` (snapshots home + settings; grep the YAML, not the exit code), or drive it with the `playwright-cli` skill (use `--headed` for substantial UI changes). API smoke: `curl -s localhost:5005/api/config` must contain `chatModelProviders`
+- Playwright e2e/API suite in `e2e/` — `npm run test:e2e` (all), `npm run test:e2e:api`, `npm run test:e2e --project=chromium`; uses a mocked LLM provider (`YAAWC_TEST_MODE=true`) and isolated test DB. New functionality lands with specs (see `e2e/CLAUDE.md`, `e2e/api/CLAUDE.md`). Also spot-check by running the app: `bash .claude/skills/run-yaawc/smoke.sh` (snapshots home + settings; grep the YAML, not the exit code), or the `playwright-cli` skill (`--headed` for substantial UI changes). API smoke: `curl -s localhost:5005/api/config` must contain `chatModelProviders`
 - Setup: if there's no `config.toml`, `cp sample.config.toml config.toml` (secrets/infra only) — **never overwrite an existing `config.toml`**; then `npm install`. Code execution / code widgets need Docker
 
 ## Data Fetching

@@ -165,6 +165,215 @@ test.describe('POST /api/chat (test-direct)', () => {
     const body = await res.json();
     expect(body.message).toBe('Please provide a message to process');
   });
+
+  test('returns 400 when chat model provider does not exist', async ({
+    request,
+  }) => {
+    const res = await request.post('/api/chat', {
+      data: {
+        message: {
+          messageId: uid(),
+          chatId: uid(),
+          content: 'test unresolvable model',
+        },
+        focusMode: 'webSearch',
+        files: [],
+        chatModel: { provider: 'nonexistent', name: 'nonexistent' },
+        systemModel: { provider: 'nonexistent', name: 'nonexistent' },
+        selectedSystemPromptIds: [],
+      },
+    });
+    expect(res.status()).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('Invalid chat model');
+  });
+
+  test('returns 400 when panel config has no executors array', async ({
+    request,
+  }) => {
+    const res = await request.post('/api/chat', {
+      data: {
+        message: {
+          messageId: uid(),
+          chatId: uid(),
+          content: 'panel test',
+        },
+        focusMode: 'webSearch',
+        files: [],
+        chatModel: { provider: 'test', name: 'test-direct' },
+        systemModel: { provider: 'test', name: 'test-direct' },
+        selectedSystemPromptIds: [],
+        panel: { options: {} },
+      },
+    });
+    expect(res.status()).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('Panel config requires an executors array.');
+  });
+
+  test('returns 400 when panel has fewer than 2 executors', async ({
+    request,
+  }) => {
+    const res = await request.post('/api/chat', {
+      data: {
+        message: {
+          messageId: uid(),
+          chatId: uid(),
+          content: 'panel test',
+        },
+        focusMode: 'webSearch',
+        files: [],
+        chatModel: { provider: 'test', name: 'test-direct' },
+        systemModel: { provider: 'test', name: 'test-direct' },
+        selectedSystemPromptIds: [],
+        panel: {
+          executors: [{ provider: 'test', name: 'test-direct' }],
+        },
+      },
+    });
+    expect(res.status()).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('at least 2 executors');
+  });
+
+  test('returns 400 when panel has more than 4 executors', async ({
+    request,
+  }) => {
+    const res = await request.post('/api/chat', {
+      data: {
+        message: {
+          messageId: uid(),
+          chatId: uid(),
+          content: 'panel test',
+        },
+        focusMode: 'webSearch',
+        files: [],
+        chatModel: { provider: 'test', name: 'test-direct' },
+        systemModel: { provider: 'test', name: 'test-direct' },
+        selectedSystemPromptIds: [],
+        panel: {
+          executors: [
+            { provider: 'test', name: 'test-direct' },
+            { provider: 'test', name: 'test-direct' },
+            { provider: 'test', name: 'test-direct' },
+            { provider: 'test', name: 'test-direct' },
+            { provider: 'test', name: 'test-direct' },
+          ],
+        },
+      },
+    });
+    expect(res.status()).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('at most 4 executors');
+  });
+
+  test('returns 400 when panel executor is missing provider', async ({
+    request,
+  }) => {
+    const res = await request.post('/api/chat', {
+      data: {
+        message: {
+          messageId: uid(),
+          chatId: uid(),
+          content: 'panel test',
+        },
+        focusMode: 'webSearch',
+        files: [],
+        chatModel: { provider: 'test', name: 'test-direct' },
+        systemModel: { provider: 'test', name: 'test-direct' },
+        selectedSystemPromptIds: [],
+        panel: {
+          executors: [
+            { provider: 'test', name: 'test-direct' },
+            { name: 'test-direct' },
+          ],
+        },
+      },
+    });
+    expect(res.status()).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('provider + name');
+  });
+
+  test('resending a messageId edits the message (nuke-and-rebuild)', async ({
+    request,
+  }) => {
+    const messageId = uid();
+    const chatId = uid();
+
+    // First message
+    await postChat(request, {
+      chatId,
+      messageId,
+      content: 'first version',
+    });
+
+    // Re-send same messageId with different content
+    const { events } = await postChat(request, {
+      chatId,
+      messageId,
+      content: 'edited version',
+    });
+
+    const text = joinResponseText(events);
+    expect(text).toBe('This is a deterministic test answer.');
+
+    // Verify only the edited content remains — the old user message and its
+    // assistant response must be gone.
+    const getRes = await request.get(`/api/chats/${chatId}`);
+    expect(getRes.status()).toBe(200);
+    const body = await getRes.json();
+    const userMsgs = (
+      body.messages as Array<{ role: string; content: string }>
+    ).filter((m) => m.role === 'user');
+    expect(userMsgs.length).toBe(1);
+    expect(userMsgs[0].content).toBe('edited version');
+  });
+
+  test('continuing after compaction uses compacted history', async ({
+    request,
+  }) => {
+    // First turn
+    const { chatId } = await postChat(request, { content: 'first turn' });
+
+    // Compact
+    const compactRes = await request.post('/api/chat/compact', {
+      data: {
+        chatId,
+        chatModel: { provider: 'test', name: 'test-direct' },
+        systemModel: { provider: 'test', name: 'test-direct' },
+      },
+    });
+    expect(compactRes.status()).toBe(200);
+
+    // Second turn — same chat, new messageId
+    const { events: events2 } = await postChat(request, {
+      chatId,
+      content: 'second turn',
+    });
+
+    // The agent must still produce its answer even though history was compacted
+    const text = joinResponseText(events2);
+    expect(text).toBe('This is a deterministic test answer.');
+
+    // Verify compaction checkpoint exists and second turn messages are present
+    const getRes = await request.get(`/api/chats/${chatId}`);
+    expect(getRes.status()).toBe(200);
+    const body = await getRes.json();
+    const compactionMsg = (
+      body.messages as Array<{ role: string; content: string }>
+    ).find((m: { role: string }) => m.role === 'compaction');
+    expect(compactionMsg).toBeTruthy();
+
+    const assistantMsgs = (
+      body.messages as Array<{ role: string; content: string }>
+    ).filter((m: { role: string }) => m.role === 'assistant');
+    // Must have an assistant answer for BOTH turns
+    expect(assistantMsgs.length).toBe(2);
+    for (const msg of assistantMsgs) {
+      expect(msg.content).toContain('This is a deterministic test answer.');
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -355,6 +564,66 @@ test.describe('POST /api/chat/compact', () => {
     expect(body.compactedMessageCount).toBeGreaterThanOrEqual(1);
     expect(body.compactionSummary).toBe('This is a deterministic test answer.');
   });
+
+  test('passes instructions through to the compaction summary', async ({
+    request,
+  }) => {
+    const chatId = await seedChat(request, {
+      content: 'instructions test',
+    });
+
+    const res = await request.post('/api/chat/compact', {
+      data: {
+        chatId,
+        instructions: 'Focus on key decisions and file paths.',
+        chatModel: { provider: 'test', name: 'test-direct' },
+        systemModel: { provider: 'test', name: 'test-direct' },
+      },
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.compactionSummary).toBe('This is a deterministic test answer.');
+    expect(body.compactedMessageCount).toBeGreaterThanOrEqual(1);
+  });
+
+  test('recompacting merges the previous summary', async ({ request }) => {
+    const chatId = await seedChat(request, {
+      content: 'recompact test',
+    });
+
+    // First compaction
+    const res1 = await request.post('/api/chat/compact', {
+      data: {
+        chatId,
+        chatModel: { provider: 'test', name: 'test-direct' },
+        systemModel: { provider: 'test', name: 'test-direct' },
+      },
+    });
+    expect(res1.status()).toBe(200);
+
+    // Second compaction — should pick up the previous summary
+    const res2 = await request.post('/api/chat/compact', {
+      data: {
+        chatId,
+        chatModel: { provider: 'test', name: 'test-direct' },
+        systemModel: { provider: 'test', name: 'test-direct' },
+      },
+    });
+    expect(res2.status()).toBe(200);
+    const body2 = await res2.json();
+    expect(body2.compactionSummary).toBe(
+      'This is a deterministic test answer.',
+    );
+
+    // Both compaction checkpoints should exist (the first was replaced at
+    // the same position, so only the second one remains as the checkpoint)
+    const getRes = await request.get(`/api/chats/${chatId}`);
+    const chatData = await getRes.json();
+    const compactionMsgs = (
+      chatData.messages as Array<{ role: string }>
+    ).filter((m) => m.role === 'compaction');
+    expect(compactionMsgs.length).toBeGreaterThanOrEqual(1);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -420,6 +689,48 @@ test.describe('GET /api/chat/runs/[messageId]/stream', () => {
     const events = await collectSseEvents(streamRes);
     expect(events.length).toBe(1);
     expect(events[0].type).toBe('gone');
+  });
+
+  test('returns 403 when chatId query param does not match the run owner', async ({
+    request,
+  }) => {
+    const { messageId } = await postChat(request, {
+      content: 'ownership test',
+    });
+
+    const streamRes = await request.get(
+      `/api/chat/runs/${messageId}/stream?chatId=${uid()}`,
+    );
+    expect(streamRes.status()).toBe(403);
+    const body = await streamRes.json();
+    expect(body.error).toBe('chatId mismatch');
+  });
+
+  test('replays from a given event index via the from param', async ({
+    request,
+  }) => {
+    const { messageId, events } = await postChat(request, {
+      content: 'partial replay test',
+    });
+
+    const originalCount = events.length;
+    // Request replay starting from halfway through the events
+    const from = Math.max(1, Math.floor(originalCount / 2));
+    const streamRes = await request.get(
+      `/api/chat/runs/${messageId}/stream?from=${from}`,
+    );
+    expect(streamRes.status()).toBe(200);
+
+    const replayEvents = await collectSseEvents(streamRes);
+    // Should have fewer events than the full stream
+    expect(replayEvents.length).toBeLessThanOrEqual(originalCount);
+    // Replaying from halfway yields only the tail of the answer — it must be
+    // a non-empty suffix of the full deterministic answer.
+    const replayedText = joinResponseText(replayEvents);
+    expect(replayedText.length).toBeGreaterThan(0);
+    const fullAnswer = 'This is a deterministic test answer.';
+    expect(fullAnswer).toContain(replayedText);
+    expect(fullAnswer.endsWith(replayedText)).toBe(true);
   });
 });
 

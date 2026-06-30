@@ -1,5 +1,11 @@
 import { test, expect } from '../fixtures/api';
 
+// Settings live in one global app_settings row per key, so tests that mutate
+// the same key (e.g. ttsSpeed in both the single-key and batch cases) must not
+// run concurrently under the suite's local fullyParallel mode. Each test still
+// restores what it changed; serial just removes the cross-test write race.
+test.describe.configure({ mode: 'serial' });
+
 test.describe('GET /api/settings', () => {
   test('returns a settings object with expected shape', async ({ request }) => {
     const res = await request.get('/api/settings');
@@ -109,5 +115,28 @@ test.describe('PATCH /api/settings', () => {
     expect(body[key]).toBeUndefined();
     // Restore
     await request.patch('/api/settings', { data: { [key]: '0.5' } });
+  });
+
+  test('batch-updates multiple keys in one request', async ({ request }) => {
+    const key1 = 'ttsSpeed';
+    const key2 = 'ttsVoice';
+    const orig = await (await request.get('/api/settings')).json();
+
+    const patchRes = await request.patch('/api/settings', {
+      data: { [key1]: '0.25', [key2]: '0.75' },
+    });
+    expect(patchRes.status()).toBe(204);
+
+    const after = await (await request.get('/api/settings')).json();
+    expect(after[key1]).toBe('0.25');
+    expect(after[key2]).toBe('0.75');
+
+    // Restore
+    await request.patch('/api/settings', {
+      data: {
+        [key1]: orig[key1] ?? null,
+        [key2]: orig[key2] ?? null,
+      },
+    });
   });
 });

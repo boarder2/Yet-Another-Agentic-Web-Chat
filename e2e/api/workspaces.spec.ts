@@ -303,6 +303,25 @@ test.describe('GET /api/workspaces/[id]/files/[fileId]', () => {
     expect(res.status()).toBe(404);
     expect(await res.json()).toMatchObject({ error: 'Not found' });
   });
+
+  test('?raw=true returns the raw bytes with content-type header', async ({
+    request,
+  }) => {
+    const wsId = await seedWorkspace(request);
+    const fileId = await seedWorkspaceFile(request, wsId, {
+      name: 'raw.txt',
+      content: 'raw-bytes-content',
+    });
+    const res = await request.get(
+      `/api/workspaces/${wsId}/files/${fileId}?raw=true`,
+    );
+    expect(res.status()).toBe(200);
+    // Content-Type should reflect the file's mime
+    expect(res.headers()['content-type']).toBe('text/plain');
+    // Body should be the raw bytes
+    const body = await res.body();
+    expect(body.toString('utf8')).toBe('raw-bytes-content');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -418,6 +437,20 @@ test.describe('PATCH /api/workspaces/[id]/files/[fileId]', () => {
     });
   });
 
+  test('accepts autoAcceptEdits: null', async ({ request }) => {
+    const wsId = await seedWorkspace(request);
+    const fileId = await seedWorkspaceFile(request, wsId, {
+      name: 'null-aae.txt',
+    });
+    const res = await request.patch(`/api/workspaces/${wsId}/files/${fileId}`, {
+      data: { autoAcceptEdits: null },
+    });
+    expect(res.status()).toBe(200);
+    const f = (await res.json()).file;
+    expect(f.autoAcceptEdits).toBeNull();
+    expect(f.name).toBe('null-aae.txt');
+  });
+
   test('returns 404 for nonexistent fileId', async ({ request }) => {
     const wsId = await seedWorkspace(request);
     const res = await request.patch(
@@ -438,6 +471,17 @@ test.describe('GET /api/workspaces/[id]/urls', () => {
     const res = await request.get(`/api/workspaces/${wsId}/urls`);
     expect(res.status()).toBe(200);
     expect(await res.json()).toEqual({ urls: [] });
+  });
+
+  test('returns seeded URLs with exact values', async ({ request }) => {
+    const wsId = await seedWorkspace(request);
+    const urls = ['https://a.example', 'https://b.example'];
+    await request.put(`/api/workspaces/${wsId}/urls`, { data: { urls } });
+
+    const res = await request.get(`/api/workspaces/${wsId}/urls`);
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.urls).toEqual(urls);
   });
 });
 

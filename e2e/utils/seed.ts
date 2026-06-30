@@ -19,10 +19,13 @@ async function postJson(
 
 export async function seedWorkspace(
   request: APIRequestContext,
-  overrides?: Partial<{ name: string }>,
+  overrides?: Partial<{ name: string; description: string }>,
 ): Promise<string> {
   const body = await postJson(request, '/api/workspaces', {
     name: overrides?.name ?? uniq('ws'),
+    ...(overrides?.description !== undefined
+      ? { description: overrides.description }
+      : {}),
   });
   return (body as { workspace: { id: string } }).workspace.id;
 }
@@ -155,4 +158,25 @@ export async function seedWorkspaceFile(
     mime: overrides?.mime ?? 'text/plain',
   });
   return (body as { file: { id: string } }).file.id;
+}
+
+/** Seed a scheduled task, run it, and return the resulting chat ID. */
+export async function seedScheduledChat(
+  request: APIRequestContext,
+  overrides?: Partial<{
+    taskName: string;
+    prompt: string;
+    focusMode: string;
+  }>,
+): Promise<string> {
+  const taskId = await seedScheduledTask(request, {
+    name: overrides?.taskName,
+    prompt: overrides?.prompt,
+  });
+  const body = await postJson(
+    request,
+    `/api/scheduled-tasks/${taskId}/run`,
+    {},
+  );
+  return (body as { chatId: string }).chatId;
 }

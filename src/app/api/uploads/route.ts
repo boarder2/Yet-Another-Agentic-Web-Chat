@@ -154,18 +154,25 @@ export async function POST(req: Request) {
         : DEFAULT_CONTEXT_WINDOW;
     }
 
+    // Reject unsupported types up front: returning from the map callback below
+    // only resolves that array element — Promise.all discards it and the
+    // handler would still respond 200.
+    const unsupported = files.find(
+      (file: any) =>
+        !['pdf', 'docx', 'txt'].includes(file.name.split('.').pop()!),
+    );
+    if (unsupported) {
+      return NextResponse.json(
+        { message: 'File type not supported' },
+        { status: 400 },
+      );
+    }
+
     const processedFiles: FileRes[] = [];
 
     await Promise.all(
       files.map(async (file: any) => {
         const fileExtension = file.name.split('.').pop();
-        if (!['pdf', 'docx', 'txt'].includes(fileExtension!)) {
-          return NextResponse.json(
-            { message: 'File type not supported' },
-            { status: 400 },
-          );
-        }
-
         const uniqueFileName = `${crypto.randomBytes(16).toString('hex')}.${fileExtension}`;
         const filePath = path.join(uploadDir, uniqueFileName);
 

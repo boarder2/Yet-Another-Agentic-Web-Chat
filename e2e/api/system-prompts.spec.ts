@@ -63,6 +63,40 @@ test.describe('GET /api/system-prompts', () => {
     expect(names).not.toContain('Deep Dive / Literature Review');
     expect(names).not.toContain('Fact-Check / Verification');
   });
+
+  test('filters by type=methodology', async ({ request }) => {
+    const res = await request.get('/api/system-prompts?type=methodology');
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    // All returned prompts should be methodology type
+    for (const item of body) {
+      expect(item.type).toBe('methodology');
+    }
+    const names = body.map((p: { name: string }) => p.name);
+    expect(names).toContain('Comparative Analysis');
+    expect(names).toContain('Deep Dive / Literature Review');
+    expect(names).toContain('Fact-Check / Verification');
+    // Persona builtins should not leak into a methodology filter
+    expect(names).not.toContain('Web Searches');
+    expect(names).not.toContain('Chat Conversations');
+  });
+
+  test('type=methodology includes seeded methodology prompt', async ({
+    request,
+  }) => {
+    const name = `sp-method-${Date.now()}`;
+    const id = await seedSystemPrompt(request, {
+      name,
+      content: 'Methodology test',
+      type: 'methodology',
+    });
+    const res = await request.get('/api/system-prompts?type=methodology');
+    const body = await res.json();
+    const found = body.find((p: { id: string }) => p.id === id);
+    expect(found).toBeTruthy();
+    expect(found.type).toBe('methodology');
+    expect(found.readOnly).toBe(false);
+  });
 });
 
 test.describe('POST /api/system-prompts', () => {
@@ -110,6 +144,19 @@ test.describe('POST /api/system-prompts', () => {
     const body = await res.json();
     expect(body.type).toBe('persona');
   });
+
+  test('creates a methodology prompt when type=methodology', async ({
+    request,
+  }) => {
+    const name = `sp-create-method-${Date.now()}`;
+    const res = await request.post('/api/system-prompts', {
+      data: { name, content: 'Method content', type: 'methodology' },
+    });
+    expect(res.status()).toBe(201);
+    const body = await res.json();
+    expect(body.name).toBe(name);
+    expect(body.type).toBe('methodology');
+  });
 });
 
 test.describe('PUT /api/system-prompts/[id]', () => {
@@ -144,6 +191,26 @@ test.describe('PUT /api/system-prompts/[id]', () => {
     expect(res.status()).toBe(400);
     const body = await res.json();
     expect(body.error).toBe('Name and content are required');
+  });
+
+  test('changes type from persona to methodology', async ({ request }) => {
+    const id = await seedSystemPrompt(request, {
+      name: 'type-change-test',
+      content: 'Before',
+      type: 'persona',
+    });
+    const res = await request.put(`/api/system-prompts/${id}`, {
+      data: {
+        name: 'type-change-test',
+        content: 'After',
+        type: 'methodology',
+      },
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.id).toBe(id);
+    expect(body.type).toBe('methodology');
+    expect(body.content).toBe('After');
   });
 });
 

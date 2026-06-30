@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures/api';
-import { seedChat } from '../utils/seed';
+import { seedChat, seedScheduledChat, seedWorkspace } from '../utils/seed';
 
 test.describe('GET /api/chats', () => {
   test('returns a chats array', async ({ request }) => {
@@ -136,6 +136,85 @@ test.describe('GET /api/chats', () => {
     expect(body.chats).toEqual([]);
     expect(body.total).toBe(0);
     expect(body.totalMessages).toBe(0);
+  });
+
+  test('filters by scheduled=1', async ({ request }) => {
+    // Seed a scheduled chat (creates + runs a scheduled task)
+    const chatId = await seedScheduledChat(request, {
+      taskName: 'scheduled-filter-test',
+      prompt: 'scheduled filter test prompt',
+    });
+
+    const res = await request.get('/api/chats?scheduled=1');
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    const ids: string[] = body.chats.map((c: { id: string }) => c.id);
+    expect(ids).toContain(chatId);
+
+    // Verify the scheduled chat is NOT in the scheduled=0 results
+    const res0 = await request.get('/api/chats?scheduled=0');
+    expect(res0.status()).toBe(200);
+    const body0 = await res0.json();
+    const ids0: string[] = body0.chats.map((c: { id: string }) => c.id);
+    expect(ids0).not.toContain(chatId);
+  });
+
+  test('filters by workspaceId', async ({ request }) => {
+    const wsId = await seedWorkspace(request, { name: 'ws-filter-test' });
+    const chatId = await seedChat(request, {
+      content: 'workspace-filter-chat',
+      workspaceId: wsId,
+    });
+
+    const res = await request.get(
+      `/api/chats?workspaceId=${encodeURIComponent(wsId)}`,
+    );
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    const ids: string[] = body.chats.map((c: { id: string }) => c.id);
+    expect(ids).toContain(chatId);
+    // Non-matching workspace should not include it
+    const resOther = await request.get(
+      '/api/chats?workspaceId=00000000-0000-0000-0000-000000000000',
+    );
+    expect(resOther.status()).toBe(200);
+    const idsOther: string[] = (await resOther.json()).chats.map(
+      (c: { id: string }) => c.id,
+    );
+    expect(idsOther).not.toContain(chatId);
+  });
+
+  test('hasMore is true when results cross page boundary', async ({
+    request,
+  }) => {
+    // Seed 3 chats, then query with limit=2 to verify hasMore: true
+    await seedChat(request, { content: 'page-boundary-1' });
+    await seedChat(request, { content: 'page-boundary-2' });
+    await seedChat(request, { content: 'page-boundary-3' });
+
+    const res = await request.get('/api/chats?limit=2&offset=0');
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.limit).toBe(2);
+    expect(body.chats.length).toBeLessThanOrEqual(2);
+    expect(body.hasMore).toBe(true);
+  });
+
+  test('combined filters: pinned + workspace', async ({ request }) => {
+    const wsId = await seedWorkspace(request, { name: 'combo-filter-ws' });
+    const chatId = await seedChat(request, {
+      content: 'combo-filter-chat',
+      workspaceId: wsId,
+    });
+    await request.patch(`/api/chats/${chatId}`, { data: { pinned: true } });
+
+    const res = await request.get(
+      `/api/chats?pinned=1&workspaceId=${encodeURIComponent(wsId)}`,
+    );
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    const ids: string[] = body.chats.map((c: { id: string }) => c.id);
+    expect(ids).toContain(chatId);
   });
 });
 
@@ -300,5 +379,35 @@ test.describe('POST /api/chats/search', () => {
     expect(chat.focusMode).toBe('webSearch');
     expect(chat.messageCount).toBe(1);
     expect(typeof chat.matchExcerpt).toBe('string');
+  });
+
+  test('search scoped to a workspace returns only matching chats in that workspace', async ({
+    request,
+  }) => {
+    const wsId = await seedWorkspace(request, { name: 'search-ws' });
+    const chatId = await seedChat(request, {
+      content: 'workspace-search-hit',
+      workspaceId: wsId,
+    });
+    // Seed a non-workspace chat with similar content — should be excluded
+    await seedChat(request, {
+      content: 'workspace-search-miss-outside',
+    });
+
+    const res = await request.post('/api/chats/search', {
+      data: {
+        query: 'workspace search hit',
+        workspaceId: wsId,
+        chatModel: { provider: 'test', name: 'test-direct' },
+      },
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    const ids: string[] = body.chats.map((c: { id: string }) => c.id);
+    expect(ids).toContain(chatId);
+    // The non-workspace chat should not appear when scoped
+    for (const hit of body.chats) {
+      expect(hit.workspaceId).toBe(wsId);
+    }
   });
 });

@@ -46,8 +46,8 @@ export const POST = async (req: Request) => {
         body.chatModel?.provider || Object.keys(chatModelProviders)[0]
       ];
     const chatModel =
-      chatModelProvider[
-        body.chatModel?.model || Object.keys(chatModelProvider)[0]
+      chatModelProvider?.[
+        body.chatModel?.model || Object.keys(chatModelProvider ?? {})[0]
       ];
 
     let llm: BaseChatModel | undefined;

@@ -34,18 +34,54 @@ test.describe('POST /api/suggestions', () => {
     expect(body.suggestions).toEqual([]);
   });
 
-  test('errors on invalid chat model provider', async ({ request }) => {
+  test('resolves default provider when chatModel is omitted', async ({
+    request,
+  }) => {
+    const res = await request.post('/api/suggestions', {
+      data: {
+        chatHistory: [
+          { role: 'user', content: 'Hello' },
+          { role: 'assistant', content: 'Hi there!' },
+        ],
+      },
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(Array.isArray(body.suggestions)).toBe(true);
+  });
+
+  test('handles longer conversation history', async ({ request }) => {
+    const res = await request.post('/api/suggestions', {
+      data: {
+        chatHistory: [
+          { role: 'user', content: 'What is the capital of France?' },
+          { role: 'assistant', content: 'The capital of France is Paris.' },
+          { role: 'user', content: 'Tell me more about it.' },
+          { role: 'assistant', content: 'Paris is known for its culture.' },
+          { role: 'user', content: 'What about the food?' },
+        ],
+        chatModel: { provider: 'test', model: 'test-direct' },
+      },
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(Array.isArray(body.suggestions)).toBe(true);
+    // The test model always returns the same text without <suggestions> tags.
+    expect(body.suggestions).toEqual([]);
+  });
+
+  test('rejects an invalid chat model provider with 400', async ({
+    request,
+  }) => {
     const res = await request.post('/api/suggestions', {
       data: {
         chatHistory: [{ role: 'user', content: 'Hello' }],
         chatModel: { provider: 'nonexistent', model: 'nonexistent' },
       },
     });
-    // The route's catch block returns 500 for unhandled errors (TypeError from
-    // accessing an undefined provider). Ideally this should be 400, but the
-    // handler wraps all errors generically.
-    expect(res.status()).toBe(500);
+    // An unresolvable model must hit the explicit `if (!llm)` guard, not throw.
+    expect(res.status()).toBe(400);
     const body = await res.json();
-    expect(body.message).toBeTruthy();
+    expect(body).toEqual({ error: 'Invalid chat model' });
   });
 });

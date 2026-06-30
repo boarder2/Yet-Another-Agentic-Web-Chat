@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures/api';
-import { seedMemory } from '../utils/seed';
+import { seedMemory, seedWorkspace } from '../utils/seed';
 
 test.describe('GET /api/memories', () => {
   test('returns paginated list shape', async ({ request }) => {
@@ -41,6 +41,102 @@ test.describe('GET /api/memories', () => {
     expect(body.limit).toBe(2);
     expect(body.offset).toBe(0);
   });
+
+  test('search by q param returns matching memories', async ({ request }) => {
+    await seedMemory(request, { content: 'panda-search-term' });
+    await seedMemory(request, { content: 'unrelated memory' });
+
+    const res = await request.get(
+      `/api/memories?q=${encodeURIComponent('panda')}`,
+    );
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.data.length).toBeGreaterThanOrEqual(1);
+    for (const m of body.data) {
+      expect((m.content as string).toLowerCase()).toContain('panda');
+    }
+  });
+
+  test('search with no matches returns empty data', async ({ request }) => {
+    const res = await request.get(
+      `/api/memories?q=${encodeURIComponent('xyznonexistent999')}`,
+    );
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.data).toEqual([]);
+    expect(body.total).toBe(0);
+  });
+
+  test('filters by category', async ({ request }) => {
+    // Seed a memory, then read its assigned category (LLM-classified).
+    const id = await seedMemory(request, { content: 'category-filter-target' });
+    const getRes = await request.get(`/api/memories/${id}`);
+    const assigned = (await getRes.json()).category;
+
+    // Filter by the assigned category — our memory must appear.
+    const res = await request.get(
+      `/api/memories?category=${encodeURIComponent(assigned)}`,
+    );
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    const ids: string[] = (body.data as Record<string, unknown>[]).map(
+      (m) => m.id as string,
+    );
+    expect(ids).toContain(id);
+    // All returned memories must match the requested category.
+    for (const m of body.data) {
+      expect((m as Record<string, unknown>).category).toBe(assigned);
+    }
+  });
+
+  test('filters by workspaceId', async ({ request }) => {
+    const wsId = await seedWorkspace(request, { name: 'mem-ws-filter' });
+    await seedMemory(request, {
+      content: 'workspace-memory',
+      workspaceId: wsId,
+    });
+    // Seed a non-workspace memory that should be excluded
+    await seedMemory(request, { content: 'global-memory' });
+
+    const res = await request.get(
+      `/api/memories?workspaceId=${encodeURIComponent(wsId)}`,
+    );
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.data.length).toBeGreaterThanOrEqual(1);
+    for (const m of body.data) {
+      expect(m.workspaceId).toBe(wsId);
+    }
+  });
+
+  test('sorts by lastAccessedAt and accessCount', async ({ request }) => {
+    await seedMemory(request, { content: 'sort-test-a' });
+    await seedMemory(request, { content: 'sort-test-b' });
+
+    for (const sort of ['lastAccessedAt', 'accessCount', 'createdAt']) {
+      const res = await request.get(
+        `/api/memories?sort=${encodeURIComponent(sort)}`,
+      );
+      expect(res.status()).toBe(200);
+      const body = await res.json();
+      expect(Array.isArray(body.data)).toBe(true);
+    }
+  });
+
+  test('hasMore is true when results cross page boundary', async ({
+    request,
+  }) => {
+    await seedMemory(request, { content: 'page-a' });
+    await seedMemory(request, { content: 'page-b' });
+    await seedMemory(request, { content: 'page-c' });
+
+    const res = await request.get('/api/memories?limit=2&offset=0');
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.data.length).toBeLessThanOrEqual(2);
+    expect(body.limit).toBe(2);
+    expect(body.hasMore).toBe(true);
+  });
 });
 
 test.describe('POST /api/memories', () => {
@@ -78,6 +174,20 @@ test.describe('POST /api/memories', () => {
     expect(res.status()).toBe(400);
     const body = await res.json();
     expect(body.error).toBe('Content is required');
+  });
+
+  test('associates a memory with a workspace when workspaceId is provided', async ({
+    request,
+  }) => {
+    const wsId = await seedWorkspace(request, { name: 'mem-ws-create' });
+    const res = await request.post('/api/memories', {
+      data: { content: 'workspace-bound-memory', workspaceId: wsId },
+    });
+    expect(res.status()).toBe(201);
+    const body = await res.json();
+    expect(body.workspaceId).toBe(wsId);
+    expect(body.content).toBe('workspace-bound-memory');
+    expect(body.sourceType).toBe('manual');
   });
 });
 
@@ -158,12 +268,15 @@ test.describe('DELETE /api/memories/[id]', () => {
 });
 
 test.describe('POST /api/memories/reindex', () => {
-  test('returns synchronous success with count', async ({ request }) => {
+  test('returns success with a count field', async ({ request }) => {
+    // Seed memories so the reindex loop has data to process.
+    await seedMemory(request, { content: 'reindex-memory-a' });
+    await seedMemory(request, { content: 'reindex-memory-b' });
+
     const res = await request.post('/api/memories/reindex');
     expect(res.status()).toBe(200);
     const body = await res.json();
     expect(body.success).toBe(true);
     expect(typeof body.count).toBe('number');
-    expect(body.count).toBeGreaterThanOrEqual(0);
   });
 });

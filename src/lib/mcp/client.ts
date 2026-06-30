@@ -55,6 +55,9 @@ async function connectOrAuth(
   try {
     await client.connect(transport);
   } catch (e) {
+    // A failed connect leaves the transport open — notably SSE's EventSource,
+    // which auto-reconnects forever and floods onerror. Close it before rethrowing.
+    await transport.close().catch(() => undefined);
     if (e instanceof UnauthorizedError) throw authError(server);
     throw e;
   }
@@ -109,10 +112,12 @@ export async function connectMcpServer(server: McpServerRow): Promise<Client> {
     await connectOrAuth(client, new SSEClientTransport(url), server);
   } else {
     // auto: probe StreamableHTTP first, fall back to SSE only on non-401 errors
+    const probe = new StreamableHTTPClientTransport(url);
     try {
-      await client.connect(new StreamableHTTPClientTransport(url));
+      await client.connect(probe);
       await persistResolvedTransport(server, 'streamableHttp');
     } catch (e) {
+      await probe.close().catch(() => undefined);
       // Never fall back on 401 — surface auth error immediately
       if (e instanceof UnauthorizedError) throw authError(server);
       await connectOrAuth(client, new SSEClientTransport(url), server);

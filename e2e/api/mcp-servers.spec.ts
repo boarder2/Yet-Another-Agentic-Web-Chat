@@ -622,3 +622,43 @@ test.describe('DELETE /api/mcp/servers (collection)', () => {
     });
   });
 });
+
+test.describe('POST /api/mcp/servers/[id]/test', () => {
+  test('returns 404 for nonexistent id', async ({ request }) => {
+    const res = await request.post(
+      '/api/mcp/servers/00000000-0000-0000-0000-000000000000/test',
+    );
+    expect(res.status()).toBe(404);
+    expect(await res.json()).toEqual({ error: 'Not found' });
+  });
+
+  // An unreachable host fails the StreamableHTTP probe and falls back to SSE,
+  // whose EventSource auto-reconnects forever — the transport must be closed on
+  // connect failure so it doesn't leak a retrying connection. The endpoint must
+  // resolve promptly with a single 'error' result rather than hang or retry.
+  test('reports error for an unreachable server without hanging', async ({
+    request,
+  }) => {
+    const createRes = await request.post('/api/mcp/servers', {
+      data: {
+        name: uniq('mcp-unreachable'),
+        url: 'https://new.example.com/mcp',
+      },
+    });
+    const created = (await createRes.json()).server;
+
+    const start = Date.now();
+    const res = await request.post(`/api/mcp/servers/${created.id}/test`);
+    const elapsed = Date.now() - start;
+
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe('error');
+    expect(body.toolCount).toBe(0);
+    expect(body.toolNames).toEqual([]);
+    expect(typeof body.error).toBe('string');
+    expect(body.error.length).toBeGreaterThan(0);
+    // The connect path self-bounds at 5s; a leaking retry loop would blow past it.
+    expect(elapsed).toBeLessThan(15000);
+  });
+});

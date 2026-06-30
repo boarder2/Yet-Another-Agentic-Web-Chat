@@ -147,7 +147,8 @@ export const getSimilarityMeasure = () =>
 
 export const getKeepAlive = () => loadConfig().GENERAL.KEEP_ALIVE;
 
-export const getBaseUrl = () => loadConfig().GENERAL.BASE_URL;
+export const getBaseUrl = () =>
+  process.env.BASE_URL || loadConfig().GENERAL.BASE_URL;
 
 export const getPrivateSessionDurationMinutes = () =>
   loadConfig().GENERAL.PRIVATE_SESSION_DURATION_MINUTES ?? 1440;

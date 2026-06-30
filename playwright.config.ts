@@ -27,6 +27,10 @@ export default defineConfig({
     env: {
       DATA_DIR: TEST_DATA_DIR,
       YAAWC_TEST_MODE: 'true',
+      // Configure a fixed public origin (distinct from the bind port) so the
+      // opensearch origin-detection specs are deterministic regardless of the
+      // local config.toml.
+      BASE_URL: 'http://localhost:3000',
       // Bind all interfaces so the readiness check on localhost connects even
       // when the container's HOSTNAME resolves to a non-loopback address.
       HOSTNAME: '0.0.0.0',

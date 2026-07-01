@@ -770,6 +770,23 @@ const ChatWindow = ({
 
       if (data.type === 'replay_complete') {
         inReplay = false;
+        // Correct the seed to the server's authoritative content: the DB read
+        // this was seeded from (partialMsg.content) can lag a debounced flush
+        // behind what's already been broadcast over SSE, dropping tokens that
+        // were live but not yet persisted at reconnect time.
+        if (
+          typeof data.content === 'string' &&
+          data.content !== recievedMessage
+        ) {
+          recievedMessage = data.content;
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.messageId === aiMessageId
+                ? { ...m, content: recievedMessage }
+                : m,
+            ),
+          );
+        }
         return;
       }
 

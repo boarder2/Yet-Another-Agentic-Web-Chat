@@ -22,4 +22,18 @@ export class SettingsPage extends BasePage {
   async close() {
     await this.closeBtn.click();
   }
+
+  /** Navigate to a section by its nav label (e.g. "Skills", "MCP Servers"). */
+  async openSection(label: string) {
+    await this.page
+      .locator('nav.hidden.lg\\:block button')
+      .filter({ hasText: label })
+      .first()
+      .click();
+    await this.page
+      .locator('h2.font-medium')
+      .filter({ hasText: label })
+      .first()
+      .waitFor({ state: 'visible' });
+  }
 }

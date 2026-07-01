@@ -66,8 +66,12 @@ class FakeChatModel extends BaseChatModel {
       ? 'Based on the document, the answer is deterministic.'
       : 'This is a deterministic test answer.';
 
+    const slow = this.modelName.includes('slow');
     const tokens = answer.split(/(?<=\s)/);
     for (let i = 0; i < tokens.length; i++) {
+      // Paced delivery so tests can deterministically observe a run
+      // mid-stream (cancel, reload/reattach) before it completes.
+      if (slow) await new Promise((resolve) => setTimeout(resolve, 300));
       const isLast = i === tokens.length - 1;
       const chunk = new ChatGenerationChunk({
         text: tokens[i],
@@ -173,6 +177,12 @@ export async function loadTestChatModels(): Promise<Record<string, ChatModel>> {
       displayName: 'Test (tool loop)',
       model: new FakeChatModel({
         modelName: 'test-tool',
+      }) as unknown as BaseChatModel,
+    },
+    'test-slow': {
+      displayName: 'Test (slow stream)',
+      model: new FakeChatModel({
+        modelName: 'test-slow',
       }) as unknown as BaseChatModel,
     },
   };

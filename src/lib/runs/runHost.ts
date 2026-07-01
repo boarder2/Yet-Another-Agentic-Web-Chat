@@ -871,6 +871,11 @@ export async function attachRunHost(params: {
   let flushTimer: ReturnType<typeof setTimeout> | null = null;
 
   const scheduleFlush = (immediate: boolean) => {
+    // Mirror onto the in-memory run immediately, ahead of the (possibly
+    // debounced) DB write below — a reconnecting client's replay boundary is
+    // seeded from this field (see runHub.subscribe's replay_complete), and it
+    // must never lag behind what's already been broadcast over SSE.
+    run.recievedMessage = recievedMessage;
     if (immediate) {
       if (flushTimer) {
         clearTimeout(flushTimer);

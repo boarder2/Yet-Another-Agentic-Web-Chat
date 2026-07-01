@@ -7,6 +7,8 @@ YAAWC is a Next.js (App Router) web app: start `npm run dev`, then drive headles
 
 **Observe with `snapshot` (DOM/a11y tree as text — diffable, greppable), not screenshots.** Screenshots are opt-in (`SHOT=1`), only worth it for visual bugs (layout, image-heavy widgets).
 
+This skill drives a live dev server for manual/exploratory checks — LLM-backed features need a real provider key. For automated regression coverage (including chat/agent behavior) that runs offline against the mocked `test` provider, use the Playwright e2e suite (`npm run test:e2e`, see `e2e/CLAUDE.md`) instead.
+
 **Port is not fixed:** `next dev` binds 5005 (`npm run dev` passes `-p 5005`) but auto-bumps to 5006+ when taken (common in the Linux devcontainer). The harness parses the bound port from the dev log and validates each candidate is really YAAWC (`/api/config` body contains `chatModelProviders`, not just any 200); override candidates with `PORTS="5005 5006 8080"`.
 
 ## Prerequisites

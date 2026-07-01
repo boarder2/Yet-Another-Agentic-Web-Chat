@@ -1,5 +1,9 @@
 import { test, expect } from '../fixtures/api';
-import { seedChat } from '../utils/seed';
+import {
+  seedChat,
+  seedAwaitingApproval,
+  cancelAwaitingRun,
+} from '../utils/seed';
 
 test.describe('GET /api/approvals/pending', () => {
   test('returns empty pending array when no approvals exist', async ({
@@ -27,12 +31,55 @@ test.describe('GET /api/approvals/pending', () => {
     expect(body.pending).toEqual([]);
   });
 
-  // Full coverage of the approvals/pending endpoint requires seeding actual
-  // approval_request rows, which can only be created by the agent when it hits
-  // an interrupt (e.g. ask_user tool call). The current test model variants
-  // (test-direct, test-tool) don't emit interrupts. A test-ask-user model
-  // variant would unlock:
-  //   - Non-empty pending array with real field values
-  //   - chatId filter returning matching vs. non-matching rows
-  //   - Multiple pending approvals with distinct toolKinds
+  test('returns a real pending approval with its question and options', async ({
+    request,
+  }) => {
+    const { chatId, messageId, approvalId, question } =
+      await seedAwaitingApproval({ content: 'approvals-real-data' });
+
+    const res = await request.get(`/api/approvals/pending?chatId=${chatId}`);
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.pending.length).toBe(1);
+    const approval = body.pending[0];
+    expect(approval.approvalId).toBe(approvalId);
+    expect(approval.chatId).toBe(chatId);
+    expect(approval.messageId).toBe(messageId);
+    expect(approval.toolKind).toBe('ask_user');
+    expect(approval.payload.question).toBe(question);
+    expect(approval.payload.question).toBe('Which color do you prefer?');
+    expect(approval.payload.options).toEqual([
+      { label: 'Red' },
+      { label: 'Blue' },
+    ]);
+    expect(approval.payload.multiSelect).toBe(false);
+    expect(approval.payload.allowFreeformInput).toBe(true);
+
+    await cancelAwaitingRun(request, { messageId, chatId });
+  });
+
+  test('scopes pending approvals by chatId — an unrelated chat sees none', async ({
+    request,
+  }) => {
+    const { chatId, messageId } = await seedAwaitingApproval({
+      content: 'approvals-scoping',
+    });
+    const otherChatId = await seedChat(request, {
+      content: 'unrelated chat',
+    });
+
+    const otherRes = await request.get(
+      `/api/approvals/pending?chatId=${otherChatId}`,
+    );
+    expect((await otherRes.json()).pending).toEqual([]);
+
+    const mineRes = await request.get(
+      `/api/approvals/pending?chatId=${chatId}`,
+    );
+    const mineBody = await mineRes.json();
+    expect(mineBody.pending.length).toBe(1);
+    expect(mineBody.pending[0].chatId).toBe(chatId);
+
+    await cancelAwaitingRun(request, { messageId, chatId });
+  });
 });

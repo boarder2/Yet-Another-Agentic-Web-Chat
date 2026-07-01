@@ -1,5 +1,6 @@
-import type { APIRequestContext } from '@playwright/test';
-import { uid, uniq } from './helpers';
+import { expect, type APIRequestContext } from '@playwright/test';
+import { uid, uniq, baseURL } from './helpers';
+import { streamChatUntil, type ChatEvent } from './sse';
 
 async function postJson(
   request: APIRequestContext,
@@ -158,6 +159,91 @@ export async function seedWorkspaceFile(
     mime: overrides?.mime ?? 'text/plain',
   });
   return (body as { file: { id: string } }).file.id;
+}
+
+export interface AwaitingApproval {
+  chatId: string;
+  messageId: string;
+  approvalId: string;
+  question: string;
+  events: ChatEvent[];
+}
+
+/**
+ * Start a chat run with the `test-ask-user` model and stop reading its SSE
+ * stream as soon as it pauses at the ask_user interrupt (awaiting_user).
+ * Uses a raw fetch under the hood (see streamChatUntil) since the run's
+ * connection stays open indefinitely once paused — the `request` fixture
+ * would hang waiting for the body to close.
+ */
+export async function seedAwaitingApproval(
+  overrides?: Partial<{
+    chatId: string;
+    messageId: string;
+    content: string;
+    focusMode: string;
+  }>,
+): Promise<AwaitingApproval> {
+  const chatId = overrides?.chatId ?? uid();
+  const messageId = overrides?.messageId ?? uid();
+  const events = await streamChatUntil(
+    baseURL(),
+    {
+      message: {
+        messageId,
+        chatId,
+        content: overrides?.content ?? 'ask-user test',
+      },
+      focusMode: overrides?.focusMode ?? 'chat',
+      files: [],
+      chatModel: { provider: 'test', name: 'test-ask-user' },
+      systemModel: { provider: 'test', name: 'test-ask-user' },
+      selectedSystemPromptIds: [],
+      workspaceId: null,
+    },
+    (evts) => evts.some((e) => e.type === 'ask_user_pending'),
+  );
+  const pending = events.find((e) => e.type === 'ask_user_pending');
+  if (!pending) {
+    throw new Error('ask_user_pending event never arrived');
+  }
+  const data = pending.data as Record<string, unknown>;
+  return {
+    chatId,
+    messageId,
+    approvalId: data.approvalId as string,
+    question: data.question as string,
+    events,
+  };
+}
+
+/**
+ * Cancel a run and poll until its terminal state is persisted. Tests that
+ * seed an awaiting-approval run but resolve it some other way (e.g. via
+ * `runs/resume`) don't need this; tests that only inspect the paused state
+ * must call this before finishing so no unresolved approval or active run
+ * leaks into other specs (`api/approvals.spec.ts`'s empty-array checks in
+ * particular assert against ALL pending approvals, unscoped).
+ */
+export async function cancelAwaitingRun(
+  request: APIRequestContext,
+  params: { messageId: string; chatId: string },
+): Promise<void> {
+  await request.post('/api/chat/cancel', {
+    data: { messageId: params.messageId },
+  });
+  await expect
+    .poll(
+      async () => {
+        const res = await request.get(`/api/chats/${params.chatId}`);
+        const body = (await res.json()) as {
+          chat: { lastRunStatus: string | null };
+        };
+        return body.chat.lastRunStatus;
+      },
+      { timeout: 5000 },
+    )
+    .toBe('cancelled');
 }
 
 /** Seed a scheduled task, run it, and return the resulting chat ID. */

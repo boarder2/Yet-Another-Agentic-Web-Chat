@@ -81,3 +81,68 @@ export function extractSources(events: ChatEvent[]): CitationSource[] {
   }
   return sources;
 }
+
+/**
+ * POST /api/chat via raw fetch and read the SSE stream incrementally,
+ * stopping as soon as `stopWhen` matches the accumulated events (or the
+ * stream ends naturally). Needed because a run paused at an interrupt
+ * (awaiting_user) keeps its HTTP connection open indefinitely — Playwright's
+ * `request` fixture has no partial-read API, so this reads the fetch body
+ * reader directly and aborts the connection once satisfied.
+ */
+export async function streamChatUntil(
+  baseUrl: string,
+  body: Record<string, unknown>,
+  stopWhen: (events: ChatEvent[]) => boolean,
+  timeoutMs = 10_000,
+): Promise<ChatEvent[]> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${baseUrl}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    if (!res.ok || !res.body) {
+      throw new Error(`POST /api/chat returned ${res.status}`);
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    const events: ChatEvent[] = [];
+    let buffer = '';
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      for (const line of lines) {
+        if (!line) continue;
+        try {
+          events.push(JSON.parse(line));
+        } catch {
+          // skip unparseable lines
+        }
+      }
+      if (stopWhen(events)) {
+        await reader.cancel().catch(() => {});
+        return events;
+      }
+    }
+    // Flush any trailing multi-byte sequence and parse a final unterminated line.
+    buffer += decoder.decode();
+    if (buffer) {
+      try {
+        events.push(JSON.parse(buffer));
+      } catch {
+        // skip unparseable trailing content
+      }
+    }
+    return events;
+  } finally {
+    clearTimeout(timer);
+    controller.abort();
+  }
+}

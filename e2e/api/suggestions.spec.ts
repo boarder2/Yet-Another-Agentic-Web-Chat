@@ -84,4 +84,25 @@ test.describe('POST /api/suggestions', () => {
     const body = await res.json();
     expect(body).toEqual({ error: 'Invalid chat model' });
   });
+
+  test('parses real suggestions from a model that emits <suggestions> XML', async ({
+    request,
+  }) => {
+    const res = await request.post('/api/suggestions', {
+      data: {
+        chatHistory: [
+          { role: 'user', content: 'Hello' },
+          { role: 'assistant', content: 'Hi, how can I help?' },
+        ],
+        chatModel: { provider: 'test', model: 'test-structured' },
+      },
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.suggestions).toEqual([
+      'What else should I know about this topic?',
+      'How does this compare to related approaches?',
+      'What are the practical next steps?',
+    ]);
+  });
 });

@@ -12,6 +12,8 @@ const config = [
       '**/storage/**',
       '**/uploads/**',
       '**/data/**',
+      '**/playwright-report/**',
+      '**/test-results/**',
       '.prettierrc.js',
       'postcss.config.js',
       'tailwind.config.ts',

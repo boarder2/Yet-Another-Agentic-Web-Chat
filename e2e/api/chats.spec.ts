@@ -363,7 +363,7 @@ test.describe('POST /api/chats/search', () => {
     const res = await request.post('/api/chats/search', {
       data: {
         query: 'search shape test',
-        chatModel: { provider: 'test', name: 'test-direct' },
+        chatModel: { provider: 'test', model: 'test-direct' },
       },
     });
     expect(res.status()).toBe(200);
@@ -398,7 +398,7 @@ test.describe('POST /api/chats/search', () => {
       data: {
         query: 'workspace search hit',
         workspaceId: wsId,
-        chatModel: { provider: 'test', name: 'test-direct' },
+        chatModel: { provider: 'test', model: 'test-direct' },
       },
     });
     expect(res.status()).toBe(200);

@@ -8,7 +8,17 @@ Tests assert **correct** behavior — what the feature is _supposed_ to do, deri
 
 ## Test Model Variants
 
-`src/lib/providers/test.ts` is scriptable by model id (`test-direct`, `test-tool`, `test-slow`, `test-embed`) — select the behavior a spec needs by choosing the model rather than special-casing a spec against real provider output. Extend it with new variants as scenarios require.
+`src/lib/providers/test.ts` is scriptable by model id — select the behavior a spec needs by choosing the model rather than special-casing a spec against real provider output. Extend it with new variants as scenarios require.
+
+| Model id          | Behavior                                                                                                                                       |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `test-direct`     | Answers immediately with fixed text, no tools.                                                                                                 |
+| `test-tool`       | Emits one `file_search` tool call, then a fixed answer.                                                                                        |
+| `test-tool-multi` | Emits two sequential `file_search` tool calls (each after the prior result), then a fixed answer.                                              |
+| `test-ask-user`   | Emits an `ask_user` tool call (triggers a real LangGraph interrupt — the run pauses `awaiting_user`); on resume, answers with fixed text.      |
+| `test-structured` | If tools are bound (`withStructuredOutput`), returns a matching tool call with deterministic args; otherwise answers with `<suggestions>` XML. |
+| `test-slow`       | Paces token delivery (300ms/token) so a spec can observe a run mid-stream.                                                                     |
+| `test-embed`      | Deterministic fixed-vector embeddings.                                                                                                         |
 
 ## Setup
 
@@ -41,6 +51,7 @@ Tests run against an isolated SQLite database at `e2e/.test-data/db.sqlite` (git
 e2e/
   smoke/          Fast smoke tests
   tests/          Full feature/regression specs
+  api/            Pure HTTP specs (see e2e/api/CLAUDE.md)
   fixtures/       Extend @playwright/test — always import from here, never @playwright/test directly
   pages/          Page Object Models (add when a flow is reused across 3+ specs)
   utils/          Shared test helpers
@@ -48,6 +59,18 @@ e2e/
   .test-data/     Isolated test database (gitignored)
 ```
 
+See `e2e/COVERAGE.md` for the route/page → spec matrix and out-of-scope table.
+
 ## Adding a Fixture
 
 Extend `e2e/fixtures/index.ts`. Do not import from `@playwright/test` directly in specs.
+
+## Seed & SSE Helpers
+
+`e2e/utils/seed.ts` — API-based data factories, reused across API and UI specs to set up state without going through the UI: `seedWorkspace`, `seedChat`, `seedMemory`, `seedSkill`, `seedSystemPrompt`, `seedScheduledTask`, `seedWorkspaceFile`, `seedScheduledChat`. Each returns the created id. `seedAwaitingApproval` starts a `test-ask-user` run and returns once it pauses at the interrupt (`chatId`/`messageId`/`approvalId`/`question`); pair it with `cancelAwaitingRun` when a spec doesn't resolve the approval via `runs/resume` itself, so no unresolved approval leaks into other specs.
+
+`e2e/utils/sse.ts` — parses the chat SSE stream: `collectSseEvents` (from a raw string or a Playwright `APIResponse`), `eventsOfType`, `joinResponseText`, `extractSources`. `streamChatUntil` reads `/api/chat` via raw `fetch` and stops as soon as a predicate matches — needed for a paused (`awaiting_user`) run, whose connection otherwise stays open indefinitely and would hang the Playwright `request` fixture.
+
+## Page Object Models
+
+`e2e/pages/`: `BasePage` (shared `goto`), `HomePage`, `ChatPage`, `DashboardPage`, `HistoryPage`, `MemoryPage`, `SettingsPage`, `WorkspacesPage`, `WorkspaceDetailPage`. Add a new POM once a flow is driven from 3+ specs; otherwise interact with the page directly in the spec.

@@ -16,6 +16,7 @@ Pure HTTP tests against route handlers under `src/app/api/**`. No browser is lau
 - Assert **correct** behavior, not current behavior — expectations come from how the endpoint is _meant_ to behave, never reverse-engineered from current output to force a green. On failure, triage: wrong expectation → fix the test; handler bug → leave it failing and surface it. Ask the user when it's ambiguous.
 - Tests must be independent — create the resources they need, don't rely on ordering.
 - **Never** hit a real LLM — use the `test` provider/model (`YAAWC_TEST_MODE=true`) that returns predefined outputs for given inputs. Any route that runs the model must be exercised against the fake one.
+- Use `e2e/utils/seed.ts` factories to set up fixtures instead of hand-rolling POST calls; use `e2e/utils/sse.ts` to parse `/api/chat` SSE responses instead of re-parsing the stream inline.
 
 ## Running
 

@@ -1,6 +1,10 @@
 import { test, expect } from '../fixtures/api';
 import { uid } from '../utils/helpers';
-import { seedChat } from '../utils/seed';
+import {
+  seedChat,
+  seedAwaitingApproval,
+  cancelAwaitingRun,
+} from '../utils/seed';
 
 test.describe('POST /api/respond-now', () => {
   test('returns 400 when messageId is missing', async ({ request }) => {
@@ -51,5 +55,22 @@ test.describe('POST /api/respond-now', () => {
     expect(res.status()).toBe(200);
     const body = await res.json();
     expect(body.success).toBe(true);
+  });
+
+  test('succeeds for a genuinely in-flight (awaiting_user) run', async ({
+    request,
+  }) => {
+    const { chatId, messageId } = await seedAwaitingApproval({
+      content: 'respond-now-in-flight',
+    });
+
+    const res = await request.post('/api/respond-now', {
+      data: { messageId },
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.success).toBe(true);
+
+    await cancelAwaitingRun(request, { messageId, chatId });
   });
 });

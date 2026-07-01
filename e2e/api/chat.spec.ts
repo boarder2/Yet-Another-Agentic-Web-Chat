@@ -1,7 +1,13 @@
 import { test, expect } from '../fixtures/api';
 import type { APIRequestContext } from '@playwright/test';
 import { uid, uniq } from '../utils/helpers';
-import { seedChat, seedWorkspace, seedWorkspaceFile } from '../utils/seed';
+import {
+  seedChat,
+  seedWorkspace,
+  seedWorkspaceFile,
+  seedAwaitingApproval,
+  cancelAwaitingRun,
+} from '../utils/seed';
 import {
   collectSseEvents,
   eventsOfType,
@@ -497,9 +503,59 @@ test.describe('POST /api/chat/cancel', () => {
     expect(body.error).toBe('No in-progress request for this messageId');
   });
 
-  // Note: the happy path (cancel an active run) cannot be tested with the
-  // current synchronous test model — the run completes before a cancel can be
-  // issued. Adding a slow/pausing test model variant would enable this.
+  test('cancels a run paused at an interrupt and transitions state to cancelled', async ({
+    request,
+  }) => {
+    const { chatId, messageId } = await seedAwaitingApproval({
+      content: 'cancel-happy-path',
+    });
+
+    // Before cancelling: the paused run shows up as awaiting_user.
+    const activeRes = await request.get('/api/chat/runs/active');
+    const activeBody = await activeRes.json();
+    const entry = (
+      activeBody.active as Array<{
+        chatId: string;
+        messageId: string;
+        status: string;
+      }>
+    ).find((r) => r.messageId === messageId);
+    expect(entry).toBeTruthy();
+    expect(entry!.chatId).toBe(chatId);
+    expect(entry!.status).toBe('awaiting_user');
+
+    const cancelRes = await request.post('/api/chat/cancel', {
+      data: { messageId },
+    });
+    expect(cancelRes.status()).toBe(200);
+    expect((await cancelRes.json()).success).toBe(true);
+
+    // Cancellation finishes asynchronously (fired from the abort listener).
+    await expect
+      .poll(async () => {
+        const getRes = await request.get(`/api/chats/${chatId}`);
+        const body = await getRes.json();
+        return body.chat.lastRunStatus as string | null;
+      })
+      .toBe('cancelled');
+
+    const getRes = await request.get(`/api/chats/${chatId}`);
+    const body = await getRes.json();
+    expect(body.chat.activeRunMessageId).toBeNull();
+    expect(body.chat.activeRunStatus).toBeNull();
+
+    // The pending approval must resolve as cancelled, not dangle.
+    const pendingRes = await request.get(
+      `/api/approvals/pending?chatId=${chatId}`,
+    );
+    expect((await pendingRes.json()).pending).toEqual([]);
+
+    const activeRes2 = await request.get('/api/chat/runs/active');
+    const stillActive = (
+      (await activeRes2.json()).active as Array<{ messageId: string }>
+    ).some((r) => r.messageId === messageId);
+    expect(stillActive).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -624,6 +680,29 @@ test.describe('POST /api/chat/compact', () => {
     ).filter((m) => m.role === 'compaction');
     expect(compactionMsgs.length).toBeGreaterThanOrEqual(1);
   });
+
+  test('returns 409 while a run is paused awaiting user input', async ({
+    request,
+  }) => {
+    const { chatId, messageId } = await seedAwaitingApproval({
+      content: 'compact-conflict',
+    });
+
+    const res = await request.post('/api/chat/compact', {
+      data: {
+        chatId,
+        chatModel: { provider: 'test', name: 'test-direct' },
+        systemModel: { provider: 'test', name: 'test-direct' },
+      },
+    });
+    expect(res.status()).toBe(409);
+    const body = await res.json();
+    expect(body.error).toBe(
+      'Cannot compact while a run is in progress. Try again when the current turn completes.',
+    );
+
+    await cancelAwaitingRun(request, { messageId, chatId });
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -653,9 +732,31 @@ test.describe('GET /api/chat/runs/active', () => {
     }
   });
 
-  // Note: the synchronous test model completes before /runs/active can be
-  // polled, so the active list is always empty. A pausing test model variant
-  // (e.g. test-ask-user) would allow testing state transitions.
+  test('reports a run paused at an interrupt as awaiting_user and counts it towards awaitingAttentionCount', async ({
+    request,
+  }) => {
+    const { chatId, messageId } = await seedAwaitingApproval({
+      content: 'active-awaiting-user',
+    });
+
+    const res = await request.get('/api/chat/runs/active');
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    const entry = (
+      body.active as Array<{
+        chatId: string;
+        messageId: string;
+        status: string;
+        startedAt: number;
+      }>
+    ).find((r) => r.messageId === messageId);
+    expect(entry).toBeTruthy();
+    expect(entry!.chatId).toBe(chatId);
+    expect(entry!.status).toBe('awaiting_user');
+    expect(body.awaitingAttentionCount).toBeGreaterThanOrEqual(1);
+
+    await cancelAwaitingRun(request, { messageId, chatId });
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -764,6 +865,117 @@ test.describe('POST /api/chat/runs/resume', () => {
     expect(res.status()).toBe(400);
   });
 
-  // Note: happy-path resume (approve a pending ask_user) requires a test model
-  // that emits an ask_user tool call (e.g. test-ask-user).
+  test('resumes a paused ask_user run to completion', async ({ request }) => {
+    const { chatId, messageId, approvalId, question } =
+      await seedAwaitingApproval({ content: 'resume-happy-path' });
+    expect(question).toBe('Which color do you prefer?');
+
+    const resumeRes = await request.post('/api/chat/runs/resume', {
+      data: { approvalId, response: { selectedOptions: ['Red'] } },
+    });
+    expect(resumeRes.status()).toBe(200);
+    expect((await resumeRes.json()).ok).toBe(true);
+
+    // Reconnect (Playwright's request fixture is fine here — the resumed run
+    // terminates quickly with the fake model and closes its stream).
+    const streamRes = await request.get(`/api/chat/runs/${messageId}/stream`);
+    expect(streamRes.status()).toBe(200);
+    const events = await collectSseEvents(streamRes);
+    const text = joinResponseText(events);
+    expect(text).toBe('Thanks for your answer — resuming now.');
+
+    const getRes = await request.get(`/api/chats/${chatId}`);
+    const body = await getRes.json();
+    expect(body.chat.lastRunStatus).toBe('completed');
+    expect(body.chat.activeRunMessageId).toBeNull();
+    const assistantMsg = (
+      body.messages as Array<{ role: string; content: string }>
+    ).find((m) => m.role === 'assistant');
+    expect(assistantMsg).toBeTruthy();
+    expect(assistantMsg!.content).toContain(
+      'Thanks for your answer — resuming now.',
+    );
+
+    // The approval must be resolved, not left pending.
+    const pendingRes = await request.get(
+      `/api/approvals/pending?chatId=${chatId}`,
+    );
+    expect((await pendingRes.json()).pending).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/chat — multi-step tool loop (test-tool-multi)
+// ---------------------------------------------------------------------------
+
+test.describe('POST /api/chat (test-tool-multi)', () => {
+  test('emits two sequential tool calls before answering', async ({
+    request,
+  }) => {
+    const wsId = await seedWorkspace(request, { name: uniq('multi-ws') });
+    await seedWorkspaceFile(request, wsId, {
+      name: `${uniq('doc')}.txt`,
+      content: 'The capital of France is Paris. The Eiffel Tower is there.',
+    });
+
+    const { events } = await postChat(request, {
+      content: 'Tell me about Paris',
+      focusMode: 'localResearch',
+      workspaceId: wsId,
+      model: 'test-tool-multi',
+    });
+
+    // Exactly two started/success pairs, in strict sequential order — the
+    // second call must not start until the first has both started and
+    // succeeded. toolCallId values are framework-generated, so assert their
+    // relational structure (paired, distinct per call) rather than exact ids.
+    const relevant = events.filter(
+      (e) => e.type === 'tool_call_started' || e.type === 'tool_call_success',
+    );
+    expect(relevant.map((e) => e.type)).toEqual([
+      'tool_call_started',
+      'tool_call_success',
+      'tool_call_started',
+      'tool_call_success',
+    ]);
+    const ids = relevant.map(
+      (e) => (e.data as Record<string, unknown>).toolCallId as string,
+    );
+    for (const id of ids) expect(typeof id).toBe('string');
+    expect(ids[0]).toBe(ids[1]);
+    expect(ids[2]).toBe(ids[3]);
+    expect(ids[0]).not.toBe(ids[2]);
+
+    const text = joinResponseText(events);
+    expect(text).toBe(
+      'Based on the documents, the multi-step answer is deterministic.',
+    );
+  });
+
+  test('message persists with the multi-step answer', async ({ request }) => {
+    const wsId = await seedWorkspace(request, {
+      name: uniq('multi-persist-ws'),
+    });
+    await seedWorkspaceFile(request, wsId, {
+      name: `${uniq('notes')}.txt`,
+      content: 'Some reference content.',
+    });
+
+    const { chatId } = await postChat(request, {
+      content: 'Summarize the notes',
+      focusMode: 'localResearch',
+      workspaceId: wsId,
+      model: 'test-tool-multi',
+    });
+
+    const getRes = await request.get(`/api/chats/${chatId}`);
+    const body = await getRes.json();
+    const assistantMsg = (
+      body.messages as Array<{ role: string; content: string }>
+    ).find((m) => m.role === 'assistant');
+    expect(assistantMsg).toBeTruthy();
+    expect(assistantMsg!.content).toContain(
+      'Based on the documents, the multi-step answer is deterministic.',
+    );
+  });
 });

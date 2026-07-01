@@ -71,6 +71,16 @@ export class MemoryPage extends BasePage {
     return -1;
   }
 
+  /** Wait for a specific memory's row to render — needed before reading
+   * contents for a memory that was seeded via the API (not added through the
+   * UI), since opening the section only waits for its heading, not for the
+   * list fetch to resolve. */
+  async waitForMemory(content: string) {
+    await this.page.locator('.group.p-3').filter({ hasText: content }).waitFor({
+      state: 'visible',
+    });
+  }
+
   /** All rendered memory content texts. */
   async memoryContents(): Promise<string[]> {
     const items = this.page.locator('.group.p-3 .text-sm.flex-1');
@@ -100,10 +110,7 @@ export class MemoryPage extends BasePage {
       .locator('textarea[aria-label="New memory content"]')
       .fill(content);
     await this.page.getByRole('button', { name: 'Save' }).click();
-    // Wait for the new memory to appear.
-    await this.page.locator('.group.p-3').filter({ hasText: content }).waitFor({
-      state: 'visible',
-    });
+    await this.waitForMemory(content);
   }
 
   // ─── Delete ───

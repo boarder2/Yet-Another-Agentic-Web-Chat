@@ -1,11 +1,37 @@
 import { test, expect } from '../fixtures';
 import { ChatPage } from '../pages/ChatPage';
 import { HistoryPage } from '../pages/HistoryPage';
+import {
+  acquireGlobalLock,
+  SHARED_SETTINGS_LOCK,
+  TEST_TIMEOUT_MS,
+} from '../utils/globalLock';
 
 const DETERMINISTIC_ANSWER = 'This is a deterministic test answer.';
 const TOOL_ANSWER = 'Based on the document, the answer is deterministic.';
 
+// These tests switch the composer's chat model, and one that doesn't expects
+// the seeded default — serialize them in declaration order so a model switch
+// in one can't leak into a sibling test that runs before its own cleanup.
+test.describe.configure({ mode: 'serial' });
+
 test.describe('chat conversation flow', () => {
+  // Also serialize against every other spec that touches the same DB-synced
+  // settings (composer model/panel selection is a real cross-device-sync
+  // feature — see SHARED_SETTINGS_LOCK's doc comment).
+  let release: (() => void) | undefined;
+  test.beforeEach(async () => {
+    test.setTimeout(TEST_TIMEOUT_MS);
+    release = await acquireGlobalLock(SHARED_SETTINGS_LOCK);
+  });
+  test.afterEach(async ({ request }) => {
+    await request.patch('/api/settings', {
+      data: { chatModelProvider: 'test', chatModel: 'test-direct' },
+    });
+    release?.();
+    release = undefined;
+  });
+
   test('submit on Home streams an answer, persists, and appears in history', async ({
     page,
     request,

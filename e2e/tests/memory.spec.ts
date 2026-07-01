@@ -1,11 +1,18 @@
 import { test, expect } from '../fixtures';
 import { seedMemory } from '../utils/seed';
 import { MemoryPage } from '../pages/MemoryPage';
+import { useSharedSettingsLock } from '../utils/globalLock';
 
 const MEMORY_ALPHA = `memory-alpha-${Date.now()}`;
 const MEMORY_BETA = `memory-beta-${Date.now()}`;
 
+test.describe.configure({ mode: 'serial' });
+
 test.describe('memory management', () => {
+  // memoryEnabled is a DB-synced, instance-wide setting also toggled by
+  // settings-persistence.spec.ts — see SHARED_SETTINGS_LOCK.
+  useSharedSettingsLock(test);
+
   test('add, read, delete a memory and trigger re-index', async ({
     page,
     request,
@@ -67,7 +74,10 @@ test.describe('memory management', () => {
     await memoryPage.open();
     await memoryPage.enableMemory();
 
-    // The pre-seeded memory should be visible.
+    // The pre-seeded memory should be visible. It was seeded via the API (not
+    // added through the UI), so unlike `addMemory` there's no built-in wait for
+    // the list's initial fetch to resolve — wait for its row explicitly.
+    await memoryPage.waitForMemory(MEMORY_ALPHA);
     const initialContents = await memoryPage.memoryContents();
     expect(initialContents).toContain(MEMORY_ALPHA);
 

@@ -1,4 +1,5 @@
 import { test, expect } from '../fixtures';
+import { useSharedSettingsLock } from '../utils/globalLock';
 
 /**
  * Verify that DB-backed non-secret settings round-trip correctly:
@@ -14,6 +15,9 @@ import { test, expect } from '../fixtures';
 test.describe.configure({ mode: 'serial' });
 
 test.describe('settings persistence', () => {
+  // memoryEnabled is also touched by memory.spec.ts — see SHARED_SETTINGS_LOCK.
+  useSharedSettingsLock(test);
+
   test('autoSuggestions toggle persists through localStorage and page reload', async ({
     page,
   }) => {

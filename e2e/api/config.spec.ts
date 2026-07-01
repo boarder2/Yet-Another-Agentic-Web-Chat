@@ -1,5 +1,12 @@
 import { test, expect } from '../fixtures/api';
 
+// updateConfig() (src/lib/config.ts) does a read-modify-write of the whole
+// config.toml file — concurrent POSTs from different tests in this file can
+// lose one another's writes. No other spec file touches /api/config, so
+// serializing just this file (not the cross-file SHARED_SETTINGS_LOCK) is
+// sufficient.
+test.describe.configure({ mode: 'serial' });
+
 test.describe('GET /api/config', () => {
   test('returns 200 with an object body', async ({ request }) => {
     const res = await request.get('/api/config');

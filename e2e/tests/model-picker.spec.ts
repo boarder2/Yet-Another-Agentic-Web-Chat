@@ -1,4 +1,5 @@
 import { test, expect } from '../fixtures';
+import { useSharedSettingsLock } from '../utils/globalLock';
 
 /**
  * Verify the `test` provider and its models are listed in the chat model picker
@@ -10,7 +11,14 @@ import { test, expect } from '../fixtures';
  * With no presets configured it renders a "Configure models" button that opens
  * the Model Configuration dialog containing the grouped ModelField popover.
  */
+test.describe.configure({ mode: 'serial' });
+
 test.describe('model picker', () => {
+  // Asserts the seeded default chat/system model — a concurrently-running
+  // spec that switches the model mid-run would otherwise legitimately (via
+  // DB sync) change what this spec observes. See SHARED_SETTINGS_LOCK.
+  useSharedSettingsLock(test);
+
   test('test provider and models are listed in Chat Model picker, with test-direct as the default', async ({
     page,
   }) => {

@@ -1,10 +1,42 @@
 import { test, expect } from '../fixtures';
 import { ChatPage } from '../pages/ChatPage';
+import {
+  acquireGlobalLock,
+  SHARED_SETTINGS_LOCK,
+  TEST_TIMEOUT_MS,
+} from '../utils/globalLock';
 
 const DIRECT_ANSWER = 'This is a deterministic test answer.';
 const TOOL_ANSWER = 'Based on the document, the answer is deterministic.';
 
+// Run in declaration order for good measure, on top of each test's own
+// afterEach reset below (belt-and-suspenders against panelSelection leaking
+// between these two tests).
+test.describe.configure({ mode: 'serial' });
+
 test.describe('agent panel', () => {
+  // panelSelection is a DB-backed, instance-wide setting (not scoped per-chat)
+  // — cross-device sync of the composer's active selection is a real feature
+  // (see src/lib/settings/keys.ts), so a test that enables the panel mutates
+  // state every other spec's browser can hydrate mid-run. Hold the shared lock
+  // for the whole test so no concurrently-running spec can read a dirty
+  // selection, and reset it before releasing so the next lock holder starts
+  // clean.
+  let release: (() => void) | undefined;
+  test.beforeEach(async () => {
+    test.setTimeout(TEST_TIMEOUT_MS);
+    release = await acquireGlobalLock(SHARED_SETTINGS_LOCK);
+  });
+  test.afterEach(async ({ request }) => {
+    await request.patch('/api/settings', {
+      data: {
+        panelSelection: JSON.stringify({ enabled: false, executors: [] }),
+      },
+    });
+    release?.();
+    release = undefined;
+  });
+
   test('enabling requires 2-4 executors before it is usable', async ({
     page,
   }) => {
@@ -73,8 +105,12 @@ test.describe('agent panel', () => {
     // The synthesized final answer (outside the panel block) also reads the
     // plain "test-direct" answer, since the fake orchestrator ignores
     // executor content — so the page now has one more match than the columns
-    // container alone.
-    await expect(page.getByText(DIRECT_ANSWER, { exact: true })).toHaveCount(2);
+    // container alone. Under heavy parallel-suite load the post-click
+    // re-render can lag past the default 5s, so give it more room.
+    await expect(page.getByText(DIRECT_ANSWER, { exact: true })).toHaveCount(
+      2,
+      { timeout: 10_000 },
+    );
 
     // Persisted content carries both the panel markup (its executor answers
     // are base64-encoded inside the tag's `data` attribute) and the

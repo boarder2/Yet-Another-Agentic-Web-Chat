@@ -64,7 +64,11 @@ async function readJsonFile<T>(filePath: string): Promise<T | null> {
 }
 
 async function writeJsonFile(filePath: string, value: unknown): Promise<void> {
-  const tmp = `${filePath}.tmp`;
+  // Unique per call so concurrent writers to the SAME filePath (e.g. two
+  // requests embedding identical content at once) never share a tmp path —
+  // otherwise one's rename can beat the other's, and the loser's rename
+  // throws ENOENT against a tmp file that's already been moved away.
+  const tmp = `${filePath}.${crypto.randomUUID()}.tmp`;
   await fsp.writeFile(tmp, JSON.stringify(value), { flush: true });
   await fsp.rename(tmp, filePath);
 }

@@ -40,8 +40,25 @@ test.describe('GET /api/chats', () => {
   });
 
   test('respects offset query param', async ({ request }) => {
-    const res1 = await request.get('/api/chats?limit=1&offset=0');
-    const res2 = await request.get('/api/chats?limit=1&offset=1');
+    // Scoped to a dedicated workspace so concurrently-running specs inserting
+    // or deleting their own chats elsewhere in the shared test DB can't shift
+    // an unscoped, whole-table pagination window between the two requests.
+    const wsId = await seedWorkspace(request, { name: 'offset-test-ws' });
+    const chatId1 = await seedChat(request, {
+      content: 'offset-test-chat-1',
+      workspaceId: wsId,
+    });
+    const chatId2 = await seedChat(request, {
+      content: 'offset-test-chat-2',
+      workspaceId: wsId,
+    });
+
+    const res1 = await request.get(
+      `/api/chats?workspaceId=${encodeURIComponent(wsId)}&limit=1&offset=0`,
+    );
+    const res2 = await request.get(
+      `/api/chats?workspaceId=${encodeURIComponent(wsId)}&limit=1&offset=1`,
+    );
     expect(res1.ok()).toBe(true);
     expect(res2.ok()).toBe(true);
     const b1 = await res1.json();
@@ -50,10 +67,13 @@ test.describe('GET /api/chats', () => {
     expect(b1.offset).toBe(0);
     expect(b2.limit).toBe(1);
     expect(b2.offset).toBe(1);
-    // Different pages should not overlap in ids (when there are ≥2 chats)
-    if (b1.chats.length === 1 && b2.chats.length === 1) {
-      expect(b1.chats[0].id).not.toBe(b2.chats[0].id);
-    }
+    expect(b1.chats).toHaveLength(1);
+    expect(b2.chats).toHaveLength(1);
+    // The two pages cover exactly our two seeded chats, non-overlapping.
+    const ids = [b1.chats[0].id, b2.chats[0].id];
+    expect(ids).toContain(chatId1);
+    expect(ids).toContain(chatId2);
+    expect(b1.chats[0].id).not.toBe(b2.chats[0].id);
   });
 
   test('response shape includes pagination fields', async ({ request }) => {

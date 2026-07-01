@@ -10,8 +10,13 @@ export class HistoryPage extends BasePage {
   /** All chat rows in the browse list. */
   private readonly chatRows = this.page.locator('[role="link"]');
 
-  /** The summary line: "N message(s) in N conversation(s)". */
-  private readonly summary = this.page.locator('.text-xs.text-fg\\/50');
+  /** The summary line: "N message(s) in N conversation(s)". Matched by text,
+   * not its (shared) utility classes — chat rows render status pill badges
+   * with the same `text-xs text-fg/50` classes, which a class locator would
+   * also match. */
+  private readonly summary = this.page.getByText(
+    /\d+\s+messages?\s+in\s+\d+\s+conversations?/,
+  );
 
   async goto() {
     await super.goto('/history');

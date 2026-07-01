@@ -25,8 +25,21 @@ test.describe('settings depth', () => {
       .last()
       .click();
 
-    await expect(page.getByText(name, { exact: true })).toBeVisible();
-    await expect(page.getByText(content, { exact: true })).toBeVisible();
+    // Other specs leave persona prompts seeded in the shared test DB (and a
+    // hardcoded content string like `content` could coincidentally match a
+    // leftover prompt from a retried attempt), so scope everything to this
+    // prompt's own card, matched by its unique name, rather than a page-wide
+    // text search. The still-open "Add" form shares the card's base classes
+    // and (briefly, until its own state settles) still shows `content` in its
+    // textarea too — scoping by `name` excludes it, since the form clears its
+    // name field before the card row renders.
+    const card = () =>
+      page
+        .locator('div.p-3.border.border-surface-2.rounded-control.bg-surface-2')
+        .filter({ hasText: name });
+
+    await expect(card()).toBeVisible();
+    await expect(card().getByText(content, { exact: true })).toBeVisible();
 
     type PromptRecord = { id: string; name: string; content: string };
     const listPrompts = async (): Promise<PromptRecord[]> =>
@@ -35,13 +48,6 @@ test.describe('settings depth', () => {
     const created = (await listPrompts()).find((p) => p.name === name);
     expect(created?.content).toBe(content);
 
-    // Other specs leave persona prompts seeded in the shared test DB, so scope
-    // to this prompt's own card rather than the first Edit/Delete on the page.
-    const card = () =>
-      page
-        .locator('div.p-3.border.border-surface-2.rounded-control.bg-surface-2')
-        .filter({ hasText: name });
-
     // Edit — change content and save. There's no GET /api/system-prompts/[id]
     // route, so verify the persisted change via the list endpoint.
     await card().getByTitle('Edit').click();
@@ -49,7 +55,9 @@ test.describe('settings depth', () => {
     // the "Add" form's "Persona prompt content…" one), unique while editing.
     await page.getByPlaceholder('Prompt Content').fill(editedContent);
     await page.getByRole('button', { name: 'Save' }).click();
-    await expect(page.getByText(editedContent, { exact: true })).toBeVisible();
+    await expect(
+      card().getByText(editedContent, { exact: true }),
+    ).toBeVisible();
 
     const afterEdit = (await listPrompts()).find((p) => p.id === created!.id);
     expect(afterEdit?.content).toBe(editedContent);
@@ -85,9 +93,13 @@ test.describe('settings depth', () => {
       .getByPlaceholder('Full skill body (markdown supported)')
       .fill('body');
     await page.getByRole('button', { name: 'Create' }).click();
+    // The validation message is a sonner toast with sonner's default 4s
+    // lifetime — under heavy parallel-suite load the render itself can be
+    // delayed, so give this more room than the default 5s to still catch it
+    // within that visible window rather than racing it.
     await expect(
       page.getByText('Name must match pattern: [a-z0-9][a-z0-9_:-]*'),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 10_000 });
 
     // Valid name succeeds.
     await page

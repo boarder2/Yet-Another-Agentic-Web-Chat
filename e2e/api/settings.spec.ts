@@ -1,10 +1,15 @@
 import { test, expect } from '../fixtures/api';
+import { useSharedSettingsLock } from '../utils/globalLock';
 
 // Settings live in one global app_settings row per key, so tests that mutate
 // the same key (e.g. ttsSpeed in both the single-key and batch cases) must not
 // run concurrently under the suite's local fullyParallel mode. Each test still
 // restores what it changed; serial just removes the cross-test write race.
 test.describe.configure({ mode: 'serial' });
+// Other specs (settings-persistence, memory, dashboard, agent-panel,
+// chat/model-picker) touch the same shared app_settings rows — see
+// SHARED_SETTINGS_LOCK.
+useSharedSettingsLock(test);
 
 test.describe('GET /api/settings', () => {
   test('returns a settings object with expected shape', async ({ request }) => {

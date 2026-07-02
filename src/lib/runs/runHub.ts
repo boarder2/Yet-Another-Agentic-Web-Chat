@@ -317,13 +317,22 @@ export function subscribe(
         }
       }
 
-      // Mark the boundary between buffered replay and live events. A
-      // reconnecting client seeds its content from the persisted message (which
-      // already reflects every replayed event), so it must skip replayed tokens
-      // and only append the live ones that follow. Without this signal it cannot
-      // tell the two apart and drops post-resume tokens equal to the seeded length.
+      // Mark the boundary between buffered replay and live events, and hand the
+      // client the run's true accumulated content as of this instant. The
+      // client's own seed comes from a DB read (messages.content), which is
+      // flushed on a debounce and can lag behind what's already been broadcast
+      // over SSE — trusting it blindly drops tokens that were sent live but not
+      // yet persisted when the client reconnected. `run.recievedMessage` is
+      // updated synchronously on every event (see runHost's scheduleFlush), so
+      // it's always current; the client corrects its seed to this value before
+      // switching from replay (skip) to live (append) mode.
       try {
-        controller.enqueue(JSON.stringify({ type: 'replay_complete' }) + '\n');
+        controller.enqueue(
+          JSON.stringify({
+            type: 'replay_complete',
+            content: run.recievedMessage,
+          }) + '\n',
+        );
       } catch {
         return;
       }

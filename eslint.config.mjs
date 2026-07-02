@@ -12,6 +12,8 @@ const config = [
       '**/storage/**',
       '**/uploads/**',
       '**/data/**',
+      '**/playwright-report/**',
+      '**/test-results/**',
       '.prettierrc.js',
       'postcss.config.js',
       'tailwind.config.ts',
@@ -20,6 +22,14 @@ const config = [
   ...nextConfig,
   ...nextTypeScriptConfig,
   prettierConfig,
+  {
+    // e2e/ uses Playwright fixtures whose `use` callback name collides with
+    // the React hooks rule — the rule is irrelevant in test files.
+    files: ['e2e/**'],
+    rules: {
+      'react-hooks/rules-of-hooks': 'off',
+    },
+  },
   {
     rules: {
       '@typescript-eslint/no-unused-vars': [

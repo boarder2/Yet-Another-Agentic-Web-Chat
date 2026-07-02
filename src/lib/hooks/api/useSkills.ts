@@ -81,7 +81,7 @@ export function useToggleSkill() {
   return useMutation({
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
       apiFetch(`/api/skills/${id}`, {
-        method: 'PATCH',
+        method: 'PUT',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ enabled }),
       }),

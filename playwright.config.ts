@@ -1,0 +1,76 @@
+import { defineConfig, devices } from '@playwright/test';
+import path from 'path';
+
+const TEST_DATA_DIR = path.resolve('./e2e/.test-data');
+const PORT = process.env.PORT ?? '5005';
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${PORT}`;
+
+export default defineConfig({
+  testDir: './e2e',
+  fullyParallel: true,
+  forbidOnly: !!process.env.CI,
+  retries: process.env.CI ? 2 : 0,
+  workers: process.env.CI ? 1 : undefined,
+  reporter: [['html', { open: 'never' }], ['list']],
+  use: {
+    baseURL: BASE_URL,
+    trace: 'on-first-retry',
+    screenshot: 'only-on-failure',
+    video: 'retain-on-failure',
+    testIdAttribute: 'data-testid',
+  },
+  expect: {
+    timeout: 5_000,
+  },
+  webServer: {
+    command: `rm -rf ${TEST_DATA_DIR} && mkdir -p ${TEST_DATA_DIR} && npx drizzle-kit push && node e2e/seed-settings.mjs && node .next/standalone/server.js`,
+    env: {
+      DATA_DIR: TEST_DATA_DIR,
+      YAAWC_TEST_MODE: 'true',
+      // Configure a fixed public origin (distinct from the bind port) so the
+      // opensearch origin-detection specs are deterministic regardless of the
+      // local config.toml.
+      BASE_URL: 'http://localhost:3000',
+      // Bind all interfaces so the readiness check on localhost connects even
+      // when the container's HOSTNAME resolves to a non-loopback address.
+      HOSTNAME: '0.0.0.0',
+      PORT,
+    },
+    url: BASE_URL,
+    // Never reuse an already-running server: a dev server points at the real
+    // data/db.sqlite, and the seed helpers write to whatever DB the reused
+    // server uses. Always boot our own fresh, DATA_DIR-isolated test server.
+    reuseExistingServer: false,
+    timeout: 120_000,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  },
+  projects: [
+    {
+      name: 'smoke',
+      testDir: 'e2e/smoke',
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'api',
+      testDir: 'e2e/api',
+    },
+    {
+      name: 'chromium',
+      testDir: 'e2e/tests',
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      // Specs that mutate instance-wide, DB-synced settings (composer
+      // model/panel selection, dashboard widgets, memory toggles, ...) and
+      // can't tolerate a concurrently-running spec observing dirty state.
+      // A single worker with fullyParallel off makes that obvious from the
+      // project alone, so specs don't need their own cross-worker mutex.
+      name: 'serial',
+      testDir: 'e2e/serial',
+      fullyParallel: false,
+      workers: 1,
+      use: { ...devices['Desktop Chrome'] },
+    },
+  ],
+});

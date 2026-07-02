@@ -20,4 +20,5 @@ export const PROVIDER_METADATA = {
   lmstudio: { key: 'lmstudio', displayName: 'LM Studio' },
   openrouter: { key: 'openrouter', displayName: 'OpenRouter' },
   custom_openai: { key: 'custom_openai', displayName: 'Custom OpenAI' },
+  test: { key: 'test', displayName: 'Test' },
 };

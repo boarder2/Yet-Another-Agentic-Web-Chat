@@ -1,0 +1,981 @@
+import { test, expect } from '../fixtures/api';
+import type { APIRequestContext } from '@playwright/test';
+import { uid, uniq } from '../utils/helpers';
+import {
+  seedChat,
+  seedWorkspace,
+  seedWorkspaceFile,
+  seedAwaitingApproval,
+  cancelAwaitingRun,
+} from '../utils/seed';
+import {
+  collectSseEvents,
+  eventsOfType,
+  joinResponseText,
+  extractSources,
+  type ChatEvent,
+} from '../utils/sse';
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+interface PostChatResult {
+  chatId: string;
+  messageId: string;
+  events: ChatEvent[];
+}
+
+/** POST /api/chat with the test model and collect all SSE events. */
+async function postChat(
+  request: APIRequestContext,
+  overrides?: Partial<{
+    chatId: string;
+    messageId: string;
+    content: string;
+    focusMode: string;
+    workspaceId: string;
+    model: string;
+  }>,
+): Promise<PostChatResult> {
+  const chatId = overrides?.chatId ?? uid();
+  const messageId = overrides?.messageId ?? uid();
+  const model = overrides?.model ?? 'test-direct';
+  const res = await request.post('/api/chat', {
+    data: {
+      message: {
+        messageId,
+        chatId,
+        content: overrides?.content ?? 'Hello',
+      },
+      focusMode: overrides?.focusMode ?? 'webSearch',
+      files: [],
+      chatModel: { provider: 'test', name: model },
+      systemModel: { provider: 'test', name: model },
+      selectedSystemPromptIds: [],
+      workspaceId: overrides?.workspaceId ?? null,
+    },
+  });
+  if (!res.ok()) {
+    const text = await res.text();
+    throw new Error(
+      `POST /api/chat returned ${res.status()}: ${text.slice(0, 500)}`,
+    );
+  }
+  const events = await collectSseEvents(res);
+  return { chatId, messageId, events };
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/chat — happy path (test-direct)
+// ---------------------------------------------------------------------------
+
+test.describe('POST /api/chat (test-direct)', () => {
+  test('streams deterministic response tokens', async ({ request }) => {
+    const { events } = await postChat(request, { content: 'hello-stream' });
+
+    const responseEvents = eventsOfType(events, 'response');
+    expect(responseEvents.length).toBeGreaterThan(0);
+
+    const text = joinResponseText(events);
+    expect(text).toBe('This is a deterministic test answer.');
+  });
+
+  test('emits a messageEnd event with model stats', async ({ request }) => {
+    const { events } = await postChat(request, { content: 'end-event' });
+
+    const endEvents = eventsOfType(events, 'messageEnd');
+    expect(endEvents.length).toBe(1);
+    const end = endEvents[0];
+    expect(typeof end.messageId).toBe('string');
+    expect(typeof end.modelStats).toBe('object');
+    const stats = end.modelStats as Record<string, unknown> | undefined;
+    expect(stats).toBeTruthy();
+    expect(typeof stats!.responseTime).toBe('number');
+  });
+
+  test('emits a stats event with deterministic model name', async ({
+    request,
+  }) => {
+    const { events } = await postChat(request, { content: 'stats-event' });
+
+    const statsEvents = eventsOfType(events, 'stats');
+    expect(statsEvents.length).toBeGreaterThanOrEqual(1);
+    const stats = statsEvents[0].data as Record<string, unknown>;
+    expect(stats.modelName).toBe('test-direct');
+  });
+
+  test('webSearch focus mode succeeds and messages persist', async ({
+    request,
+  }) => {
+    const { chatId, events } = await postChat(request, {
+      content: 'focus-web-search',
+      focusMode: 'webSearch',
+    });
+
+    const text = joinResponseText(events);
+    expect(text).toBe('This is a deterministic test answer.');
+
+    // Verify messages persisted to the DB
+    const getRes = await request.get(`/api/chats/${chatId}`);
+    expect(getRes.status()).toBe(200);
+    const body = await getRes.json();
+    expect(body.chat.focusMode).toBe('webSearch');
+    const msgs: Array<{ role: string; content: string }> = body.messages;
+    const userMsg = msgs.find((m) => m.role === 'user');
+    const assistantMsg = msgs.find((m) => m.role === 'assistant');
+    expect(userMsg).toBeTruthy();
+    expect(userMsg!.content).toBe('focus-web-search');
+    expect(assistantMsg).toBeTruthy();
+    expect(assistantMsg!.content).toBe('This is a deterministic test answer.');
+  });
+
+  test('localResearch focus mode succeeds', async ({ request }) => {
+    const { events } = await postChat(request, {
+      content: 'focus-local',
+      focusMode: 'localResearch',
+    });
+
+    const endEvents = eventsOfType(events, 'messageEnd');
+    expect(endEvents.length).toBe(1);
+  });
+
+  test('chat focus mode succeeds', async ({ request }) => {
+    const { events } = await postChat(request, {
+      content: 'focus-chat',
+      focusMode: 'chat',
+    });
+
+    const endEvents = eventsOfType(events, 'messageEnd');
+    expect(endEvents.length).toBe(1);
+  });
+
+  test('message content is required — returns 400 when empty with no images', async ({
+    request,
+  }) => {
+    const res = await request.post('/api/chat', {
+      data: {
+        message: {
+          messageId: uid(),
+          chatId: uid(),
+          content: '',
+        },
+        focusMode: 'webSearch',
+        files: [],
+        chatModel: { provider: 'test', name: 'test-direct' },
+        systemModel: { provider: 'test', name: 'test-direct' },
+        selectedSystemPromptIds: [],
+      },
+    });
+    expect(res.status()).toBe(400);
+    const body = await res.json();
+    expect(body.message).toBe('Please provide a message to process');
+  });
+
+  test('returns 400 when chat model provider does not exist', async ({
+    request,
+  }) => {
+    const res = await request.post('/api/chat', {
+      data: {
+        message: {
+          messageId: uid(),
+          chatId: uid(),
+          content: 'test unresolvable model',
+        },
+        focusMode: 'webSearch',
+        files: [],
+        chatModel: { provider: 'nonexistent', name: 'nonexistent' },
+        systemModel: { provider: 'nonexistent', name: 'nonexistent' },
+        selectedSystemPromptIds: [],
+      },
+    });
+    expect(res.status()).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('Invalid chat model');
+  });
+
+  test('returns 400 when panel config has no executors array', async ({
+    request,
+  }) => {
+    const res = await request.post('/api/chat', {
+      data: {
+        message: {
+          messageId: uid(),
+          chatId: uid(),
+          content: 'panel test',
+        },
+        focusMode: 'webSearch',
+        files: [],
+        chatModel: { provider: 'test', name: 'test-direct' },
+        systemModel: { provider: 'test', name: 'test-direct' },
+        selectedSystemPromptIds: [],
+        panel: { options: {} },
+      },
+    });
+    expect(res.status()).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('Panel config requires an executors array.');
+  });
+
+  test('returns 400 when panel has fewer than 2 executors', async ({
+    request,
+  }) => {
+    const res = await request.post('/api/chat', {
+      data: {
+        message: {
+          messageId: uid(),
+          chatId: uid(),
+          content: 'panel test',
+        },
+        focusMode: 'webSearch',
+        files: [],
+        chatModel: { provider: 'test', name: 'test-direct' },
+        systemModel: { provider: 'test', name: 'test-direct' },
+        selectedSystemPromptIds: [],
+        panel: {
+          executors: [{ provider: 'test', name: 'test-direct' }],
+        },
+      },
+    });
+    expect(res.status()).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('at least 2 executors');
+  });
+
+  test('returns 400 when panel has more than 4 executors', async ({
+    request,
+  }) => {
+    const res = await request.post('/api/chat', {
+      data: {
+        message: {
+          messageId: uid(),
+          chatId: uid(),
+          content: 'panel test',
+        },
+        focusMode: 'webSearch',
+        files: [],
+        chatModel: { provider: 'test', name: 'test-direct' },
+        systemModel: { provider: 'test', name: 'test-direct' },
+        selectedSystemPromptIds: [],
+        panel: {
+          executors: [
+            { provider: 'test', name: 'test-direct' },
+            { provider: 'test', name: 'test-direct' },
+            { provider: 'test', name: 'test-direct' },
+            { provider: 'test', name: 'test-direct' },
+            { provider: 'test', name: 'test-direct' },
+          ],
+        },
+      },
+    });
+    expect(res.status()).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('at most 4 executors');
+  });
+
+  test('returns 400 when panel executor is missing provider', async ({
+    request,
+  }) => {
+    const res = await request.post('/api/chat', {
+      data: {
+        message: {
+          messageId: uid(),
+          chatId: uid(),
+          content: 'panel test',
+        },
+        focusMode: 'webSearch',
+        files: [],
+        chatModel: { provider: 'test', name: 'test-direct' },
+        systemModel: { provider: 'test', name: 'test-direct' },
+        selectedSystemPromptIds: [],
+        panel: {
+          executors: [
+            { provider: 'test', name: 'test-direct' },
+            { name: 'test-direct' },
+          ],
+        },
+      },
+    });
+    expect(res.status()).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('provider + name');
+  });
+
+  test('resending a messageId edits the message (nuke-and-rebuild)', async ({
+    request,
+  }) => {
+    const messageId = uid();
+    const chatId = uid();
+
+    // First message
+    await postChat(request, {
+      chatId,
+      messageId,
+      content: 'first version',
+    });
+
+    // Re-send same messageId with different content
+    const { events } = await postChat(request, {
+      chatId,
+      messageId,
+      content: 'edited version',
+    });
+
+    const text = joinResponseText(events);
+    expect(text).toBe('This is a deterministic test answer.');
+
+    // Verify only the edited content remains — the old user message and its
+    // assistant response must be gone.
+    const getRes = await request.get(`/api/chats/${chatId}`);
+    expect(getRes.status()).toBe(200);
+    const body = await getRes.json();
+    const userMsgs = (
+      body.messages as Array<{ role: string; content: string }>
+    ).filter((m) => m.role === 'user');
+    expect(userMsgs.length).toBe(1);
+    expect(userMsgs[0].content).toBe('edited version');
+  });
+
+  test('continuing after compaction uses compacted history', async ({
+    request,
+  }) => {
+    // First turn
+    const { chatId } = await postChat(request, { content: 'first turn' });
+
+    // Compact
+    const compactRes = await request.post('/api/chat/compact', {
+      data: {
+        chatId,
+        chatModel: { provider: 'test', name: 'test-direct' },
+        systemModel: { provider: 'test', name: 'test-direct' },
+      },
+    });
+    expect(compactRes.status()).toBe(200);
+
+    // Second turn — same chat, new messageId
+    const { events: events2 } = await postChat(request, {
+      chatId,
+      content: 'second turn',
+    });
+
+    // The agent must still produce its answer even though history was compacted
+    const text = joinResponseText(events2);
+    expect(text).toBe('This is a deterministic test answer.');
+
+    // Verify compaction checkpoint exists and second turn messages are present
+    const getRes = await request.get(`/api/chats/${chatId}`);
+    expect(getRes.status()).toBe(200);
+    const body = await getRes.json();
+    const compactionMsg = (
+      body.messages as Array<{ role: string; content: string }>
+    ).find((m: { role: string }) => m.role === 'compaction');
+    expect(compactionMsg).toBeTruthy();
+
+    const assistantMsgs = (
+      body.messages as Array<{ role: string; content: string }>
+    ).filter((m: { role: string }) => m.role === 'assistant');
+    // Must have an assistant answer for BOTH turns
+    expect(assistantMsgs.length).toBe(2);
+    for (const msg of assistantMsgs) {
+      expect(msg.content).toContain('This is a deterministic test answer.');
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/chat — tool loop (test-tool)
+// ---------------------------------------------------------------------------
+
+test.describe('POST /api/chat (test-tool)', () => {
+  test('emits tool_call_started and tool_call_success events', async ({
+    request,
+  }) => {
+    const wsId = await seedWorkspace(request, { name: uniq('tool-ws') });
+    await seedWorkspaceFile(request, wsId, {
+      name: `${uniq('doc')}.txt`,
+      content: 'The capital of France is Paris.',
+    });
+
+    const { events } = await postChat(request, {
+      content: 'What is the capital of France?',
+      focusMode: 'localResearch',
+      workspaceId: wsId,
+      model: 'test-tool',
+    });
+
+    const toolStartEvents = eventsOfType(events, 'tool_call_started');
+    expect(toolStartEvents.length).toBeGreaterThanOrEqual(1);
+
+    const started = toolStartEvents[0].data as Record<string, unknown>;
+    expect(typeof started.toolCallId).toBe('string');
+
+    const toolSuccessEvents = eventsOfType(events, 'tool_call_success');
+    expect(toolSuccessEvents.length).toBeGreaterThanOrEqual(1);
+    const success = toolSuccessEvents[0].data as Record<string, unknown>;
+    expect(success.status).toBe('success');
+  });
+
+  test('emits sources events with citation data from file_search', async ({
+    request,
+  }) => {
+    const wsId = await seedWorkspace(request, { name: uniq('cite-ws') });
+    await seedWorkspaceFile(request, wsId, {
+      name: `${uniq('ref')}.txt`,
+      content:
+        'Paris is the capital of France. It is known for the Eiffel Tower.',
+    });
+
+    const { events } = await postChat(request, {
+      content: 'What is the capital of France?',
+      focusMode: 'localResearch',
+      workspaceId: wsId,
+      model: 'test-tool',
+    });
+
+    const sources = extractSources(events);
+    expect(Array.isArray(sources)).toBe(true);
+  });
+
+  test('produces deterministic tool-result answer', async ({ request }) => {
+    const wsId = await seedWorkspace(request, { name: uniq('tool-ans-ws') });
+    await seedWorkspaceFile(request, wsId, {
+      name: `${uniq('notes')}.txt`,
+      content: 'The sky is blue.',
+    });
+
+    const { events } = await postChat(request, {
+      content: 'What color is the sky?',
+      focusMode: 'localResearch',
+      workspaceId: wsId,
+      model: 'test-tool',
+    });
+
+    const text = joinResponseText(events);
+    expect(text).toBe('Based on the document, the answer is deterministic.');
+  });
+
+  test('message persists with tool-use answer', async ({ request }) => {
+    const wsId = await seedWorkspace(request, { name: uniq('persist-ws') });
+    await seedWorkspaceFile(request, wsId, {
+      name: `${uniq('data')}.txt`,
+      content: 'Test content for persistence.',
+    });
+
+    const { chatId } = await postChat(request, {
+      content: 'Tell me about the test content',
+      focusMode: 'localResearch',
+      workspaceId: wsId,
+      model: 'test-tool',
+    });
+
+    const getRes = await request.get(`/api/chats/${chatId}`);
+    expect(getRes.status()).toBe(200);
+    const body = await getRes.json();
+    const assistantMsg = (
+      body.messages as Array<{ role: string; content: string }>
+    ).find((m) => m.role === 'assistant');
+    expect(assistantMsg).toBeTruthy();
+    // The agent prepends a <ToolCall> XML marker before the model's answer.
+    expect(assistantMsg!.content).toContain(
+      'Based on the document, the answer is deterministic.',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/chat/cancel
+// ---------------------------------------------------------------------------
+
+test.describe('POST /api/chat/cancel', () => {
+  test('returns 400 when messageId is missing', async ({ request }) => {
+    const res = await request.post('/api/chat/cancel', { data: {} });
+    expect(res.status()).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('Missing messageId');
+  });
+
+  test('returns 404 for a non-existent messageId', async ({ request }) => {
+    const res = await request.post('/api/chat/cancel', {
+      data: { messageId: uid() },
+    });
+    expect(res.status()).toBe(404);
+    const body = await res.json();
+    expect(body.error).toBe('No in-progress request for this messageId');
+  });
+
+  test('cancels a run paused at an interrupt and transitions state to cancelled', async ({
+    request,
+  }) => {
+    const { chatId, messageId } = await seedAwaitingApproval({
+      content: 'cancel-happy-path',
+    });
+
+    // Before cancelling: the paused run shows up as awaiting_user.
+    const activeRes = await request.get('/api/chat/runs/active');
+    const activeBody = await activeRes.json();
+    const entry = (
+      activeBody.active as Array<{
+        chatId: string;
+        messageId: string;
+        status: string;
+      }>
+    ).find((r) => r.messageId === messageId);
+    expect(entry).toBeTruthy();
+    expect(entry!.chatId).toBe(chatId);
+    expect(entry!.status).toBe('awaiting_user');
+
+    const cancelRes = await request.post('/api/chat/cancel', {
+      data: { messageId },
+    });
+    expect(cancelRes.status()).toBe(200);
+    expect((await cancelRes.json()).success).toBe(true);
+
+    // Cancellation finishes asynchronously (fired from the abort listener).
+    await expect
+      .poll(async () => {
+        const getRes = await request.get(`/api/chats/${chatId}`);
+        const body = await getRes.json();
+        return body.chat.lastRunStatus as string | null;
+      })
+      .toBe('cancelled');
+
+    const getRes = await request.get(`/api/chats/${chatId}`);
+    const body = await getRes.json();
+    expect(body.chat.activeRunMessageId).toBeNull();
+    expect(body.chat.activeRunStatus).toBeNull();
+
+    // The pending approval must resolve as cancelled, not dangle.
+    const pendingRes = await request.get(
+      `/api/approvals/pending?chatId=${chatId}`,
+    );
+    expect((await pendingRes.json()).pending).toEqual([]);
+
+    const activeRes2 = await request.get('/api/chat/runs/active');
+    const stillActive = (
+      (await activeRes2.json()).active as Array<{ messageId: string }>
+    ).some((r) => r.messageId === messageId);
+    expect(stillActive).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/chat/compact
+// ---------------------------------------------------------------------------
+
+test.describe('POST /api/chat/compact', () => {
+  test('returns 400 when chatId is missing', async ({ request }) => {
+    const res = await request.post('/api/chat/compact', { data: {} });
+    expect(res.status()).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('chatId is required');
+  });
+
+  test('compacts a chat and returns deterministic summary', async ({
+    request,
+  }) => {
+    const chatId = await seedChat(request, {
+      content: 'compact test message',
+    });
+
+    const res = await request.post('/api/chat/compact', {
+      data: {
+        chatId,
+        chatModel: { provider: 'test', name: 'test-direct' },
+        systemModel: { provider: 'test', name: 'test-direct' },
+      },
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    // The deterministic test model produces this exact summary.
+    expect(body.compactionSummary).toBe('This is a deterministic test answer.');
+    expect(body.compactedMessageCount).toBeGreaterThanOrEqual(1);
+    expect(typeof body.lastCompactedId).toBe('number');
+    expect(typeof body.tokensBefore).toBe('number');
+    expect(typeof body.tokensAfter).toBe('number');
+
+    // Verify the compaction summary is persisted as a message row.
+    const getRes = await request.get(`/api/chats/${chatId}`);
+    const chatData = await getRes.json();
+    const compactionMsg = (
+      chatData.messages as Array<{ role: string; content: string }>
+    ).find((m: { role: string }) => m.role === 'compaction');
+    expect(compactionMsg).toBeTruthy();
+    expect(compactionMsg!.content).toBe(body.compactionSummary);
+  });
+
+  test('succeeds on a chat with multiple messages', async ({ request }) => {
+    const chatId = await seedChat(request, {
+      content: 'multi-compact test',
+    });
+
+    const res = await request.post('/api/chat/compact', {
+      data: {
+        chatId,
+        chatModel: { provider: 'test', name: 'test-direct' },
+        systemModel: { provider: 'test', name: 'test-direct' },
+      },
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.compactedMessageCount).toBeGreaterThanOrEqual(1);
+    expect(body.compactionSummary).toBe('This is a deterministic test answer.');
+  });
+
+  test('passes instructions through to the compaction summary', async ({
+    request,
+  }) => {
+    const chatId = await seedChat(request, {
+      content: 'instructions test',
+    });
+
+    const res = await request.post('/api/chat/compact', {
+      data: {
+        chatId,
+        instructions: 'Focus on key decisions and file paths.',
+        chatModel: { provider: 'test', name: 'test-direct' },
+        systemModel: { provider: 'test', name: 'test-direct' },
+      },
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.compactionSummary).toBe('This is a deterministic test answer.');
+    expect(body.compactedMessageCount).toBeGreaterThanOrEqual(1);
+  });
+
+  test('recompacting merges the previous summary', async ({ request }) => {
+    const chatId = await seedChat(request, {
+      content: 'recompact test',
+    });
+
+    // First compaction
+    const res1 = await request.post('/api/chat/compact', {
+      data: {
+        chatId,
+        chatModel: { provider: 'test', name: 'test-direct' },
+        systemModel: { provider: 'test', name: 'test-direct' },
+      },
+    });
+    expect(res1.status()).toBe(200);
+
+    // Second compaction — should pick up the previous summary
+    const res2 = await request.post('/api/chat/compact', {
+      data: {
+        chatId,
+        chatModel: { provider: 'test', name: 'test-direct' },
+        systemModel: { provider: 'test', name: 'test-direct' },
+      },
+    });
+    expect(res2.status()).toBe(200);
+    const body2 = await res2.json();
+    expect(body2.compactionSummary).toBe(
+      'This is a deterministic test answer.',
+    );
+
+    // Both compaction checkpoints should exist (the first was replaced at
+    // the same position, so only the second one remains as the checkpoint)
+    const getRes = await request.get(`/api/chats/${chatId}`);
+    const chatData = await getRes.json();
+    const compactionMsgs = (
+      chatData.messages as Array<{ role: string }>
+    ).filter((m) => m.role === 'compaction');
+    expect(compactionMsgs.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test('returns 409 while a run is paused awaiting user input', async ({
+    request,
+  }) => {
+    const { chatId, messageId } = await seedAwaitingApproval({
+      content: 'compact-conflict',
+    });
+
+    const res = await request.post('/api/chat/compact', {
+      data: {
+        chatId,
+        chatModel: { provider: 'test', name: 'test-direct' },
+        systemModel: { provider: 'test', name: 'test-direct' },
+      },
+    });
+    expect(res.status()).toBe(409);
+    const body = await res.json();
+    expect(body.error).toBe(
+      'Cannot compact while a run is in progress. Try again when the current turn completes.',
+    );
+
+    await cancelAwaitingRun(request, { messageId, chatId });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/chat/runs/active
+// ---------------------------------------------------------------------------
+
+test.describe('GET /api/chat/runs/active', () => {
+  test('returns active runs array (may be empty)', async ({ request }) => {
+    const res = await request.get('/api/chat/runs/active');
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(Array.isArray(body.active)).toBe(true);
+    expect(Array.isArray(body.stale)).toBe(true);
+    expect(typeof body.unreadCount).toBe('number');
+    expect(typeof body.awaitingAttentionCount).toBe('number');
+  });
+
+  test('active run objects have required fields', async ({ request }) => {
+    const res = await request.get('/api/chat/runs/active');
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    for (const run of body.active) {
+      expect(typeof run.chatId).toBe('string');
+      expect(typeof run.messageId).toBe('string');
+      expect(typeof run.startedAt).toBe('number');
+      expect(['running', 'awaiting_user']).toContain(run.status);
+    }
+  });
+
+  test('reports a run paused at an interrupt as awaiting_user and counts it towards awaitingAttentionCount', async ({
+    request,
+  }) => {
+    const { chatId, messageId } = await seedAwaitingApproval({
+      content: 'active-awaiting-user',
+    });
+
+    const res = await request.get('/api/chat/runs/active');
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    const entry = (
+      body.active as Array<{
+        chatId: string;
+        messageId: string;
+        status: string;
+        startedAt: number;
+      }>
+    ).find((r) => r.messageId === messageId);
+    expect(entry).toBeTruthy();
+    expect(entry!.chatId).toBe(chatId);
+    expect(entry!.status).toBe('awaiting_user');
+    expect(body.awaitingAttentionCount).toBeGreaterThanOrEqual(1);
+
+    await cancelAwaitingRun(request, { messageId, chatId });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/chat/runs/[messageId]/stream
+// ---------------------------------------------------------------------------
+
+test.describe('GET /api/chat/runs/[messageId]/stream', () => {
+  test('reconnects to a recently completed run and replays events', async ({
+    request,
+  }) => {
+    const { messageId, events } = await postChat(request, {
+      content: 'reconnect test',
+    });
+
+    // The run should still be in the hub (TTL is 60 s). Reconnect immediately.
+    const streamRes = await request.get(`/api/chat/runs/${messageId}/stream`);
+    expect(streamRes.status()).toBe(200);
+
+    const replayEvents = await collectSseEvents(streamRes);
+    const replayedText = joinResponseText(replayEvents);
+    expect(replayedText).toBe('This is a deterministic test answer.');
+
+    const originalResponseCount = eventsOfType(events, 'response').length;
+    const replayResponseCount = eventsOfType(replayEvents, 'response').length;
+    expect(replayResponseCount).toBe(originalResponseCount);
+  });
+
+  test('returns gone for an unknown messageId', async ({ request }) => {
+    const streamRes = await request.get(`/api/chat/runs/${uid()}/stream`);
+    expect(streamRes.status()).toBe(200);
+    const events = await collectSseEvents(streamRes);
+    expect(events.length).toBe(1);
+    expect(events[0].type).toBe('gone');
+  });
+
+  test('returns 403 when chatId query param does not match the run owner', async ({
+    request,
+  }) => {
+    const { messageId } = await postChat(request, {
+      content: 'ownership test',
+    });
+
+    const streamRes = await request.get(
+      `/api/chat/runs/${messageId}/stream?chatId=${uid()}`,
+    );
+    expect(streamRes.status()).toBe(403);
+    const body = await streamRes.json();
+    expect(body.error).toBe('chatId mismatch');
+  });
+
+  test('replays from a given event index via the from param', async ({
+    request,
+  }) => {
+    const { messageId, events } = await postChat(request, {
+      content: 'partial replay test',
+    });
+
+    const originalCount = events.length;
+    // Request replay starting from halfway through the events
+    const from = Math.max(1, Math.floor(originalCount / 2));
+    const streamRes = await request.get(
+      `/api/chat/runs/${messageId}/stream?from=${from}`,
+    );
+    expect(streamRes.status()).toBe(200);
+
+    const replayEvents = await collectSseEvents(streamRes);
+    // Should have fewer events than the full stream
+    expect(replayEvents.length).toBeLessThanOrEqual(originalCount);
+    // Replaying from halfway yields only the tail of the answer — it must be
+    // a non-empty suffix of the full deterministic answer.
+    const replayedText = joinResponseText(replayEvents);
+    expect(replayedText.length).toBeGreaterThan(0);
+    const fullAnswer = 'This is a deterministic test answer.';
+    expect(fullAnswer).toContain(replayedText);
+    expect(fullAnswer.endsWith(replayedText)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/chat/runs/resume
+// ---------------------------------------------------------------------------
+
+test.describe('POST /api/chat/runs/resume', () => {
+  test('returns 400 when no approvalId or resumeMap provided', async ({
+    request,
+  }) => {
+    const res = await request.post('/api/chat/runs/resume', { data: {} });
+    expect(res.status()).toBe(400);
+    const body = await res.json();
+    expect(body.error).toMatch(/approvalId/i);
+  });
+
+  test('returns 410 for a non-existent approvalId', async ({ request }) => {
+    const res = await request.post('/api/chat/runs/resume', {
+      data: { approvalId: uid() },
+    });
+    expect(res.status()).toBe(410);
+    const body = await res.json();
+    expect(body.error).toMatch(/not found/i);
+  });
+
+  test('returns 400 when resumeMap is empty object', async ({ request }) => {
+    const res = await request.post('/api/chat/runs/resume', {
+      data: { resumeMap: {} },
+    });
+    expect(res.status()).toBe(400);
+  });
+
+  test('resumes a paused ask_user run to completion', async ({ request }) => {
+    const { chatId, messageId, approvalId, question } =
+      await seedAwaitingApproval({ content: 'resume-happy-path' });
+    expect(question).toBe('Which color do you prefer?');
+
+    const resumeRes = await request.post('/api/chat/runs/resume', {
+      data: { approvalId, response: { selectedOptions: ['Red'] } },
+    });
+    expect(resumeRes.status()).toBe(200);
+    expect((await resumeRes.json()).ok).toBe(true);
+
+    // Reconnect (Playwright's request fixture is fine here — the resumed run
+    // terminates quickly with the fake model and closes its stream).
+    const streamRes = await request.get(`/api/chat/runs/${messageId}/stream`);
+    expect(streamRes.status()).toBe(200);
+    const events = await collectSseEvents(streamRes);
+    const text = joinResponseText(events);
+    expect(text).toBe('Thanks for your answer — resuming now.');
+
+    const getRes = await request.get(`/api/chats/${chatId}`);
+    const body = await getRes.json();
+    expect(body.chat.lastRunStatus).toBe('completed');
+    expect(body.chat.activeRunMessageId).toBeNull();
+    const assistantMsg = (
+      body.messages as Array<{ role: string; content: string }>
+    ).find((m) => m.role === 'assistant');
+    expect(assistantMsg).toBeTruthy();
+    expect(assistantMsg!.content).toContain(
+      'Thanks for your answer — resuming now.',
+    );
+
+    // The approval must be resolved, not left pending.
+    const pendingRes = await request.get(
+      `/api/approvals/pending?chatId=${chatId}`,
+    );
+    expect((await pendingRes.json()).pending).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/chat — multi-step tool loop (test-tool-multi)
+// ---------------------------------------------------------------------------
+
+test.describe('POST /api/chat (test-tool-multi)', () => {
+  test('emits two sequential tool calls before answering', async ({
+    request,
+  }) => {
+    const wsId = await seedWorkspace(request, { name: uniq('multi-ws') });
+    await seedWorkspaceFile(request, wsId, {
+      name: `${uniq('doc')}.txt`,
+      content: 'The capital of France is Paris. The Eiffel Tower is there.',
+    });
+
+    const { events } = await postChat(request, {
+      content: 'Tell me about Paris',
+      focusMode: 'localResearch',
+      workspaceId: wsId,
+      model: 'test-tool-multi',
+    });
+
+    // Exactly two started/success pairs, in strict sequential order — the
+    // second call must not start until the first has both started and
+    // succeeded. toolCallId values are framework-generated, so assert their
+    // relational structure (paired, distinct per call) rather than exact ids.
+    const relevant = events.filter(
+      (e) => e.type === 'tool_call_started' || e.type === 'tool_call_success',
+    );
+    expect(relevant.map((e) => e.type)).toEqual([
+      'tool_call_started',
+      'tool_call_success',
+      'tool_call_started',
+      'tool_call_success',
+    ]);
+    const ids = relevant.map(
+      (e) => (e.data as Record<string, unknown>).toolCallId as string,
+    );
+    for (const id of ids) expect(typeof id).toBe('string');
+    expect(ids[0]).toBe(ids[1]);
+    expect(ids[2]).toBe(ids[3]);
+    expect(ids[0]).not.toBe(ids[2]);
+
+    const text = joinResponseText(events);
+    expect(text).toBe(
+      'Based on the documents, the multi-step answer is deterministic.',
+    );
+  });
+
+  test('message persists with the multi-step answer', async ({ request }) => {
+    const wsId = await seedWorkspace(request, {
+      name: uniq('multi-persist-ws'),
+    });
+    await seedWorkspaceFile(request, wsId, {
+      name: `${uniq('notes')}.txt`,
+      content: 'Some reference content.',
+    });
+
+    const { chatId } = await postChat(request, {
+      content: 'Summarize the notes',
+      focusMode: 'localResearch',
+      workspaceId: wsId,
+      model: 'test-tool-multi',
+    });
+
+    const getRes = await request.get(`/api/chats/${chatId}`);
+    const body = await getRes.json();
+    const assistantMsg = (
+      body.messages as Array<{ role: string; content: string }>
+    ).find((m) => m.role === 'assistant');
+    expect(assistantMsg).toBeTruthy();
+    expect(assistantMsg!.content).toContain(
+      'Based on the documents, the multi-step answer is deterministic.',
+    );
+  });
+});

@@ -28,6 +28,9 @@ logs/
 
 # Testing
 /coverage/
+/test-results/
+/playwright-report/
+/blob-report/
 
 # Miscellaneous
 .DS_Store
@@ -50,3 +53,5 @@ next-env.d.ts
 
 .playwright-cli/
 workspace-files/
+# claude-alt session registry (ephemeral)
+.claude/claude-alt/

@@ -116,7 +116,7 @@ Dashboard widget configurations are stored in browser localStorage. The key name
 
 ### Browser Search Engine
 
-If you added Perplexica as a browser search engine, update the URL from your old instance to the new one. The URL format remains `http://your-host:3000/?q=%s`.
+If you added Perplexica as a browser search engine, update the URL from your old instance to the new one. The URL format remains `http://your-host:5005/?q=%s`.
 
 ## Breaking Changes
 

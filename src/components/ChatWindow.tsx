@@ -42,6 +42,7 @@ import { getSuggestions } from '@/lib/actions';
 import { SKILL_TOKEN_SCAN_REGEX } from '@/lib/skills/validation';
 import { LoaderCircle, Settings } from 'lucide-react';
 import { useSettingsModal } from '@/components/settings/SettingsModalProvider';
+import { subscribeSettingsHydrated } from '@/lib/settings/persist';
 import NextError from 'next/error';
 import {
   useLocalStorageBoolean,
@@ -442,9 +443,17 @@ const ChatWindow = ({
   const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
-    checkConfig(setChatModelProvider, setIsConfigReady, setHasError, () =>
-      openSettings('api-keys'),
-    );
+    // checkConfig treats a missing chatModel/chatModelProvider in localStorage
+    // as "unconfigured" and picks a fallback provider, persisting it back. Until
+    // DB→localStorage hydration completes, an empty cache doesn't mean
+    // unconfigured — it means not-yet-synced — so wait for hydration first;
+    // otherwise this races hydrateSettingsFromDb and can permanently overwrite
+    // the real selection with the wrong fallback.
+    return subscribeSettingsHydrated(() => {
+      checkConfig(setChatModelProvider, setIsConfigReady, setHasError, () =>
+        openSettings('api-keys'),
+      );
+    });
   }, [openSettings]);
 
   const [loading, setLoading] = useState(false);
@@ -770,6 +779,23 @@ const ChatWindow = ({
 
       if (data.type === 'replay_complete') {
         inReplay = false;
+        // Correct the seed to the server's authoritative content: the DB read
+        // this was seeded from (partialMsg.content) can lag a debounced flush
+        // behind what's already been broadcast over SSE, dropping tokens that
+        // were live but not yet persisted at reconnect time.
+        if (
+          typeof data.content === 'string' &&
+          data.content !== recievedMessage
+        ) {
+          recievedMessage = data.content;
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.messageId === aiMessageId
+                ? { ...m, content: recievedMessage }
+                : m,
+            ),
+          );
+        }
         return;
       }
 

@@ -7,7 +7,9 @@ YAAWC is a Next.js (App Router) web app: start `npm run dev`, then drive headles
 
 **Observe with `snapshot` (DOM/a11y tree as text — diffable, greppable), not screenshots.** Screenshots are opt-in (`SHOT=1`), only worth it for visual bugs (layout, image-heavy widgets).
 
-**Port is not fixed:** `next dev` prefers 3000 but auto-bumps to 3001+ when taken (common in the Linux devcontainer). The harness parses the bound port from the dev log and validates each candidate is really YAAWC (`/api/config` body contains `chatModelProviders`, not just any 200); override candidates with `PORTS="3000 3001 8080"`.
+This skill drives a live dev server for manual/exploratory checks — LLM-backed features need a real provider key. For automated regression coverage (including chat/agent behavior) that runs offline against the mocked `test` provider, use the Playwright e2e suite (`npm run test:e2e`, see `e2e/CLAUDE.md`) instead.
+
+**Port is not fixed:** `next dev` binds 5005 (`npm run dev` passes `-p 5005`) but auto-bumps to 5006+ when taken (common in the Linux devcontainer). The harness parses the bound port from the dev log and validates each candidate is really YAAWC (`/api/config` body contains `chatModelProviders`, not just any 200); override candidates with `PORTS="5005 5006 8080"`.
 
 ## Prerequisites
 
@@ -26,16 +28,16 @@ It: reuses or starts `npm run dev` (logs → `/tmp/yaawc-dev.log`, up to 90s for
 
 ### Driving it yourself
 
-`playwright-cli` keeps a stateful named session; one command per call. Swap `:3000` for the actual port.
+`playwright-cli` keeps a stateful named session; one command per call. Swap `:5005` for the actual port.
 
 **Headed for large changes:** when testing a large/substantial change, open in headed mode (`--headed`) so the user can watch the run. Simple tests (including smoke) can stay headless.
 
 ```bash
-playwright-cli -s=yaawc open --headed http://localhost:3000   # --headed for large changes; omit for simple/smoke
-playwright-cli -s=yaawc open http://localhost:3000
+playwright-cli -s=yaawc open --headed http://localhost:5005   # --headed for large changes; omit for simple/smoke
+playwright-cli -s=yaawc open http://localhost:5005
 playwright-cli -s=yaawc snapshot                 # DOM/a11y tree + element refs (e96, …) — your main view
 playwright-cli -s=yaawc fill e96 "your query"    # use fill/type, NOT eval — React onChange
-playwright-cli -s=yaawc goto http://localhost:3000/dashboard
+playwright-cli -s=yaawc goto http://localhost:5005/dashboard
 playwright-cli -s=yaawc console error
 playwright-cli -s=yaawc screenshot --filename=/tmp/shot.png   # visual bugs only
 playwright-cli -s=yaawc close
@@ -46,8 +48,8 @@ Refs (`e96`) change on reload — re-snapshot before acting. Full command set: `
 ## API smoke (no browser)
 
 ```bash
-curl -s -m 10 http://localhost:3000/api/config | head -c 200   # model providers JSON
-curl -s http://localhost:3000/api/models                        # available model ids
+curl -s -m 10 http://localhost:5005/api/config | head -c 200   # model providers JSON
+curl -s http://localhost:5005/api/models                        # available model ids
 ```
 
 LLM endpoints (`/api/chat`, `/api/search`) need a chat+system model (DB-backed, set in Settings) and a provider key in `config.toml`; the `test-automation` skill has the `/api/chat` payload shape and test model.
@@ -55,15 +57,15 @@ LLM endpoints (`/api/chat`, `/api/search`) need a chat+system model (DB-backed, 
 ## Run (human path)
 
 ```bash
-npm run dev    # → localhost:3000, hot reload, Ctrl-C to stop (fastest for just viewing)
+npm run dev    # → localhost:5005, hot reload, Ctrl-C to stop (fastest for just viewing)
 npm run build  # db:push (drizzle migrate+push) then next build — needs working db.sqlite
 npm start      # serve the production build
 ```
 
 ## Gotchas
 
-- **Port:** `config.toml` `PORT` is ignored; `next dev` picks 3000 or next free — read it from the log, never assume.
-- **No two dev servers from one dir:** the second bumps to 3001, prints "Ready", then exits _"Another next dev server is already running."_ So 3001 means one server pushed off 3000 by a non-Next process, not two YAAWCs.
+- **Port:** `config.toml` `PORT` is ignored; `next dev` picks 5005 (`-p 5005`) or next free — read it from the log, never assume.
+- **No two dev servers from one dir:** the second bumps to 5006, prints "Ready", then exits _"Another next dev server is already running."_ So 5006 means one server pushed off 5005 by a non-Next process, not two YAAWCs.
 - **A 200 ≠ YAAWC:** another app on the port also answers curl — grep `/api/config` for `chatModelProviders` before trusting it.
 - **One benign console error per page:** `RangeError: invalid language tag: "undefined"` from `ReactQueryDevtools` (dev only) — ignore; a _second_ error is real.
 - **React inputs:** `eval el.value=…` won't fire onChange — use `fill`/`type`; you can still `eval` to _read_ the value.
@@ -73,6 +75,6 @@ npm start      # serve the production build
 ## Troubleshooting
 
 - **`command not found: timeout`** — macOS lacks GNU `timeout`; poll with `seq`/`sleep` (harness does) or install coreutils for `gtimeout`.
-- **Landed on an unexpected port** — 3000 was taken; normal. Read the port from `/tmp/yaawc-dev.log`, or `kill $(lsof -ti:3000)` to force 3000.
+- **Landed on an unexpected port** — 5005 was taken; normal. Read the port from `/tmp/yaawc-dev.log`, or `kill $(lsof -ti:5005)` to force 5005.
 - **Server never comes up** — `tail -20 /tmp/yaawc-dev.log`; usually missing `config.toml` or a drizzle/`db.sqlite` error.
 - **`playwright-cli` not found** — use `npx playwright-cli`.

@@ -1,40 +1,21 @@
 import { test, expect } from '../fixtures';
 import { ChatPage } from '../pages/ChatPage';
-import {
-  acquireGlobalLock,
-  SHARED_SETTINGS_LOCK,
-  TEST_TIMEOUT_MS,
-} from '../utils/globalLock';
 
 const DIRECT_ANSWER = 'This is a deterministic test answer.';
 const TOOL_ANSWER = 'Based on the document, the answer is deterministic.';
 
-// Run in declaration order for good measure, on top of each test's own
-// afterEach reset below (belt-and-suspenders against panelSelection leaking
-// between these two tests).
-test.describe.configure({ mode: 'serial' });
-
 test.describe('agent panel', () => {
   // panelSelection is a DB-backed, instance-wide setting (not scoped per-chat)
   // — cross-device sync of the composer's active selection is a real feature
-  // (see src/lib/settings/keys.ts), so a test that enables the panel mutates
-  // state every other spec's browser can hydrate mid-run. Hold the shared lock
-  // for the whole test so no concurrently-running spec can read a dirty
-  // selection, and reset it before releasing so the next lock holder starts
-  // clean.
-  let release: (() => void) | undefined;
-  test.beforeEach(async () => {
-    test.setTimeout(TEST_TIMEOUT_MS);
-    release = await acquireGlobalLock(SHARED_SETTINGS_LOCK);
-  });
+  // (see src/lib/settings/keys.ts). This spec's `serial` project (one worker)
+  // keeps a concurrently-running spec from ever reading a dirty selection;
+  // reset it after each test so the next test in the suite starts clean.
   test.afterEach(async ({ request }) => {
     await request.patch('/api/settings', {
       data: {
         panelSelection: JSON.stringify({ enabled: false, executors: [] }),
       },
     });
-    release?.();
-    release = undefined;
   });
 
   test('enabling requires 2-4 executors before it is usable', async ({

@@ -1,17 +1,14 @@
 import { test, expect } from '../fixtures';
 import { seedMemory } from '../utils/seed';
 import { MemoryPage } from '../pages/MemoryPage';
-import { useSharedSettingsLock } from '../utils/globalLock';
 
 const MEMORY_ALPHA = `memory-alpha-${Date.now()}`;
 const MEMORY_BETA = `memory-beta-${Date.now()}`;
 
-test.describe.configure({ mode: 'serial' });
-
 test.describe('memory management', () => {
   // memoryEnabled is a DB-synced, instance-wide setting also toggled by
-  // settings-persistence.spec.ts — see SHARED_SETTINGS_LOCK.
-  useSharedSettingsLock(test);
+  // settings-persistence.spec.ts — this spec's `serial` project (one worker)
+  // keeps them from racing each other.
 
   test('add, read, delete a memory and trigger re-index', async ({
     page,

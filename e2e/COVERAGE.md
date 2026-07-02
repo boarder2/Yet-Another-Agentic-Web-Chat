@@ -1,6 +1,6 @@
 # Coverage Matrix
 
-Route/page → spec mapping for the e2e suite. Kept in sync with `e2e/api/*.spec.ts` and `e2e/tests/*.spec.ts` as specs are added — when you add or rename a spec that changes what's covered, update this file in the same change.
+Route/page → spec mapping for the e2e suite. Kept in sync with `e2e/api/*.spec.ts`, `e2e/tests/*.spec.ts`, and `e2e/serial/*.spec.ts` as specs are added — when you add or rename a spec that changes what's covered, update this file in the same change.
 
 ## API routes → specs
 
@@ -12,9 +12,9 @@ Route/page → spec mapping for the e2e suite. Kept in sync with `e2e/api/*.spec
 | `respond-now`                                                                                     | `api/respond-now.spec.ts`     |                                                                                                                            |
 | `autocomplete`                                                                                    | `api/autocomplete.spec.ts`    |                                                                                                                            |
 | `suggestions`                                                                                     | `api/suggestions.spec.ts`     |                                                                                                                            |
-| `config`, `models`                                                                                | `api/config.spec.ts`          |                                                                                                                            |
+| `config`, `models`                                                                                | `serial/config.spec.ts`       |                                                                                                                            |
 | `opensearch`                                                                                      | `api/opensearch.spec.ts`      |                                                                                                                            |
-| `settings`                                                                                        | `api/settings.spec.ts`        |                                                                                                                            |
+| `settings`                                                                                        | `serial/settings.spec.ts`     |                                                                                                                            |
 | `tools`                                                                                           | `api/tools.spec.ts`           |                                                                                                                            |
 | `memories` (+`[id]`, `reindex`)                                                                   | `api/memories.spec.ts`        |                                                                                                                            |
 | `skills` (+`[id]`)                                                                                | `api/skills.spec.ts`          |                                                                                                                            |
@@ -33,18 +33,18 @@ Route/page → spec mapping for the e2e suite. Kept in sync with `e2e/api/*.spec
 
 ## Pages → specs
 
-| Page                                                       | Spec                                                                                                                     | Notes                                                        |
-| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------ |
-| `/` (Home), `/c/[chatId]`                                  | `tests/chat.spec.ts`, `tests/navigation.spec.ts`, `smoke/home.spec.ts`                                                   |                                                              |
-| `/dashboard`                                               | `tests/dashboard.spec.ts`, `tests/navigation.spec.ts`                                                                    |                                                              |
-| `/workspaces`, `/workspaces/[id]`                          | `tests/workspaces.spec.ts`, `tests/navigation.spec.ts`, `smoke/home.spec.ts`                                             |                                                              |
-| `/workspaces/[id]/c/[chatId]`, `/c/new`, `/files/[fileId]` | —                                                                                                                        | **gap** — reached only indirectly, not driven directly       |
-| `/history`                                                 | `tests/library-history.spec.ts`, `tests/navigation.spec.ts`, `smoke/home.spec.ts`                                        |                                                              |
-| `/scheduled-tasks`                                         | `tests/navigation.spec.ts`                                                                                               | list route only — nav smoke, not the create/edit/manage flow |
-| `/scheduled-tasks/manage`, `/new`, `/manage/[id]/edit`     | —                                                                                                                        | **gap** — no dedicated spec                                  |
-| Settings (page + modal)                                    | `tests/navigation.spec.ts`, `tests/settings-depth.spec.ts`, `tests/settings-persistence.spec.ts`, `tests/memory.spec.ts` |                                                              |
-| Agent Panel composer                                       | `tests/agent-panel.spec.ts`                                                                                              |                                                              |
-| Model picker                                               | `tests/model-picker.spec.ts`                                                                                             |                                                              |
+| Page                                                       | Spec                                                                                                                       | Notes                                                        |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `/` (Home), `/c/[chatId]`                                  | `serial/chat.spec.ts`, `tests/navigation.spec.ts`, `smoke/home.spec.ts`                                                    |                                                              |
+| `/dashboard`                                               | `serial/dashboard.spec.ts`, `tests/navigation.spec.ts`                                                                     |                                                              |
+| `/workspaces`, `/workspaces/[id]`                          | `tests/workspaces.spec.ts`, `tests/navigation.spec.ts`, `smoke/home.spec.ts`                                               |                                                              |
+| `/workspaces/[id]/c/[chatId]`, `/c/new`, `/files/[fileId]` | —                                                                                                                          | **gap** — reached only indirectly, not driven directly       |
+| `/history`                                                 | `tests/library-history.spec.ts`, `tests/navigation.spec.ts`, `smoke/home.spec.ts`                                          |                                                              |
+| `/scheduled-tasks`                                         | `tests/navigation.spec.ts`                                                                                                 | list route only — nav smoke, not the create/edit/manage flow |
+| `/scheduled-tasks/manage`, `/new`, `/manage/[id]/edit`     | —                                                                                                                          | **gap** — no dedicated spec                                  |
+| Settings (page + modal)                                    | `tests/navigation.spec.ts`, `tests/settings-depth.spec.ts`, `serial/settings-persistence.spec.ts`, `serial/memory.spec.ts` |                                                              |
+| Agent Panel composer                                       | `serial/agent-panel.spec.ts`                                                                                               |                                                              |
+| Model picker                                               | `serial/model-picker.spec.ts`                                                                                              |                                                              |
 
 ## Out of scope (and why)
 

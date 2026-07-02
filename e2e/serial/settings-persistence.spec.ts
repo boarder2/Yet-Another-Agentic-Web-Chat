@@ -1,5 +1,4 @@
 import { test, expect } from '../fixtures';
-import { useSharedSettingsLock } from '../utils/globalLock';
 
 /**
  * Verify that DB-backed non-secret settings round-trip correctly:
@@ -10,14 +9,10 @@ import { useSharedSettingsLock } from '../utils/globalLock';
  * depends on its specific value.
  */
 // Both tests mutate the same global settings keys (autoSuggestions,
-// memoryEnabled); serialize them so the suite's local fullyParallel mode can't
-// race two writers against the single app_settings row.
-test.describe.configure({ mode: 'serial' });
+// memoryEnabled) — as does memory.spec.ts. This spec's `serial` project (one
+// worker) keeps writers from racing against the single app_settings row.
 
 test.describe('settings persistence', () => {
-  // memoryEnabled is also touched by memory.spec.ts — see SHARED_SETTINGS_LOCK.
-  useSharedSettingsLock(test);
-
   test('autoSuggestions toggle persists through localStorage and page reload', async ({
     page,
   }) => {

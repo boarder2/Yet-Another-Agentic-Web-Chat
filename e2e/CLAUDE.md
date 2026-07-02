@@ -36,6 +36,7 @@ A valid `config.toml` must exist at the project root (smoke tests do not call LL
 | ------------------------- | ----------------------- |
 | `npm run test:e2e`        | Run all e2e tests       |
 | `npm run test:e2e:smoke`  | Run smoke tests only    |
+| `npm run test:e2e:serial` | Run serial specs only   |
 | `npm run test:e2e:ui`     | Open Playwright UI mode |
 | `npm run test:e2e:report` | Open the HTML report    |
 
@@ -49,6 +50,8 @@ Tests run against an isolated SQLite database at `e2e/.test-data/db.sqlite` (git
 
 The test DB is shared across the whole run — it's isolated from dev data, not per-spec. A spec that persists a non-isolated change (global/app-level settings, an MCP server, a cron/scheduled task, anything not scoped to a workspace/chat it creates) must revert or delete it after the test, or it leaks into and pollutes later specs. Prefer scoping state to a fixture the spec owns (a fresh workspace/chat) when possible; when a change is unavoidably global, clean it up in the test body or an `afterEach`/`afterAll`.
 
+A spec that mutates instance-wide, DB-synced settings (composer model/panel selection, dashboard widgets, memory toggles, ...) can't just clean up after itself — it also can't tolerate another spec concurrently reading dirty state mid-run. Put specs like that in `e2e/serial/` instead of `e2e/tests/`/`e2e/api/`: that project runs on a single worker, so cross-spec races on shared settings are structurally impossible rather than something each spec has to guard against.
+
 ## Directory Layout
 
 ```
@@ -56,6 +59,7 @@ e2e/
   smoke/          Fast smoke tests
   tests/          Full feature/regression specs
   api/            Pure HTTP specs (see e2e/api/CLAUDE.md)
+  serial/         Specs that mutate shared, DB-synced settings — single-worker project, run mutually exclusive of every other spec
   fixtures/       Extend @playwright/test — always import from here, never @playwright/test directly
   pages/          Page Object Models (add when a flow is reused across 3+ specs)
   utils/          Shared test helpers

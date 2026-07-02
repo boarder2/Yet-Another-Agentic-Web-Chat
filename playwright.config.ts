@@ -60,5 +60,17 @@ export default defineConfig({
       testDir: 'e2e/tests',
       use: { ...devices['Desktop Chrome'] },
     },
+    {
+      // Specs that mutate instance-wide, DB-synced settings (composer
+      // model/panel selection, dashboard widgets, memory toggles, ...) and
+      // can't tolerate a concurrently-running spec observing dirty state.
+      // A single worker with fullyParallel off makes that obvious from the
+      // project alone, so specs don't need their own cross-worker mutex.
+      name: 'serial',
+      testDir: 'e2e/serial',
+      fullyParallel: false,
+      workers: 1,
+      use: { ...devices['Desktop Chrome'] },
+    },
   ],
 });

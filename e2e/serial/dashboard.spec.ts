@@ -1,10 +1,5 @@
 import { test, expect } from '../fixtures';
 import { DashboardPage } from '../pages/DashboardPage';
-import {
-  acquireGlobalLock,
-  SHARED_SETTINGS_LOCK,
-  TEST_TIMEOUT_MS,
-} from '../utils/globalLock';
 
 const WIDGET_ALPHA = {
   id: 'widget-test-alpha',
@@ -32,27 +27,16 @@ const WIDGET_BETA = {
   layout: { x: 2, y: 0, w: 2, h: 2 },
 };
 
-// Both tests mutate the global, DB-backed dashboard settings keys, so they must
-// not run concurrently (the suite is fullyParallel locally).
-test.describe.configure({ mode: 'serial' });
-
 test.describe('dashboard', () => {
-  // Cross-device sync of dashboard settings is a real feature (see
-  // src/lib/settings/keys.ts) — hold the shared lock for the whole test so no
-  // concurrently-running spec can hydrate a dirty value, and reset before
-  // releasing so the next lock holder starts clean.
-  let release: (() => void) | undefined;
-  test.beforeEach(async () => {
-    test.setTimeout(TEST_TIMEOUT_MS);
-    release = await acquireGlobalLock(SHARED_SETTINGS_LOCK);
-  });
+  // Both tests mutate the global, DB-backed dashboard settings keys (a real
+  // cross-device-sync feature — see src/lib/settings/keys.ts). This spec's
+  // `serial` project (one worker) keeps a concurrently-running spec from
+  // hydrating a dirty value; reset after each test so nothing leaks between
+  // tests.
   test.afterEach(async ({ request }) => {
-    // Reset the shared dashboard state so nothing leaks between tests.
     await request.patch('/api/settings', {
       data: { yaawc_dashboard_widgets: '[]', yaawc_dashboard_cache: '{}' },
     });
-    release?.();
-    release = undefined;
   });
 
   test('renders the heading and the empty-state board when no widgets exist', async ({

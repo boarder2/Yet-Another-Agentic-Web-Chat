@@ -8,11 +8,9 @@ import {
   getOpenrouterApiKey,
   getDeepseekApiKey,
   getAimlApiKey,
-  getPrivateSessionDurationMinutes,
   getBraveSearchApiKey,
   getBraveLLMApiKey,
   getMojeekApiKey,
-  updateConfig,
 } from '@/lib/config';
 import { setCredential, type CredentialKey } from '@/lib/credentials';
 import { isEncryptionConfigured } from '@/lib/encryption';
@@ -76,9 +74,6 @@ export const GET = async (_req: Request) => {
     // app-wide EncryptionGate (src/components/EncryptionGate.tsx): until this
     // is true, credential storage is unavailable and the UI blocks usage.
     config['encryptionConfigured'] = isEncryptionConfigured();
-
-    config['privateSessionDurationMinutes'] =
-      getPrivateSessionDurationMinutes();
 
     // Search provider credentials (encrypted, credentials.ts). The endpoint URL
     // and provider/locale preferences are DB-backed settings (settings/server.ts).
@@ -148,15 +143,6 @@ export const POST = async (req: Request) => {
       // so changing one mustn't force a full model-cache refetch.
       if (field.key.startsWith('model.')) providerChanged = true;
       setCredential(field.key, config[field.body]);
-    }
-
-    if (config.privateSessionDurationMinutes !== undefined) {
-      updateConfig({
-        GENERAL: {
-          PRIVATE_SESSION_DURATION_MINUTES:
-            config.privateSessionDurationMinutes,
-        },
-      });
     }
 
     // If any model-provider credential changed, invalidate the cached model

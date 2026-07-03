@@ -113,10 +113,6 @@ interface Config {
   };
 }
 
-type RecursivePartial<T> = {
-  [P in keyof T]?: RecursivePartial<T[P]>;
-};
-
 const loadConfig = () => {
   // Server-side only
   if (typeof window === 'undefined') {
@@ -168,9 +164,6 @@ export const getKeepAlive = () => loadConfig().GENERAL.KEEP_ALIVE;
 
 export const getBaseUrl = () =>
   process.env.BASE_URL || loadConfig().GENERAL.BASE_URL;
-
-export const getPrivateSessionDurationMinutes = () =>
-  loadConfig().GENERAL.PRIVATE_SESSION_DURATION_MINUTES ?? 1440;
 
 export const getEncryptionPassphrase = () => {
   // An explicitly-set env var wins over config.toml — including an empty string,
@@ -225,52 +218,6 @@ export const getCustomOpenaiModelName = () =>
   getCustomOpenaiUrlAndModel().modelName;
 
 export const getLMStudioApiEndpoint = () => getLMStudioApiUrl();
-
-const mergeConfigs = (
-  current: Record<string, unknown>,
-  update: Record<string, unknown>,
-): Record<string, unknown> => {
-  if (update === null || update === undefined) {
-    return current;
-  }
-
-  if (typeof current !== 'object' || current === null) {
-    return update;
-  }
-
-  // Handle arrays specifically - don't merge them, replace them
-  if (Array.isArray(update)) {
-    return update;
-  }
-
-  const result = { ...current };
-
-  for (const key in update) {
-    if (Object.prototype.hasOwnProperty.call(update, key)) {
-      const updateValue = update[key];
-
-      // Handle arrays specifically - don't merge them, replace them
-      if (Array.isArray(updateValue)) {
-        result[key] = updateValue;
-      } else if (
-        typeof updateValue === 'object' &&
-        updateValue !== null &&
-        typeof result[key] === 'object' &&
-        result[key] !== null &&
-        !Array.isArray(result[key])
-      ) {
-        result[key] = mergeConfigs(
-          result[key] as Record<string, unknown>,
-          updateValue as Record<string, unknown>,
-        );
-      } else if (updateValue !== undefined) {
-        result[key] = updateValue;
-      }
-    }
-  }
-
-  return result;
-};
 
 const ALLOWED_IMAGE_PATTERN = /^node:\d+(-slim|-alpine)?$/;
 const ALLOWED_DOCKER_HOST_PATTERN =
@@ -373,6 +320,12 @@ export const readLegacyMigratableConfig = (): Record<string, string> => {
   put('retentionScheduledRunsMode', r?.SCHEDULED_RUNS_MODE);
   put('retentionScheduledRunsValue', r?.SCHEDULED_RUNS_VALUE);
 
+  // GENERAL.PRIVATE_SESSION_DURATION_MINUTES
+  put(
+    'privateSessionDurationMinutes',
+    cfg.GENERAL?.PRIVATE_SESSION_DURATION_MINUTES,
+  );
+
   // [SEARCH] provider + locale preferences (API keys stay in credentials.ts)
   const s = cfg.SEARCH;
   put('searchProvider', s?.PROVIDER);
@@ -440,19 +393,4 @@ export const readLegacyCredentialsConfig = (): Record<string, string> => {
   put('search.mojeek', cfg.SEARCH?.PROVIDERS?.MOJEEK?.API_KEY);
 
   return out;
-};
-
-export const updateConfig = (config: RecursivePartial<Config>) => {
-  // Server-side only
-  if (typeof window === 'undefined') {
-    const currentConfig = loadConfig();
-    const mergedConfig = mergeConfigs(
-      currentConfig as unknown as Record<string, unknown>,
-      config as unknown as Record<string, unknown>,
-    );
-    fs!.writeFileSync(
-      path!.join(path!.join(process.cwd(), `${configFileName}`)),
-      toml.stringify(mergedConfig as unknown as toml.JsonMap),
-    );
-  }
 };

@@ -1,7 +1,7 @@
 import db from './db';
 import { chats, messages } from './db/schema';
 import { eq } from 'drizzle-orm';
-import { getPrivateSessionDurationMinutes } from './config';
+import { getPrivateSessionDurationMinutes } from './settings/server';
 import { getRunByChatId } from './runs/runHub';
 
 export async function cleanupExpiredPrivateSessions(): Promise<number> {

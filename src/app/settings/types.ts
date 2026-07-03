@@ -15,7 +15,6 @@ export interface SettingsType {
   customOpenaiApiKey: string;
   encryptionConfigured: boolean;
   contextWindowSize: number;
-  privateSessionDurationMinutes: number;
   braveSearchApiKey: string;
   braveLLMApiKey: string;
   mojeekApiKey: string;

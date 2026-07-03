@@ -52,8 +52,7 @@ export default function ApiKeysSection({
       }
     >
       <p className="text-xs text-fg/60">
-        Values are also editable directly in{' '}
-        <code className="font-mono">config.toml</code>.
+        API keys are encrypted at rest in the database.
       </p>
       <div className="flex flex-col space-y-4">
         <div className="flex flex-col space-y-1">

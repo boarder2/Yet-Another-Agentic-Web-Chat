@@ -49,11 +49,9 @@ apiTest.describe('encryption gate: API', () => {
   );
 
   apiTest(
-    'POST /api/config still accepts a non-credential field',
+    'POST /api/config still accepts a non-credential body',
     async ({ request }) => {
-      const res = await request.post('/api/config', {
-        data: { privateSessionDurationMinutes: 60 },
-      });
+      const res = await request.post('/api/config', { data: {} });
       expect(res.status()).toBe(200);
     },
   );

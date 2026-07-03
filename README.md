@@ -371,7 +371,7 @@ Click **"Start private session"** at the bottom of the chat page, or navigate to
 
 ### Configuration
 
-Set `PRIVATE_SESSION_DURATION_MINUTES` in `config.toml` or via the Settings page. Predefined options: 1 hour, 8 hours, 24 hours, or a custom duration. Default is 24 hours (1440 minutes).
+Set the private session duration from Settings → Retention. Predefined options: 1 hour, 8 hours, 24 hours, or a custom duration. Default is 24 hours (1440 minutes).
 
 ## Personalization & Personas
 

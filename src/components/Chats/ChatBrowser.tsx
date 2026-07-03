@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useWorkspacesList } from '@/lib/hooks/api/useWorkspaces';
-import { useConfig } from '@/lib/hooks/api/useConfig';
+import { useLocalStorageString } from '@/lib/hooks/useLocalStorage';
 import {
   useChatsInfinite,
   useChatSearch,
@@ -58,7 +58,10 @@ const ChatBrowser = ({ workspaceId }: Props) => {
 
   const { data: activeWorkspaces = [] } = useWorkspacesList(false);
   const { data: archivedWorkspaces = [] } = useWorkspacesList(true);
-  const { data: configData } = useConfig();
+  const [privateSessionDurationMinutes] = useLocalStorageString(
+    'privateSessionDurationMinutes',
+    '1440',
+  );
 
   const [selectedWorkspaceFilters, setSelectedWorkspaceFilters] = useState<
     string[]
@@ -86,12 +89,11 @@ const ChatBrowser = ({ workspaceId }: Props) => {
   }, []);
 
   const privateSessionDurationMs = useMemo(() => {
-    const minutes = (configData as { privateSessionDurationMinutes?: number })
-      ?.privateSessionDurationMinutes;
-    return typeof minutes === 'number'
+    const minutes = parseInt(privateSessionDurationMinutes, 10);
+    return Number.isFinite(minutes) && minutes > 0
       ? minutes * 60 * 1000
       : 24 * 60 * 60 * 1000;
-  }, [configData]);
+  }, [privateSessionDurationMinutes]);
 
   // Build workspace map for chip rendering
   const workspaceMap = useMemo(() => {

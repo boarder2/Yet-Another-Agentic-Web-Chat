@@ -56,6 +56,9 @@ export const MIGRATED_SETTING_KEYS = [
   'retentionChatsValue',
   'retentionScheduledRunsMode',
   'retentionScheduledRunsValue',
+  // Private-session auto-delete duration (instance-wide). Seeded once from
+  // legacy config.toml `GENERAL.PRIVATE_SESSION_DURATION_MINUTES`.
+  'privateSessionDurationMinutes',
   // Search provider + locale preferences (instance-wide). The provider API
   // keys are encrypted in `credentials.ts`; the SearXNG URL is below (it's a
   // non-secret endpoint). Seeded once from the legacy config.toml `[SEARCH]`

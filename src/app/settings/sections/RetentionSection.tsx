@@ -1,9 +1,9 @@
 'use client';
 
+import { useState } from 'react';
 import SettingsSection from '../components/SettingsSection';
 import Select from '../components/Select';
 import InputComponent from '../components/InputComponent';
-import { SettingsType } from '../types';
 import { useLocalStorageString } from '@/lib/hooks/useLocalStorage';
 
 const MODES = [
@@ -23,6 +23,9 @@ const PREDEFINED_DURATIONS = [
   { label: '7 days', value: 10080 },
   { label: 'Custom', value: -1 },
 ];
+const PREDEFINED_DURATION_VALUES = PREDEFINED_DURATIONS.filter(
+  (d) => d.value !== -1,
+).map((d) => d.value);
 
 function RetentionPanel({
   label,
@@ -61,31 +64,7 @@ function RetentionPanel({
   );
 }
 
-export default function RetentionSection({
-  savingStates,
-  setConfig,
-  saveConfig,
-  privateSessionDurationMinutes,
-  isCustomPrivateDuration,
-  customPrivateDurationInput,
-  setPrivateSessionDurationMinutes,
-  setIsCustomPrivateDuration,
-  setCustomPrivateDurationInput,
-}: {
-  config: SettingsType;
-  savingStates: Record<string, boolean>;
-  setConfig: React.Dispatch<React.SetStateAction<SettingsType | null>>;
-  saveConfig: (
-    key: string,
-    value: string | string[] | number | boolean,
-  ) => void;
-  privateSessionDurationMinutes: number;
-  isCustomPrivateDuration: boolean;
-  customPrivateDurationInput: string;
-  setPrivateSessionDurationMinutes: (val: number) => void;
-  setIsCustomPrivateDuration: (val: boolean) => void;
-  setCustomPrivateDurationInput: (val: string) => void;
-}) {
+export default function RetentionSection() {
   // Retention policies are DB-backed (app_settings, synced from localStorage).
   const [chatsMode, setChatsMode] = useLocalStorageString(
     'retentionChatsMode',
@@ -103,6 +82,18 @@ export default function RetentionSection({
     'retentionScheduledRunsValue',
     '10',
   );
+  const [privateDurationRaw, setPrivateDurationRaw] = useLocalStorageString(
+    'privateSessionDurationMinutes',
+    '1440',
+  );
+  const privateSessionDurationMinutes =
+    parseInt(privateDurationRaw, 10) || 1440;
+  // Sticky UI override so picking "Custom" stays selected even if the typed
+  // value happens to match a predefined option.
+  const [customOverride, setCustomOverride] = useState(false);
+  const isCustomPrivateDuration =
+    customOverride ||
+    !PREDEFINED_DURATION_VALUES.includes(privateSessionDurationMinutes);
 
   return (
     <SettingsSection title="Retention">
@@ -141,18 +132,10 @@ export default function RetentionSection({
           onChange={(e) => {
             const val = parseInt(e.target.value);
             if (val === -1) {
-              setIsCustomPrivateDuration(true);
-              setCustomPrivateDurationInput(
-                String(privateSessionDurationMinutes),
-              );
+              setCustomOverride(true);
             } else {
-              setIsCustomPrivateDuration(false);
-              setPrivateSessionDurationMinutes(val);
-              setConfig((prev) => ({
-                ...prev!,
-                privateSessionDurationMinutes: val,
-              }));
-              saveConfig('privateSessionDurationMinutes', val);
+              setCustomOverride(false);
+              setPrivateDurationRaw(String(val));
             }
           }}
           options={PREDEFINED_DURATIONS.map((d) => ({
@@ -166,22 +149,14 @@ export default function RetentionSection({
             <InputComponent
               type="number"
               min={1}
-              value={customPrivateDurationInput}
+              value={privateDurationRaw}
               placeholder="Duration in minutes"
-              isSaving={savingStates['privateSessionDurationMinutes']}
-              onChange={(e) => {
-                setCustomPrivateDurationInput(e.target.value);
-              }}
-              onSave={(value) => {
-                const numValue = Math.max(1, parseInt(value) || 1440);
-                setPrivateSessionDurationMinutes(numValue);
-                setCustomPrivateDurationInput(String(numValue));
-                setConfig((prev) => ({
-                  ...prev!,
-                  privateSessionDurationMinutes: numValue,
-                }));
-                saveConfig('privateSessionDurationMinutes', numValue);
-              }}
+              onChange={(e) => setPrivateDurationRaw(e.target.value)}
+              onSave={(value) =>
+                setPrivateDurationRaw(
+                  String(Math.max(1, parseInt(value) || 1440)),
+                )
+              }
             />
             <p className="text-xs text-fg/60">
               Enter a custom duration in minutes (minimum 1).

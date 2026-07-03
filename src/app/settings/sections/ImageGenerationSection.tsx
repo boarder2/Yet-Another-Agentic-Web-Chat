@@ -34,7 +34,7 @@ export default function ImageGenerationSection() {
   const [refreshing, setRefreshing] = useState(false);
 
   // Image generation settings are DB-backed (app_settings, synced from
-  // localStorage). The OpenRouter API key stays in config.toml.
+  // localStorage). The OpenRouter API key is an encrypted DB credential.
   const [enabled, setEnabled] = useLocalStorageBoolean(
     'imageGenerationEnabled',
     false,

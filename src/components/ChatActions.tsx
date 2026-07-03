@@ -12,7 +12,7 @@ import {
   Transition,
 } from '@headlessui/react';
 import { exportAsMarkdown, exportAsPDF } from '@/lib/chatExport';
-import { useConfig } from '@/lib/hooks/api/useConfig';
+import { useLocalStorageString } from '@/lib/hooks/useLocalStorage';
 import { useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api/client';
 import { qk } from '@/lib/api/keys';
@@ -33,7 +33,10 @@ const ChatActions = ({
   workspaceId?: string;
 }) => {
   const qc = useQueryClient();
-  const { data: configData } = useConfig();
+  const [privateSessionDurationMinutes] = useLocalStorageString(
+    'privateSessionDurationMinutes',
+    '1440',
+  );
   const [expiresIn, setExpiresIn] = useState<string>('');
   const [, setTick] = useState(0);
 
@@ -44,12 +47,11 @@ const ChatActions = ({
       : '';
 
   const durationMs = useMemo(() => {
-    const minutes = (configData as { privateSessionDurationMinutes?: number })
-      ?.privateSessionDurationMinutes;
-    return typeof minutes === 'number'
+    const minutes = parseInt(privateSessionDurationMinutes, 10);
+    return Number.isFinite(minutes) && minutes > 0
       ? minutes * 60 * 1000
       : 24 * 60 * 60 * 1000;
-  }, [configData]);
+  }, [privateSessionDurationMinutes]);
 
   useEffect(() => {
     const intervalId = setInterval(() => setTick((t) => t + 1), 60000);

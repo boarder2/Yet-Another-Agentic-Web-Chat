@@ -132,6 +132,18 @@ export function getScheduledRunRetentionPolicy(): RetentionPolicy {
   };
 }
 
+/**
+ * Private-session auto-delete duration, in minutes. Seeded from legacy
+ * `GENERAL.PRIVATE_SESSION_DURATION_MINUTES`.
+ */
+export function getPrivateSessionDurationMinutes(): number {
+  const raw = getSettings(['privateSessionDurationMinutes'])[
+    'privateSessionDurationMinutes'
+  ];
+  const value = parseInt(raw ?? '', 10);
+  return Number.isFinite(value) && value > 0 ? value : 1440;
+}
+
 /** Search provider selection. Seeded from legacy `SEARCH.*_PROVIDER`. */
 export function getSearchProviderSelection(): {
   provider: SearchProviderIdType;

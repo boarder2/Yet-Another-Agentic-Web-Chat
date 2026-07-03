@@ -1,9 +1,10 @@
 import { test, expect } from '../fixtures/api';
 import { MASKED_SECRET } from '../../src/lib/maskedSecret';
 
-// updateConfig() (src/lib/config.ts) does a read-modify-write of the whole
-// config.toml file — concurrent POSTs from different tests could lose one
-// another's writes. This spec lives in the `serial` project (one worker, not
+// POST /api/config only writes encrypted credentials now (setCredential) and
+// invalidates the shared model-provider cache — concurrent writes to the same
+// key, or a cache invalidation racing another test's read, could interfere
+// across tests. This spec lives in the `serial` project (one worker, not
 // fully parallel), so that can't happen.
 
 test.describe('GET /api/config', () => {
@@ -121,14 +122,13 @@ test.describe('GET /api/config', () => {
     expect(res.status()).toBe(200);
     const body = await res.json();
 
-    // These fields are always present with a string (possibly empty).
-    // Provider/search endpoint URLs (ollamaApiUrl, searxngApiUrl, ...) are
-    // DB-backed settings now — see settings.spec.ts — not part of this route.
+    // Always present with a string (possibly empty). Provider/search endpoint
+    // URLs (ollamaApiUrl, searxngApiUrl, ...) are DB-backed settings now — see
+    // settings.spec.ts — not part of this route.
     expect(typeof body.baseUrl).toBe('string');
-    expect(typeof body.privateSessionDurationMinutes).toBe('number');
   });
 
-  test('does not include provider/search endpoint URL fields (moved to /api/settings)', async ({
+  test('does not include fields moved to /api/settings', async ({
     request,
   }) => {
     const res = await request.get('/api/config');
@@ -140,6 +140,7 @@ test.describe('GET /api/config', () => {
     expect(body).not.toHaveProperty('customOpenaiApiUrl');
     expect(body).not.toHaveProperty('customOpenaiModelName');
     expect(body).not.toHaveProperty('searxngApiUrl');
+    expect(body).not.toHaveProperty('privateSessionDurationMinutes');
   });
 });
 
@@ -149,30 +150,6 @@ test.describe('POST /api/config', () => {
     expect(res.status()).toBe(200);
     const body = await res.json();
     expect(body.message).toBe('Config updated');
-  });
-
-  test('persists a non-secret value and reflects it in GET', async ({
-    request,
-  }) => {
-    const before = await (await request.get('/api/config')).json();
-    const original = before.privateSessionDurationMinutes;
-    const newValue = original === 60 ? 120 : 60;
-
-    const post = await request.post('/api/config', {
-      data: { privateSessionDurationMinutes: newValue },
-    });
-    expect(post.status()).toBe(200);
-
-    try {
-      const res = await request.get('/api/config');
-      expect(res.status()).toBe(200);
-      const body = await res.json();
-      expect(body.privateSessionDurationMinutes).toBe(newValue);
-    } finally {
-      await request.post('/api/config', {
-        data: { privateSessionDurationMinutes: original },
-      });
-    }
   });
 
   test('masked sentinel in POST preserves the existing key', async ({

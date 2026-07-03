@@ -109,12 +109,6 @@ export default function SettingsPanel({
   );
   const [, setIsCustomContextWindow] = useState(false);
 
-  const [privateSessionDurationMinutes, setPrivateSessionDurationMinutes] =
-    useState(1440);
-  const [isCustomPrivateDuration, setIsCustomPrivateDuration] = useState(false);
-  const [customPrivateDurationInput, setCustomPrivateDurationInput] =
-    useState('');
-
   const [userSystemPrompts, setUserSystemPrompts] = useState<Prompt[]>([]);
   const [editingPrompt, setEditingPrompt] = useState<Prompt | null>(null);
   const [newPromptName, setNewPromptName] = useState('');
@@ -159,19 +153,11 @@ export default function SettingsPanel({
   const deleteSystemPromptMutation = useDeleteSystemPrompt();
 
   // (C) Config-API-backed state — mirrors the latest /api/config response
-  // (retention, search providers, private-session duration, model lists).
+  // (search providers, model lists).
   const applyConfigObject = useCallback((data: SettingsType) => {
     setConfig(data);
     setChatModels(data.chatModelProviders || {});
     setEmbeddingModels(data.embeddingModelProviders || {});
-
-    const duration = data.privateSessionDurationMinutes ?? 1440;
-    setPrivateSessionDurationMinutes(duration);
-    const isPredefined = [5, 15, 30, 60, 480, 1440, 4320, 10080].includes(
-      duration,
-    );
-    setIsCustomPrivateDuration(!isPredefined);
-    if (!isPredefined) setCustomPrivateDurationInput(String(duration));
   }, []);
 
   // (B) localStorage-backed (DB-synced) state — model selections plus the
@@ -803,26 +789,7 @@ export default function SettingsPanel({
                   />
                 )}
 
-                {activeSection === 'retention' && (
-                  <RetentionSection
-                    config={config}
-                    savingStates={savingStates}
-                    setConfig={setConfig}
-                    saveConfig={saveConfig}
-                    privateSessionDurationMinutes={
-                      privateSessionDurationMinutes
-                    }
-                    isCustomPrivateDuration={isCustomPrivateDuration}
-                    customPrivateDurationInput={customPrivateDurationInput}
-                    setPrivateSessionDurationMinutes={
-                      setPrivateSessionDurationMinutes
-                    }
-                    setIsCustomPrivateDuration={setIsCustomPrivateDuration}
-                    setCustomPrivateDurationInput={
-                      setCustomPrivateDurationInput
-                    }
-                  />
-                )}
+                {activeSection === 'retention' && <RetentionSection />}
 
                 {activeSection === 'skills' && <SkillsSection />}
 

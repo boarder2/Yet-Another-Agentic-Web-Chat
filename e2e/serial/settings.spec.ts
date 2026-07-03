@@ -142,6 +142,30 @@ test.describe('PATCH /api/settings', () => {
     });
   });
 
+  test('private session duration round-trips (moved off /api/config)', async ({
+    request,
+  }) => {
+    const key = 'privateSessionDurationMinutes';
+    const before = await (await request.get('/api/settings')).json();
+    const original = before[key];
+
+    const patchRes = await request.patch('/api/settings', {
+      data: { [key]: '60' },
+    });
+    expect(patchRes.status()).toBe(204);
+
+    const after = await (await request.get('/api/settings')).json();
+    expect(after[key]).toBe('60');
+
+    // Confirm /api/config no longer carries this field at all.
+    const config = await (await request.get('/api/config')).json();
+    expect(config).not.toHaveProperty(key);
+
+    await request.patch('/api/settings', {
+      data: { [key]: original ?? null },
+    });
+  });
+
   test('batch-updates multiple keys in one request', async ({ request }) => {
     const key1 = 'ttsSpeed';
     const key2 = 'ttsVoice';

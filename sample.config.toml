@@ -1,16 +1,16 @@
 [GENERAL]
 KEEP_ALIVE = "5m"
 BASE_URL = ""
-PRIVATE_SESSION_DURATION_MINUTES = 1440
-# HIDDEN_MODELS and [GENERAL.RETENTION] have been migrated to the database
-# (app_settings table). Manage them from Settings → Model Visibility / Retention.
-# Selected models (embedding + memory-processing model) are likewise DB-backed
-# and configured from the Settings UI.
+# HIDDEN_MODELS, [GENERAL.RETENTION], and PRIVATE_SESSION_DURATION_MINUTES have
+# been migrated to the database (app_settings table). Manage them from
+# Settings → Model Visibility / Retention. Selected models (embedding +
+# memory-processing model) are likewise DB-backed and configured from the
+# Settings UI.
 
 [SECURITY]
 # REQUIRED for credential storage. A passphrase of your choosing, used to
 # derive the key that encrypts provider/search API keys and MCP auth at rest
-# (AES-256-GCM). Never auto-generated — until this is set, the app blocks
+# (AES-256-GCM). Until this is set, the app blocks
 # usage and the Settings UI shows an error. Changing it later re-derives a
 # different key, so existing encrypted credentials become unreadable and must
 # be re-entered via Settings.

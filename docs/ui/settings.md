@@ -1,6 +1,6 @@
 # Settings
 
-The Settings page is the central configuration hub for YAAWC. It is organized into collapsible sections, each managing a specific category of preferences.
+The Settings page is the central configuration hub for YAAWC. It is organized into collapsible sections, grouped into **General**, **AI Models**, **Search**, and **Security**.
 
 **Route:** `/settings`
 
@@ -9,11 +9,15 @@ The Settings page is the central configuration hub for YAAWC. It is organized in
 > in the `app_settings` DB table, synced via `/api/settings` (see
 > `src/lib/settings/persist.ts` + the `MIGRATED_SETTING_KEYS` allowlist).
 > Exceptions that stay **localStorage-only**: `appTheme`, `userBg`, `userAccent`,
-> `chatWidthWide`, `codeExecutionWarningAccepted`. Secrets stay in `config.toml`.
-> **Ambient settings** (memory toggles, personalization location/profile and
-> their send-enabled flags) are read **server-side** from `app_settings` by
-> `/api/chat` and are no longer sent in the request body; per-request composer
-> choices (model selection, selected prompts, vision) remain request parameters.
+> `chatWidthWide`, `codeExecutionWarningAccepted`. **Secrets** (model/search
+> provider API keys, MCP auth) never go through this path — they're encrypted
+> at rest in a dedicated `credentials` DB table (AES-256-GCM, see
+> `src/lib/credentials.ts` / `src/lib/encryption.ts`), keyed from the
+> passphrase in `config.toml`. **Ambient settings** (memory toggles,
+> personalization location/profile and their send-enabled flags) are read
+> **server-side** from `app_settings` by `/api/chat` and are no longer sent in
+> the request body; per-request composer choices (model selection, selected
+> prompts, vision) remain request parameters.
 
 ---
 
@@ -30,28 +34,39 @@ While configuration loads from `/api/config`, a full-page spinner is displayed.
 
 ---
 
-## Sections
+## General
 
-### 1. Preferences
-
-**Content**: Theme switcher dropdown.
-
-- **Options**: Light, Dark, Custom.
-- When **Custom** is selected, two color picker inputs appear:
-  - **Background**: Sets the base background color. Foreground, surface, and surface-2 colors are auto-derived from luminance analysis.
-  - **Accent**: Sets the accent/brand color. Lighter and darker variants are auto-derived.
-- Theme changes apply immediately to the entire application.
-- **Persistence**: `appTheme`, `userBg`, `userAccent` in localStorage.
-
-### 2. Automatic Search
+### Automatic Search
 
 A single toggle switch.
 
 - **On**: The AI automatically generates follow-up suggestion queries after each response.
 - **Off**: Users must manually click "Load suggestions" to see related queries.
-- **Persistence**: `autoSuggestions` in localStorage. Also saved to server config.
+- **Persistence**: `autoSuggestions` in localStorage. Also synced to the DB.
 
-### 3. Personalization
+### MCP Servers
+
+CRUD for remote MCP servers (see `mcp-integration` skill).
+
+- Add/edit a server's name, URL, transport (auto/Streamable HTTP/SSE), and auth (none, bearer/API key, OAuth client credentials, or interactive OAuth). Secrets are write-only — existing tokens are never re-displayed.
+- **Test** probes the connection; **Authorize** starts the interactive OAuth flow; **Refresh tools** re-runs discovery.
+- Expand a server's **Tools** panel to enable/disable individual tools and toggle auto-run vs. ask-before-running per tool.
+
+### Memory
+
+Cross-conversation memory: enable/disable, toggle retrieval (inject relevant memories into chats) and automatic detection (LLM-analyzes conversations for facts worth remembering), pick the memory-processing model, and browse/search/add/edit/delete stored memories (with re-index and delete-all actions).
+
+- **Persistence**: `memoryEnabled`, `memoryRetrievalEnabled`, `memoryAutoDetectionEnabled` in localStorage (DB-synced). Memory-processing model under its own `memoryModelProvider`/`memoryModel` keys — independent of the chat picker's `systemModelProvider`/`systemModel`.
+
+### Persona Prompts
+
+A CRUD interface for custom persona prompts that guide the AI's behavior and formatting.
+
+- Each prompt is a card (name + truncated content) with edit/delete.
+- **Add**: inline form (name + content), `POST /api/system-prompts`.
+- **Copy Template** dropdown offers pre-built formatting templates (Web, Local, Chat, Scholarly) to paste into a prompt.
+
+### Personalization
 
 Two fields for providing personal context to the AI:
 
@@ -63,91 +78,90 @@ Two fields for providing personal context to the AI:
 - Changes save immediately on input and dispatch a `personalization-update` custom event for real-time sync with the chat input's PersonalizationPicker.
 - **Persistence**: `personalization.location`, `personalization.about` in localStorage.
 
-### 4. Persona Prompts
+### Research Methodologies
 
-A CRUD interface for custom persona prompts that guide the AI's behavior and formatting.
+Same CRUD pattern as Persona Prompts, but for methodology prompts (`type: 'methodology'`) used by research-oriented focus modes. Includes a template picker over `builtinMethodologyTemplates`.
 
-#### Viewing Prompts
+### Retention
 
-- Each prompt is a card showing its name and a truncated content preview.
-- **Edit button** (pencil icon): Transforms the card into inline editable fields (name input + content textarea) with Save and Cancel buttons.
-- **Delete button** (trash icon): Shows a browser `confirm()` dialog, then calls `DELETE /api/system-prompts/:id`.
+Automatic purge policy for chats and scheduled task runs (pinned chats are never purged), plus private-session duration.
 
-#### Adding Prompts
+- **Regular Chats** / **Scheduled Task Runs**: mode (`days` / `count` / `disabled`) + a numeric value.
+- **Private Session Duration**: predefined options (5 min – 7 days) or a custom value in minutes.
+- **Persistence**: `retentionChatsMode/Value`, `retentionScheduledRunsMode/Value`, `privateSessionDurationMinutes` in localStorage (DB-synced).
 
-- **"Add Persona Prompt" button**: Reveals an inline form with name input, content textarea, and Save/Cancel buttons.
-- Saving calls `POST /api/system-prompts` and adds the new prompt to the list.
-- Both name and content must be non-empty.
+### Skills
 
-#### Copy Template Picker
+CRUD for user-defined agent skills (on-demand instructions the agent can load), global or workspace-scoped, with a toggle for model auto-invocation vs. slash-command-only.
 
-A dropdown selector offering pre-built formatting templates:
+### Voice
 
-| Template      | Description                                                 |
-| ------------- | ----------------------------------------------------------- |
-| **Web**       | Citation and formatting instructions for web search results |
-| **Local**     | Instructions for local file research with citations         |
-| **Chat**      | Instructions for creative conversation mode                 |
-| **Scholarly** | Academic citation formatting                                |
+Read-aloud configuration: engine (local neural model vs. browser built-in), voice, playback speed, and narration mode (faithful read vs. LLM-generated descriptions of tables/charts, with its own model picker). Includes an inline preview player.
 
-Selecting a template and clicking "Copy" copies its content to the clipboard for pasting into a prompt.
+- **Persistence**: `ttsVoice`, `ttsEngine`, `ttsSpeed`, `ttsNarrationMode`, `ttsNarrationProvider`, `ttsNarrationModel` in localStorage (DB-synced).
 
-### 5. Default Search Settings
+---
+
+## AI Models
+
+### Default Search
 
 Override the model used for direct search queries (e.g., OpenSearch/address bar integration).
 
-- **Model selector**: Embedded ModelSelector component for choosing a provider and model.
-- **Reset button** (RotateCcw icon): Clears the override, reverting to the default chat model.
+- **Model picker**: provider + model.
+- **Reset button**: clears the override, reverting to the default chat model.
 - **Persistence**: `searchChatModelProvider`, `searchChatModel` in localStorage.
 
-### 6. Model Settings
+### Model Settings
 
-Configuration for the three model roles used by the application:
+Configuration for provider connections and the embedding model. (Chat and system models are chosen from the chat input's model picker, not here; the memory-processing model lives in the Memory section.)
 
-#### Chat Model
+- **Custom OpenAI**: model name, API key, base URL — for OpenAI-compatible endpoints (LM Studio, vLLM, etc.).
+- **Embedding Model**: provider + model dropdowns. Used system-wide for indexing/querying (file upload, file search, memories); resolved server-side so requests never carry it. Changing it triggers a memory re-index.
+- **Persistence**: `customOpenaiModelName`, `customOpenaiApiUrl`, `embeddingModelProvider`, `embeddingModel` in localStorage (DB-synced); `customOpenaiApiKey` is an encrypted credential.
 
-- **Provider dropdown**: Lists all available LLM providers with their models.
-- **Model dropdown**: Lists models for the selected provider.
-- Changing the provider auto-selects the first available model.
-- **Custom OpenAI**: When `custom_openai` is the provider, three additional fields appear:
-  - Model Name (text)
-  - Custom OpenAI API Key (password)
-  - Custom OpenAI Base URL (text)
-- **Persistence**: `chatModelProvider`, `chatModel` in localStorage.
+### Model Presets
 
-#### Memory Processing Model
+Save named combinations of chat model, system model, vision capability, and context window (up to a fixed max). Apply, edit, duplicate, reorder, or delete presets; "Current" shows which preset (if any) matches the live selection. Presets are also selectable from the chat input.
 
-Moved out of Model Settings — now lives in **Settings → Memory** ("Memory Processing Model", visible when Memory is enabled).
+- **Persistence**: presets array under a single localStorage key (DB-synced); applying one writes the chat picker's own selection keys.
 
-- **Provider and Model dropdowns**: Picks the server-side model used to extract, deduplicate, classify, and reindex memories (`api/memories/*`).
-- **Persistence**: DB-backed under its own keys `memoryModelProvider` / `memoryModel` (the `app_settings` table, via the settings persistence layer / `localStorage` cache — see [Settings persistence](../../CLAUDE.md)). Fully independent of the chat picker's per-chat `systemModelProvider`/`systemModel` keys, so applying a chat model preset never changes it (and vice versa). Read server-side via `getMemoryModelSelection()`, which falls back to the legacy config.toml `SELECTED_MODELS.SYSTEM_MODEL` for installs that predate the split (a one-time migration in the Memory section seeds the new keys from that value on first visit).
+### Agent Panel Presets
 
-#### Ollama Context Window
+Save named Agent Panel configurations — a set of 2–4 executor models — for the composer's panel mode. Apply, edit, duplicate, reorder, or delete.
 
-Visible only when the chat model provider is `ollama`.
+- **Persistence**: presets array under a single localStorage key (DB-synced).
 
-- **Predefined sizes**: Dropdown with options: 1024, 2048 (default), 4096, 8192, 16384, 32768, 65536, 131072, and Custom.
-- **Custom input**: When "Custom..." is selected, a number input appears (minimum 512). Validated on blur.
-- **Persistence**: `ollamaContextWindow` in localStorage.
-
-#### Embedding Model
-
-- **Provider and Model dropdowns**: Select the system-wide embedding model. Used for all indexing and querying (file upload, file search, memories) — resolved server-side from the DB so they always agree; requests never carry an embedding model.
-- **Persistence**: `embeddingModelProvider`, `embeddingModel` in localStorage (synced to the DB, the source of truth).
-
-### 7. Model Visibility
+### Model Visibility
 
 Control which models appear in selection dropdowns throughout the application.
 
-- **Expandable provider sections**: Each provider can be expanded to show its individual models.
-- **Per-model toggle switches**: Show or hide individual models.
-- **Bulk actions**: "Show All" and "Hide All" buttons per provider section.
-- Hidden models are persisted via `POST /api/config` (server-side).
-- Models hidden here will not appear in the ModelSelector popovers.
+- **Expandable provider sections**, per-model toggles, and per-provider "Show All"/"Hide All".
+- **Persistence**: `hiddenModels` in localStorage (DB-synced).
 
-### 8. API Keys & Server URLs
+### Image Generation
 
-Input fields for configuring external service connections. Each field saves on blur.
+Enable/disable agent image generation (via OpenRouter) and configure its default model, aspect ratio, and resolution.
+
+- **Persistence**: `imageGenerationEnabled`, `imageGenerationModel`, `imageGenerationAspectRatio`, `imageGenerationImageSize` in localStorage (DB-synced). Requires an OpenRouter API key (Settings → API Keys).
+
+---
+
+## Search
+
+### Search Providers
+
+Choose which search provider (SearXNG, Brave Search, Brave LLM Context, Mojeek) powers regular vs. private chats, plus a fallback provider, search language, and region. A capability table shows which provider serves web/image/video/autocomplete search for each mode. Provider API keys/URLs are configured here too.
+
+- **Persistence**: `searchProvider`, `searchPrivateProvider`, `searchFallbackProvider`, `searchLanguage`, `searchRegion`, `searxngApiUrl` in localStorage (DB-synced, unencrypted). `braveSearchApiKey`, `braveLLMApiKey`, `mojeekApiKey` are encrypted credentials.
+
+---
+
+## Security
+
+### API Keys
+
+Input fields for model-provider connections. Each field saves on blur.
 
 | Field                  | Type     | Description                              |
 | ---------------------- | -------- | ---------------------------------------- |
@@ -161,6 +175,7 @@ Input fields for configuring external service connections. Each field saves on b
 | **AI/ML API Key**      | Password | API key for AI/ML platform               |
 | **LM Studio API URL**  | Text     | Base URL for LM Studio instance          |
 
+- API keys are encrypted credentials (`src/lib/credentials.ts`); the two `*_API_URL` fields are unencrypted DB-backed settings (`ollamaApiUrl`, `lmStudioApiUrl` in localStorage, DB-synced).
 - After saving an API key or URL, the page re-fetches `/api/config` to update available model lists.
 - A spinning indicator appears briefly beside the field during save.
 
@@ -178,10 +193,10 @@ Each settings section is wrapped in a collapsible component:
 
 ## Save Behavior
 
-- **API key and URL fields**: Save on blur via `POST /api/config`.
-- **Model selections (chat, embedding)**: Save to both localStorage and server config.
-- **Model selections (system)**: Save to localStorage only.
-- **Toggle switches**: Save immediately on change.
-- **Personalization fields**: Save immediately on input change to localStorage.
-- **Persona prompts**: Save via dedicated API endpoints (`POST`, `PUT`, `DELETE /api/system-prompts`).
-- **Saving feedback**: A spinning indicator appears next to the field being saved, lasting approximately 500ms.
+- **Encrypted credentials** (API keys): save on blur via `POST /api/config`.
+- **Non-secret DB-backed fields** (endpoint URLs, model selections, toggles, presets, etc.): save to localStorage and sync to `app_settings`.
+- **Device-local UI prefs** (theme, accent, bg, chat width): localStorage only.
+- **Persona prompts / methodologies**: save via dedicated API endpoints (`POST`, `PUT`, `DELETE /api/system-prompts`).
+- **Memories**: save via dedicated API endpoints (`/api/memories/*`).
+- **MCP servers**: save via dedicated API endpoints (`/api/mcp/servers/*`).
+- **Saving feedback**: a spinning indicator appears next to the field being saved.

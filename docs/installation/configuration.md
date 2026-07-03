@@ -26,12 +26,6 @@ General application settings.
 - **Default**: `""` (empty)
 - **Description**: Optional base URL override. When set, overrides the detected URL for OpenSearch and other public URLs.
 
-#### PRIVATE_SESSION_DURATION_MINUTES
-
-- **Type**: Number
-- **Default**: `1440`
-- **Description**: How long a private chat session stays active before expiring, in minutes.
-
 ### [SECURITY]
 
 #### ENCRYPTION_PASSPHRASE
@@ -59,7 +53,7 @@ The following are no longer configured via `config.toml` — manage them from th
 - **Provider/search endpoint URLs** (Ollama, LM Studio, Custom OpenAI, SearXNG) — Settings → API Keys / Model Settings / Search Providers
 - **Model selection** (embedding + memory-processing models) — Settings UI
 - **Model visibility** (`HIDDEN_MODELS`) — Settings → Model Visibility
-- **Retention policy** — Settings → Retention
+- **Retention policy**, including private session duration — Settings → Retention
 - **Image generation** — Settings → Image Generation (its OpenRouter API key is encrypted in the database)
 
 ## Example Configuration
@@ -68,7 +62,6 @@ The following are no longer configured via `config.toml` — manage them from th
 [GENERAL]
 KEEP_ALIVE = "5m"
 BASE_URL = ""
-PRIVATE_SESSION_DURATION_MINUTES = 1440
 
 [SECURITY]
 ENCRYPTION_PASSPHRASE = ""

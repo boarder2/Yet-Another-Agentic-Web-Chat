@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import db from '@/lib/db';
-import { mcpServers } from '@/lib/db/schema';
+import { mcpServers, mcpServerWorkspaces } from '@/lib/db/schema';
 import { eq, sql } from 'drizzle-orm';
 import { invalidateServer } from '@/lib/mcp/manager';
 import { redactServer } from '@/lib/mcp/types';
@@ -115,14 +115,21 @@ export async function PATCH(
       'headerName',
       'oauthClientId',
       'oauthScope',
+      'visibleInGeneralChat',
     ] as const;
+    const strictBooleanKeys: readonly string[] = [
+      'enabled',
+      'visibleInGeneralChat',
+    ];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const update: Record<string, any> = { updatedAt: new Date() };
     for (const key of allowed) {
       if (key in body) {
-        // Coerce enabled to strict boolean (POST does body.enabled !== false,
+        // Coerce boolean fields to strict booleans (POST does body.x !== false,
         // but PATCH must accept any JSON value).
-        update[key] = key === 'enabled' ? body[key] === true : body[key];
+        update[key] = strictBooleanKeys.includes(key)
+          ? body[key] === true
+          : body[key];
       }
     }
     if ('secretToken' in body) {
@@ -182,6 +189,10 @@ export async function DELETE(
   const { id } = await params;
   try {
     invalidateServer(id);
+    await db
+      .delete(mcpServerWorkspaces)
+      .where(eq(mcpServerWorkspaces.serverId, id))
+      .execute();
     await db.delete(mcpServers).where(eq(mcpServers.id, id)).execute();
     return NextResponse.json({ ok: true });
   } catch {

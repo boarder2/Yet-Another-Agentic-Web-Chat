@@ -1893,13 +1893,13 @@ ${url ? `<url>${url}</url>` : ''}
         );
       }
 
-      // Rebuild MCP tools — outside the workspaceId guard because MCP servers are
-      // global. Must use the same namespaced names as the initial run so that any
-      // in-flight approval (which uses namespacedName as markupKey) can complete.
-      // pinnedMcpDescriptors carries any descriptor snapshots extracted from the
-      // resolving approvals by performResume (in-memory, already resolved in DB
-      // before this method is called). Inject any pinned tool not in the live list
-      // so an interrupted tool can still complete even if the server changed.
+      // Rebuild MCP tools. Must use the same namespaced names as the initial run
+      // so that any in-flight approval (which uses namespacedName as markupKey)
+      // can complete. pinnedMcpDescriptors carries any descriptor snapshots
+      // extracted from the resolving approvals by performResume (in-memory,
+      // already resolved in DB before this method is called). Inject any pinned
+      // tool not in the live list so an interrupted tool can still complete even
+      // if the server (or its workspace scope) changed.
       const { buildMcpLangchainTools, buildToolForDescriptor } =
         await import('@/lib/mcp/toolFactory');
       // Live discovery is best-effort: a failure (e.g. degraded DB/tool-config
@@ -1910,6 +1910,7 @@ ${url ? `<url>${url}</url>` : ''}
           emitter: this.emitter,
           interactiveSession: this.interactiveSession,
           messageId: this.messageId ?? '',
+          workspaceId: this.workspaceId,
         });
         resumeExtraTools.push(...mcpTools);
         for (const t of mcpTools) builtNames.add(t.name);

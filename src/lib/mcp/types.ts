@@ -60,6 +60,23 @@ export function resolveToolSetting(
   };
 }
 
+/**
+ * Whether a server should be offered in a given chat, given its workspace
+ * scope. An empty (or absent) scope means "available everywhere" — the
+ * unchanged default. A non-empty scope restricts to those workspaces' chats,
+ * plus unscoped chats when `visibleInGeneralChat` is set.
+ */
+export function isServerVisibleForChat(
+  scope:
+    | { workspaceIds: Set<string>; visibleInGeneralChat: boolean }
+    | undefined,
+  chatWorkspaceId: string | null,
+): boolean {
+  if (!scope || scope.workspaceIds.size === 0) return true;
+  if (chatWorkspaceId === null) return scope.visibleInGeneralChat;
+  return scope.workspaceIds.has(chatWorkspaceId);
+}
+
 /** A single MCP tool as discovered from a server, namespaced for use as a LangChain tool. */
 export interface McpToolDescriptor {
   serverId: string;

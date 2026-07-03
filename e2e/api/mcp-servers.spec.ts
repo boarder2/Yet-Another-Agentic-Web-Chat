@@ -1,5 +1,6 @@
 import { test, expect } from '../fixtures/api';
 import { uniq } from '../utils/helpers';
+import { seedWorkspace } from '../utils/seed';
 
 test.describe('POST /api/mcp/servers', () => {
   test('creates a server with valid name and url', async ({ request }) => {
@@ -408,6 +409,43 @@ test.describe('PATCH /api/mcp/servers/[id]', () => {
     expect(body.server).not.toHaveProperty('secretToken');
   });
 
+  // -- visibleInGeneralChat -----------------------------------------------
+
+  test('persists and round-trips visibleInGeneralChat', async ({ request }) => {
+    const createRes = await request.post('/api/mcp/servers', {
+      data: { name: uniq('mcp-vgc'), url: 'https://example.com/mcp' },
+    });
+    const created = (await createRes.json()).server;
+    expect(created.visibleInGeneralChat).toBe(false);
+
+    const res = await request.patch(`/api/mcp/servers/${created.id}`, {
+      data: { visibleInGeneralChat: true },
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.server.visibleInGeneralChat).toBe(true);
+
+    const getRes = await request.get(`/api/mcp/servers/${created.id}`);
+    expect((await getRes.json()).server.visibleInGeneralChat).toBe(true);
+  });
+
+  test('coerces visibleInGeneralChat to a strict boolean', async ({
+    request,
+  }) => {
+    const createRes = await request.post('/api/mcp/servers', {
+      data: { name: uniq('mcp-vgc-coerce'), url: 'https://example.com/mcp' },
+    });
+    const created = (await createRes.json()).server;
+
+    const res = await request.patch(`/api/mcp/servers/${created.id}`, {
+      data: { visibleInGeneralChat: 'yes' },
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    // Non-boolean truthy value must coerce to false, not pass through.
+    expect(body.server.visibleInGeneralChat).toBe(false);
+  });
+
   // -- toolConfigPatch validation branches -----------------------------------
 
   test('rejects toolConfigPatch that is not an object', async ({ request }) => {
@@ -578,6 +616,150 @@ test.describe('PATCH /api/mcp/servers/[id]', () => {
     expect(res.status()).toBe(400);
     const body = await res.json();
     expect(body.error).toContain('toolConfigPatch has too many entries');
+  });
+});
+
+test.describe('GET/PUT /api/mcp/servers/[id]/workspaces', () => {
+  test('returns an empty array for a newly created server', async ({
+    request,
+  }) => {
+    const createRes = await request.post('/api/mcp/servers', {
+      data: { name: uniq('mcp-ws-empty'), url: 'https://example.com/mcp' },
+    });
+    const created = (await createRes.json()).server;
+
+    const res = await request.get(`/api/mcp/servers/${created.id}/workspaces`);
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.workspaceIds).toEqual([]);
+  });
+
+  test('returns 404 for a nonexistent server', async ({ request }) => {
+    const res = await request.get(
+      '/api/mcp/servers/00000000-0000-0000-0000-000000000000/workspaces',
+    );
+    expect(res.status()).toBe(404);
+    expect(await res.json()).toEqual({ error: 'Not found' });
+  });
+
+  test('rejects a non-array workspaceIds with 400', async ({ request }) => {
+    const createRes = await request.post('/api/mcp/servers', {
+      data: { name: uniq('mcp-ws-notarr'), url: 'https://example.com/mcp' },
+    });
+    const created = (await createRes.json()).server;
+
+    const res = await request.put(`/api/mcp/servers/${created.id}/workspaces`, {
+      data: { workspaceIds: 'not-an-array' },
+    });
+    expect(res.status()).toBe(400);
+    const body = await res.json();
+    expect(body).toEqual({
+      error: 'workspaceIds must be an array of strings',
+    });
+  });
+
+  test('rejects an array with non-string entries with 400', async ({
+    request,
+  }) => {
+    const createRes = await request.post('/api/mcp/servers', {
+      data: { name: uniq('mcp-ws-badentry'), url: 'https://example.com/mcp' },
+    });
+    const created = (await createRes.json()).server;
+
+    const res = await request.put(`/api/mcp/servers/${created.id}/workspaces`, {
+      data: { workspaceIds: [123] },
+    });
+    expect(res.status()).toBe(400);
+    const body = await res.json();
+    expect(body).toEqual({
+      error: 'workspaceIds must be an array of strings',
+    });
+  });
+
+  test('rejects an unknown workspace id with 400', async ({ request }) => {
+    const createRes = await request.post('/api/mcp/servers', {
+      data: { name: uniq('mcp-ws-unknown'), url: 'https://example.com/mcp' },
+    });
+    const created = (await createRes.json()).server;
+
+    const res = await request.put(`/api/mcp/servers/${created.id}/workspaces`, {
+      data: { workspaceIds: ['00000000-0000-0000-0000-000000000000'] },
+    });
+    expect(res.status()).toBe(400);
+    const body = await res.json();
+    expect(body).toEqual({ error: 'One or more workspace ids do not exist' });
+  });
+
+  test('persists a valid workspace list and round-trips it', async ({
+    request,
+  }) => {
+    const createRes = await request.post('/api/mcp/servers', {
+      data: { name: uniq('mcp-ws-ok'), url: 'https://example.com/mcp' },
+    });
+    const created = (await createRes.json()).server;
+    const wsA = await seedWorkspace(request);
+    const wsB = await seedWorkspace(request);
+
+    const putRes = await request.put(
+      `/api/mcp/servers/${created.id}/workspaces`,
+      { data: { workspaceIds: [wsA, wsB] } },
+    );
+    expect(putRes.status()).toBe(200);
+    expect(await putRes.json()).toEqual({ ok: true });
+
+    const getRes = await request.get(
+      `/api/mcp/servers/${created.id}/workspaces`,
+    );
+    const body = await getRes.json();
+    expect(body.workspaceIds.sort()).toEqual([wsA, wsB].sort());
+  });
+
+  test('fully replaces the previous list rather than merging', async ({
+    request,
+  }) => {
+    const createRes = await request.post('/api/mcp/servers', {
+      data: { name: uniq('mcp-ws-replace'), url: 'https://example.com/mcp' },
+    });
+    const created = (await createRes.json()).server;
+    const wsA = await seedWorkspace(request);
+    const wsB = await seedWorkspace(request);
+
+    await request.put(`/api/mcp/servers/${created.id}/workspaces`, {
+      data: { workspaceIds: [wsA] },
+    });
+    const putRes = await request.put(
+      `/api/mcp/servers/${created.id}/workspaces`,
+      { data: { workspaceIds: [wsB] } },
+    );
+    expect(putRes.status()).toBe(200);
+
+    const getRes = await request.get(
+      `/api/mcp/servers/${created.id}/workspaces`,
+    );
+    const body = await getRes.json();
+    expect(body.workspaceIds).toEqual([wsB]);
+  });
+
+  test('an empty array clears the scope entirely', async ({ request }) => {
+    const createRes = await request.post('/api/mcp/servers', {
+      data: { name: uniq('mcp-ws-clear'), url: 'https://example.com/mcp' },
+    });
+    const created = (await createRes.json()).server;
+    const wsA = await seedWorkspace(request);
+
+    await request.put(`/api/mcp/servers/${created.id}/workspaces`, {
+      data: { workspaceIds: [wsA] },
+    });
+    const putRes = await request.put(
+      `/api/mcp/servers/${created.id}/workspaces`,
+      { data: { workspaceIds: [] } },
+    );
+    expect(putRes.status()).toBe(200);
+
+    const getRes = await request.get(
+      `/api/mcp/servers/${created.id}/workspaces`,
+    );
+    expect((await getRes.json()).workspaceIds).toEqual([]);
   });
 });
 

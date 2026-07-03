@@ -276,6 +276,14 @@ export const mcpServers = sqliteTable(
     toolConfig: text('tool_config', { mode: 'json' }).$type<
       Record<string, { enabled?: boolean; approval?: 'always' | 'never' }>
     >(),
+    // Whether a server scoped to specific workspaces (via mcpServerWorkspaces)
+    // is also visible in unscoped (no-workspace) chats. Meaningless when the
+    // server has no scope rows — an unscoped server is already visible everywhere.
+    visibleInGeneralChat: integer('visible_in_general_chat', {
+      mode: 'boolean',
+    })
+      .notNull()
+      .default(false),
     headerName: text('header_name'),
     secretToken: text('secret_token'),
     oauthClientId: text('oauth_client_id'),
@@ -298,6 +306,25 @@ export const mcpServers = sqliteTable(
   },
   (t) => ({
     nameUnique: uniqueIndex('mcp_servers_name_unique').on(t.name),
+  }),
+);
+
+// Per-server workspace scope. Empty (no rows for a server) means the server is
+// available in every chat, unscoped and every workspace — the unchanged
+// default. A non-empty set restricts the server to those workspaces' chats,
+// plus unscoped chats when `mcpServers.visibleInGeneralChat` is also true.
+export const mcpServerWorkspaces = sqliteTable(
+  'mcp_server_workspaces',
+  {
+    serverId: text('server_id')
+      .notNull()
+      .references(() => mcpServers.id, { onDelete: 'cascade' }),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.serverId, t.workspaceId] }),
   }),
 );
 

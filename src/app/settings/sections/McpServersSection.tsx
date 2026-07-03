@@ -16,6 +16,7 @@ import {
   AlertCircle,
   WifiOff,
   Wrench,
+  FolderOpen,
   ChevronDown,
   ChevronRight,
 } from 'lucide-react';
@@ -32,6 +33,11 @@ import {
   useAuthorizeMcpServer,
   type McpServer,
 } from '@/lib/hooks/api/useMcpServers';
+import {
+  useMcpServerWorkspaceScopes,
+  useSaveMcpServerWorkspaceScopes,
+} from '@/lib/hooks/api/useMcpServerWorkspaceScopes';
+import { useWorkspacesList } from '@/lib/hooks/api/useWorkspaces';
 import { useQueryClient } from '@tanstack/react-query';
 import { qk } from '@/lib/api/keys';
 
@@ -221,9 +227,99 @@ function ToolsPanel({ server }: { server: McpServer }) {
   );
 }
 
+function WorkspaceScopePanel({ server }: { server: McpServer }) {
+  const { data: activeWorkspaces = [] } = useWorkspacesList(false);
+  const { data: archivedWorkspaces = [] } = useWorkspacesList(true);
+  const { data: scopedIds = [] } = useMcpServerWorkspaceScopes(server.id);
+  const saveScopes = useSaveMcpServerWorkspaceScopes(server.id);
+  const patch = usePatchMcpServer(server.id);
+
+  const workspaces = [...activeWorkspaces, ...archivedWorkspaces];
+
+  const toggleWorkspace = (id: string) => {
+    const next = scopedIds.includes(id)
+      ? scopedIds.filter((x) => x !== id)
+      : [...scopedIds, id];
+    saveScopes.mutate(next, {
+      onError: () => toast.error('Failed to update workspace scope'),
+    });
+  };
+
+  const toggleVisibleInGeneralChat = (v: boolean) => {
+    patch.mutate(
+      { visibleInGeneralChat: v },
+      { onError: () => toast.error('Failed to update setting') },
+    );
+  };
+
+  if (workspaces.length === 0) {
+    return (
+      <div className="mt-3 border-t border-surface-2 pt-3 text-xs text-fg/50">
+        No workspaces exist yet. This server is available in every chat.
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 border-t border-surface-2 pt-3 space-y-3">
+      <p className="text-xs text-fg/50">
+        Leave everything unchecked to keep this server available in every chat.
+        Check workspaces to restrict it to only those chats.
+      </p>
+      <ul className="divide-y divide-surface-2 border border-surface-2 rounded-surface">
+        {workspaces.map((w) => (
+          <li key={w.id} className="flex items-center gap-2 p-2.5">
+            <input
+              type="checkbox"
+              aria-label={`Scope to workspace: ${w.name}`}
+              checked={scopedIds.includes(w.id)}
+              onChange={() => toggleWorkspace(w.id)}
+              className="accent-accent"
+            />
+            <span className="flex-1 text-sm truncate">{w.name}</span>
+            {w.archivedAt && (
+              <span className="text-xs text-fg/40">Archived</span>
+            )}
+          </li>
+        ))}
+      </ul>
+      {scopedIds.length > 0 && (
+        <div className="flex items-center justify-between gap-3 px-1">
+          <span className="text-xs text-fg/70">
+            Also show in chats with no workspace
+          </span>
+          <AppSwitch
+            checked={server.visibleInGeneralChat}
+            onChange={toggleVisibleInGeneralChat}
+            aria-label={
+              server.visibleInGeneralChat
+                ? 'Hide from chats with no workspace'
+                : 'Show in chats with no workspace'
+            }
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function scopeBadge(server: McpServer, scopedCount: number) {
+  if (scopedCount === 0) {
+    return <span className="text-xs text-fg/40">All workspaces</span>;
+  }
+  return (
+    <span className="text-xs text-fg/40">
+      Scoped: {scopedCount}
+      {server.visibleInGeneralChat ? ' + general' : ''}
+    </span>
+  );
+}
+
 function ServerRow({ server }: { server: McpServer }) {
   const [editing, setEditing] = useState(false);
   const [showTools, setShowTools] = useState(false);
+  const [showScope, setShowScope] = useState(false);
+  const { data: scopedIds = [] } = useMcpServerWorkspaceScopes(server.id);
   const [form, setForm] = useState<ServerFormState>({
     name: server.name,
     url: server.url,
@@ -528,6 +624,8 @@ function ServerRow({ server }: { server: McpServer }) {
               : server.authType.replace(/_/g, ' ')}
             {' · '}
             {server.transport}
+            {' · '}
+            {scopeBadge(server, scopedIds.length)}
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -585,6 +683,15 @@ function ServerRow({ server }: { server: McpServer }) {
         </button>
         <button
           type="button"
+          onClick={() => setShowScope((v) => !v)}
+          aria-expanded={showScope}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-control bg-surface-2 text-fg/70 hover:text-fg transition-colors duration-150"
+        >
+          {showScope ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+          <FolderOpen size={12} /> Workspaces
+        </button>
+        <button
+          type="button"
           onClick={handleRefresh}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-control bg-surface-2 text-fg/70 hover:text-fg transition-colors duration-150"
         >
@@ -613,6 +720,7 @@ function ServerRow({ server }: { server: McpServer }) {
         </p>
       )}
       {showTools && <ToolsPanel server={server} />}
+      {showScope && <WorkspaceScopePanel server={server} />}
     </div>
   );
 }

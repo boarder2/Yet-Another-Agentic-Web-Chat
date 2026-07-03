@@ -73,3 +73,17 @@ Client-side server state uses **TanStack Query** (provider in `src/app/providers
 ## Documentation Style
 
 - Keep all documentation and README additions terse — prefer minimal facts over verbose prose. Match the brevity of surrounding sections and avoid bloated first drafts
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues on `boarder2/Yet-Another-Agentic-Web-Chat` (uses the `gh` CLI); external PRs are not a triage surface. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default label vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`) — no overrides. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout: `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.

@@ -13,9 +13,14 @@ import { isSoftStop } from '@/lib/utils/runControl';
 import {
   callMcpTool,
   getEnabledServerToolConfigs,
+  getServerWorkspaceScopes,
   getToolDescriptorsForEnabledServers,
 } from './manager';
-import { resolveToolSetting, type McpToolDescriptor } from './types';
+import {
+  isServerVisibleForChat,
+  resolveToolSetting,
+  type McpToolDescriptor,
+} from './types';
 
 // ── Tool factory ──────────────────────────────────────────────────────────
 
@@ -23,6 +28,7 @@ export interface McpToolFactoryOpts {
   emitter: EventEmitter;
   interactiveSession: boolean;
   messageId: string;
+  workspaceId?: string | null;
 }
 
 /**
@@ -36,9 +42,10 @@ export interface McpToolFactoryOpts {
 export async function buildMcpLangchainTools(
   opts: McpToolFactoryOpts,
 ): Promise<DynamicStructuredTool[]> {
-  const [descriptors, configs] = await Promise.all([
+  const [descriptors, configs, scopes] = await Promise.all([
     getToolDescriptorsForEnabledServers(),
     getEnabledServerToolConfigs(),
+    getServerWorkspaceScopes(),
   ]);
   const tools: DynamicStructuredTool[] = [];
   for (const descriptor of descriptors) {
@@ -48,6 +55,13 @@ export async function buildMcpLangchainTools(
     );
     // Disabled tools are never injected — the model never sees them.
     if (!enabled) continue;
+    if (
+      !isServerVisibleForChat(
+        scopes.get(descriptor.serverId),
+        opts.workspaceId ?? null,
+      )
+    )
+      continue;
     tools.push(buildToolForDescriptor(descriptor, opts, requiresApproval));
   }
   return tools;

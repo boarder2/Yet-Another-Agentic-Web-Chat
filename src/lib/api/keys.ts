@@ -30,6 +30,8 @@ export const qk = {
   mcpServers: ['mcp-servers'] as const,
   mcpServer: (id: string) => ['mcp-servers', id] as const,
   mcpServerTools: (id: string) => ['mcp-servers', id, 'tools'] as const,
+  mcpServerWorkspaces: (id: string) =>
+    ['mcp-servers', id, 'workspaces'] as const,
   scheduledTasks: ['scheduled-tasks'] as const,
   scheduledRuns: ['scheduled-task-runs'] as const,
   scheduledRunsUnread: ['scheduled-task-runs', 'unread'] as const,

@@ -608,6 +608,7 @@ export const POST = async (req: Request) => {
           emitter: stream,
           interactiveSession: true,
           messageId: message.messageId,
+          workspaceId: resolvedWorkspaceId,
         });
         extraTools.push(...mcpTools);
       } catch (e) {

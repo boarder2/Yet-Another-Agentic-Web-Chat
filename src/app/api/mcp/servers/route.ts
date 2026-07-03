@@ -68,6 +68,7 @@ export async function POST(req: NextRequest) {
           (body.authType as (typeof mcpServers.$inferInsert)['authType']) ??
           'none',
         enabled: body.enabled !== false,
+        visibleInGeneralChat: body.visibleInGeneralChat === true,
         headerName: (body.headerName as string | undefined) ?? null,
         secretToken: body.secretToken
           ? encrypt(body.secretToken as string)

@@ -13,6 +13,7 @@ export interface McpServer {
   resolvedTransport: 'streamableHttp' | 'sse' | null;
   authType: 'none' | 'bearer' | 'oauth_client_credentials' | 'oauth';
   enabled: boolean;
+  visibleInGeneralChat: boolean;
   headerName: string | null;
   hasToken: boolean;
   oauthClientId: string | null;
@@ -75,6 +76,7 @@ export function useCreateMcpServer() {
       transport?: string;
       authType?: string;
       enabled?: boolean;
+      visibleInGeneralChat?: boolean;
       headerName?: string;
       secretToken?: string;
       oauthClientId?: string;

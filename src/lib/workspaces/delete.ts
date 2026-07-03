@@ -3,6 +3,7 @@ import {
   workspaces,
   workspaceFiles,
   workspaceSystemPrompts,
+  mcpServerWorkspaces,
   chats,
   memories,
 } from '@/lib/db/schema';
@@ -27,6 +28,10 @@ export async function deleteWorkspace(workspaceId: string): Promise<void> {
   await db
     .delete(workspaceFiles)
     .where(eq(workspaceFiles.workspaceId, workspaceId))
+    .execute();
+  await db
+    .delete(mcpServerWorkspaces)
+    .where(eq(mcpServerWorkspaces.workspaceId, workspaceId))
     .execute();
 
   // Detach chats from workspace (don't delete the chats themselves)

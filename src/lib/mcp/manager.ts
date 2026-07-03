@@ -3,7 +3,7 @@ import 'server-only';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { ContentBlock } from '@modelcontextprotocol/sdk/types.js';
 import db from '@/lib/db';
-import { mcpServers } from '@/lib/db/schema';
+import { mcpServers, mcpServerWorkspaces } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import {
   McpAuthRequiredError,
@@ -133,6 +133,46 @@ export async function getEnabledServerToolConfigs(): Promise<
   const map = new Map<string, McpToolConfig>();
   for (const row of rows) {
     if (row.toolConfig) map.set(row.id, row.toolConfig);
+  }
+  return map;
+}
+
+/** A server's workspace scope, as consumed by `isServerVisibleForChat()`. */
+export interface ServerWorkspaceScope {
+  workspaceIds: Set<string>;
+  visibleInGeneralChat: boolean;
+}
+
+/**
+ * Workspace scope for every enabled server, keyed by server id. Read fresh
+ * (two flat queries, no per-server loop) so settings edits take effect on the
+ * next agent turn. Intentionally NOT swallowed — same fail-closed contract as
+ * `getEnabledServerToolConfigs()`: a read failure propagates so the caller
+ * omits all MCP tools for the turn rather than misapplying scope.
+ */
+export async function getServerWorkspaceScopes(): Promise<
+  Map<string, ServerWorkspaceScope>
+> {
+  const [servers, scopeRows] = await Promise.all([
+    db
+      .select({
+        id: mcpServers.id,
+        visibleInGeneralChat: mcpServers.visibleInGeneralChat,
+      })
+      .from(mcpServers)
+      .where(eq(mcpServers.enabled, true)),
+    db.select().from(mcpServerWorkspaces),
+  ]);
+
+  const map = new Map<string, ServerWorkspaceScope>();
+  for (const server of servers) {
+    map.set(server.id, {
+      workspaceIds: new Set(),
+      visibleInGeneralChat: server.visibleInGeneralChat,
+    });
+  }
+  for (const row of scopeRows) {
+    map.get(row.serverId)?.workspaceIds.add(row.workspaceId);
   }
   return map;
 }

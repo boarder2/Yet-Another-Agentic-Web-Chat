@@ -1,4 +1,11 @@
 import toml from '@iarna/toml';
+import { getCredential } from '@/lib/credentials';
+import {
+  getOllamaApiUrl,
+  getLMStudioApiUrl,
+  getSearxngApiUrl,
+  getCustomOpenaiUrlAndModel,
+} from '@/lib/settings/server';
 
 // Dynamic require for Node.js modules to prevent client-side bundling errors
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -10,7 +17,6 @@ const configFileName = 'config.toml';
 
 interface Config {
   GENERAL: {
-    SIMILARITY_MEASURE: string;
     KEEP_ALIVE: string;
     BASE_URL?: string;
     HIDDEN_MODELS: string[];
@@ -22,6 +28,22 @@ interface Config {
       SCHEDULED_RUNS_VALUE?: number;
     };
   };
+  // The passphrase src/lib/encryption.ts derives the credential-encryption key
+  // from. Must live outside the DB it encrypts, so this is the one credential
+  // that stays in config.toml. Required — never auto-generated: if unset,
+  // credential encryption is unavailable and the app blocks usage until the
+  // user sets it themselves.
+  SECURITY?: {
+    ENCRYPTION_PASSPHRASE?: string;
+  };
+  /**
+   * Legacy provider/search credential + endpoint fields. No longer read at
+   * runtime — API keys are encrypted DB rows (src/lib/credentials.ts) and
+   * endpoint URLs are DB-backed settings (src/lib/settings/server.ts). Kept
+   * typed here only so the one-time boot migrations
+   * (`migrateLegacyCredentials()`, `readLegacyMigratableConfig()`) can still
+   * pick up values from existing installs' config.toml.
+   */
   MODELS: {
     OPENAI: {
       API_KEY: string;
@@ -142,9 +164,6 @@ const loadConfig = () => {
   return {} as Config;
 };
 
-export const getSimilarityMeasure = () =>
-  loadConfig().GENERAL.SIMILARITY_MEASURE;
-
 export const getKeepAlive = () => loadConfig().GENERAL.KEEP_ALIVE;
 
 export const getBaseUrl = () =>
@@ -153,30 +172,32 @@ export const getBaseUrl = () =>
 export const getPrivateSessionDurationMinutes = () =>
   loadConfig().GENERAL.PRIVATE_SESSION_DURATION_MINUTES ?? 1440;
 
+export const getEncryptionPassphrase = () => {
+  // An explicitly-set env var wins over config.toml — including an empty string,
+  // which the encryption-gate e2e server uses to force the "not configured"
+  // state regardless of the developer's local config.toml passphrase.
+  const fromEnv = process.env.ENCRYPTION_PASSPHRASE;
+  if (fromEnv !== undefined) return fromEnv || undefined;
+  return loadConfig().SECURITY?.ENCRYPTION_PASSPHRASE || undefined;
+};
+
 export type RetentionPolicy = {
   mode: 'days' | 'count' | 'disabled';
   value: number;
 };
 
-export const getOpenaiApiKey = () => loadConfig().MODELS.OPENAI.API_KEY;
+export const getOpenaiApiKey = () => getCredential('model.openai');
 
-export const getGroqApiKey = () => loadConfig().MODELS.GROQ.API_KEY;
+export const getGroqApiKey = () => getCredential('model.groq');
 
-export const getOpenrouterApiKey = () => loadConfig().MODELS.OPENROUTER.API_KEY;
+export const getOpenrouterApiKey = () => getCredential('model.openrouter');
 
-export const getAnthropicApiKey = () => loadConfig().MODELS.ANTHROPIC.API_KEY;
+export const getAnthropicApiKey = () => getCredential('model.anthropic');
 
-export const getGeminiApiKey = () => loadConfig().MODELS.GEMINI.API_KEY;
+export const getGeminiApiKey = () => getCredential('model.gemini');
 
-export const getSearxngApiEndpoint = () => {
-  const cfg = loadConfig();
-  return (
-    process.env.SEARXNG_API_URL ||
-    cfg.SEARCH?.PROVIDERS?.SEARXNG?.API_URL ||
-    cfg.API_ENDPOINTS?.SEARXNG ||
-    ''
-  );
-};
+export const getSearxngApiEndpoint = () =>
+  process.env.SEARXNG_API_URL || getSearxngApiUrl();
 
 export type SearchProviderIdType =
   | 'searxng'
@@ -184,32 +205,26 @@ export type SearchProviderIdType =
   | 'brave_llm'
   | 'mojeek';
 
-export const getBraveSearchApiKey = () =>
-  loadConfig().SEARCH?.PROVIDERS?.BRAVE_SEARCH?.API_KEY || '';
+export const getBraveSearchApiKey = () => getCredential('search.braveSearch');
 
-export const getBraveLLMApiKey = () =>
-  loadConfig().SEARCH?.PROVIDERS?.BRAVE_LLM?.API_KEY || '';
+export const getBraveLLMApiKey = () => getCredential('search.braveLLM');
 
-export const getMojeekApiKey = () =>
-  loadConfig().SEARCH?.PROVIDERS?.MOJEEK?.API_KEY || '';
+export const getMojeekApiKey = () => getCredential('search.mojeek');
 
-export const getOllamaApiEndpoint = () => loadConfig().MODELS.OLLAMA.API_URL;
+export const getOllamaApiEndpoint = () => getOllamaApiUrl();
 
-export const getDeepseekApiKey = () => loadConfig().MODELS.DEEPSEEK.API_KEY;
+export const getDeepseekApiKey = () => getCredential('model.deepseek');
 
-export const getAimlApiKey = () => loadConfig().MODELS.AIMLAPI.API_KEY;
+export const getAimlApiKey = () => getCredential('model.aimlapi');
 
-export const getCustomOpenaiApiKey = () =>
-  loadConfig().MODELS.CUSTOM_OPENAI.API_KEY;
+export const getCustomOpenaiApiKey = () => getCredential('model.customOpenai');
 
-export const getCustomOpenaiApiUrl = () =>
-  loadConfig().MODELS.CUSTOM_OPENAI.API_URL;
+export const getCustomOpenaiApiUrl = () => getCustomOpenaiUrlAndModel().url;
 
 export const getCustomOpenaiModelName = () =>
-  loadConfig().MODELS.CUSTOM_OPENAI.MODEL_NAME;
+  getCustomOpenaiUrlAndModel().modelName;
 
-export const getLMStudioApiEndpoint = () =>
-  loadConfig().MODELS.LM_STUDIO.API_URL;
+export const getLMStudioApiEndpoint = () => getLMStudioApiUrl();
 
 const mergeConfigs = (
   current: Record<string, unknown>,
@@ -358,7 +373,7 @@ export const readLegacyMigratableConfig = (): Record<string, string> => {
   put('retentionScheduledRunsMode', r?.SCHEDULED_RUNS_MODE);
   put('retentionScheduledRunsValue', r?.SCHEDULED_RUNS_VALUE);
 
-  // [SEARCH] provider + locale preferences (API keys/URL stay in config.toml)
+  // [SEARCH] provider + locale preferences (API keys stay in credentials.ts)
   const s = cfg.SEARCH;
   put('searchProvider', s?.PROVIDER);
   put('searchPrivateProvider', s?.PRIVATE_PROVIDER);
@@ -382,6 +397,47 @@ export const readLegacyMigratableConfig = (): Record<string, string> => {
   put('imageGenerationModel', ig?.MODEL);
   put('imageGenerationAspectRatio', ig?.ASPECT_RATIO);
   put('imageGenerationImageSize', ig?.IMAGE_SIZE);
+
+  // Provider/search endpoint URLs — non-secret, DB-backed via the same
+  // migrated-settings path as the fields above.
+  put('ollamaApiUrl', cfg.MODELS?.OLLAMA?.API_URL);
+  put('lmStudioApiUrl', cfg.MODELS?.LM_STUDIO?.API_URL);
+  put('customOpenaiApiUrl', cfg.MODELS?.CUSTOM_OPENAI?.API_URL);
+  put('customOpenaiModelName', cfg.MODELS?.CUSTOM_OPENAI?.MODEL_NAME);
+  put(
+    'searxngApiUrl',
+    cfg.SEARCH?.PROVIDERS?.SEARXNG?.API_URL || cfg.API_ENDPOINTS?.SEARXNG,
+  );
+
+  return out;
+};
+
+/**
+ * Legacy provider/search API key values still present in config.toml, keyed by
+ * their `credentials` table key (see `CREDENTIAL_KEYS` in
+ * `src/lib/credentials.ts`). Read raw here ONLY by the one-time boot migration
+ * (`migrateLegacyCredentials()`) so existing installs don't lose keys configured
+ * before encryption-at-rest. Runtime reads go through `credentials.ts`, not this.
+ */
+export const readLegacyCredentialsConfig = (): Record<string, string> => {
+  const cfg = loadConfig();
+  const out: Record<string, string> = {};
+  const put = (key: string, val: string | undefined | null) => {
+    if (val === undefined || val === null || val === '') return;
+    out[key] = val;
+  };
+
+  put('model.openai', cfg.MODELS?.OPENAI?.API_KEY);
+  put('model.groq', cfg.MODELS?.GROQ?.API_KEY);
+  put('model.anthropic', cfg.MODELS?.ANTHROPIC?.API_KEY);
+  put('model.gemini', cfg.MODELS?.GEMINI?.API_KEY);
+  put('model.deepseek', cfg.MODELS?.DEEPSEEK?.API_KEY);
+  put('model.aimlapi', cfg.MODELS?.AIMLAPI?.API_KEY);
+  put('model.openrouter', cfg.MODELS?.OPENROUTER?.API_KEY);
+  put('model.customOpenai', cfg.MODELS?.CUSTOM_OPENAI?.API_KEY);
+  put('search.braveSearch', cfg.SEARCH?.PROVIDERS?.BRAVE_SEARCH?.API_KEY);
+  put('search.braveLLM', cfg.SEARCH?.PROVIDERS?.BRAVE_LLM?.API_KEY);
+  put('search.mojeek', cfg.SEARCH?.PROVIDERS?.MOJEEK?.API_KEY);
 
   return out;
 };

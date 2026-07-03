@@ -45,10 +45,24 @@ export const ttsNarrations = sqliteTable('tts_narrations', {
 // browser localStorage key space exactly (values are the same serialized
 // strings the client cache holds) so the DB is the durable, cross-device source
 // of truth while localStorage acts as a synchronous local cache. Only the keys
-// in MIGRATED_SETTING_KEYS (src/lib/settings/keys.ts) ever land here — secrets
-// (custom_openai creds, provider API keys) stay in config.toml and device-local
-// UI prefs (theme, chat width) stay in localStorage only.
+// in MIGRATED_SETTING_KEYS (src/lib/settings/keys.ts) ever land here —
+// device-local UI prefs (theme, chat width) stay in localStorage only, and
+// secrets (provider/search API keys, MCP auth) live encrypted in `credentials`
+// (src/lib/credentials.ts), never here — this table is returned verbatim to
+// the client by GET /api/settings.
 export const appSettings = sqliteTable('app_settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+// Encrypted credential storage (AES-256-GCM, src/lib/encryption.ts), keyed by
+// logical name (see CREDENTIAL_KEYS in src/lib/credentials.ts). Deliberately
+// its own table, not `app_settings` — that table is shipped verbatim to every
+// client by GET /api/settings, so ciphertext must never land there.
+export const credentials = sqliteTable('credentials', {
   key: text('key').primaryKey(),
   value: text('value').notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp' })
@@ -287,15 +301,18 @@ export const mcpServers = sqliteTable(
   }),
 );
 
-// Per-server persisted OAuth credentials (access/refresh tokens, DCR result, AS metadata cache)
+// Per-server persisted OAuth credentials (access/refresh tokens, DCR result, AS
+// metadata cache). Values are encrypted (src/lib/encryption.ts) at the
+// provider layer (src/lib/mcp/oauth.ts), which also owns JSON
+// serialization/parsing — so these columns are plain text, not `mode: 'json'`.
 export const mcpOauth = sqliteTable('mcp_oauth', {
   serverId: text('server_id')
     .primaryKey()
     .references(() => mcpServers.id, { onDelete: 'cascade' }),
-  clientInformation: text('client_information', { mode: 'json' }),
-  tokens: text('tokens', { mode: 'json' }),
+  clientInformation: text('client_information'),
+  tokens: text('tokens'),
   // SDK saveDiscoveryState/discoveryState cache (NOT a hand-rolled metadata blob)
-  discoveryState: text('discovery_state', { mode: 'json' }),
+  discoveryState: text('discovery_state'),
   updatedAt: integer('updated_at', { mode: 'timestamp' })
     .notNull()
     .$defaultFn(() => new Date()),

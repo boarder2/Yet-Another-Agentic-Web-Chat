@@ -2,3 +2,4 @@ test-results/
 playwright-report/
 .auth/
 .test-data/
+.test-data-unconfigured/

@@ -54,7 +54,6 @@
     "better-sqlite3": "^12.6.2",
     "clsx": "^2.1.1",
     "compute-cosine-similarity": "^1.1.0",
-    "compute-dot": "^1.1.0",
     "cron": "^4.4.0",
     "diff": "^9.0.0",
     "dockerode": "^4.0.10",

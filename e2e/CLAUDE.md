@@ -28,7 +28,7 @@ Install Playwright browsers (run once):
 npx playwright install --with-deps chromium
 ```
 
-A valid `config.toml` must exist at the project root (smoke tests do not call LLMs, but the app requires the file to boot).
+A valid `config.toml` must exist at the project root (smoke tests do not call LLMs, but the app requires the file to boot). `SECURITY.ENCRYPTION_PASSPHRASE` (required for credential storage, see `settings-persistence` skill) is supplied via the `ENCRYPTION_PASSPHRASE` env var in `playwright.config.ts`'s `webServer.env`, not the shared `config.toml` — tests never need a real passphrase configured.
 
 ## Running Tests
 
@@ -60,11 +60,13 @@ e2e/
   tests/          Full feature/regression specs
   api/            Pure HTTP specs (see e2e/api/CLAUDE.md)
   serial/         Specs that mutate shared, DB-synced settings — single-worker project, run mutually exclusive of every other spec
+  encryption-gate/ Specs against the second, ENCRYPTION_PASSPHRASE-less webServer — the only place the "not configured" blocking gate can be exercised
   fixtures/       Extend @playwright/test — always import from here, never @playwright/test directly
   pages/          Page Object Models (add when a flow is reused across 3+ specs)
   utils/          Shared test helpers
   .auth/          Reserved for storage-state files (gitignored)
   .test-data/     Isolated test database (gitignored)
+  .test-data-unconfigured/ Isolated test database for the encryption-gate project (gitignored)
 ```
 
 See `e2e/COVERAGE.md` for the route/page → spec matrix and out-of-scope table.

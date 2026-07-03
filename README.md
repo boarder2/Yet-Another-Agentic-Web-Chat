@@ -49,6 +49,7 @@ YAAWC (**Pronounced: "yawck"** — as in the sound you make when yet another AI 
 - [Installation](#installation)
   - [Docker (Recommended)](#docker-recommended)
   - [Manual Setup](#manual-setup)
+  - [Encryption Passphrase](#encryption-passphrase)
   - [Ollama Connection Errors](#ollama-connection-errors)
 - [Using as a Browser Search Engine](#using-as-a-browser-search-engine)
 - [Network \& Reverse Proxy](#network--reverse-proxy)
@@ -319,7 +320,7 @@ Configure workspaces from `/workspaces`, or pick one inline while chatting.
 
 OpenAI, Ollama, Google Gemini, Xenova Transformers (fully local — no API needed), AI/ML API, LM Studio.
 
-All provider keys are configurable from the Settings UI or `config.toml`. API keys are never exposed in the frontend.
+All provider keys are configured from the Settings UI, encrypted at rest (see [Encryption Passphrase](#encryption-passphrase)), and never exposed in the frontend.
 
 ## Memory
 
@@ -453,22 +454,7 @@ YAAWC supports multiple search backends and lets you choose from the Settings pa
    cd Yet-Another-Agentic-Web-Chat
    ```
 
-3. Rename `sample.config.toml` to `config.toml` and fill in the provider keys you plan to use:
-
-   | Key          | Required When                                                 |
-   | ------------ | ------------------------------------------------------------- |
-   | `OPENAI`     | Using OpenAI models                                           |
-   | `OLLAMA`     | Using Ollama (`http://host.docker.internal:11434` for Docker) |
-   | `GROQ`       | Using Groq                                                    |
-   | `OPENROUTER` | Using OpenRouter                                              |
-   | `ANTHROPIC`  | Using Anthropic                                               |
-   | `GEMINI`     | Using Google Gemini                                           |
-   | `DEEPSEEK`   | Using DeepSeek                                                |
-   | `AIMLAPI`    | Using AI/ML API                                               |
-   | `LM_STUDIO`  | Using LM Studio                                               |
-
-   > All keys can also be changed later from the Settings page.
-
+3. Rename `sample.config.toml` to `config.toml` and set a `[SECURITY] ENCRYPTION_PASSPHRASE` (required — see [Encryption Passphrase](#encryption-passphrase)).
 4. Start the stack:
 
    ```bash
@@ -477,7 +463,7 @@ YAAWC supports multiple search backends and lets you choose from the Settings pa
 
    This pulls the prebuilt `boarder2/yaawc:latest` image from Docker Hub — no local build required.
 
-5. Open http://localhost:5005.
+5. Open http://localhost:5005 and add your LLM/search provider API keys from the Settings page.
 
 To update later, pull the latest image and recreate the stack:
 
@@ -489,7 +475,7 @@ docker compose up -d
 ### Manual Setup
 
 1. Install and configure [SearXNG](https://github.com/searxng/searxng) with JSON output enabled.
-2. Clone the repo, copy `sample.config.toml` → `config.toml`, and fill in your settings.
+2. Clone the repo, copy `sample.config.toml` → `config.toml`, and set a `[SECURITY] ENCRYPTION_PASSPHRASE` (required — see [Encryption Passphrase](#encryption-passphrase)).
 3. Install dependencies and build:
 
    ```bash
@@ -498,7 +484,18 @@ docker compose up -d
    npm start
    ```
 
+4. Open the app and add your LLM/search provider API keys from the Settings page.
+
 See [docs/installation](docs/installation) for additional configuration, updating, and tracing setup.
+
+### Encryption Passphrase
+
+Provider/search API keys and MCP auth are stored encrypted at rest (AES-256-GCM). The key is derived from a passphrase, which is **required** — the app blocks usage until one is set. Provide it either:
+
+- In `config.toml`: `[SECURITY]` → `ENCRYPTION_PASSPHRASE = "your-passphrase-here"`, or
+- As an `ENCRYPTION_PASSPHRASE` environment variable (takes precedence over `config.toml`).
+
+Changing the passphrase later derives a different key, so previously encrypted credentials become unreadable and must be re-entered via Settings.
 
 ### Ollama Connection Errors
 

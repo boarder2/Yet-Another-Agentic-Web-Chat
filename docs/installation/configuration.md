@@ -4,20 +4,15 @@ This guide covers all the configuration options available in YAAWC's `config.tom
 
 ## Configuration File Structure
 
-YAAWC uses a TOML configuration file (`config.toml`) to manage settings. Create a `config.toml` file in the project root based on the example configuration below, or use the Settings page in the web UI to configure models and API keys after starting the application.
+YAAWC uses a TOML configuration file (`config.toml`) to manage settings. Create a `config.toml` file in the project root based on the example configuration below.
+
+`config.toml` holds only infrastructure config (Docker/code-execution) plus the required encryption passphrase. Everything else — model/search provider API keys, provider/search endpoint URLs, model visibility, retention, image generation, and model selection — is managed from the Settings page in the web UI and stored in the database.
 
 ## Configuration Sections
 
 ### [GENERAL]
 
 General application settings.
-
-#### SIMILARITY_MEASURE
-
-- **Type**: String
-- **Options**: `"cosine"` or `"dot"`
-- **Default**: `"cosine"`
-- **Description**: The similarity measure used for embedding comparisons in search results ranking.
 
 #### KEEP_ALIVE
 
@@ -31,154 +26,58 @@ General application settings.
 - **Default**: `""` (empty)
 - **Description**: Optional base URL override. When set, overrides the detected URL for OpenSearch and other public URLs.
 
-#### HIDDEN_MODELS
+#### PRIVATE_SESSION_DURATION_MINUTES
 
-- **Type**: Array of Strings
-- **Default**: `[]` (empty array)
-- **Description**: Array of model names to hide from the user interface and API responses. Hidden models will not appear in model selection lists but can still be used if directly specified.
-- **Example**: `["gpt-4", "claude-3-opus", "expensive-model"]`
-- **Use Cases**:
-  - Hide expensive models to prevent accidental usage
-  - Remove models that don't work well with your configuration
-  - Simplify the UI by hiding unused models
+- **Type**: Number
+- **Default**: `1440`
+- **Description**: How long a private chat session stays active before expiring, in minutes.
 
-### [MODELS]
+### [SECURITY]
 
-Model provider configurations. Each provider has its own subsection.
-
-#### [MODELS.OPENAI]
-
-- **API_KEY**: Your OpenAI API key
-
-#### [MODELS.GROQ]
-
-- **API_KEY**: Your Groq API key
-
-#### [MODELS.ANTHROPIC]
-
-- **API_KEY**: Your Anthropic API key
-
-#### [MODELS.GEMINI]
-
-- **API_KEY**: Your Google Gemini API key
-
-#### [MODELS.CUSTOM_OPENAI]
-
-Configuration for OpenAI-compatible APIs (like LMStudio, vLLM, etc.)
-
-- **API_KEY**: API key for the custom endpoint
-- **API_URL**: Base URL for the OpenAI-compatible API
-- **MODEL_NAME**: Name of the model to use
-
-#### [MODELS.OLLAMA]
-
-- **API_URL**: Ollama server URL (e.g., `"http://host.docker.internal:11434"`)
-
-#### [MODELS.DEEPSEEK]
-
-- **API_KEY**: Your DeepSeek API key
-
-#### [MODELS.AIMLAPI]
-
-- **API_KEY**: Your AIML API key
-
-#### [MODELS.LM_STUDIO]
-
-- **API_URL**: LM Studio server URL (e.g., `"http://host.docker.internal:1234"`)
-
-#### [MODELS.OPENROUTER]
-
-- **API_KEY**: Your OpenRouter API key
-
-### [API_ENDPOINTS]
-
-External service endpoints.
-
-#### SEARXNG
+#### ENCRYPTION_PASSPHRASE
 
 - **Type**: String
-- **Description**: SearxNG API URL for web search functionality
-- **Example**: `"http://localhost:32768"`
-- **Note**: Can also be set via the `SEARXNG_API_URL` environment variable, which takes precedence over the config file value.
+- **Required**: Yes — never auto-generated
+- **Description**: Passphrase used to derive the key (AES-256-GCM) that encrypts provider/search API keys and MCP auth at rest in the database. Until this is set, the app blocks usage and the Settings UI shows an error. Changing it later re-derives a different key, so existing encrypted credentials become unreadable and must be re-entered via Settings.
 
-## Model Visibility Management
+### [TOOLS.CODE_EXECUTION]
 
-The `HIDDEN_MODELS` setting allows server administrators to control which models are visible to users:
+Configuration for the sandboxed code execution tool (requires Docker).
 
-### How It Works
+- **ENABLED**: Boolean, default `false`
+- **DOCKER_IMAGE**: String, default `"node:slim"`
+- **DOCKER_HOST**: String, default `"unix:///var/run/docker.sock"`
+- **TIMEOUT_SECONDS**: Number, default `30`
+- **MEMORY_MB**: Number, default `128`
+- **MAX_OUTPUT_CHARS**: Number, default `50000`
 
-1. Models listed in `HIDDEN_MODELS` are filtered out of API responses
-2. The settings UI shows all models (including hidden ones) for management
-3. Hidden models can still be used if explicitly specified in API calls
+## Settings Managed in the Database
 
-### Managing Hidden Models
+The following are no longer configured via `config.toml` — manage them from the Settings page in the web UI:
 
-1. **Via Configuration File**: Edit the `HIDDEN_MODELS` array in `config.toml`
-2. **Via Settings UI**: Use the "Model Visibility" section in the settings page
-3. **Via API**: Use the `/api/config` endpoint to update the configuration
-
-### API Behavior
-
-- **Default**: `/api/models` returns only visible models
-- **Include Hidden**: `/api/models?include_hidden=true` returns all models (for admin use)
-
-## Security Considerations
-
-- Store API keys securely and never commit them to version control
-- Use environment variables for sensitive configuration in production
-- Regularly rotate API keys
-- Consider using `HIDDEN_MODELS` to prevent access to expensive or sensitive models
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Models not appearing**: Check if they're listed in `HIDDEN_MODELS`
-2. **API errors**: Verify API keys and URLs are correct
-3. **Ollama connection issues**: Ensure the Ollama server is running and accessible
-4. **SearxNG not working**: Verify the SearxNG endpoint is correct and accessible
+- **Model & search provider API keys** — Settings → API Keys / Search Providers (encrypted at rest)
+- **Provider/search endpoint URLs** (Ollama, LM Studio, Custom OpenAI, SearXNG) — Settings → API Keys / Model Settings / Search Providers
+- **Model selection** (embedding + memory-processing models) — Settings UI
+- **Model visibility** (`HIDDEN_MODELS`) — Settings → Model Visibility
+- **Retention policy** — Settings → Retention
+- **Image generation** — Settings → Image Generation (its OpenRouter API key is encrypted in the database)
 
 ## Example Configuration
 
 ```toml
 [GENERAL]
-SIMILARITY_MEASURE = "cosine"
 KEEP_ALIVE = "5m"
 BASE_URL = ""
-HIDDEN_MODELS = ["gpt-4", "claude-3-opus"]
+PRIVATE_SESSION_DURATION_MINUTES = 1440
 
-[MODELS.OPENAI]
-API_KEY = "sk-your-openai-key-here"
+[SECURITY]
+ENCRYPTION_PASSPHRASE = ""
 
-[MODELS.GROQ]
-API_KEY = ""
-
-[MODELS.ANTHROPIC]
-API_KEY = ""
-
-[MODELS.GEMINI]
-API_KEY = ""
-
-[MODELS.DEEPSEEK]
-API_KEY = ""
-
-[MODELS.AIMLAPI]
-API_KEY = ""
-
-[MODELS.OPENROUTER]
-API_KEY = ""
-
-[MODELS.OLLAMA]
-API_URL = "http://localhost:11434"
-
-[MODELS.LM_STUDIO]
-API_URL = "http://localhost:1234"
-
-[MODELS.CUSTOM_OPENAI]
-API_KEY = ""
-API_URL = ""
-MODEL_NAME = ""
-
-[API_ENDPOINTS]
-SEARXNG = "http://localhost:32768"
+[TOOLS.CODE_EXECUTION]
+ENABLED = false
+DOCKER_IMAGE = "node:slim"
+DOCKER_HOST = "unix:///var/run/docker.sock"
+TIMEOUT_SECONDS = 30
+MEMORY_MB = 128
+MAX_OUTPUT_CHARS = 50000
 ```

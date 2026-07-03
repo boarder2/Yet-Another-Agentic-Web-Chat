@@ -2,12 +2,12 @@
 
 import { PROVIDER_METADATA } from '@/lib/providers/metadata';
 import { LoaderCircle, RefreshCw } from 'lucide-react';
-import { useState } from 'react';
-import { toast } from 'sonner';
 import SettingsSection from '../components/SettingsSection';
 import Select from '../components/Select';
 import InputComponent from '../components/InputComponent';
 import { SettingsType } from '../types';
+import { useLocalStorageString } from '@/lib/hooks/useLocalStorage';
+import { useRefreshModels } from '@/lib/hooks/api/useModels';
 
 export default function ModelSettingsSection({
   config,
@@ -31,22 +31,13 @@ export default function ModelSettingsSection({
     value: string | string[] | number | boolean,
   ) => void;
 }) {
-  const [refreshing, setRefreshing] = useState(false);
-
-  const handleRefreshModels = async () => {
-    try {
-      setRefreshing(true);
-      const res = await fetch('/api/models?refresh=true&include_hidden=true');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      toast.success('Model list refreshed. Reloading…');
-      setTimeout(() => window.location.reload(), 500);
-    } catch (err) {
-      console.error('Failed to refresh models:', err);
-      toast.error('Failed to refresh models');
-    } finally {
-      setRefreshing(false);
-    }
-  };
+  const { refresh, refreshing } = useRefreshModels();
+  const [customOpenaiModelName, setCustomOpenaiModelName] =
+    useLocalStorageString('customOpenaiModelName', '');
+  const [customOpenaiApiUrl, setCustomOpenaiApiUrl] = useLocalStorageString(
+    'customOpenaiApiUrl',
+    '',
+  );
 
   return (
     <SettingsSection
@@ -55,7 +46,7 @@ export default function ModelSettingsSection({
         <button
           type="button"
           className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-control border border-surface-2 hover:bg-surface-2 transition disabled:opacity-60"
-          onClick={handleRefreshModels}
+          onClick={() => refresh({ reload: true })}
           disabled={refreshing}
           title="Refresh models from providers"
         >
@@ -82,15 +73,11 @@ export default function ModelSettingsSection({
           <InputComponent
             type="text"
             placeholder="Model name"
-            value={config.customOpenaiModelName}
-            isSaving={savingStates['customOpenaiModelName']}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-              setConfig((prev) => ({
-                ...prev!,
-                customOpenaiModelName: e.target.value,
-              }));
-            }}
-            onSave={(value) => saveConfig('customOpenaiModelName', value)}
+            value={customOpenaiModelName}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+              setCustomOpenaiModelName(e.target.value)
+            }
+            onSave={() => refresh({ reload: true })}
           />
         </div>
         <div className="flex flex-col space-y-1">
@@ -114,15 +101,11 @@ export default function ModelSettingsSection({
           <InputComponent
             type="text"
             placeholder="Custom OpenAI Base URL"
-            value={config.customOpenaiApiUrl}
-            isSaving={savingStates['customOpenaiApiUrl']}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-              setConfig((prev) => ({
-                ...prev!,
-                customOpenaiApiUrl: e.target.value,
-              }));
-            }}
-            onSave={(value) => saveConfig('customOpenaiApiUrl', value)}
+            value={customOpenaiApiUrl}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+              setCustomOpenaiApiUrl(e.target.value)
+            }
+            onSave={() => refresh({ reload: true })}
           />
         </div>
       </div>

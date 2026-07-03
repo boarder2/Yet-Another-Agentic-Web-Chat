@@ -1,20 +1,47 @@
 import { createHash } from 'crypto';
 
 import type { mcpServers, mcpOauth } from '@/lib/db/schema';
+import { decryptTolerant } from '@/lib/encryption';
 
 export type McpServerRow = typeof mcpServers.$inferSelect;
 export type McpOauthRow = typeof mcpOauth.$inferSelect;
+
+/** `McpServerRow` with secrets replaced by presence booleans — safe to send to the client. */
+export type SanitizedMcpServerRow = Omit<
+  McpServerRow,
+  'secretToken' | 'oauthClientSecret'
+> & { hasToken: boolean; hasSecret: boolean };
 
 /** Per-tool overrides for an MCP server, keyed by tool name. */
 export type McpToolConfig = NonNullable<McpServerRow['toolConfig']>;
 
 /** Redact secrets from a server row before sending to the client. */
-export function redactServer(row: McpServerRow) {
+export function redactServer(row: McpServerRow): SanitizedMcpServerRow {
   const { secretToken, oauthClientSecret, ...rest } = row;
   return {
     ...rest,
     hasToken: !!secretToken,
     hasSecret: !!oauthClientSecret,
+  };
+}
+
+/**
+ * Decrypt `secretToken`/`oauthClientSecret` on a server row read from the DB.
+ * Tolerates null values and legacy plaintext (pre-encryption rows not yet
+ * caught by `migrateMcpAuth()`), so it's safe to call unconditionally on every
+ * read path.
+ */
+export function decryptServerSecrets(row: McpServerRow): McpServerRow {
+  return {
+    ...row,
+    secretToken: decryptTolerant(
+      row.secretToken,
+      `secretToken for server ${row.id}`,
+    ),
+    oauthClientSecret: decryptTolerant(
+      row.oauthClientSecret,
+      `oauthClientSecret for server ${row.id}`,
+    ),
   };
 }
 

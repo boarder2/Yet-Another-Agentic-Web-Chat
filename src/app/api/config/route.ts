@@ -2,23 +2,21 @@ import {
   getAnthropicApiKey,
   getBaseUrl,
   getCustomOpenaiApiKey,
-  getCustomOpenaiApiUrl,
-  getCustomOpenaiModelName,
   getGeminiApiKey,
   getGroqApiKey,
-  getOllamaApiEndpoint,
   getOpenaiApiKey,
   getOpenrouterApiKey,
   getDeepseekApiKey,
   getAimlApiKey,
-  getLMStudioApiEndpoint,
   getPrivateSessionDurationMinutes,
-  getSearxngApiEndpoint,
   getBraveSearchApiKey,
   getBraveLLMApiKey,
   getMojeekApiKey,
   updateConfig,
 } from '@/lib/config';
+import { setCredential, type CredentialKey } from '@/lib/credentials';
+import { isEncryptionConfigured } from '@/lib/encryption';
+import { MASKED_SECRET, maskSecret } from '@/lib/maskedSecret';
 import { getCodeExecutionConfig } from '@/lib/config';
 import { getResolvedSearchCapabilities } from '@/lib/search/providers';
 import { invalidateModelCache } from '@/lib/providers/modelCache';
@@ -62,37 +60,31 @@ export const GET = async (_req: Request) => {
       });
     }
 
-    // Helper function to obfuscate API keys
-    const protectApiKey = (key: string | null | undefined) => {
-      return key ? 'protected' : key;
-    };
+    // Mask all API keys in the response
+    config['openaiApiKey'] = maskSecret(getOpenaiApiKey());
+    config['groqApiKey'] = maskSecret(getGroqApiKey());
+    config['anthropicApiKey'] = maskSecret(getAnthropicApiKey());
+    config['geminiApiKey'] = maskSecret(getGeminiApiKey());
+    config['deepseekApiKey'] = maskSecret(getDeepseekApiKey());
+    config['openrouterApiKey'] = maskSecret(getOpenrouterApiKey());
+    config['customOpenaiApiKey'] = maskSecret(getCustomOpenaiApiKey());
+    config['aimlApiKey'] = maskSecret(getAimlApiKey());
 
-    // Obfuscate all API keys in the response
-    config['openaiApiKey'] = protectApiKey(getOpenaiApiKey());
-    config['groqApiKey'] = protectApiKey(getGroqApiKey());
-    config['anthropicApiKey'] = protectApiKey(getAnthropicApiKey());
-    config['geminiApiKey'] = protectApiKey(getGeminiApiKey());
-    config['deepseekApiKey'] = protectApiKey(getDeepseekApiKey());
-    config['openrouterApiKey'] = protectApiKey(getOpenrouterApiKey());
-    config['customOpenaiApiKey'] = protectApiKey(getCustomOpenaiApiKey());
-    config['aimlApiKey'] = protectApiKey(getAimlApiKey());
-
-    // Non-sensitive values remain unchanged
-    config['ollamaApiUrl'] = getOllamaApiEndpoint();
-    config['lmStudioApiUrl'] = getLMStudioApiEndpoint();
-    config['customOpenaiApiUrl'] = getCustomOpenaiApiUrl();
-    config['customOpenaiModelName'] = getCustomOpenaiModelName();
     config['baseUrl'] = getBaseUrl();
+
+    // Never the passphrase itself — just whether one is configured. Drives the
+    // app-wide EncryptionGate (src/components/EncryptionGate.tsx): until this
+    // is true, credential storage is unavailable and the UI blocks usage.
+    config['encryptionConfigured'] = isEncryptionConfigured();
 
     config['privateSessionDurationMinutes'] =
       getPrivateSessionDurationMinutes();
 
-    // Search provider credentials/endpoint (secrets/infra stay in config.toml).
-    // Provider/locale preferences are DB-backed (see settings/server.ts).
-    config['searxngApiUrl'] = getSearxngApiEndpoint();
-    config['braveSearchApiKey'] = protectApiKey(getBraveSearchApiKey());
-    config['braveLLMApiKey'] = protectApiKey(getBraveLLMApiKey());
-    config['mojeekApiKey'] = protectApiKey(getMojeekApiKey());
+    // Search provider credentials (encrypted, credentials.ts). The endpoint URL
+    // and provider/locale preferences are DB-backed settings (settings/server.ts).
+    config['braveSearchApiKey'] = maskSecret(getBraveSearchApiKey());
+    config['braveLLMApiKey'] = maskSecret(getBraveLLMApiKey());
+    config['mojeekApiKey'] = maskSecret(getMojeekApiKey());
     config['searchCapabilitiesRegular'] = getResolvedSearchCapabilities(false);
     config['searchCapabilitiesPrivate'] = getResolvedSearchCapabilities(true);
 
@@ -116,149 +108,61 @@ export const POST = async (req: Request) => {
   try {
     const config = await req.json();
 
-    const getUpdatedProtectedValue = (
-      newValue: string,
-      currentConfig: string,
-    ) => {
-      // "protected" is the masked placeholder from GET — keep existing.
-      if (newValue === 'protected') {
-        return currentConfig;
-      }
-
-      return newValue;
-    };
-
-    const updatedConfig = {
-      GENERAL: {
-        ...(config.privateSessionDurationMinutes !== undefined && {
-          PRIVATE_SESSION_DURATION_MINUTES:
-            config.privateSessionDurationMinutes,
-        }),
-      },
-      MODELS: {
-        OPENAI: {
-          API_KEY: getUpdatedProtectedValue(
-            config.openaiApiKey,
-            getOpenaiApiKey(),
-          ),
-        },
-        GROQ: {
-          API_KEY: getUpdatedProtectedValue(config.groqApiKey, getGroqApiKey()),
-        },
-        ANTHROPIC: {
-          API_KEY: getUpdatedProtectedValue(
-            config.anthropicApiKey,
-            getAnthropicApiKey(),
-          ),
-        },
-        GEMINI: {
-          API_KEY: getUpdatedProtectedValue(
-            config.geminiApiKey,
-            getGeminiApiKey(),
-          ),
-        },
-        OLLAMA: {
-          API_URL: config.ollamaApiUrl,
-        },
-        DEEPSEEK: {
-          API_KEY: getUpdatedProtectedValue(
-            config.deepseekApiKey,
-            getDeepseekApiKey(),
-          ),
-        },
-        AIMLAPI: {
-          API_KEY: getUpdatedProtectedValue(config.aimlApiKey, getAimlApiKey()),
-        },
-        LM_STUDIO: {
-          API_URL: config.lmStudioApiUrl,
-        },
-        OPENROUTER: {
-          API_KEY: getUpdatedProtectedValue(
-            config.openrouterApiKey,
-            getOpenrouterApiKey(),
-          ),
-        },
-        CUSTOM_OPENAI: {
-          API_URL: config.customOpenaiApiUrl,
-          API_KEY: getUpdatedProtectedValue(
-            config.customOpenaiApiKey,
-            getCustomOpenaiApiKey(),
-          ),
-          MODEL_NAME: config.customOpenaiModelName,
-        },
-      },
-    };
-
-    updateConfig(updatedConfig);
-
-    // If any model-provider credential or URL changed, invalidate the
-    // cached model lists so the next /api/models call refetches from source.
-    const providerCredentialFields = [
-      'openaiApiKey',
-      'groqApiKey',
-      'anthropicApiKey',
-      'geminiApiKey',
-      'ollamaApiUrl',
-      'deepseekApiKey',
-      'aimlApiKey',
-      'lmStudioApiUrl',
-      'openrouterApiKey',
-      'customOpenaiApiKey',
-      'customOpenaiApiUrl',
-      'customOpenaiModelName',
+    // Model/search provider API keys — encrypted, stored in `credentials`.
+    const credentialFields: Array<{ body: string; key: CredentialKey }> = [
+      { body: 'openaiApiKey', key: 'model.openai' },
+      { body: 'groqApiKey', key: 'model.groq' },
+      { body: 'anthropicApiKey', key: 'model.anthropic' },
+      { body: 'geminiApiKey', key: 'model.gemini' },
+      { body: 'deepseekApiKey', key: 'model.deepseek' },
+      { body: 'aimlApiKey', key: 'model.aimlapi' },
+      { body: 'openrouterApiKey', key: 'model.openrouter' },
+      { body: 'customOpenaiApiKey', key: 'model.customOpenai' },
+      { body: 'braveSearchApiKey', key: 'search.braveSearch' },
+      { body: 'braveLLMApiKey', key: 'search.braveLLM' },
+      { body: 'mojeekApiKey', key: 'search.mojeek' },
     ];
-    const providerChanged = providerCredentialFields.some(
-      (field) => config[field] !== undefined && config[field] !== 'protected',
+
+    // MASKED_SECRET is the placeholder GET returns for an existing key: it means
+    // "unchanged", so skip it entirely rather than decrypt-then-re-encrypt an
+    // identical value on every unrelated save. Everything else is a real write —
+    // a new secret to store, or '' to clear.
+    const writes = credentialFields.filter(
+      (f) => config[f.body] !== undefined && config[f.body] !== MASKED_SECRET,
     );
-    if (providerChanged) {
-      invalidateModelCache();
+
+    // Only a non-empty write needs the passphrase; clearing a key ('') deletes.
+    if (writes.some((f) => config[f.body]) && !isEncryptionConfigured()) {
+      return Response.json(
+        {
+          message:
+            'No encryption passphrase configured. Set SECURITY.ENCRYPTION_PASSPHRASE in config.toml before saving credentials.',
+        },
+        { status: 503 },
+      );
     }
 
-    // Save search provider credentials/endpoint if present. Provider/locale
-    // preferences are DB-backed (Settings UI → app_settings), not handled here.
-    const hasSearchFields =
-      config.searxngApiUrl !== undefined ||
-      config.braveSearchApiKey !== undefined ||
-      config.braveLLMApiKey !== undefined ||
-      config.mojeekApiKey !== undefined;
+    let providerChanged = false;
+    for (const field of writes) {
+      // Only model-provider credentials feed the model list; search keys don't,
+      // so changing one mustn't force a full model-cache refetch.
+      if (field.key.startsWith('model.')) providerChanged = true;
+      setCredential(field.key, config[field.body]);
+    }
 
-    if (hasSearchFields) {
-      const providers: {
-        SEARXNG?: { API_URL?: string };
-        BRAVE_SEARCH?: { API_KEY?: string };
-        BRAVE_LLM?: { API_KEY?: string };
-        MOJEEK?: { API_KEY?: string };
-      } = {};
-      if (config.searxngApiUrl !== undefined) {
-        providers.SEARXNG = { API_URL: config.searxngApiUrl };
-      }
-      if (config.braveSearchApiKey !== undefined) {
-        providers.BRAVE_SEARCH = {
-          API_KEY: getUpdatedProtectedValue(
-            config.braveSearchApiKey,
-            getBraveSearchApiKey(),
-          ),
-        };
-      }
-      if (config.braveLLMApiKey !== undefined) {
-        providers.BRAVE_LLM = {
-          API_KEY: getUpdatedProtectedValue(
-            config.braveLLMApiKey,
-            getBraveLLMApiKey(),
-          ),
-        };
-      }
-      if (config.mojeekApiKey !== undefined) {
-        providers.MOJEEK = {
-          API_KEY: getUpdatedProtectedValue(
-            config.mojeekApiKey,
-            getMojeekApiKey(),
-          ),
-        };
-      }
-      if (Object.keys(providers).length > 0) {
-        updateConfig({ SEARCH: { PROVIDERS: providers } });
-      }
+    if (config.privateSessionDurationMinutes !== undefined) {
+      updateConfig({
+        GENERAL: {
+          PRIVATE_SESSION_DURATION_MINUTES:
+            config.privateSessionDurationMinutes,
+        },
+      });
+    }
+
+    // If any model-provider credential changed, invalidate the cached model
+    // lists so the next /api/models call refetches from source.
+    if (providerChanged) {
+      invalidateModelCache();
     }
 
     return Response.json({ message: 'Config updated' }, { status: 200 });

@@ -195,3 +195,39 @@ export function getImageGenerationConfig(): ImageGenerationConfig | null {
     imageSize: s['imageGenerationImageSize'] || '1K',
   };
 }
+
+/** Ollama API URL. Seeded from legacy `MODELS.OLLAMA.API_URL`. */
+export function getOllamaApiUrl(): string {
+  return getSettings(['ollamaApiUrl'])['ollamaApiUrl'] ?? '';
+}
+
+/** LM Studio API URL. Seeded from legacy `MODELS.LM_STUDIO.API_URL`. */
+export function getLMStudioApiUrl(): string {
+  return getSettings(['lmStudioApiUrl'])['lmStudioApiUrl'] ?? '';
+}
+
+/**
+ * SearXNG API URL. Seeded from legacy `SEARCH.PROVIDERS.SEARXNG.API_URL` /
+ * `API_ENDPOINTS.SEARXNG`. Callers needing the `SEARXNG_API_URL` env override
+ * should check that first — see `getSearxngApiEndpoint()` in `@/lib/config`.
+ */
+export function getSearxngApiUrl(): string {
+  return getSettings(['searxngApiUrl'])['searxngApiUrl'] ?? '';
+}
+
+/**
+ * Custom OpenAI endpoint URL + model name. Seeded from legacy
+ * `MODELS.CUSTOM_OPENAI.API_URL`/`MODEL_NAME`. The API key is a separate
+ * lookup in `credentials.ts` — same logical provider, two stores, because one
+ * half is a secret and the other isn't.
+ */
+export function getCustomOpenaiUrlAndModel(): {
+  url: string;
+  modelName: string;
+} {
+  const s = getSettings(['customOpenaiApiUrl', 'customOpenaiModelName']);
+  return {
+    url: s['customOpenaiApiUrl'] ?? '',
+    modelName: s['customOpenaiModelName'] ?? '',
+  };
+}

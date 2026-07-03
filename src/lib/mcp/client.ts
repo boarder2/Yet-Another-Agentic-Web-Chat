@@ -10,7 +10,11 @@ import { version } from '@/../package.json';
 import db from '@/lib/db';
 import { mcpServers } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { McpAuthRequiredError, type McpServerRow } from './types';
+import {
+  McpAuthRequiredError,
+  decryptServerSecrets,
+  type McpServerRow,
+} from './types';
 
 // Validate URL at the call site: throws if malformed.
 function parseUrl(urlStr: string, serverId: string): URL {
@@ -82,7 +86,10 @@ async function persistResolvedTransport(
  * - auto transport: tries StreamableHTTP first, falls back to SSE (never on 401).
  * - Throws McpAuthRequiredError if the server returns 401/UnauthorizedError.
  */
-export async function connectMcpServer(server: McpServerRow): Promise<Client> {
+export async function connectMcpServer(
+  rawServer: McpServerRow,
+): Promise<Client> {
+  const server = decryptServerSecrets(rawServer);
   const url = parseUrl(server.url, server.id);
 
   const client = new Client({ name: 'YAAWC', version }, { capabilities: {} });

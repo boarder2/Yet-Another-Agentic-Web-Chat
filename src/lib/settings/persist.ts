@@ -90,9 +90,11 @@ const pending = new Set<string>();
 // aborts the in-flight request on unload.
 const inFlight = new Set<string>();
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
-// Guards against overlapping PATCHes: an older, slower request must never land
-// after a newer one and resurrect a stale value. Only one flush runs at a time.
-let flushInFlight = false;
+// The single in-flight flush, if any. Guards against overlapping PATCHes (an
+// older, slower request must never land after a newer one and resurrect a stale
+// value) and lets callers await the drain — a concurrent flush() coalesces onto
+// it, and it doesn't resolve until `pending` is empty.
+let currentFlush: Promise<void> | null = null;
 const FLUSH_DELAY_MS = 400;
 // If the hydration fetch hangs (neither resolves nor rejects), open the gate
 // anyway so hydration-gated consumers don't suppress writes forever.
@@ -144,29 +146,47 @@ function scheduleFlush() {
   }, FLUSH_DELAY_MS);
 }
 
-async function flush() {
-  // Serialize: if a flush is already running, it drains `pending` in its loop,
-  // so just let it. This prevents two concurrent in-flight PATCHes racing.
-  if (flushInFlight || pending.size === 0) return;
-  flushInFlight = true;
-  try {
-    while (pending.size > 0) {
-      const keys = [...pending];
-      pending.clear();
-      for (const key of keys) inFlight.add(key);
-      try {
-        await patchSettings(buildPatch(keys));
-      } catch {
-        // Re-queue on failure and stop; a later write (or pagehide) retries.
-        for (const key of keys) pending.add(key);
-        break;
-      } finally {
-        for (const key of keys) inFlight.delete(key);
+function flush(): Promise<void> {
+  // Coalesce: if a flush is already running, return it — its loop drains
+  // `pending` (including keys added after it started), so a concurrent caller
+  // both avoids a racing PATCH and can await the same completion.
+  if (currentFlush) return currentFlush;
+  if (pending.size === 0) return Promise.resolve();
+  currentFlush = (async () => {
+    try {
+      while (pending.size > 0) {
+        const keys = [...pending];
+        pending.clear();
+        for (const key of keys) inFlight.add(key);
+        try {
+          await patchSettings(buildPatch(keys));
+        } catch {
+          // Re-queue on failure and stop; a later write (or pagehide) retries.
+          for (const key of keys) pending.add(key);
+          break;
+        } finally {
+          for (const key of keys) inFlight.delete(key);
+        }
       }
+    } finally {
+      currentFlush = null;
     }
-  } finally {
-    flushInFlight = false;
+  })();
+  return currentFlush;
+}
+
+/**
+ * Force any pending settings writes to the DB now and await completion.
+ * Callers that must read a just-written setting back server-side (e.g.
+ * refreshing the model list right after editing a provider URL) await this so
+ * the 400ms-debounced flush can't leave the DB holding the pre-edit value.
+ */
+export async function flushSettings(): Promise<void> {
+  if (flushTimer) {
+    clearTimeout(flushTimer);
+    flushTimer = null;
   }
+  await flush();
 }
 
 function record(key: string) {

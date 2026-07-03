@@ -18,9 +18,35 @@ import db from '@/lib/db';
 import { mcpOauth, mcpOauthFlows, mcpServers } from '@/lib/db/schema';
 import { eq, lt } from 'drizzle-orm';
 import { getBaseUrl } from '@/lib/config';
+import { encrypt, decryptTolerant } from '@/lib/encryption';
 import { version } from '@/../package.json';
 import type { McpServerRow } from './types';
-import { McpAuthRequiredError } from './types';
+import { McpAuthRequiredError, decryptServerSecrets } from './types';
+
+/**
+ * Decrypt a DB-stored OAuth JSON column, tolerating null and legacy
+ * plaintext. Returns `undefined` (rather than throwing) if decryption fails —
+ * e.g. the passphrase changed since this value was saved — so a stale row
+ * degrades to "no stored auth" instead of breaking the whole request.
+ */
+function decryptJson<T>(raw: string | null): T | undefined {
+  const json = decryptTolerant(raw, 'OAuth data');
+  if (json === null) return undefined;
+  try {
+    return JSON.parse(json) as T;
+  } catch (err) {
+    console.error(
+      '[mcp] Failed to parse stored OAuth data. Treating as unset.',
+      err,
+    );
+    return undefined;
+  }
+}
+
+/** Serialize + encrypt a value for a DB-stored OAuth JSON column. */
+function encryptJson(value: unknown): string {
+  return encrypt(JSON.stringify(value));
+}
 
 // ── BASE_URL validation ────────────────────────────────────────────────────
 
@@ -76,31 +102,37 @@ abstract class McpDbOAuthProvider {
     const row = await db.query.mcpOauth.findFirst({
       where: eq(mcpOauth.serverId, this._serverId),
     });
-    return (row?.tokens as OAuthTokens) ?? undefined;
+    return decryptJson<OAuthTokens>(row?.tokens ?? null);
   }
 
   async saveTokens(tokens: OAuthTokens): Promise<void> {
+    const value = encryptJson(tokens);
     await db
       .insert(mcpOauth)
-      .values({ serverId: this._serverId, tokens, updatedAt: new Date() })
+      .values({
+        serverId: this._serverId,
+        tokens: value,
+        updatedAt: new Date(),
+      })
       .onConflictDoUpdate({
         target: mcpOauth.serverId,
-        set: { tokens, updatedAt: new Date() },
+        set: { tokens: value, updatedAt: new Date() },
       })
       .execute();
   }
 
   async saveDiscoveryState(state: OAuthDiscoveryState): Promise<void> {
+    const value = encryptJson(state);
     await db
       .insert(mcpOauth)
       .values({
         serverId: this._serverId,
-        discoveryState: state,
+        discoveryState: value,
         updatedAt: new Date(),
       })
       .onConflictDoUpdate({
         target: mcpOauth.serverId,
-        set: { discoveryState: state, updatedAt: new Date() },
+        set: { discoveryState: value, updatedAt: new Date() },
       })
       .execute();
   }
@@ -109,7 +141,7 @@ abstract class McpDbOAuthProvider {
     const row = await db.query.mcpOauth.findFirst({
       where: eq(mcpOauth.serverId, this._serverId),
     });
-    return (row?.discoveryState as OAuthDiscoveryState) ?? undefined;
+    return decryptJson<OAuthDiscoveryState>(row?.discoveryState ?? null);
   }
 
   async invalidateCredentials(
@@ -235,23 +267,25 @@ export class McpOAuthProvider
     const row = await db.query.mcpOauth.findFirst({
       where: eq(mcpOauth.serverId, this._serverId),
     });
-    if (!row?.clientInformation) return undefined;
-    return row.clientInformation as OAuthClientInformationMixed;
+    return decryptJson<OAuthClientInformationMixed>(
+      row?.clientInformation ?? null,
+    );
   }
 
   async saveClientInformation(
     info: OAuthClientInformationMixed,
   ): Promise<void> {
+    const value = encryptJson(info);
     await db
       .insert(mcpOauth)
       .values({
         serverId: this._serverId,
-        clientInformation: info,
+        clientInformation: value,
         updatedAt: new Date(),
       })
       .onConflictDoUpdate({
         target: mcpOauth.serverId,
-        set: { clientInformation: info, updatedAt: new Date() },
+        set: { clientInformation: value, updatedAt: new Date() },
       })
       .execute();
   }
@@ -339,7 +373,8 @@ class McpClientCredentialsProvider
  * the token (DB-backed) and re-fetches on 401, so there's no manual token plumbing.
  * Surfaces failures as McpAuthRequiredError so the manager marks server status.
  */
-export async function connectWithClientCredentials(server: McpServerRow) {
+export async function connectWithClientCredentials(rawServer: McpServerRow) {
+  const server = decryptServerSecrets(rawServer);
   if (!server.oauthClientId || !server.oauthClientSecret) {
     throw new Error(
       `Server "${server.name}" uses oauth_client_credentials but is missing client ID or secret`,

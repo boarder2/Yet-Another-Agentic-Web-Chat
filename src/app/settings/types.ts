@@ -10,16 +10,12 @@ export interface SettingsType {
   openrouterApiKey: string;
   anthropicApiKey: string;
   geminiApiKey: string;
-  ollamaApiUrl: string;
-  lmStudioApiUrl: string;
   deepseekApiKey: string;
   aimlApiKey: string;
   customOpenaiApiKey: string;
-  customOpenaiApiUrl: string;
-  customOpenaiModelName: string;
+  encryptionConfigured: boolean;
   contextWindowSize: number;
   privateSessionDurationMinutes: number;
-  searxngApiUrl: string;
   braveSearchApiKey: string;
   braveLLMApiKey: string;
   mojeekApiKey: string;

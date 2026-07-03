@@ -1,5 +1,4 @@
 [GENERAL]
-SIMILARITY_MEASURE = "cosine"
 KEEP_ALIVE = "5m"
 BASE_URL = ""
 PRIVATE_SESSION_DURATION_MINUTES = 1440
@@ -8,58 +7,20 @@ PRIVATE_SESSION_DURATION_MINUTES = 1440
 # Selected models (embedding + memory-processing model) are likewise DB-backed
 # and configured from the Settings UI.
 
-[MODELS.OPENAI]
-API_KEY = ""
+[SECURITY]
+# REQUIRED for credential storage. A passphrase of your choosing, used to
+# derive the key that encrypts provider/search API keys and MCP auth at rest
+# (AES-256-GCM). Never auto-generated — until this is set, the app blocks
+# usage and the Settings UI shows an error. Changing it later re-derives a
+# different key, so existing encrypted credentials become unreadable and must
+# be re-entered via Settings.
+ENCRYPTION_PASSPHRASE = ""
 
-[MODELS.GROQ]
-API_KEY = ""
-
-[MODELS.OPENROUTER]
-API_KEY = ""
-
-[MODELS.ANTHROPIC]
-API_KEY = ""
-
-[MODELS.GEMINI]
-API_KEY = ""
-
-[MODELS.CUSTOM_OPENAI]
-API_KEY = ""
-API_URL = ""
-MODEL_NAME = ""
-
-[MODELS.OLLAMA]
-API_URL = ""
-
-[MODELS.DEEPSEEK]
-API_KEY = ""
-
-[MODELS.AIMLAPI]
-API_KEY = ""
-
-[MODELS.LM_STUDIO]
-API_URL = ""
-
-[API_ENDPOINTS]
-SEARXNG = ""
-
-[SEARCH]
-# Search provider + locale preferences (PROVIDER, PRIVATE_PROVIDER,
-# FALLBACK_PROVIDER, LANGUAGE, REGION) have been migrated to the database
-# (app_settings table). Manage them from Settings → Search Providers.
-# Provider credentials/endpoints below stay here (secrets/infra).
-
-[SEARCH.PROVIDERS.SEARXNG]
-API_URL = ""
-
-[SEARCH.PROVIDERS.BRAVE_SEARCH]
-API_KEY = ""
-
-[SEARCH.PROVIDERS.BRAVE_LLM]
-API_KEY = ""
-
-[SEARCH.PROVIDERS.MOJEEK]
-API_KEY = ""
+# Model/search provider API keys have migrated to the database (`credentials`
+# table, encrypted). Manage them from Settings → API Keys / Search Providers.
+# Provider/search endpoint URLs (Ollama, LM Studio, Custom OpenAI, SearXNG)
+# have likewise migrated to the database (app_settings table, unencrypted).
+# Manage them from Settings → API Keys / Model Settings / Search Providers.
 
 [TOOLS.CODE_EXECUTION]
 ENABLED = false
@@ -71,4 +32,4 @@ MAX_OUTPUT_CHARS = 50000
 
 # [TOOLS.IMAGE_GENERATION] has been migrated to the database (app_settings
 # table). Manage it from Settings → Image Generation. The OpenRouter API key it
-# uses stays in [MODELS.OPENROUTER].
+# uses is encrypted in the database (`credentials` table).

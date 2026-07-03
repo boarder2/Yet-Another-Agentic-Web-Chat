@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { mcpServers } from '@/lib/db/schema';
 import { redactServer } from '@/lib/mcp/types';
+import { encrypt, isEncryptionConfigured } from '@/lib/encryption';
 
 export async function GET() {
   try {
@@ -24,6 +25,19 @@ export async function POST(req: NextRequest) {
     }
     if (!body.url || typeof body.url !== 'string') {
       return NextResponse.json({ error: 'url required' }, { status: 400 });
+    }
+
+    if (
+      (body.secretToken || body.oauthClientSecret) &&
+      !isEncryptionConfigured()
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            'No encryption passphrase configured. Set SECURITY.ENCRYPTION_PASSPHRASE in config.toml before saving MCP secrets.',
+        },
+        { status: 503 },
+      );
     }
 
     // Validate URL
@@ -55,10 +69,13 @@ export async function POST(req: NextRequest) {
           'none',
         enabled: body.enabled !== false,
         headerName: (body.headerName as string | undefined) ?? null,
-        secretToken: (body.secretToken as string | undefined) ?? null,
+        secretToken: body.secretToken
+          ? encrypt(body.secretToken as string)
+          : null,
         oauthClientId: (body.oauthClientId as string | undefined) ?? null,
-        oauthClientSecret:
-          (body.oauthClientSecret as string | undefined) ?? null,
+        oauthClientSecret: body.oauthClientSecret
+          ? encrypt(body.oauthClientSecret as string)
+          : null,
         oauthScope: (body.oauthScope as string | undefined) ?? null,
       })
       .returning();

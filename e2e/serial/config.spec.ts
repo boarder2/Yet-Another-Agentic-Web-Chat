@@ -1,4 +1,5 @@
 import { test, expect } from '../fixtures/api';
+import { MASKED_SECRET } from '../../src/lib/maskedSecret';
 
 // updateConfig() (src/lib/config.ts) does a read-modify-write of the whole
 // config.toml file — concurrent POSTs from different tests could lose one
@@ -47,14 +48,14 @@ test.describe('GET /api/config', () => {
     expect(typeof body.embeddingModelProviders).toBe('object');
   });
 
-  test('masks a configured api key as "protected"', async ({ request }) => {
+  test('masks a configured api key with the sentinel', async ({ request }) => {
     const fakeKey = 'sk-test-fake-key-masking-check';
     await request.post('/api/config', { data: { openaiApiKey: fakeKey } });
     try {
       const res = await request.get('/api/config');
       expect(res.status()).toBe(200);
       const body = await res.json();
-      expect(body.openaiApiKey).toBe('protected');
+      expect(body.openaiApiKey).toBe(MASKED_SECRET);
     } finally {
       // Restore: clear the key so config.toml is left as it was
       await request.post('/api/config', { data: { openaiApiKey: '' } });
@@ -62,7 +63,7 @@ test.describe('GET /api/config', () => {
   });
 
   test('clearing an api key makes it falsy in GET', async ({ request }) => {
-    // Create BOTH branches deterministically: set → 'protected', clear → falsy.
+    // Create BOTH branches deterministically: set → sentinel, clear → falsy.
     const key = 'aimlApiKey';
     const knownValue = 'sk-test-aiml-branch-check';
 
@@ -70,10 +71,10 @@ test.describe('GET /api/config', () => {
     await request.post('/api/config', { data: { [key]: knownValue } });
 
     try {
-      // Branch 1: key is set → GET returns 'protected'
+      // Branch 1: key is set → GET returns the masked sentinel
       const res1 = await request.get('/api/config');
       expect(res1.status()).toBe(200);
-      expect((await res1.json())[key]).toBe('protected');
+      expect((await res1.json())[key]).toBe(MASKED_SECRET);
 
       // Branch 2: clear the key → GET returns falsy
       await request.post('/api/config', { data: { [key]: '' } });
@@ -120,11 +121,25 @@ test.describe('GET /api/config', () => {
     expect(res.status()).toBe(200);
     const body = await res.json();
 
-    // These fields are always present with a string (possibly empty)
-    expect(typeof body.ollamaApiUrl).toBe('string');
-    expect(typeof body.searxngApiUrl).toBe('string');
+    // These fields are always present with a string (possibly empty).
+    // Provider/search endpoint URLs (ollamaApiUrl, searxngApiUrl, ...) are
+    // DB-backed settings now — see settings.spec.ts — not part of this route.
     expect(typeof body.baseUrl).toBe('string');
     expect(typeof body.privateSessionDurationMinutes).toBe('number');
+  });
+
+  test('does not include provider/search endpoint URL fields (moved to /api/settings)', async ({
+    request,
+  }) => {
+    const res = await request.get('/api/config');
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+
+    expect(body).not.toHaveProperty('ollamaApiUrl');
+    expect(body).not.toHaveProperty('lmStudioApiUrl');
+    expect(body).not.toHaveProperty('customOpenaiApiUrl');
+    expect(body).not.toHaveProperty('customOpenaiModelName');
+    expect(body).not.toHaveProperty('searxngApiUrl');
   });
 });
 
@@ -139,9 +154,12 @@ test.describe('POST /api/config', () => {
   test('persists a non-secret value and reflects it in GET', async ({
     request,
   }) => {
-    const newUrl = 'http://ollama.test:11434';
+    const before = await (await request.get('/api/config')).json();
+    const original = before.privateSessionDurationMinutes;
+    const newValue = original === 60 ? 120 : 60;
+
     const post = await request.post('/api/config', {
-      data: { ollamaApiUrl: newUrl },
+      data: { privateSessionDurationMinutes: newValue },
     });
     expect(post.status()).toBe(200);
 
@@ -149,13 +167,15 @@ test.describe('POST /api/config', () => {
       const res = await request.get('/api/config');
       expect(res.status()).toBe(200);
       const body = await res.json();
-      expect(body.ollamaApiUrl).toBe(newUrl);
+      expect(body.privateSessionDurationMinutes).toBe(newValue);
     } finally {
-      await request.post('/api/config', { data: { ollamaApiUrl: '' } });
+      await request.post('/api/config', {
+        data: { privateSessionDurationMinutes: original },
+      });
     }
   });
 
-  test('"protected" sentinel in POST preserves the existing key', async ({
+  test('masked sentinel in POST preserves the existing key', async ({
     request,
   }) => {
     const fakeKey = 'sk-test-preserve-check';
@@ -163,35 +183,37 @@ test.describe('POST /api/config', () => {
     await request.post('/api/config', { data: { groqApiKey: fakeKey } });
 
     try {
-      // POST "protected" — must NOT clear the key
-      await request.post('/api/config', { data: { groqApiKey: 'protected' } });
+      // POST the sentinel — must NOT clear the key
+      await request.post('/api/config', {
+        data: { groqApiKey: MASKED_SECRET },
+      });
 
       const res = await request.get('/api/config');
       expect(res.status()).toBe(200);
       const body = await res.json();
       // Key still set → must still be masked
-      expect(body.groqApiKey).toBe('protected');
+      expect(body.groqApiKey).toBe(MASKED_SECRET);
     } finally {
       await request.post('/api/config', { data: { groqApiKey: '' } });
     }
   });
 
-  test('"protected" sentinel preserves a search key', async ({ request }) => {
+  test('masked sentinel preserves a search key', async ({ request }) => {
     const fakeKey = 'sk-brave-search-test-key';
     await request.post('/api/config', {
       data: { braveSearchApiKey: fakeKey },
     });
 
     try {
-      // POST "protected" — must NOT clear the key
+      // POST the sentinel — must NOT clear the key
       await request.post('/api/config', {
-        data: { braveSearchApiKey: 'protected' },
+        data: { braveSearchApiKey: MASKED_SECRET },
       });
 
       const res = await request.get('/api/config');
       expect(res.status()).toBe(200);
       const body = await res.json();
-      expect(body.braveSearchApiKey).toBe('protected');
+      expect(body.braveSearchApiKey).toBe(MASKED_SECRET);
     } finally {
       await request.post('/api/config', {
         data: { braveSearchApiKey: '' },

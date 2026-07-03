@@ -1,11 +1,11 @@
 'use client';
 
 import { LoaderCircle, RefreshCw } from 'lucide-react';
-import { useState } from 'react';
-import { toast } from 'sonner';
 import SettingsSection from '../components/SettingsSection';
 import InputComponent from '../components/InputComponent';
 import { SettingsType } from '../types';
+import { useLocalStorageString } from '@/lib/hooks/useLocalStorage';
+import { useRefreshModels } from '@/lib/hooks/api/useModels';
 
 export default function ApiKeysSection({
   config,
@@ -21,21 +21,15 @@ export default function ApiKeysSection({
     value: string | string[] | number | boolean,
   ) => void;
 }) {
-  const [refreshing, setRefreshing] = useState(false);
-
-  const handleRefreshModels = async () => {
-    try {
-      setRefreshing(true);
-      const res = await fetch('/api/models?refresh=true&include_hidden=true');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      toast.success('Model list refreshed.');
-    } catch (err) {
-      console.error('Failed to refresh models:', err);
-      toast.error('Failed to refresh models');
-    } finally {
-      setRefreshing(false);
-    }
-  };
+  const { refresh, refreshing } = useRefreshModels();
+  const [ollamaApiUrl, setOllamaApiUrl] = useLocalStorageString(
+    'ollamaApiUrl',
+    '',
+  );
+  const [lmStudioApiUrl, setLmStudioApiUrl] = useLocalStorageString(
+    'lmStudioApiUrl',
+    '',
+  );
 
   return (
     <SettingsSection
@@ -44,7 +38,7 @@ export default function ApiKeysSection({
         <button
           type="button"
           className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-control border border-surface-2 hover:bg-surface-2 transition disabled:opacity-60"
-          onClick={handleRefreshModels}
+          onClick={() => refresh()}
           disabled={refreshing}
           title="Refresh models from providers"
         >
@@ -84,15 +78,9 @@ export default function ApiKeysSection({
           <InputComponent
             type="text"
             placeholder="Ollama API URL"
-            value={config.ollamaApiUrl}
-            isSaving={savingStates['ollamaApiUrl']}
-            onChange={(e) => {
-              setConfig((prev) => ({
-                ...prev!,
-                ollamaApiUrl: e.target.value,
-              }));
-            }}
-            onSave={(value) => saveConfig('ollamaApiUrl', value)}
+            value={ollamaApiUrl}
+            onChange={(e) => setOllamaApiUrl(e.target.value)}
+            onSave={() => refresh()}
           />
         </div>
 
@@ -203,15 +191,9 @@ export default function ApiKeysSection({
           <InputComponent
             type="text"
             placeholder="LM Studio API URL"
-            value={config.lmStudioApiUrl}
-            isSaving={savingStates['lmStudioApiUrl']}
-            onChange={(e) => {
-              setConfig((prev) => ({
-                ...prev!,
-                lmStudioApiUrl: e.target.value,
-              }));
-            }}
-            onSave={(value) => saveConfig('lmStudioApiUrl', value)}
+            value={lmStudioApiUrl}
+            onChange={(e) => setLmStudioApiUrl(e.target.value)}
+            onSave={() => refresh()}
           />
         </div>
       </div>

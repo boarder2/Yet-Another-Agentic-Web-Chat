@@ -7,9 +7,11 @@ description: Use when working on app settings — adding/changing a setting, the
 
 ## The split (read this first)
 
-- **`config.toml` holds ONLY secrets/infra** — API keys, DB, SearXNG URL, code-execution. **No model selection or behavior settings live there.** Never overwrite an existing `config.toml`.
-- **Everything else is DB-backed** (`app_settings` table) or **request-supplied**.
-- Non-secret, non-device settings sync **localStorage ⇄ DB**; the **DB is the durable source of truth**. Device-local UI prefs (theme, accent, bg, chat width) and secrets are excluded.
+- **`config.toml` holds ONLY genuine infra** — Docker/code-execution config, `BASE_URL`/port, and the required encryption passphrase (`SECURITY.ENCRYPTION_PASSPHRASE`, which can't live inside the thing it protects). Never auto-generated: `src/lib/encryption.ts` derives the AES key from it via scrypt; if unset, credential storage is unavailable and `GET /api/config`'s `encryptionConfigured: false` drives a full-app blocking gate (`EncryptionGate`, wraps `RootLayout`) until the user sets it. Never overwrite an existing `config.toml`.
+- **All credentials — MCP auth and provider/search API keys — live encrypted in the DB**, in a dedicated `credentials` table (`src/lib/credentials.ts`, AES-256-GCM via `src/lib/encryption.ts`), distinct from `app_settings`. `app_settings` is shipped verbatim to every client by `GET /api/settings`, so ciphertext must never land there.
+- **Provider/search endpoint URLs are DB-backed too** (Ollama, LM Studio, Custom OpenAI, SearXNG) — via the ordinary `MIGRATED_SETTING_KEYS`/localStorage-sync path below, unencrypted, same as `searchProvider`. They're non-secret, so they don't need the `credentials` table.
+- Everything else is DB-backed (`app_settings` table) or **request-supplied**.
+- Non-secret, non-device settings sync **localStorage ⇄ DB**; the **DB is the durable source of truth**. Device-local UI prefs (theme, accent, bg, chat width) are excluded.
 
 ## Adding / changing a synced setting
 
@@ -17,7 +19,7 @@ description: Use when working on app settings — adding/changing a setting, the
 2. If a value was previously read from `config.toml`, **seed it once** in `src/lib/settings/seed.ts` (first-boot migration of legacy config values into `app_settings`).
 3. To read it **server-side**, add/extend a helper in `src/lib/settings/server.ts` (`getSettings([keys])` on hot paths; `getAllSettings()` otherwise; typed getters like `getSearchProviderSelection`). Booleans are stored as `'true'`/`'false'`.
 
-**Do NOT migrate:** secrets (`openAIApiKey`, base URLs → config.toml), device-local UI prefs (`appTheme`, `userBg`, `userAccent`, `chatWidthWide`, `codeExecutionWarningAccepted`), legacy `perplexica_dashboard_*` keys.
+**Do NOT migrate:** device-local UI prefs (`appTheme`, `userBg`, `userAccent`, `chatWidthWide`, `codeExecutionWarningAccepted`), legacy `perplexica_dashboard_*` keys. Secrets never go through `MIGRATED_SETTING_KEYS`/`app_settings` at all — see `credentials.ts` above, or the `mcp-integration` skill for MCP auth.
 
 ## Sync layer — `src/lib/settings/persist.ts` (subtle; tread carefully)
 

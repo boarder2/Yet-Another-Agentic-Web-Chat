@@ -5,6 +5,7 @@ import InputComponent from '../components/InputComponent';
 import Select from '../components/Select';
 import { SettingsType } from '../types';
 import { useLocalStorageString } from '@/lib/hooks/useLocalStorage';
+import { useRefreshModels } from '@/lib/hooks/api/useModels';
 
 const PROVIDER_OPTIONS = [
   { value: 'searxng', label: 'SearXNG' },
@@ -150,8 +151,9 @@ export default function SearchProvidersSection({
     value: string | string[] | number | boolean,
   ) => void;
 }) {
-  // Provider/locale preferences are DB-backed (app_settings, synced from
-  // localStorage). The provider credentials below stay in config.toml.
+  // Provider/locale preferences and the SearXNG URL are DB-backed
+  // (app_settings, synced from localStorage). The API-key credentials below
+  // are encrypted, stored separately (credentials.ts via /api/config).
   const [provider, setProvider] = useLocalStorageString(
     'searchProvider',
     'searxng',
@@ -166,6 +168,15 @@ export default function SearchProvidersSection({
   );
   const [language, setLanguage] = useLocalStorageString('searchLanguage', 'en');
   const [region, setRegion] = useLocalStorageString('searchRegion', 'US');
+  const [searxngApiUrl, setSearxngApiUrl] = useLocalStorageString(
+    'searxngApiUrl',
+    '',
+  );
+  const { refresh } = useRefreshModels();
+
+  // Persist the edited URL and refresh models silently, mirroring the model-list
+  // invalidation /api/config's POST used to trigger when the SearXNG URL changed.
+  const handleSearxngUrlSaved = () => void refresh({ silent: true });
 
   return (
     <SettingsSection title="Search Providers">
@@ -314,15 +325,9 @@ export default function SearchProvidersSection({
           <InputComponent
             type="text"
             placeholder="http://localhost:8080"
-            value={config.searxngApiUrl || ''}
-            isSaving={savingStates['searxngApiUrl']}
-            onChange={(e) =>
-              setConfig((prev) => ({
-                ...prev!,
-                searxngApiUrl: e.target.value,
-              }))
-            }
-            onSave={(value) => saveConfig('searxngApiUrl', value)}
+            value={searxngApiUrl}
+            onChange={(e) => setSearxngApiUrl(e.target.value)}
+            onSave={handleSearxngUrlSaved}
           />
         </div>
 

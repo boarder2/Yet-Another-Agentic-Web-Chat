@@ -6,6 +6,7 @@ import Sidebar from '@/components/Sidebar';
 import { Toaster } from 'sonner';
 import ThemeController from '@/components/theme/Controller';
 import SettingsModalProvider from '@/components/settings/SettingsModalProvider';
+import EncryptionGate from '@/components/EncryptionGate';
 import Providers from './providers';
 
 const montserrat = Montserrat({
@@ -39,9 +40,11 @@ export default function RootLayout({
       <body className={cn('h-full bg-bg text-fg', montserrat.className)}>
         <Providers>
           <ThemeController>
-            <SettingsModalProvider>
-              <Sidebar>{children}</Sidebar>
-            </SettingsModalProvider>
+            <EncryptionGate>
+              <SettingsModalProvider>
+                <Sidebar>{children}</Sidebar>
+              </SettingsModalProvider>
+            </EncryptionGate>
             <Toaster
               toastOptions={{
                 unstyled: true,

@@ -118,6 +118,30 @@ test.describe('PATCH /api/settings', () => {
     await request.patch('/api/settings', { data: { [key]: '0.5' } });
   });
 
+  test('provider/search endpoint URLs round-trip (moved off /api/config)', async ({
+    request,
+  }) => {
+    const key = 'ollamaApiUrl';
+    const before = await (await request.get('/api/settings')).json();
+    const original = before[key];
+
+    const patchRes = await request.patch('/api/settings', {
+      data: { [key]: 'http://ollama.test:11434' },
+    });
+    expect(patchRes.status()).toBe(204);
+
+    const after = await (await request.get('/api/settings')).json();
+    expect(after[key]).toBe('http://ollama.test:11434');
+
+    // Confirm /api/config no longer carries this field at all.
+    const config = await (await request.get('/api/config')).json();
+    expect(config).not.toHaveProperty(key);
+
+    await request.patch('/api/settings', {
+      data: { [key]: original ?? null },
+    });
+  });
+
   test('batch-updates multiple keys in one request', async ({ request }) => {
     const key1 = 'ttsSpeed';
     const key2 = 'ttsVoice';

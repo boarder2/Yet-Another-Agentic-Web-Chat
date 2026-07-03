@@ -4,6 +4,7 @@ import { mcpServers } from '@/lib/db/schema';
 import { eq, sql } from 'drizzle-orm';
 import { invalidateServer } from '@/lib/mcp/manager';
 import { redactServer } from '@/lib/mcp/types';
+import { encrypt, isEncryptionConfigured } from '@/lib/encryption';
 
 /** Cap on per-tool override entries to keep the JSON column bounded. */
 const TOOL_CONFIG_MAX_ENTRIES = 200;
@@ -90,7 +91,21 @@ export async function PATCH(
       if (err) return NextResponse.json({ error: err }, { status: 400 });
     }
 
-    // Only accept known updatable fields
+    if (
+      (body.secretToken || body.oauthClientSecret) &&
+      !isEncryptionConfigured()
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            'No encryption passphrase configured. Set SECURITY.ENCRYPTION_PASSPHRASE in config.toml before saving MCP secrets.',
+        },
+        { status: 503 },
+      );
+    }
+
+    // Only accept known updatable fields. secretToken/oauthClientSecret are
+    // handled separately below so they can be encrypted before storage.
     const allowed = [
       'name',
       'url',
@@ -98,9 +113,7 @@ export async function PATCH(
       'authType',
       'enabled',
       'headerName',
-      'secretToken',
       'oauthClientId',
-      'oauthClientSecret',
       'oauthScope',
     ] as const;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -111,6 +124,14 @@ export async function PATCH(
         // but PATCH must accept any JSON value).
         update[key] = key === 'enabled' ? body[key] === true : body[key];
       }
+    }
+    if ('secretToken' in body) {
+      update.secretToken = body.secretToken ? encrypt(body.secretToken) : null;
+    }
+    if ('oauthClientSecret' in body) {
+      update.oauthClientSecret = body.oauthClientSecret
+        ? encrypt(body.oauthClientSecret)
+        : null;
     }
     // Changing URL/auth/transport invalidates resolved transport
     if ('url' in body || 'authType' in body || 'transport' in body) {

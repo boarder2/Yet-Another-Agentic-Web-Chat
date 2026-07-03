@@ -8,7 +8,9 @@
  * must stay free of client-only or server-only dependencies.
  *
  * Deliberately NOT migrated (stay local / elsewhere):
- * - Secrets: `openAIApiKey`, `openAIBaseURL` — live in config.toml.
+ * - Secrets: all provider/search API keys and MCP auth — encrypted in the
+ *   dedicated `credentials` table (`src/lib/credentials.ts`), never here,
+ *   since this table is shipped verbatim to every client.
  * - Device-local UI prefs: `appTheme`, `userBg`, `userAccent`, `chatWidthWide`,
  *   `codeExecutionWarningAccepted`.
  * - Legacy `perplexica_dashboard_*` keys (handled by a separate one-shot
@@ -54,9 +56,10 @@ export const MIGRATED_SETTING_KEYS = [
   'retentionChatsValue',
   'retentionScheduledRunsMode',
   'retentionScheduledRunsValue',
-  // Search provider + locale preferences (instance-wide). The provider API keys
-  // and the SearXNG URL stay in config.toml (secrets/infra). Seeded once from
-  // the legacy config.toml `[SEARCH]` block.
+  // Search provider + locale preferences (instance-wide). The provider API
+  // keys are encrypted in `credentials.ts`; the SearXNG URL is below (it's a
+  // non-secret endpoint). Seeded once from the legacy config.toml `[SEARCH]`
+  // block.
   'searchProvider',
   'searchPrivateProvider',
   'searchFallbackProvider',
@@ -65,13 +68,21 @@ export const MIGRATED_SETTING_KEYS = [
   // Hidden models (model-visibility). Seeded once from legacy
   // config.toml `GENERAL.HIDDEN_MODELS`.
   'hiddenModels',
-  // Image generation tool settings. The OpenRouter API key stays in config.toml.
-  // Seeded once from the legacy config.toml `[TOOLS.IMAGE_GENERATION]` block.
+  // Image generation tool settings. The OpenRouter API key is encrypted in
+  // `credentials.ts`. Seeded once from the legacy config.toml
+  // `[TOOLS.IMAGE_GENERATION]` block.
   'imageGenerationEnabled',
   'imageGenerationProvider',
   'imageGenerationModel',
   'imageGenerationAspectRatio',
   'imageGenerationImageSize',
+  // Provider/search endpoint URLs (non-secret; the API keys they pair with
+  // live in `credentials.ts`). Seeded once from legacy config.toml.
+  'ollamaApiUrl',
+  'lmStudioApiUrl',
+  'customOpenaiApiUrl',
+  'customOpenaiModelName',
+  'searxngApiUrl',
   // Text-to-speech
   'ttsVoice',
   'ttsEngine',

@@ -227,10 +227,15 @@ function ToolsPanel({ server }: { server: McpServer }) {
   );
 }
 
-function WorkspaceScopePanel({ server }: { server: McpServer }) {
+function WorkspaceScopePanel({
+  server,
+  scopedIds,
+}: {
+  server: McpServer;
+  scopedIds: string[];
+}) {
   const { data: activeWorkspaces = [] } = useWorkspacesList(false);
   const { data: archivedWorkspaces = [] } = useWorkspacesList(true);
-  const { data: scopedIds = [] } = useMcpServerWorkspaceScopes(server.id);
   const saveScopes = useSaveMcpServerWorkspaceScopes(server.id);
   const patch = usePatchMcpServer(server.id);
 
@@ -720,7 +725,9 @@ function ServerRow({ server }: { server: McpServer }) {
         </p>
       )}
       {showTools && <ToolsPanel server={server} />}
-      {showScope && <WorkspaceScopePanel server={server} />}
+      {showScope && (
+        <WorkspaceScopePanel server={server} scopedIds={scopedIds} />
+      )}
     </div>
   );
 }

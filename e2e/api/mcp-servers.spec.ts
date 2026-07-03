@@ -690,6 +690,34 @@ test.describe('GET/PUT /api/mcp/servers/[id]/workspaces', () => {
     expect(body).toEqual({ error: 'One or more workspace ids do not exist' });
   });
 
+  test('a rejected update leaves the previous scope untouched', async ({
+    request,
+  }) => {
+    const createRes = await request.post('/api/mcp/servers', {
+      data: { name: uniq('mcp-ws-atomic'), url: 'https://example.com/mcp' },
+    });
+    const created = (await createRes.json()).server;
+    const wsA = await seedWorkspace(request);
+
+    await request.put(`/api/mcp/servers/${created.id}/workspaces`, {
+      data: { workspaceIds: [wsA] },
+    });
+
+    // Mixing the existing valid id with a nonexistent one must reject the
+    // whole update atomically, not delete the prior scope then fail to insert.
+    const res = await request.put(`/api/mcp/servers/${created.id}/workspaces`, {
+      data: {
+        workspaceIds: [wsA, '00000000-0000-0000-0000-000000000000'],
+      },
+    });
+    expect(res.status()).toBe(400);
+
+    const getRes = await request.get(
+      `/api/mcp/servers/${created.id}/workspaces`,
+    );
+    expect((await getRes.json()).workspaceIds).toEqual([wsA]);
+  });
+
   test('persists a valid workspace list and round-trips it', async ({
     request,
   }) => {

@@ -11,6 +11,7 @@ import {
   type McpToolConfig,
   type McpToolDescriptor,
   type McpServerRow,
+  type ServerWorkspaceScope,
 } from './types';
 import { connectMcpServer } from './client';
 
@@ -135,12 +136,6 @@ export async function getEnabledServerToolConfigs(): Promise<
     if (row.toolConfig) map.set(row.id, row.toolConfig);
   }
   return map;
-}
-
-/** A server's workspace scope, as consumed by `isServerVisibleForChat()`. */
-export interface ServerWorkspaceScope {
-  workspaceIds: Set<string>;
-  visibleInGeneralChat: boolean;
 }
 
 /**

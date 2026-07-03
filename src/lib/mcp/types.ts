@@ -60,6 +60,12 @@ export function resolveToolSetting(
   };
 }
 
+/** A server's workspace scope, as produced by `getServerWorkspaceScopes()`. */
+export interface ServerWorkspaceScope {
+  workspaceIds: Set<string>;
+  visibleInGeneralChat: boolean;
+}
+
 /**
  * Whether a server should be offered in a given chat, given its workspace
  * scope. An empty (or absent) scope means "available everywhere" — the
@@ -67,9 +73,7 @@ export function resolveToolSetting(
  * plus unscoped chats when `visibleInGeneralChat` is set.
  */
 export function isServerVisibleForChat(
-  scope:
-    | { workspaceIds: Set<string>; visibleInGeneralChat: boolean }
-    | undefined,
+  scope: ServerWorkspaceScope | undefined,
   chatWorkspaceId: string | null,
 ): boolean {
   if (!scope || scope.workspaceIds.size === 0) return true;

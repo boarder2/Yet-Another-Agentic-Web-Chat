@@ -15,6 +15,7 @@ services:
       - SYS_ADMIN
     command: sleep infinity
     network_mode: host
+    init: true
 
 volumes:
   backend-dbstore:

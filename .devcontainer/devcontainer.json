@@ -9,15 +9,6 @@
   "features": {
     "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
   },
-  "forwardPorts": [5005, 4000],
-  "portsAttributes": {
-    "5005": {
-      "label": "YAAWC (Next.js)"
-    },
-    "4000": {
-      "label": "SearXNG"
-    }
-  },
   "postCreateCommand": "npm ci --fetch-timeout=600000 && npx playwright install chromium || true",
   "customizations": {
     "vscode": {

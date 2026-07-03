@@ -8,7 +8,6 @@ import {
   getCustomOpenaiApiUrl,
   getCustomOpenaiModelName,
 } from '@/lib/config';
-import { ChatOllama } from '@langchain/ollama';
 import { createAgent } from 'langchain';
 import { allTools } from '@/lib/tools';
 import { WidgetProcessRequest } from '@/lib/types/api';
@@ -61,11 +60,6 @@ async function getLLMInstance(
 
     if (chatModelProviders[provider] && chatModelProviders[provider][model]) {
       const llm = chatModelProviders[provider][model].model as BaseChatModel;
-
-      // Special handling for Ollama models
-      if (llm instanceof ChatOllama && provider === 'ollama') {
-        llm.numCtx = 2048; // Default context window
-      }
 
       return llm;
     }

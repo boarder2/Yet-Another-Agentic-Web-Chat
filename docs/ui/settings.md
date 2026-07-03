@@ -163,19 +163,18 @@ Choose which search provider (SearXNG, Brave Search, Brave LLM Context, Mojeek) 
 
 Input fields for model-provider connections. Each field saves on blur.
 
-| Field                  | Type     | Description                              |
-| ---------------------- | -------- | ---------------------------------------- |
-| **OpenAI API Key**     | Password | API key for OpenAI models                |
-| **Ollama API URL**     | Text     | Base URL for self-hosted Ollama instance |
-| **GROQ API Key**       | Password | API key for Groq models                  |
-| **OpenRouter API Key** | Password | API key for OpenRouter                   |
-| **Anthropic API Key**  | Password | API key for Anthropic (Claude) models    |
-| **Gemini API Key**     | Password | API key for Google Gemini models         |
-| **Deepseek API Key**   | Password | API key for Deepseek models              |
-| **AI/ML API Key**      | Password | API key for AI/ML platform               |
-| **LM Studio API URL**  | Text     | Base URL for LM Studio instance          |
+| Field                  | Type     | Description                           |
+| ---------------------- | -------- | ------------------------------------- |
+| **OpenAI API Key**     | Password | API key for OpenAI models             |
+| **GROQ API Key**       | Password | API key for Groq models               |
+| **OpenRouter API Key** | Password | API key for OpenRouter                |
+| **Anthropic API Key**  | Password | API key for Anthropic (Claude) models |
+| **Gemini API Key**     | Password | API key for Google Gemini models      |
+| **Deepseek API Key**   | Password | API key for Deepseek models           |
+| **AI/ML API Key**      | Password | API key for AI/ML platform            |
+| **LM Studio API URL**  | Text     | Base URL for LM Studio instance       |
 
-- API keys are encrypted credentials (`src/lib/credentials.ts`); the two `*_API_URL` fields are unencrypted DB-backed settings (`ollamaApiUrl`, `lmStudioApiUrl` in localStorage, DB-synced).
+- API keys are encrypted credentials (`src/lib/credentials.ts`); the `LM Studio API URL` field is an unencrypted DB-backed setting (`lmStudioApiUrl` in localStorage, DB-synced).
 - After saving an API key or URL, the page re-fetches `/api/config` to update available model lists.
 - A spinning indicator appears briefly beside the field during save.
 

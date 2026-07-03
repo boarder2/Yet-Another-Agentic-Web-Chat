@@ -22,10 +22,6 @@ export default function ApiKeysSection({
   ) => void;
 }) {
   const { refresh, refreshing } = useRefreshModels();
-  const [ollamaApiUrl, setOllamaApiUrl] = useLocalStorageString(
-    'ollamaApiUrl',
-    '',
-  );
   const [lmStudioApiUrl, setLmStudioApiUrl] = useLocalStorageString(
     'lmStudioApiUrl',
     '',
@@ -69,17 +65,6 @@ export default function ApiKeysSection({
               }));
             }}
             onSave={(value) => saveConfig('openaiApiKey', value)}
-          />
-        </div>
-
-        <div className="flex flex-col space-y-1">
-          <p className="text-sm">Ollama API URL</p>
-          <InputComponent
-            type="text"
-            placeholder="Ollama API URL"
-            value={ollamaApiUrl}
-            onChange={(e) => setOllamaApiUrl(e.target.value)}
-            onSave={() => refresh()}
           />
         </div>
 

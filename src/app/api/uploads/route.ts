@@ -16,7 +16,6 @@ import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
 import { Document } from '@langchain/core/documents';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { ChatOpenAI } from '@langchain/openai';
-import { ChatOllama } from '@langchain/ollama';
 import { z } from 'zod';
 import { withStructuredOutput } from '@/lib/utils/structuredOutput';
 // import { getLangfuseCallbacks } from '@/lib/tracing/langfuse';
@@ -143,12 +142,6 @@ export async function POST(req: Request) {
     } else if (chatModelProvider && chatModelConfig) {
       llm = chatModelConfig.model;
 
-      if (llm instanceof ChatOllama && chat_model_provider === 'ollama') {
-        const contextWindow = context_window
-          ? parseInt(context_window as string, 10)
-          : DEFAULT_CONTEXT_WINDOW;
-        llm.numCtx = contextWindow;
-      }
       (llm as any).contextWindowSize = context_window
         ? parseInt(context_window as string, 10)
         : DEFAULT_CONTEXT_WINDOW;

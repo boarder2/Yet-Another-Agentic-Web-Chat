@@ -1,5 +1,4 @@
 [GENERAL]
-KEEP_ALIVE = "5m"
 BASE_URL = ""
 # HIDDEN_MODELS, [GENERAL.RETENTION], and PRIVATE_SESSION_DURATION_MINUTES have
 # been migrated to the database (app_settings table). Manage them from
@@ -18,7 +17,7 @@ ENCRYPTION_PASSPHRASE = ""
 
 # Model/search provider API keys have migrated to the database (`credentials`
 # table, encrypted). Manage them from Settings → API Keys / Search Providers.
-# Provider/search endpoint URLs (Ollama, LM Studio, Custom OpenAI, SearXNG)
+# Provider/search endpoint URLs (LM Studio, Custom OpenAI, SearXNG)
 # have likewise migrated to the database (app_settings table, unencrypted).
 # Manage them from Settings → API Keys / Model Settings / Search Providers.
 

@@ -81,7 +81,6 @@ export const MIGRATED_SETTING_KEYS = [
   'imageGenerationImageSize',
   // Provider/search endpoint URLs (non-secret; the API keys they pair with
   // live in `credentials.ts`). Seeded once from legacy config.toml.
-  'ollamaApiUrl',
   'lmStudioApiUrl',
   'customOpenaiApiUrl',
   'customOpenaiModelName',

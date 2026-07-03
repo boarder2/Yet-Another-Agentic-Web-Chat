@@ -9,7 +9,7 @@ User query → API route → `SimplifiedAgent` (LangGraph React Agent) uses tool
 - **Chat Model**: agent reasoning, final answer, streamed output
 - **System Model**: tools and internal chains (URL summarization, query generation, task breakdown)
 
-Stack: Next.js (App Router) + React 19 + Tailwind 4, TanStack Query (client data fetching), LangChain/LangGraph, SQLite+Drizzle, SearXNG, Xenova embeddings, optional LangFuse tracing. Config via `config.toml` (copy from `sample.config.toml`). LLM providers: OpenAI, Anthropic, Groq, Ollama, Gemini, DeepSeek, LM Studio.
+Stack: Next.js (App Router) + React 19 + Tailwind 4, TanStack Query (client data fetching), LangChain/LangGraph, SQLite+Drizzle, SearXNG, Xenova embeddings, optional LangFuse tracing. Config via `config.toml` (copy from `sample.config.toml`). LLM providers: OpenAI, Anthropic, Groq, Gemini, DeepSeek, LM Studio.
 
 ## Focus Modes
 
@@ -32,7 +32,7 @@ Two widget kinds (`src/lib/types/widget.ts`): LLM-transformed and user-JS (Docke
 
 ## Settings
 
-`config.toml` holds **only** infrastructure config (Docker/code-execution, `BASE_URL`/port) plus a required encryption passphrase (`SECURITY.ENCRYPTION_PASSPHRASE`, never auto-generated — the app blocks usage until it's set). Credentials — model/search provider API keys and MCP auth — are DB-backed and encrypted at rest (AES-256-GCM key derived from the passphrase, `src/lib/encryption.ts`), in a dedicated `credentials` table (`src/lib/credentials.ts`) separate from `app_settings`. Provider/search endpoint URLs (Ollama, LM Studio, Custom OpenAI, SearXNG) are DB-backed too, via the ordinary settings-sync layer (unencrypted, non-secret). Everything else is DB-backed (`app_settings`) or request-supplied. Non-secret settings sync localStorage ⇄ DB (`src/lib/settings/`, DB is source of truth); model selection via `ModelPicker`; the settings UI is one `SettingsPanel` (`src/app/settings/`) shown as a page and a modal.
+`config.toml` holds **only** infrastructure config (Docker/code-execution, `BASE_URL`/port) plus a required encryption passphrase (`SECURITY.ENCRYPTION_PASSPHRASE`, never auto-generated — the app blocks usage until it's set). Credentials — model/search provider API keys and MCP auth — are DB-backed and encrypted at rest (AES-256-GCM key derived from the passphrase, `src/lib/encryption.ts`), in a dedicated `credentials` table (`src/lib/credentials.ts`) separate from `app_settings`. Provider/search endpoint URLs (LM Studio, Custom OpenAI, SearXNG) are DB-backed too, via the ordinary settings-sync layer (unencrypted, non-secret). Everything else is DB-backed (`app_settings`) or request-supplied. Non-secret settings sync localStorage ⇄ DB (`src/lib/settings/`, DB is source of truth); model selection via `ModelPicker`; the settings UI is one `SettingsPanel` (`src/app/settings/`) shown as a page and a modal.
 
 ## Conventions
 

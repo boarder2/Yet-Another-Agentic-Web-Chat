@@ -50,7 +50,6 @@ YAAWC (**Pronounced: "yawck"** — as in the sound you make when yet another AI 
   - [Docker (Recommended)](#docker-recommended)
   - [Manual Setup](#manual-setup)
   - [Encryption Passphrase](#encryption-passphrase)
-  - [Ollama Connection Errors](#ollama-connection-errors)
 - [Using as a Browser Search Engine](#using-as-a-browser-search-engine)
 - [Network \& Reverse Proxy](#network--reverse-proxy)
 - [Observability](#observability)
@@ -75,8 +74,8 @@ Want to know more about the architecture? See [docs/architecture/README.md](docs
 | **Skills**                  | On-demand instruction sets (global or per-workspace) the agent loads automatically or you invoke with `/slash` commands                                                                              |
 | **Charts**                  | Interactive bar, line, area, and pie/donut charts rendered inline in the conversation                                                                                                                |
 | **Chat History Search**     | The agent can search and quote your past conversations to answer follow-ups                                                                                                                          |
-| **10 LLM Providers**        | OpenAI, Anthropic, Groq, Ollama, Gemini, DeepSeek, LM Studio, OpenRouter, AI/ML API, Custom OpenAI                                                                                                   |
-| **6 Embedding Providers**   | OpenAI, Ollama, Gemini, Xenova Transformers (local), AI/ML API, LM Studio                                                                                                                            |
+| **9 LLM Providers**         | OpenAI, Anthropic, Groq, Gemini, DeepSeek, LM Studio, OpenRouter, AI/ML API, Custom OpenAI                                                                                                           |
+| **5 Embedding Providers**   | OpenAI, Gemini, Xenova Transformers (local), AI/ML API, LM Studio                                                                                                                                    |
 | **Dashboard Widgets**       | LLM- and code-based widgets on the dashboard and home screen, with auto-refresh, drag-and-drop layout, and export/import                                                                             |
 | **Personas**                | Custom system prompts with built-in templates (scholarly, conversational, etc.)                                                                                                                      |
 | **Research Methodologies**  | Per-message selectable research playbooks (Comparative Analysis, Literature Review, Fact-Check) with custom methodology authoring                                                                    |
@@ -303,22 +302,21 @@ Configure workspaces from `/workspaces`, or pick one inline while chatting.
 
 ### Chat Models
 
-| Provider      | Config                                 |
-| ------------- | -------------------------------------- |
-| OpenAI        | API key                                |
-| Anthropic     | API key                                |
-| Groq          | API key                                |
-| Google Gemini | API key                                |
-| DeepSeek      | API key                                |
-| OpenRouter    | API key                                |
-| AI/ML API     | API key                                |
-| Ollama        | Local URL, configurable context window |
-| LM Studio     | Local URL                              |
-| Custom OpenAI | Base URL + API key + model name        |
+| Provider      | Config                          |
+| ------------- | ------------------------------- |
+| OpenAI        | API key                         |
+| Anthropic     | API key                         |
+| Groq          | API key                         |
+| Google Gemini | API key                         |
+| DeepSeek      | API key                         |
+| OpenRouter    | API key                         |
+| AI/ML API     | API key                         |
+| LM Studio     | Local URL                       |
+| Custom OpenAI | Base URL + API key + model name |
 
 ### Embedding Models
 
-OpenAI, Ollama, Google Gemini, Xenova Transformers (fully local — no API needed), AI/ML API, LM Studio.
+OpenAI, Google Gemini, Xenova Transformers (fully local — no API needed), AI/ML API, LM Studio.
 
 All provider keys are configured from the Settings UI, encrypted at rest (see [Encryption Passphrase](#encryption-passphrase)), and never exposed in the frontend.
 
@@ -496,15 +494,6 @@ Provider/search API keys and MCP auth are stored encrypted at rest (AES-256-GCM)
 - As an `ENCRYPTION_PASSPHRASE` environment variable (takes precedence over `config.toml`).
 
 Changing the passphrase later derives a different key, so previously encrypted credentials become unreadable and must be re-entered via Settings.
-
-### Ollama Connection Errors
-
-| OS                     | Recommended URL                     |
-| ---------------------- | ----------------------------------- |
-| Windows / Mac (Docker) | `http://host.docker.internal:11434` |
-| Linux (Docker)         | `http://<host-private-ip>:11434`    |
-
-On Linux, you may also need to set `Environment="OLLAMA_HOST=0.0.0.0"` in `/etc/systemd/system/ollama.service` and restart Ollama. See the [Ollama FAQ](https://github.com/ollama/ollama/blob/main/docs/faq.md#setting-environment-variables-on-linux) for details.
 
 ## Using as a Browser Search Engine
 

@@ -8,7 +8,6 @@ import {
 import { getAvailableChatModelProviders } from '@/lib/providers';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { AIMessage, BaseMessage, HumanMessage } from '@langchain/core/messages';
-import { ChatOllama } from '@langchain/ollama';
 import { ChatOpenAI } from '@langchain/openai';
 
 interface ChatModel {
@@ -63,9 +62,6 @@ export const POST = async (req: Request) => {
       }) as unknown as BaseChatModel;
     } else if (chatModelProvider && chatModel) {
       llm = chatModel.model;
-      if (llm instanceof ChatOllama && body.chatModel?.provider === 'ollama') {
-        llm.numCtx = body.chatModel.contextWindowSize || DEFAULT_CONTEXT_WINDOW;
-      }
       (llm as unknown as { contextWindowSize?: number }).contextWindowSize =
         body.chatModel?.contextWindowSize || DEFAULT_CONTEXT_WINDOW;
     }

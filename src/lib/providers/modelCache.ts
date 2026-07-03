@@ -8,7 +8,6 @@ import {
   getGeminiApiKey,
   getGroqApiKey,
   getLMStudioApiEndpoint,
-  getOllamaApiEndpoint,
   getOpenaiApiKey,
   getOpenrouterApiKey,
 } from '../config';
@@ -41,8 +40,6 @@ const providerSignature = (provider: string): string => {
       return getAnthropicApiKey() || '';
     case 'gemini':
       return getGeminiApiKey() || '';
-    case 'ollama':
-      return getOllamaApiEndpoint() || '';
     case 'deepseek':
       return getDeepseekApiKey() || '';
     case 'aimlapi':

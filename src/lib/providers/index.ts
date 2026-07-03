@@ -7,7 +7,6 @@ import {
   getCustomOpenaiModelName,
 } from '../config';
 import { ChatOpenAI } from '@langchain/openai';
-import { loadOllamaChatModels, loadOllamaEmbeddingModels } from './ollama';
 import { loadGroqChatModels } from './groq';
 import { loadAnthropicChatModels } from './anthropic';
 import { loadGeminiChatModels, loadGeminiEmbeddingModels } from './gemini';
@@ -46,7 +45,6 @@ export const chatModelProviders: Record<
   () => Promise<Record<string, ChatModel>>
 > = {
   openai: loadOpenAIChatModels,
-  ollama: loadOllamaChatModels,
   groq: loadGroqChatModels,
   anthropic: loadAnthropicChatModels,
   gemini: loadGeminiChatModels,
@@ -61,7 +59,6 @@ export const embeddingModelProviders: Record<
   () => Promise<Record<string, EmbeddingModel>>
 > = {
   openai: loadOpenAIEmbeddingModels,
-  ollama: loadOllamaEmbeddingModels,
   gemini: loadGeminiEmbeddingModels,
   transformers: loadTransformersEmbeddingsModels,
   aimlapi: loadAimlApiEmbeddingModels,

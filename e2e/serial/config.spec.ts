@@ -123,7 +123,7 @@ test.describe('GET /api/config', () => {
     const body = await res.json();
 
     // Always present with a string (possibly empty). Provider/search endpoint
-    // URLs (ollamaApiUrl, searxngApiUrl, ...) are DB-backed settings now — see
+    // URLs (lmStudioApiUrl, searxngApiUrl, ...) are DB-backed settings now — see
     // settings.spec.ts — not part of this route.
     expect(typeof body.baseUrl).toBe('string');
   });
@@ -135,7 +135,6 @@ test.describe('GET /api/config', () => {
     expect(res.status()).toBe(200);
     const body = await res.json();
 
-    expect(body).not.toHaveProperty('ollamaApiUrl');
     expect(body).not.toHaveProperty('lmStudioApiUrl');
     expect(body).not.toHaveProperty('customOpenaiApiUrl');
     expect(body).not.toHaveProperty('customOpenaiModelName');

@@ -9,7 +9,7 @@ description: Use when working on app settings — adding/changing a setting, the
 
 - **`config.toml` holds ONLY genuine infra** — Docker/code-execution config, `BASE_URL`/port, and the required encryption passphrase (`SECURITY.ENCRYPTION_PASSPHRASE`, which can't live inside the thing it protects). Never auto-generated: `src/lib/encryption.ts` derives the AES key from it via scrypt; if unset, credential storage is unavailable and `GET /api/config`'s `encryptionConfigured: false` drives a full-app blocking gate (`EncryptionGate`, wraps `RootLayout`) until the user sets it. Never overwrite an existing `config.toml`.
 - **All credentials — MCP auth and provider/search API keys — live encrypted in the DB**, in a dedicated `credentials` table (`src/lib/credentials.ts`, AES-256-GCM via `src/lib/encryption.ts`), distinct from `app_settings`. `app_settings` is shipped verbatim to every client by `GET /api/settings`, so ciphertext must never land there.
-- **Provider/search endpoint URLs are DB-backed too** (Ollama, LM Studio, Custom OpenAI, SearXNG) — via the ordinary `MIGRATED_SETTING_KEYS`/localStorage-sync path below, unencrypted, same as `searchProvider`. They're non-secret, so they don't need the `credentials` table.
+- **Provider/search endpoint URLs are DB-backed too** (LM Studio, Custom OpenAI, SearXNG) — via the ordinary `MIGRATED_SETTING_KEYS`/localStorage-sync path below, unencrypted, same as `searchProvider`. They're non-secret, so they don't need the `credentials` table.
 - Everything else is DB-backed (`app_settings` table) or **request-supplied**.
 - Non-secret, non-device settings sync **localStorage ⇄ DB**; the **DB is the durable source of truth**. Device-local UI prefs (theme, accent, bg, chat width) are excluded.
 

@@ -11,7 +11,6 @@ import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { StringOutputParser } from '@langchain/core/output_parsers';
 import { PromptTemplate } from '@langchain/core/prompts';
 import { RunnableSequence } from '@langchain/core/runnables';
-import { ChatOllama } from '@langchain/ollama';
 import { ChatOpenAI } from '@langchain/openai';
 
 const searchTermsPrompt = `You are a search assistant. Given a natural language query, extract specific search terms to find relevant conversations in a personal chat history.
@@ -65,9 +64,6 @@ export const POST = async (req: Request) => {
       }) as unknown as BaseChatModel;
     } else if (chatModelProvider && selectedChatModel) {
       llm = selectedChatModel.model;
-      if (llm instanceof ChatOllama && chatModel?.provider === 'ollama') {
-        llm.numCtx = chatModel.contextWindowSize || DEFAULT_CONTEXT_WINDOW;
-      }
       (llm as unknown as { contextWindowSize?: number }).contextWindowSize =
         chatModel.contextWindowSize || DEFAULT_CONTEXT_WINDOW;
     }

@@ -14,12 +14,6 @@ YAAWC uses a TOML configuration file (`config.toml`) to manage settings. Create 
 
 General application settings.
 
-#### KEEP_ALIVE
-
-- **Type**: String
-- **Default**: `"5m"`
-- **Description**: How long to keep Ollama models loaded into memory. Use time suffixes like `"5m"` for 5 minutes, `"1h"` for 1 hour, or `"-1m"` for indefinite.
-
 #### BASE_URL
 
 - **Type**: String
@@ -50,7 +44,7 @@ Configuration for the sandboxed code execution tool (requires Docker).
 The following are no longer configured via `config.toml` — manage them from the Settings page in the web UI:
 
 - **Model & search provider API keys** — Settings → API Keys / Search Providers (encrypted at rest)
-- **Provider/search endpoint URLs** (Ollama, LM Studio, Custom OpenAI, SearXNG) — Settings → API Keys / Model Settings / Search Providers
+- **Provider/search endpoint URLs** (LM Studio, Custom OpenAI, SearXNG) — Settings → API Keys / Model Settings / Search Providers
 - **Model selection** (embedding + memory-processing models) — Settings UI
 - **Model visibility** (`HIDDEN_MODELS`) — Settings → Model Visibility
 - **Retention policy**, including private session duration — Settings → Retention
@@ -60,7 +54,6 @@ The following are no longer configured via `config.toml` — manage them from th
 
 ```toml
 [GENERAL]
-KEEP_ALIVE = "5m"
 BASE_URL = ""
 
 [SECURITY]

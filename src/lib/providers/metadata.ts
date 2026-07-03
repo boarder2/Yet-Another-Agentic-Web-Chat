@@ -10,7 +10,6 @@
  */
 export const PROVIDER_METADATA = {
   openai: { key: 'openai', displayName: 'OpenAI' },
-  ollama: { key: 'ollama', displayName: 'Ollama' },
   groq: { key: 'groq', displayName: 'Groq' },
   anthropic: { key: 'anthropic', displayName: 'Anthropic' },
   gemini: { key: 'gemini', displayName: 'Google Gemini' },

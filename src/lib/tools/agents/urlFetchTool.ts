@@ -173,7 +173,7 @@ Provide a comprehensive summary of the above web page content, focusing on infor
 
             // Emit token usage from this LLM call so parent agent can accumulate it.
             // Prefer usage_metadata (standardized LangChain field); fall back to
-            // response_metadata.usage for OpenAI-format providers (Ollama, LM Studio, etc.)
+            // response_metadata.usage for OpenAI-format providers (LM Studio, etc.)
             // that don't populate usage_metadata but do include prompt_tokens/completion_tokens.
             const usageData =
               result.usage_metadata ??

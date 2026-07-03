@@ -121,17 +121,17 @@ test.describe('PATCH /api/settings', () => {
   test('provider/search endpoint URLs round-trip (moved off /api/config)', async ({
     request,
   }) => {
-    const key = 'ollamaApiUrl';
+    const key = 'lmStudioApiUrl';
     const before = await (await request.get('/api/settings')).json();
     const original = before[key];
 
     const patchRes = await request.patch('/api/settings', {
-      data: { [key]: 'http://ollama.test:11434' },
+      data: { [key]: 'http://lmstudio.test:1234' },
     });
     expect(patchRes.status()).toBe(204);
 
     const after = await (await request.get('/api/settings')).json();
-    expect(after[key]).toBe('http://ollama.test:11434');
+    expect(after[key]).toBe('http://lmstudio.test:1234');
 
     // Confirm /api/config no longer carries this field at all.
     const config = await (await request.get('/api/config')).json();

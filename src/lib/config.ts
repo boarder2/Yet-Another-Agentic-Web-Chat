@@ -1,7 +1,6 @@
 import toml from '@iarna/toml';
 import { getCredential } from '@/lib/credentials';
 import {
-  getOllamaApiUrl,
   getLMStudioApiUrl,
   getSearxngApiUrl,
   getCustomOpenaiUrlAndModel,
@@ -17,7 +16,6 @@ const configFileName = 'config.toml';
 
 interface Config {
   GENERAL: {
-    KEEP_ALIVE: string;
     BASE_URL?: string;
     HIDDEN_MODELS: string[];
     PRIVATE_SESSION_DURATION_MINUTES?: number;
@@ -56,9 +54,6 @@ interface Config {
     };
     GEMINI: {
       API_KEY: string;
-    };
-    OLLAMA: {
-      API_URL: string;
     };
     DEEPSEEK: {
       API_KEY: string;
@@ -160,8 +155,6 @@ const loadConfig = () => {
   return {} as Config;
 };
 
-export const getKeepAlive = () => loadConfig().GENERAL.KEEP_ALIVE;
-
 export const getBaseUrl = () =>
   process.env.BASE_URL || loadConfig().GENERAL.BASE_URL;
 
@@ -203,8 +196,6 @@ export const getBraveSearchApiKey = () => getCredential('search.braveSearch');
 export const getBraveLLMApiKey = () => getCredential('search.braveLLM');
 
 export const getMojeekApiKey = () => getCredential('search.mojeek');
-
-export const getOllamaApiEndpoint = () => getOllamaApiUrl();
 
 export const getDeepseekApiKey = () => getCredential('model.deepseek');
 
@@ -353,7 +344,6 @@ export const readLegacyMigratableConfig = (): Record<string, string> => {
 
   // Provider/search endpoint URLs — non-secret, DB-backed via the same
   // migrated-settings path as the fields above.
-  put('ollamaApiUrl', cfg.MODELS?.OLLAMA?.API_URL);
   put('lmStudioApiUrl', cfg.MODELS?.LM_STUDIO?.API_URL);
   put('customOpenaiApiUrl', cfg.MODELS?.CUSTOM_OPENAI?.API_URL);
   put('customOpenaiModelName', cfg.MODELS?.CUSTOM_OPENAI?.MODEL_NAME);

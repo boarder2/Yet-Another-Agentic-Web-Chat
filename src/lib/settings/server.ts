@@ -208,11 +208,6 @@ export function getImageGenerationConfig(): ImageGenerationConfig | null {
   };
 }
 
-/** Ollama API URL. Seeded from legacy `MODELS.OLLAMA.API_URL`. */
-export function getOllamaApiUrl(): string {
-  return getSettings(['ollamaApiUrl'])['ollamaApiUrl'] ?? '';
-}
-
 /** LM Studio API URL. Seeded from legacy `MODELS.LM_STUDIO.API_URL`. */
 export function getLMStudioApiUrl(): string {
   return getSettings(['lmStudioApiUrl'])['lmStudioApiUrl'] ?? '';

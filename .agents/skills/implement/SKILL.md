@@ -12,4 +12,4 @@ Run typechecking regularly, single test files regularly, and the full test suite
 
 Once done, use /code-review to review the work.
 
-Commit your work to the current branch.
+Iterate until the build, linting, and full test suite pass without issues and code review is clean. Do not skip linting, even pre-existing issues must be fixed.

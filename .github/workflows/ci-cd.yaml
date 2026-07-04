@@ -72,7 +72,6 @@ jobs:
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
-      - run: npm run build
       - name: Run e2e tests (full suite)
         run: npm run test:e2e
         env:

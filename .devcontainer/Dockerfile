@@ -5,21 +5,21 @@ ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    curl \
-    git \
-    procps \
-    python3 \
-    pipx \
-    make \
-    g++ \
-    sqlite3 \
-    ssh \
-    jq \
-    zsh \
-    unzip \
-    sudo \
-    libsecret-1-0 libsecret-1-dev libsecret-common gnome-keyring gnome-keyring-pkcs11 seahorse \
+  ca-certificates \
+  curl \
+  git \
+  procps \
+  python3 \
+  pipx \
+  make \
+  g++ \
+  sqlite3 \
+  ssh \
+  jq \
+  zsh \
+  unzip \
+  sudo \
+  libsecret-1-0 libsecret-1-dev libsecret-common gnome-keyring gnome-keyring-pkcs11 seahorse \
   && apt-get clean && rm -rf /var/lib/apt/lists/* \
   && echo 'node ALL=(root) NOPASSWD:ALL' > /etc/sudoers.d/node \
   && chmod 0440 /etc/sudoers.d/node
@@ -35,11 +35,11 @@ RUN npm install -g playwright @playwright/cli@latest typescript-language-server 
 
 # Create directories used by the app when DATA_DIR points here
 RUN mkdir -p \
-    /home/yaawc/data \
-    /home/yaawc/uploads \
-    /home/yaawc/storage/deep_research \
-    /workspaces/YAAWC \
-    /home/node/.omp/config \
+  /home/yaawc/data \
+  /home/yaawc/uploads \
+  /home/yaawc/storage/deep_research \
+  /workspaces/YAAWC \
+  /home/node/.omp/config \
   && chown -R node:node /home/yaawc /workspaces /home/node
 
 WORKDIR /workspaces/YAAWC
@@ -51,16 +51,16 @@ RUN curl -fsSL https://claude.ai/install.sh | bash \
   && echo 'export PATH="$HOME/.local/bin:$PATH"' >> /home/node/.zshrc \
   && cat >> /home/node/.zshrc << 'EOF'
 claude-alt() {
-  (
-    while IFS='=' read -r key value; do
-      export "${key#CCALT_}=$value"
-    done < <(env | grep '^CCALT_')
-    claude "$@"
-  )
+(
+while IFS='=' read -r key value; do
+export "${key#CCALT_}=$value"
+done < <(env | grep '^CCALT_')
+claude "$@"
+)
 }
 EOF
 RUN curl -s https://ohmyposh.dev/install.sh | bash -s && echo 'eval "$(oh-my-posh init zsh --config /home/node/.omp/config/negligible-mine.omp.json)"' >> /home/node/.zshrc
-RUN curl -fsSL https://gh.io/copilot-install | bash
+# RUN curl -fsSL https://gh.io/copilot-install | bash
 
 RUN mkdir -p /home/node/.persist/.claude /home/node/.persist/.copilot \
   && touch /home/node/.persist/.claude.json /home/node/.persist/.zsh_history \

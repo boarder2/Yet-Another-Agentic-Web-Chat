@@ -6,14 +6,28 @@ import {
 } from '../utils/seed';
 
 test.describe('GET /api/approvals/pending', () => {
-  test('returns empty pending array when no approvals exist', async ({
+  // The unfiltered endpoint returns pending approvals across every chat, so its
+  // result can't be asserted empty in a shared-DB parallel run — other specs
+  // seed approvals concurrently. Assert the branch's real contract instead: our
+  // seeded approval appears in the global list. ("Empty when none" is covered,
+  // isolatably, by the chatId-filtered cases below.)
+  test('lists a pending approval in the unfiltered (all-chats) result', async ({
     request,
   }) => {
+    const { chatId, messageId, approvalId } = await seedAwaitingApproval({
+      content: 'approvals-global-list',
+    });
+
     const res = await request.get('/api/approvals/pending');
     expect(res.status()).toBe(200);
     const body = await res.json();
     expect(Array.isArray(body.pending)).toBe(true);
-    expect(body.pending).toEqual([]);
+    const mine = body.pending.find(
+      (a: { approvalId: string }) => a.approvalId === approvalId,
+    );
+    expect(mine?.chatId).toBe(chatId);
+
+    await cancelAwaitingRun(request, { messageId, chatId });
   });
 
   test('filters by chatId query param (empty result for chat with no approvals)', async ({

@@ -1,0 +1,6 @@
+# Isolated config for the Playwright suite. Intentionally minimal: tests get
+# secrets/origin (ENCRYPTION_PASSPHRASE, BASE_URL) via the webServer env and
+# everything else from the fresh, DATA_DIR-isolated test DB. Do NOT add provider
+# URLs or keys here — anything in this file seeds into the test DB and leaks into
+# every test. Keeping it empty is what keeps the suite independent of the
+# developer's real config.toml.

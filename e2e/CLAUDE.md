@@ -28,7 +28,7 @@ Install Playwright browsers (run once):
 npx playwright install --with-deps chromium
 ```
 
-A valid `config.toml` must exist at the project root (smoke tests do not call LLMs, but the app requires the file to boot). `SECURITY.ENCRYPTION_PASSPHRASE` (required for credential storage, see `settings-persistence` skill) is supplied via the `ENCRYPTION_PASSPHRASE` env var in `playwright.config.ts`'s `webServer.env`, not the shared `config.toml` — tests never need a real passphrase configured.
+The suite does **not** read the developer's root `config.toml`. `playwright.config.ts`'s `webServer.env` sets `CONFIG_PATH` to the committed, intentionally-empty `e2e/config.test.toml`, so nothing from a local config seeds into the test DB (`seedSettingsFromConfig` runs on boot and would otherwise migrate provider URLs like `MODELS.LM_STUDIO.API_URL` into it). Keep `e2e/config.test.toml` empty — never add provider URLs or keys there. `SECURITY.ENCRYPTION_PASSPHRASE` (required for credential storage, see `settings-persistence` skill) is supplied via the `ENCRYPTION_PASSPHRASE` env var, not any `config.toml` — tests never need a real passphrase configured.
 
 ## Running Tests
 

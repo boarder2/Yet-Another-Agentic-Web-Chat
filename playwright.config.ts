@@ -2,6 +2,9 @@ import { defineConfig, devices } from '@playwright/test';
 import path from 'path';
 
 const TEST_DATA_DIR = path.resolve('./e2e/.test-data');
+// Minimal, committed config so the suite never reads the developer's real
+// config.toml (whose provider URLs would otherwise seed into the test DB).
+const TEST_CONFIG = path.resolve('./e2e/config.test.toml');
 const PORT = process.env.PORT ?? '5005';
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${PORT}`;
 
@@ -47,6 +50,7 @@ export default defineConfig({
         // when the container's HOSTNAME resolves to a non-loopback address.
         HOSTNAME: '0.0.0.0',
         PORT,
+        CONFIG_PATH: TEST_CONFIG,
       },
       url: BASE_URL,
       // Never reuse an already-running server: a dev server points at the real
@@ -67,6 +71,7 @@ export default defineConfig({
         BASE_URL: 'http://localhost:3000',
         HOSTNAME: '0.0.0.0',
         PORT: UNCONFIGURED_PORT,
+        CONFIG_PATH: TEST_CONFIG,
         // Explicit empty passphrase forces the "not configured" state, so the
         // gate is exercised regardless of any passphrase in the local config.toml.
         ENCRYPTION_PASSPHRASE: '',

@@ -111,8 +111,10 @@ interface Config {
 const loadConfig = () => {
   // Server-side only
   if (typeof window === 'undefined') {
+    const configPath =
+      process.env.CONFIG_PATH || path!.join(process.cwd(), configFileName);
     const config = toml.parse(
-      fs!.readFileSync(path!.join(process.cwd(), `${configFileName}`), 'utf-8'),
+      fs!.readFileSync(configPath, 'utf-8'),
     ) as unknown as Config;
 
     // Ensure GENERAL section exists

@@ -784,6 +784,75 @@ test.describe('GET /api/chat/runs/[messageId]/stream', () => {
     expect(replayResponseCount).toBe(originalResponseCount);
   });
 
+  test('closes the replay with a replay_complete carrying the authoritative content', async ({
+    request,
+  }) => {
+    // The reconnect/attach path gates live tokens behind this sentinel: the
+    // client stays in replay (seeded content is authoritative) until
+    // replay_complete arrives, then adopts its content and appends only live
+    // post-resume tokens. Losing the sentinel would drop or double the answer.
+    const { messageId } = await postChat(request, {
+      content: 'replay_complete test',
+    });
+
+    const replayEvents = await collectSseEvents(
+      await request.get(`/api/chat/runs/${messageId}/stream`),
+    );
+    const complete = replayEvents.find((e) => e.type === 'replay_complete') as
+      | { type: string; content?: string }
+      | undefined;
+    expect(complete).toBeDefined();
+    expect(complete!.content).toBe('This is a deterministic test answer.');
+  });
+
+  test('replays a tool-call run with markup identical to the live transcript', async ({
+    request,
+  }) => {
+    // Replay parity for the tool-rich path: the reconnect/attach reducer rebuilds
+    // the assistant row purely from replayed events, so the tool-call lifecycle
+    // events (markup + status) it receives must match what the live send emitted
+    // — otherwise a reloaded chat renders different tool chips than streamed live.
+    const wsId = await seedWorkspace(request, { name: uniq('replay-tool-ws') });
+    await seedWorkspaceFile(request, wsId, {
+      name: `${uniq('doc')}.txt`,
+      content: 'The capital of France is Paris.',
+    });
+
+    const { messageId, events: liveEvents } = await postChat(request, {
+      content: 'What is the capital of France?',
+      focusMode: 'localResearch',
+      workspaceId: wsId,
+      model: 'test-tool',
+    });
+    // Sanity: the live run actually exercised the tool path.
+    expect(
+      eventsOfType(liveEvents, 'tool_call_started').length,
+    ).toBeGreaterThan(0);
+
+    const replayEvents = await collectSseEvents(
+      await request.get(`/api/chat/runs/${messageId}/stream`),
+    );
+
+    // The markup emitted on tool_call_started must be byte-identical across live
+    // and replay (same toolCallId, same widget markup, same order).
+    const markup = (evs: ChatEvent[]) =>
+      eventsOfType(evs, 'tool_call_started').map(
+        (e) => (e.data as { content: string }).content,
+      );
+    expect(markup(replayEvents)).toEqual(markup(liveEvents));
+
+    // Tool completions (status transitions) must match too.
+    const successes = (evs: ChatEvent[]) =>
+      eventsOfType(evs, 'tool_call_success').map((e) => {
+        const d = e.data as { toolCallId: string; status: string };
+        return { toolCallId: d.toolCallId, status: d.status };
+      });
+    expect(successes(replayEvents)).toEqual(successes(liveEvents));
+
+    // And the answer text folds identically.
+    expect(joinResponseText(replayEvents)).toBe(joinResponseText(liveEvents));
+  });
+
   test('returns gone for an unknown messageId', async ({ request }) => {
     const streamRes = await request.get(`/api/chat/runs/${uid()}/stream`);
     expect(streamRes.status()).toBe(200);

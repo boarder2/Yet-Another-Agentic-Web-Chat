@@ -31,17 +31,14 @@ import {
 } from '@/lib/tools/agents';
 import { filterExecutorTools } from '@/lib/tools/panel/restrictedToolset';
 import type { ModelRef } from '@/lib/types/panel';
+import {
+  emitStreamEvent,
+  onStreamEvent,
+  type AgentEmitEvent,
+  type PanelUsage,
+} from '@/lib/streaming/events';
 
-type TokenUsage = {
-  input_tokens: number;
-  output_tokens: number;
-  total_tokens: number;
-};
-
-export type PanelUsage = {
-  usageChat: TokenUsage;
-  usageSystem: TokenUsage;
-};
+export type { PanelUsage };
 
 export interface PanelExecutorResult {
   idx: number;
@@ -202,56 +199,45 @@ export class PanelCoordinator {
   ): Promise<PanelExecutorResult> {
     const modelName = getModelName(executor.llm) || executor.ref.name;
 
-    this.emit('panel_executor_started', { executorIdx: idx, model: modelName });
+    this.emit({
+      type: 'panel_executor_started',
+      executorIdx: idx,
+      model: modelName,
+    });
 
     const isolated = new EventEmitter();
     const collected = { text: '', documents: [] as Document[] };
     let usage: PanelUsage | undefined;
 
-    isolated.on('data', (data: string) => {
-      try {
-        const parsed = JSON.parse(data);
-        if (parsed.type === 'response') {
-          const token = parsed.data || '';
-          collected.text += token;
-          if (token) {
-            this.emit('panel_executor_data', { executorIdx: idx, token });
-          }
-        } else if (parsed.type === 'sources_added') {
-          // Incremental per-search batches: accumulate.
-          if (Array.isArray(parsed.data))
-            collected.documents.push(...parsed.data);
-        } else if (parsed.type === 'sources') {
-          // The final `sources` event re-emits the agent's COMPLETE document
-          // set (the same docs already streamed via `sources_added`), so treat
-          // it as authoritative and replace — appending here would double-count
-          // every source (inflating sourceCount and duplicating URL-less docs).
-          if (Array.isArray(parsed.data)) collected.documents = parsed.data;
+    onStreamEvent(isolated, (event) => {
+      if (event.type === 'response') {
+        const token = event.data || '';
+        collected.text += token;
+        if (token) {
+          this.emit({ type: 'panel_executor_data', executorIdx: idx, token });
         }
-      } catch {
-        // ignore malformed event
-      }
-    });
-
-    isolated.on('stats', (data: string) => {
-      try {
-        const parsed = JSON.parse(data);
-        if (parsed.type === 'modelStats' && parsed.data) {
-          usage = {
-            usageChat: parsed.data.usageChat || {
-              input_tokens: 0,
-              output_tokens: 0,
-              total_tokens: 0,
-            },
-            usageSystem: parsed.data.usageSystem || {
-              input_tokens: 0,
-              output_tokens: 0,
-              total_tokens: 0,
-            },
-          };
-        }
-      } catch {
-        // ignore malformed stats
+      } else if (event.type === 'sources_added') {
+        // Incremental per-search batches: accumulate.
+        if (Array.isArray(event.data)) collected.documents.push(...event.data);
+      } else if (event.type === 'sources') {
+        // The final `sources` event re-emits the agent's COMPLETE document
+        // set (the same docs already streamed via `sources_added`), so treat
+        // it as authoritative and replace — appending here would double-count
+        // every source (inflating sourceCount and duplicating URL-less docs).
+        if (Array.isArray(event.data)) collected.documents = event.data;
+      } else if (event.type === 'model_stats' && event.data) {
+        usage = {
+          usageChat: event.data.usageChat || {
+            input_tokens: 0,
+            output_tokens: 0,
+            total_tokens: 0,
+          },
+          usageSystem: event.data.usageSystem || {
+            input_tokens: 0,
+            output_tokens: 0,
+            total_tokens: 0,
+          },
+        };
       }
     });
 
@@ -291,7 +277,8 @@ export class PanelCoordinator {
       // resolves, and the isolated listeners above are synchronous, so by this
       // point `collected` is fully populated — no flush delay is needed.
       const text = removeThinkingBlocks(collected.text).trim();
-      this.emit('panel_executor_completed', {
+      this.emit({
+        type: 'panel_executor_completed',
         executorIdx: idx,
         model: modelName,
         sourceCount: collected.documents.length,
@@ -309,7 +296,8 @@ export class PanelCoordinator {
       };
     } catch (err: unknown) {
       const error = err instanceof Error ? err.message : String(err);
-      this.emit('panel_executor_error', {
+      this.emit({
+        type: 'panel_executor_error',
         executorIdx: idx,
         model: modelName,
         error,
@@ -361,7 +349,7 @@ export class PanelCoordinator {
     return merged;
   }
 
-  private emit(type: string, data: Record<string, unknown>): void {
-    this.parentEmitter.emit('data', JSON.stringify({ type, ...data }));
+  private emit(event: AgentEmitEvent): void {
+    emitStreamEvent(this.parentEmitter, event);
   }
 }

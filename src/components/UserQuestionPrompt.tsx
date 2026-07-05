@@ -3,20 +3,7 @@
 import { useState, useCallback } from 'react';
 import { HelpCircle, X, Send, SkipForward } from 'lucide-react';
 
-export type PendingQuestion = {
-  questionId: string;
-  question: string;
-  options?: { label: string; description?: string }[];
-  multiSelect?: boolean;
-  allowFreeformInput?: boolean;
-  context?: string;
-  toolCallId?: string;
-  status: 'pending' | 'answered' | 'skipped' | 'timed_out' | 'cancelled';
-  response?: {
-    selectedOptions?: string[];
-    freeformText?: string;
-  };
-};
+export type { PendingQuestion } from '@/lib/streaming/chatState';
 
 export function UserQuestionPrompt({
   questionId,

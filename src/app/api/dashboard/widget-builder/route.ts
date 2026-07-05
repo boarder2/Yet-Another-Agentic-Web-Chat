@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { EventEmitter } from 'events';
 import { HumanMessage, AIMessage, BaseMessage } from '@langchain/core/messages';
 import { SimplifiedAgent } from '@/lib/search/simplifiedAgent';
+import { onStreamEvent } from '@/lib/streaming/events';
 import {
   resolveChatAndEmbedding,
   ModelRef,
@@ -106,24 +107,28 @@ export async function POST(req: NextRequest) {
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
-      const send = (payload: string) =>
-        controller.enqueue(encoder.encode(`data: ${payload}\n\n`));
+      const send = (payload: unknown) =>
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify(payload)}\n\n`),
+        );
 
-      emitter.on('data', send);
-      emitter.on('stats', send);
-      emitter.once('end', () => {
-        send(JSON.stringify({ type: 'end' }));
-        emitter.removeAllListeners();
-        try {
-          controller.close();
-        } catch {}
-      });
-      emitter.once('error', (e: unknown) => {
-        send(JSON.stringify({ type: 'error', data: String(e) }));
-        emitter.removeAllListeners();
-        try {
-          controller.close();
-        } catch {}
+      onStreamEvent(emitter, (event) => {
+        if (event.type === 'agent_end') {
+          send({ type: 'end' });
+          emitter.removeAllListeners();
+          try {
+            controller.close();
+          } catch {}
+        } else if (event.type === 'agent_error') {
+          send({ type: 'error', data: event.data });
+          emitter.removeAllListeners();
+          try {
+            controller.close();
+          } catch {}
+        } else {
+          // Forward the agent's own events (response, widget_proposal, …).
+          send(event);
+        }
       });
 
       // Tool allowlist is enforced server-side: we only ever pass our 4 tools.
@@ -138,7 +143,7 @@ export async function POST(req: NextRequest) {
           customSystemPrompt,
         )
         .catch((e) => {
-          send(JSON.stringify({ type: 'error', data: String(e) }));
+          send({ type: 'error', data: String(e) });
           try {
             controller.close();
           } catch {}

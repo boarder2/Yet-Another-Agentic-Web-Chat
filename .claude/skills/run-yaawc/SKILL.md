@@ -52,7 +52,7 @@ curl -s -m 10 http://localhost:5005/api/config | head -c 200   # model providers
 curl -s http://localhost:5005/api/models                        # available model ids
 ```
 
-LLM endpoints (`/api/chat`, `/api/search`) need a chat+system model (DB-backed, set in Settings) and a provider key in `config.toml`; the `test-automation` skill has the `/api/chat` payload shape and test model.
+LLM endpoints (`/api/chat`, `/api/search`) need a chat+system model (DB-backed, set in Settings) and a provider key in `config.toml`; the `api-endpoints` skill has the `/api/chat` payload shape. To exercise these without a real provider, use the env-gated `test` provider (`YAAWC_TEST_MODE=true`) — see `e2e/CLAUDE.md`.
 
 ## Run (human path)
 

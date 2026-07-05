@@ -10,6 +10,7 @@ import { getWorkspace } from '@/lib/workspaces/service';
 import db from '@/lib/db';
 import { workspaceFiles } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
+import { emitStreamEvent } from '@/lib/streaming/events';
 
 const WorkspaceCreateFileSchema = z.object({
   file: z
@@ -194,17 +195,14 @@ export function workspaceCreateFileTool(opts: {
             .where(eq(workspaceFiles.id, row.id));
         }
 
-        opts.emitter.emit(
-          'data',
-          JSON.stringify({
-            type: 'workspace_file_changed',
-            data: {
-              workspaceId: opts.workspaceId,
-              file: input.file,
-              action: 'create',
-            },
-          }),
-        );
+        emitStreamEvent(opts.emitter, {
+          type: 'workspace_file_changed',
+          data: {
+            workspaceId: opts.workspaceId,
+            file: input.file,
+            action: 'create',
+          },
+        });
 
         return new Command({
           update: {
@@ -230,17 +228,14 @@ export function workspaceCreateFileTool(opts: {
         bytes,
       });
 
-      opts.emitter.emit(
-        'data',
-        JSON.stringify({
-          type: 'workspace_file_changed',
-          data: {
-            workspaceId: opts.workspaceId,
-            file: input.file,
-            action: 'create',
-          },
-        }),
-      );
+      emitStreamEvent(opts.emitter, {
+        type: 'workspace_file_changed',
+        data: {
+          workspaceId: opts.workspaceId,
+          file: input.file,
+          action: 'create',
+        },
+      });
 
       return new Command({
         update: {

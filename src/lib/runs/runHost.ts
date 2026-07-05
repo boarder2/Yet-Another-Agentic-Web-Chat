@@ -26,6 +26,15 @@ import {
   flushRunEvents,
   dropRunEventBuffer,
 } from './runEventsPersistence';
+import {
+  emitStreamEvent,
+  onStreamEvent,
+  normalizeStreamEvent,
+  type ModelStats,
+  type ToolKind,
+  type LangGraphInterrupt,
+  type StreamEvent,
+} from '@/lib/streaming/events';
 import { deleteCheckpoint } from './checkpointer';
 import { cleanupCancelToken, registerCancelToken } from '@/lib/cancel-tokens';
 import {
@@ -46,46 +55,6 @@ import { popCallbackRunId } from '@/lib/sandbox/codeExecutionCorrelation';
 import { popCallbackRunId as popQuestionCallbackRunId } from '@/lib/userQuestion/questionCorrelation';
 
 // ── Types ──────────────────────────────────────────────────────────────────
-
-type TokenUsage = {
-  input_tokens: number;
-  output_tokens: number;
-  total_tokens: number;
-};
-
-type ModelStats = {
-  modelName: string;
-  responseTime?: number;
-  usage?: TokenUsage;
-  modelNameChat?: string;
-  modelNameSystem?: string;
-  usageChat?: TokenUsage;
-  usageSystem?: TokenUsage;
-  usedLocation?: boolean;
-  usedPersonalization?: boolean;
-  firstChatCallInputTokens?: number;
-};
-
-type ToolKind =
-  | 'ask_user'
-  | 'code_execution'
-  | 'workspace_edit'
-  | 'workspace_create'
-  | 'skill_edit'
-  | 'mcp_tool';
-
-interface InterruptValue {
-  kind: ToolKind;
-  toolCallId: string;
-  markupKey?: string | null;
-  payload: Record<string, unknown>;
-  snapshot?: Record<string, unknown> | null;
-}
-
-interface LangGraphInterrupt {
-  id: string;
-  value: InterruptValue;
-}
 
 // In-memory lock to prevent concurrent resumes for the same approvalId
 const resumeLocks = new Set<string>();
@@ -195,13 +164,12 @@ async function handleInterrupts(
 
     const markupToolCallId = resolveMarkupToolCallId(kind, markupKey);
 
-    const ev: Record<string, unknown> = {
+    // pushEvent enqueues the *_pending event via the registered persister.
+    pushEvent(run, {
       type: `${kind}_pending`,
       data: { approvalId: i.id, toolCallId, markupToolCallId, ...payload },
       messageId: run.aiMessageId,
-    };
-    // pushEvent enqueues the *_pending event via the registered persister.
-    pushEvent(run, ev);
+    });
   }
 
   pauseRun(run);
@@ -347,9 +315,10 @@ function findMarkupToolCallId(
   const pendingEv = run.eventLog.find(
     (e) =>
       e.ev.type === pendingType &&
-      (e.ev.data as Record<string, unknown>)?.approvalId === approval.id,
+      (e.ev as { data?: Record<string, unknown> }).data?.approvalId ===
+        approval.id,
   );
-  return (pendingEv?.ev.data as Record<string, unknown> | undefined)
+  return (pendingEv?.ev as { data?: Record<string, unknown> } | undefined)?.data
     ?.markupToolCallId as string | undefined;
 }
 
@@ -367,13 +336,10 @@ function emitStaleAndMarkup(
   });
   const markupToolCallId = findMarkupToolCallId(run, approval);
   if (!markupToolCallId) return;
-  run.emitter.emit(
-    'data',
-    JSON.stringify({
-      type: 'tool_call_error',
-      data: { toolCallId: markupToolCallId, status: 'error', error: reason },
-    }),
-  );
+  emitStreamEvent(run.emitter, {
+    type: 'tool_call_error',
+    data: { toolCallId: markupToolCallId, status: 'error', error: reason },
+  });
 }
 
 /** Emit the answered event (closes modals on all tabs) + update the tool-call
@@ -403,13 +369,10 @@ function emitAnsweredAndMarkup(
   if (res.decision === 'reject' || res.decision === 'always_prompt')
     extra.decision = 'rejected';
   if (res.approved === false) extra.decision = 'denied';
-  run.emitter.emit(
-    'data',
-    JSON.stringify({
-      type: 'tool_call_success',
-      data: { toolCallId: markupToolCallId, status: 'success', extra },
-    }),
-  );
+  emitStreamEvent(run.emitter, {
+    type: 'tool_call_success',
+    data: { toolCallId: markupToolCallId, status: 'success', extra },
+  });
 }
 
 type ResumeItem = { approvalId: string; response: unknown };
@@ -652,10 +615,10 @@ async function performResume(items: ResumeItem[]): Promise<void> {
         // spinning. The handler's `terminated` guard makes this a no-op if the
         // run already completed.
         try {
-          resumedRun.emitter.emit(
-            'error',
-            JSON.stringify({ data: String(err) }),
-          );
+          emitStreamEvent(resumedRun.emitter, {
+            type: 'agent_error',
+            data: String(err),
+          });
         } catch {
           // emitter already torn down; nothing more to do
         }
@@ -746,7 +709,9 @@ async function reconstructAwaitingRun(
     emitter,
     eventLog: persistedEvents.map((e) => ({
       seq: e.seq,
-      ev: e.data as Record<string, unknown>,
+      // Persisted rows may use pre-canonical approval type names; normalize so
+      // resume seeding and replay match the current vocabulary.
+      ev: normalizeStreamEvent(e.data) as StreamEvent,
     })),
     subscribers: new Map(),
     abortController,
@@ -838,7 +803,10 @@ export async function attachRunHost(params: {
   const userQuestionRunIdMap = new Map<string, string>();
   if (isResume) {
     for (const { ev } of run.eventLog) {
-      const d = (ev.data ?? ev) as Record<string, unknown>;
+      const d = ((ev as { data?: unknown }).data ?? ev) as Record<
+        string,
+        unknown
+      >;
       if (ev.type === 'code_execution_pending') {
         const runId = d.markupToolCallId as string | undefined;
         if (runId) {
@@ -849,10 +817,7 @@ export async function attachRunHost(params: {
           if (d.toolCallId)
             codeExecutionRunIdMap.set(d.toolCallId as string, runId);
         }
-      } else if (
-        ev.type === 'user_question_pending' ||
-        ev.type === 'ask_user_pending'
-      ) {
+      } else if (ev.type === 'ask_user_pending') {
         const runId = d.markupToolCallId as string | undefined;
         if (runId) {
           const qId = (d.approvalId ?? d.questionId) as string | undefined;
@@ -997,93 +962,85 @@ export async function attachRunHost(params: {
     doCancelAsync().catch(console.warn);
   });
 
-  emitter.on('data', (data: string) => {
+  // Single typed handler for every event on the run's emitter. Wire-bound
+  // events are pushed (after markup accumulation); control events are
+  // translated (model_stats→stats) or drive lifecycle (interrupt, agent_end,
+  // agent_error). tool_llm_usage is the agent's own signal and is ignored here.
+  onStreamEvent(emitter, async (event) => {
     if (terminated) return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const parsedData = JSON.parse(data) as Record<string, any>;
 
-    if (parsedData.type === 'response') {
+    if (event.type === 'response') {
       pushEvent(run, {
         type: 'response',
-        data: parsedData.data,
+        data: event.data,
         messageId: aiMessageId,
       });
-      recievedMessage += parsedData.data;
+      recievedMessage += event.data;
       scheduleFlush(false);
-    } else if (
-      parsedData.type === 'sources' ||
-      parsedData.type === 'sources_added'
-    ) {
-      if (parsedData.searchQuery) searchQuery = parsedData.searchQuery;
-      if (parsedData.searchUrl) searchUrl = parsedData.searchUrl;
+    } else if (event.type === 'sources' || event.type === 'sources_added') {
+      if (event.searchQuery) searchQuery = event.searchQuery;
+      if (event.searchUrl) searchUrl = event.searchUrl;
 
       pushEvent(run, {
-        type: parsedData.type,
-        data: parsedData.data,
-        searchQuery: parsedData.searchQuery,
+        type: event.type,
+        data: event.data,
+        searchQuery: event.searchQuery,
         messageId: aiMessageId,
         searchUrl,
       });
 
-      sources = parsedData.data;
+      sources = event.data as unknown as Record<string, unknown>[];
+      scheduleFlush(true);
+    } else if (event.type === 'tool_call_started') {
+      pushEvent(run, { ...event, messageId: aiMessageId });
+      if (event.data.content) recievedMessage += event.data.content;
+      scheduleFlush(true);
+    } else if (event.type === 'tool_call_success') {
+      pushEvent(run, { ...event, messageId: aiMessageId });
+      recievedMessage = updateToolCallMarkup(
+        recievedMessage,
+        event.data.toolCallId,
+        { status: event.data.status, extra: event.data.extra },
+      );
+      scheduleFlush(true);
+    } else if (event.type === 'tool_call_error') {
+      pushEvent(run, { ...event, messageId: aiMessageId });
+      recievedMessage = updateToolCallMarkup(
+        recievedMessage,
+        event.data.toolCallId,
+        { status: event.data.status, error: event.data.error },
+      );
       scheduleFlush(true);
     } else if (
-      parsedData.type === 'tool_call_started' ||
-      parsedData.type === 'tool_call_success' ||
-      parsedData.type === 'tool_call_error'
+      event.type === 'subagent_started' ||
+      event.type === 'subagent_completed' ||
+      event.type === 'subagent_error' ||
+      event.type === 'subagent_data'
     ) {
-      pushEvent(run, {
-        type: parsedData.type,
-        data: parsedData.data,
-        messageId: aiMessageId,
-      });
+      pushEvent(run, { ...event, messageId: aiMessageId } as StreamEvent);
 
-      if (parsedData.type === 'tool_call_started' && parsedData.data?.content) {
-        recievedMessage += parsedData.data.content;
-      } else if (
-        parsedData.type === 'tool_call_success' ||
-        parsedData.type === 'tool_call_error'
-      ) {
-        recievedMessage = updateToolCallMarkup(
-          recievedMessage,
-          parsedData.data.toolCallId,
-          {
-            status: parsedData.data.status,
-            error: parsedData.data.error,
-            extra: parsedData.data.extra,
-          },
-        );
-      }
-      scheduleFlush(true);
-    } else if (
-      parsedData.type === 'subagent_started' ||
-      parsedData.type === 'subagent_completed' ||
-      parsedData.type === 'subagent_error' ||
-      parsedData.type === 'subagent_data'
-    ) {
-      pushEvent(run, { ...parsedData, messageId: aiMessageId });
-
-      if (parsedData.type === 'subagent_started') {
-        const markup = `<SubagentExecution id="${parsedData.executionId}" name="${encodeHtmlAttribute(parsedData.name ?? '')}" task="${encodeHtmlAttribute(parsedData.task ?? '')}" status="running"></SubagentExecution>\n`;
+      if (event.type === 'subagent_started') {
+        const markup = `<SubagentExecution id="${event.executionId}" name="${encodeHtmlAttribute(event.name ?? '')}" task="${encodeHtmlAttribute(event.task ?? '')}" status="running"></SubagentExecution>\n`;
         recievedMessage += markup;
-      } else if (parsedData.type === 'subagent_data') {
-        const nestedEvent = parsedData.data;
-        const executionId = parsedData.subagentId;
+      } else if (event.type === 'subagent_data') {
+        const nestedEvent = event.data;
+        const executionId = event.subagentId;
         if (
-          nestedEvent?.type === 'tool_call_started' &&
+          nestedEvent.type === 'tool_call_started' &&
           nestedEvent.data?.content
         ) {
+          const content = nestedEvent.data.content;
           const subagentRegex = new RegExp(
             `(<SubagentExecution\\s+id="${executionId}"[^>]*>)(.*?)(</SubagentExecution>)`,
             'gs',
           );
           recievedMessage = recievedMessage.replace(
             subagentRegex,
-            (_match, openTag, content, closeTag) =>
-              `${openTag}${content}${nestedEvent.data.content}\n${closeTag}`,
+            (_match, openTag, inner, closeTag) =>
+              `${openTag}${inner}${content}\n${closeTag}`,
           );
         } else if (
-          nestedEvent?.type === 'tool_call_success' &&
+          nestedEvent.type === 'tool_call_success' &&
           nestedEvent.data?.toolCallId
         ) {
           recievedMessage = updateToolCallMarkup(
@@ -1092,7 +1049,7 @@ export async function attachRunHost(params: {
             { status: 'success' },
           );
         } else if (
-          nestedEvent?.type === 'tool_call_error' &&
+          nestedEvent.type === 'tool_call_error' &&
           nestedEvent.data?.toolCallId
         ) {
           recievedMessage = updateToolCallMarkup(
@@ -1101,13 +1058,12 @@ export async function attachRunHost(params: {
             { status: 'error', error: nestedEvent.data.error },
           );
         }
-      } else if (
-        parsedData.type === 'subagent_completed' ||
-        parsedData.type === 'subagent_error'
-      ) {
+      } else {
         const status =
-          parsedData.type === 'subagent_completed' ? 'success' : 'error';
-        const executionId = parsedData.id;
+          event.type === 'subagent_completed' ? 'success' : 'error';
+        const executionId = event.id;
+        const summary = event.summary;
+        const error = event.error;
         const subagentRegex = new RegExp(
           `<SubagentExecution\\s+id="${executionId}"([^>]*)>(.*?)<\\/SubagentExecution>`,
           'gs',
@@ -1120,16 +1076,16 @@ export async function attachRunHost(params: {
               .trim();
             if (!updatedAttrs.includes('status='))
               updatedAttrs += ` status="${status}"`;
-            if (parsedData.summary && status === 'success') {
-              const esc = parsedData.summary
+            if (summary && status === 'success') {
+              const esc = summary
                 .replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;');
               updatedAttrs += ` summary="${esc}"`;
             }
-            if (parsedData.error && status === 'error') {
-              const esc = parsedData.error
+            if (error && status === 'error') {
+              const esc = error
                 .replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
@@ -1142,84 +1098,75 @@ export async function attachRunHost(params: {
       }
       scheduleFlush(true);
     } else if (
-      parsedData.type === 'panel_executor_started' ||
-      parsedData.type === 'panel_executor_data' ||
-      parsedData.type === 'panel_executor_completed' ||
-      parsedData.type === 'panel_executor_error'
+      event.type === 'panel_executor_started' ||
+      event.type === 'panel_executor_data' ||
+      event.type === 'panel_executor_completed' ||
+      event.type === 'panel_executor_error'
     ) {
-      pushEvent(run, { ...parsedData, messageId: aiMessageId });
-      const idx = parsedData.executorIdx as number;
-      if (parsedData.type === 'panel_executor_started') {
+      pushEvent(run, { ...event, messageId: aiMessageId } as StreamEvent);
+      const idx = event.executorIdx;
+      if (event.type === 'panel_executor_started') {
         recievedMessage = applyPanelExecutorStarted(
           recievedMessage,
           idx,
-          parsedData.model ?? `Model ${idx + 1}`,
+          event.model ?? `Model ${idx + 1}`,
         );
-      } else if (parsedData.type === 'panel_executor_data') {
+      } else if (event.type === 'panel_executor_data') {
         recievedMessage = applyPanelExecutorResponseToken(
           recievedMessage,
           idx,
-          parsedData.token ?? '',
+          event.token ?? '',
         );
-      } else if (parsedData.type === 'panel_executor_completed') {
+      } else if (event.type === 'panel_executor_completed') {
         recievedMessage = applyPanelExecutorStatus(
           recievedMessage,
           idx,
           'success',
           {
-            sourceCount: parsedData.sourceCount,
-            tokens: panelExecutorTokens(parsedData.usage),
-            model: parsedData.model,
+            sourceCount: event.sourceCount,
+            tokens: panelExecutorTokens(event.usage),
+            model: event.model,
           },
         );
-      } else if (parsedData.type === 'panel_executor_error') {
+      } else {
         recievedMessage = applyPanelExecutorStatus(
           recievedMessage,
           idx,
           'error',
           {
-            error: parsedData.error,
-            model: parsedData.model,
+            error: event.error,
+            model: event.model,
           },
         );
       }
       scheduleFlush(true);
-    } else if (parsedData.type === 'chart_spec') {
-      const { chartId, spec } = parsedData.data ?? {};
+    } else if (event.type === 'chart_spec') {
+      const { chartId, spec } = event.data;
       if (chartId && spec) chartSpecs[chartId] = spec;
       pushEvent(run, {
         type: 'chart_spec',
-        data: parsedData.data,
+        data: event.data,
         messageId: aiMessageId,
       });
       scheduleFlush(true);
-    } else if (parsedData.type === 'todo_update') {
+    } else if (event.type === 'todo_update') {
       pushEvent(run, {
         type: 'todo_update',
-        data: parsedData.data,
+        data: event.data,
         messageId: aiMessageId,
       });
-    } else if (parsedData.type === 'code_execution_pending') {
-      const runId = parsedData.data?.markupToolCallId;
-      if (runId && parsedData.data?.executionId) {
-        codeExecutionRunIdMap.set(parsedData.data.executionId, runId);
-      }
+    } else if (event.type === 'code_execution_result') {
       pushEvent(run, {
-        type: parsedData.type,
-        data: parsedData.data,
-        messageId: aiMessageId,
-      });
-    } else if (parsedData.type === 'code_execution_result') {
-      pushEvent(run, {
-        type: parsedData.type,
-        data: parsedData.data,
+        type: 'code_execution_result',
+        data: event.data,
         messageId: aiMessageId,
       });
       const tcId =
-        codeExecutionRunIdMap.get(parsedData.data?.executionId) ||
-        parsedData.data?.toolCallId;
+        (event.data.executionId &&
+          codeExecutionRunIdMap.get(event.data.executionId)) ||
+        event.data.toolCallId;
       if (tcId) {
-        const d = parsedData.data;
+        const d = event.data;
         const extra: Record<string, string> = {};
         if (d.exitCode !== undefined) extra.exitCode = String(d.exitCode);
         if (d.stdout) extra.stdout = d.stdout.slice(0, 2000);
@@ -1234,84 +1181,23 @@ export async function attachRunHost(params: {
         });
       }
       scheduleFlush(true);
-    } else if (parsedData.type === 'user_question_pending') {
-      const runId = parsedData.data?.markupToolCallId;
-      if (runId && parsedData.data?.questionId) {
-        userQuestionRunIdMap.set(parsedData.data.questionId, runId);
-      }
-      pushEvent(run, {
-        type: parsedData.type,
-        data: parsedData.data,
-        messageId: aiMessageId,
-      });
-    } else if (parsedData.type === 'user_question_answered') {
-      pushEvent(run, {
-        type: parsedData.type,
-        data: parsedData.data,
-        messageId: aiMessageId,
-      });
-      const tcId =
-        userQuestionRunIdMap.get(parsedData.data?.questionId) ||
-        parsedData.data?.toolCallId;
-      if (tcId) {
-        const d = parsedData.data;
-        const extra: Record<string, string> = {};
-        if (d.selectedOptions?.length)
-          extra.selectedOptions = d.selectedOptions.join(', ');
-        if (d.freeformText) extra.freeformText = d.freeformText.slice(0, 500);
-        if (d.skipped) extra.skipped = 'true';
-        if (d.timedOut) extra.timedOut = 'true';
-        recievedMessage = updateToolCallMarkup(recievedMessage, tcId, {
-          extra,
-        });
-      }
-      scheduleFlush(true);
-    } else if (
-      parsedData.type === 'workspace_edit_approval_pending' ||
-      parsedData.type === 'workspace_edit_approval_answered' ||
-      parsedData.type === 'skill_edit_approval_pending' ||
-      parsedData.type === 'skill_edit_approval_answered'
-    ) {
-      pushEvent(run, {
-        type: parsedData.type,
-        data: parsedData.data,
-        messageId: aiMessageId,
-      });
-    } else if (parsedData.type === 'context_grew') {
+    } else if (event.type === 'context_grew') {
       pushEvent(run, {
         type: 'context_grew',
-        kind: parsedData.kind,
-        tokens: parsedData.tokens,
-        totalEstimated: parsedData.totalEstimated,
+        kind: event.kind,
+        tokens: event.tokens,
+        totalEstimated: event.totalEstimated,
         messageId: aiMessageId,
       });
-    } else if (parsedData.type === 'workspace_file_changed') {
+    } else if (event.type === 'workspace_file_changed') {
       pushEvent(run, {
-        type: parsedData.type,
-        data: parsedData.data,
+        type: 'workspace_file_changed',
+        data: event.data,
         messageId: aiMessageId,
       });
-    }
-  });
-
-  emitter.on('progress', (data: string) => {
-    if (terminated) return;
-    const parsedData = JSON.parse(data) as Record<string, unknown>;
-    if (parsedData.type === 'progress') {
-      pushEvent(run, {
-        type: 'progress',
-        data: parsedData.data,
-        messageId: aiMessageId,
-      });
-    }
-  });
-
-  emitter.on('stats', (data: string) => {
-    if (terminated) return;
-    const parsedData = JSON.parse(data) as Record<string, unknown>;
-    if (parsedData.type === 'modelStats') {
+    } else if (event.type === 'model_stats') {
       modelStats = {
-        ...(parsedData.data as ModelStats),
+        ...event.data,
         usedLocation,
         usedPersonalization,
       };
@@ -1320,104 +1206,92 @@ export async function attachRunHost(params: {
         data: modelStats,
         messageId: aiMessageId,
       });
-    }
-  });
-
-  emitter.on('interrupts', async (data: string) => {
-    if (terminated) return;
-    try {
-      const interrupts = JSON.parse(data) as LangGraphInterrupt[];
-      await handleInterrupts(run, interrupts);
-    } catch (err) {
-      console.error('[runHost] handleInterrupts failed:', err);
-    }
-  });
-
-  emitter.on('end', async () => {
-    if (terminated) return;
-
-    const endTime = Date.now();
-    modelStats = {
-      ...modelStats,
-      responseTime: endTime - startTime,
-      usedLocation,
-      usedPersonalization,
-    };
-
-    // Best-effort projection of next-turn input tokens (mirrors route.ts logic)
-    let projectedNextInputTokens: number | undefined;
-    try {
-      const assistantEstimate = Math.round(recievedMessage.length / 4);
-      if (modelStats.firstChatCallInputTokens) {
-        // Accurate path: base = actual measured input for this turn. Only the
-        // system rows appended after the user message during this turn are new
-        // relative to that base, so sum just those (in SQL) rather than
-        // re-reading the whole conversation.
-        const newRowsChars = await sumMessageContentChars(chatId, {
-          afterMessageId: userMessageId,
-        });
-        const newRowsTokens = Math.round(newRowsChars / 4);
-        projectedNextInputTokens =
-          modelStats.firstChatCallInputTokens +
-          newRowsTokens +
-          assistantEstimate;
-      } else {
-        // Fallback: estimate from all rows + fixed system-prompt estimate
-        const fromRowsChars = await sumMessageContentChars(chatId);
-        const SYSTEM_PROMPT_ESTIMATE = 3000;
-        const fromRows = Math.round(fromRowsChars / 4);
-        projectedNextInputTokens =
-          fromRows + assistantEstimate + SYSTEM_PROMPT_ESTIMATE;
+    } else if (event.type === 'interrupt') {
+      try {
+        await handleInterrupts(run, event.interrupts);
+      } catch (err) {
+        console.error('[runHost] handleInterrupts failed:', err);
       }
-    } catch (err) {
-      console.warn('[runHost] projection failed:', err);
+    } else if (event.type === 'agent_end') {
+      const endTime = Date.now();
+      modelStats = {
+        ...modelStats,
+        responseTime: endTime - startTime,
+        usedLocation,
+        usedPersonalization,
+      };
+
+      // Best-effort projection of next-turn input tokens (mirrors route.ts logic)
+      let projectedNextInputTokens: number | undefined;
+      try {
+        const assistantEstimate = Math.round(recievedMessage.length / 4);
+        if (modelStats.firstChatCallInputTokens) {
+          // Accurate path: base = actual measured input for this turn. Only the
+          // system rows appended after the user message during this turn are new
+          // relative to that base, so sum just those (in SQL) rather than
+          // re-reading the whole conversation.
+          const newRowsChars = await sumMessageContentChars(chatId, {
+            afterMessageId: userMessageId,
+          });
+          const newRowsTokens = Math.round(newRowsChars / 4);
+          projectedNextInputTokens =
+            modelStats.firstChatCallInputTokens +
+            newRowsTokens +
+            assistantEstimate;
+        } else {
+          // Fallback: estimate from all rows + fixed system-prompt estimate
+          const fromRowsChars = await sumMessageContentChars(chatId);
+          const SYSTEM_PROMPT_ESTIMATE = 3000;
+          const fromRows = Math.round(fromRowsChars / 4);
+          projectedNextInputTokens =
+            fromRows + assistantEstimate + SYSTEM_PROMPT_ESTIMATE;
+        }
+      } catch (err) {
+        console.warn('[runHost] projection failed:', err);
+      }
+
+      pushEvent(run, {
+        type: 'messageEnd',
+        messageId: aiMessageId,
+        modelStats,
+        searchQuery,
+        searchUrl,
+        usedLocation,
+        usedPersonalization,
+        memoriesUsed: memoriesUsed.length > 0 ? memoriesUsed : undefined,
+        projectedNextInputTokens,
+      });
+
+      // Delete LangGraph checkpoint on clean completion (no further resumes needed)
+      deleteCheckpoint(run.threadId).catch((e: unknown) =>
+        console.warn('[runHost] checkpoint delete on completion failed:', e),
+      );
+
+      await terminate('completed', {
+        createdAt: new Date(),
+        ...(sources.length > 0 && { sources }),
+        ...(searchQuery && { searchQuery }),
+        modelStats,
+        ...(searchUrl && { searchUrl }),
+        usedLocation,
+        usedPersonalization,
+        ...(memoriesUsed.length > 0 && { memoriesUsed }),
+        ...(Object.keys(chartSpecs).length > 0 && { chartSpecs }),
+        // no runStatus field = success
+      });
+    } else if (event.type === 'agent_error') {
+      pushEvent(run, { type: 'error', data: event.data });
+
+      deleteCheckpoint(run.threadId).catch(console.warn);
+      terminate('errored', {
+        createdAt: new Date(),
+        runStatus: 'errored',
+        ...(sources.length > 0 && { sources }),
+        ...(searchQuery && { searchQuery }),
+        ...(searchUrl && { searchUrl }),
+        ...(Object.keys(chartSpecs).length > 0 && { chartSpecs }),
+      }).catch(console.warn);
     }
-
-    pushEvent(run, {
-      type: 'messageEnd',
-      messageId: aiMessageId,
-      modelStats,
-      searchQuery,
-      searchUrl,
-      usedLocation,
-      usedPersonalization,
-      memoriesUsed: memoriesUsed.length > 0 ? memoriesUsed : undefined,
-      projectedNextInputTokens,
-    });
-
-    // Delete LangGraph checkpoint on clean completion (no further resumes needed)
-    deleteCheckpoint(run.threadId).catch((e: unknown) =>
-      console.warn('[runHost] checkpoint delete on completion failed:', e),
-    );
-
-    await terminate('completed', {
-      createdAt: new Date(),
-      ...(sources.length > 0 && { sources }),
-      ...(searchQuery && { searchQuery }),
-      modelStats,
-      ...(searchUrl && { searchUrl }),
-      usedLocation,
-      usedPersonalization,
-      ...(memoriesUsed.length > 0 && { memoriesUsed }),
-      ...(Object.keys(chartSpecs).length > 0 && { chartSpecs }),
-      // no runStatus field = success
-    });
-  });
-
-  emitter.on('error', (data: string) => {
-    if (terminated) return;
-    const parsedData = JSON.parse(data) as Record<string, unknown>;
-    pushEvent(run, { type: 'error', data: parsedData.data });
-
-    deleteCheckpoint(run.threadId).catch(console.warn);
-    terminate('errored', {
-      createdAt: new Date(),
-      runStatus: 'errored',
-      ...(sources.length > 0 && { sources }),
-      ...(searchQuery && { searchQuery }),
-      ...(searchUrl && { searchUrl }),
-      ...(Object.keys(chartSpecs).length > 0 && { chartSpecs }),
-    }).catch(console.warn);
   });
 }
 

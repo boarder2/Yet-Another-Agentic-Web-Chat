@@ -51,8 +51,6 @@ const MessageBox = ({
   sendMessage,
   handleEditMessage,
   onThinkBoxToggle,
-  analysisProgress,
-  modelStats,
   gatheringSources,
   actionMessageId,
   editInputProps,
@@ -84,29 +82,6 @@ const MessageBox = ({
     thinkBoxId: string,
     expanded: boolean,
   ) => void;
-  analysisProgress?: {
-    message: string;
-    current: number;
-    total: number;
-    subMessage?: string;
-  } | null;
-  modelStats?: {
-    usage?: {
-      input_tokens: number;
-      output_tokens: number;
-      total_tokens: number;
-    };
-    usageChat?: {
-      input_tokens: number;
-      output_tokens: number;
-      total_tokens: number;
-    };
-    usageSystem?: {
-      input_tokens: number;
-      output_tokens: number;
-      total_tokens: number;
-    };
-  } | null;
   gatheringSources?: Array<{
     searchQuery: string;
     sources: Document[];
@@ -279,8 +254,6 @@ const MessageBox = ({
           rewrite={rewrite}
           sendMessage={sendMessage}
           onThinkBoxToggle={onThinkBoxToggle}
-          analysisProgress={analysisProgress}
-          modelStats={modelStats}
           gatheringSources={gatheringSources}
           actionMessageId={actionMessageId}
           isPrivateSession={isPrivateSession}

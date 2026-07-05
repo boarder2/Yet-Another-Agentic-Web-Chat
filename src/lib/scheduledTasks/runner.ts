@@ -25,6 +25,7 @@ import {
 } from '@/lib/utils/prompts';
 import { updateToolCallMarkup } from '@/lib/utils/toolCallMarkup';
 import { SimplifiedAgent } from '@/lib/search/simplifiedAgent';
+import { onStreamEvent } from '@/lib/streaming/events';
 
 export async function runScheduledTask(
   taskId: string,
@@ -128,55 +129,35 @@ export async function runScheduledTask(
     const startTime = Date.now();
 
     await new Promise<void>((resolve, reject) => {
-      emitter.on('data', (data: string) => {
-        try {
-          const parsedData = JSON.parse(data);
-          if (parsedData.type === 'response') {
-            receivedMessage += parsedData.data;
-          } else if (
-            parsedData.type === 'sources' ||
-            parsedData.type === 'sources_added'
-          ) {
-            sources = parsedData.data;
-            if (parsedData.searchQuery) searchQuery = parsedData.searchQuery;
-            if (parsedData.searchUrl) searchUrl = parsedData.searchUrl;
-          } else if (
-            parsedData.type === 'tool_call_started' &&
-            parsedData.data?.content
-          ) {
-            receivedMessage += parsedData.data.content;
-          } else if (
-            parsedData.type === 'tool_call_success' ||
-            parsedData.type === 'tool_call_error'
-          ) {
-            receivedMessage = updateToolCallMarkup(
-              receivedMessage,
-              parsedData.data.toolCallId,
-              {
-                status: parsedData.data.status,
-                error: parsedData.data.error,
-                extra: parsedData.data.extra,
-              },
-            );
-          }
-        } catch {
-          // Ignore unparseable events
+      onStreamEvent(emitter, (event) => {
+        if (event.type === 'response') {
+          receivedMessage += event.data;
+        } else if (event.type === 'sources' || event.type === 'sources_added') {
+          sources = event.data as unknown as Array<Record<string, unknown>>;
+          if (event.searchQuery) searchQuery = event.searchQuery;
+          if (event.searchUrl) searchUrl = event.searchUrl;
+        } else if (event.type === 'tool_call_started') {
+          if (event.data.content) receivedMessage += event.data.content;
+        } else if (event.type === 'tool_call_success') {
+          receivedMessage = updateToolCallMarkup(
+            receivedMessage,
+            event.data.toolCallId,
+            { status: event.data.status, extra: event.data.extra },
+          );
+        } else if (event.type === 'tool_call_error') {
+          receivedMessage = updateToolCallMarkup(
+            receivedMessage,
+            event.data.toolCallId,
+            { status: event.data.status, error: event.data.error },
+          );
+        } else if (event.type === 'model_stats') {
+          modelStats = event.data as unknown as Record<string, unknown>;
+        } else if (event.type === 'agent_end') {
+          resolve();
+        } else if (event.type === 'agent_error') {
+          reject(new Error(event.data));
         }
       });
-
-      emitter.on('stats', (data: string) => {
-        try {
-          const parsed = JSON.parse(data);
-          if (parsed.type === 'modelStats') {
-            modelStats = parsed.data;
-          }
-        } catch {
-          // Ignore
-        }
-      });
-
-      emitter.on('end', () => resolve());
-      emitter.on('error', (e: unknown) => reject(new Error(String(e))));
 
       // 10. Start agent (do NOT await — lifecycle managed by emitter)
       agent.searchAndAnswer(

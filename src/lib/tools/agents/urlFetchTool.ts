@@ -10,6 +10,7 @@ import { SimplifiedAgentStateType } from '@/lib/state/chatAgentState';
 import { ToolMessage } from '@langchain/core/messages';
 // import { getLangfuseCallbacks } from '@/lib/tracing/langfuse';
 import { isSoftStop } from '@/lib/utils/runControl';
+import { emitStreamEvent } from '@/lib/streaming/events';
 
 // Schema for URL fetch tool input
 const URLFetchToolSchema = z.object({
@@ -193,18 +194,16 @@ Provide a comprehensive summary of the above web page content, focusing on infor
                 rawUsage.completion_tokens ||
                 rawUsage.completionTokens ||
                 0;
-              emitter.emit(
-                'tool_llm_usage',
-                JSON.stringify({
-                  target: 'system',
-                  input_tokens: inputTokens,
-                  output_tokens: outputTokens,
-                  total_tokens:
-                    rawUsage.total_tokens ||
-                    rawUsage.totalTokens ||
-                    inputTokens + outputTokens,
-                }),
-              );
+              emitStreamEvent(emitter, {
+                type: 'tool_llm_usage',
+                target: 'system',
+                input_tokens: inputTokens,
+                output_tokens: outputTokens,
+                total_tokens:
+                  rawUsage.total_tokens ||
+                  rawUsage.totalTokens ||
+                  inputTokens + outputTokens,
+              });
             }
 
             finalContent = removeThinkingBlocks(result.content as string);

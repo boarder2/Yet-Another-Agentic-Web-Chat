@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import type { RunnableConfig } from '@langchain/core/runnables';
 import type { EventEmitter } from 'events';
 import { getRunContext } from '@/lib/skills/runStore';
+import { emitStreamEvent } from '@/lib/streaming/events';
 
 const runTotals = new Map<string, number>();
 
@@ -128,15 +129,14 @@ export async function persistFromToolConfig(args: {
     runTotals.set(runId, running);
 
     const emitter = config.configurable.emitter as EventEmitter | undefined;
-    emitter?.emit(
-      'data',
-      JSON.stringify({
+    if (emitter) {
+      emitStreamEvent(emitter, {
         type: 'context_grew',
         kind,
         tokens: persistedTokens,
         totalEstimated: running,
-      }),
-    );
+      });
+    }
   } catch (err) {
     console.warn(`[persistToolContext] failed for kind=${kind}:`, err);
   }

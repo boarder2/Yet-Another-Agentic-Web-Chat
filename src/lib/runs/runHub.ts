@@ -1,4 +1,5 @@
 import type { EventEmitter } from 'stream';
+import type { StreamEvent } from '@/lib/streaming/events';
 
 export type RunStatus =
   | 'running'
@@ -9,7 +10,7 @@ export type RunStatus =
 
 export type SeqEvent = {
   seq: number;
-  ev: Record<string, unknown>;
+  ev: StreamEvent;
 };
 
 type Subscriber = {
@@ -125,7 +126,7 @@ export function setEventPersister(
  * Push an event into the run's eventLog and broadcast to all subscribers.
  * Allowed for both 'running' and 'awaiting_user' states.
  */
-export function pushEvent(run: Run, ev: Record<string, unknown>): void {
+export function pushEvent(run: Run, ev: StreamEvent): void {
   if (run.status !== 'running' && run.status !== 'awaiting_user') return;
 
   const seqEvent: SeqEvent = { seq: ++run.seq, ev };

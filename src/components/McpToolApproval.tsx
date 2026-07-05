@@ -3,18 +3,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { Plug, X, Check, Ban, ShieldCheck } from 'lucide-react';
 
-export type PendingMcpApproval = {
-  approvalId: string;
-  toolCallId?: string;
-  serverId?: string;
-  serverName: string;
-  toolName: string;
-  namespacedName: string;
-  description: string;
-  arguments: Record<string, unknown>;
-  createdAt?: number;
-  status: 'pending' | 'approved' | 'denied' | 'cancelled';
-};
+export type { PendingMcpApproval } from '@/lib/streaming/chatState';
 
 export function McpToolApproval({
   approvalId,

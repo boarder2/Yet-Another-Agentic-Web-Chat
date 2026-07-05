@@ -1,6 +1,7 @@
 import db from '@/lib/db';
 import { runEvents } from '@/lib/db/schema';
 import type { SeqEvent } from './runHub';
+import type { StreamEvent } from '@/lib/streaming/events';
 
 /**
  * Buffered persistence of milestone run events into the `run_events` table so a
@@ -13,7 +14,7 @@ import type { SeqEvent } from './runHub';
  * everything.
  */
 
-type BufferedEvent = { seq: number; ev: Record<string, unknown> };
+type BufferedEvent = { seq: number; ev: StreamEvent };
 type MessageBuffer = {
   chatId: string;
   events: BufferedEvent[];

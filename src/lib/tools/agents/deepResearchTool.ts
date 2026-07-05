@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { SubagentExecutor } from '@/lib/search/subagents/executor';
 import { getSubagentDefinition } from '@/lib/search/subagents/definitions';
 import { persistFromToolConfig } from '@/lib/utils/persistToolContext';
+import { emitStreamEvent } from '@/lib/streaming/events';
 
 // Schema for deep research tool input
 const DeepResearchToolSchema = z.object({
@@ -98,30 +99,26 @@ export const deepResearchTool = tool(
           usageChat.output_tokens > 0 ||
           usageChat.total_tokens > 0
         ) {
-          emitter.emit(
-            'tool_llm_usage',
-            JSON.stringify({
-              target: 'chat',
-              input_tokens: usageChat.input_tokens,
-              output_tokens: usageChat.output_tokens,
-              total_tokens: usageChat.total_tokens,
-            }),
-          );
+          emitStreamEvent(emitter, {
+            type: 'tool_llm_usage',
+            target: 'chat',
+            input_tokens: usageChat.input_tokens,
+            output_tokens: usageChat.output_tokens,
+            total_tokens: usageChat.total_tokens,
+          });
         }
         if (
           usageSystem.input_tokens > 0 ||
           usageSystem.output_tokens > 0 ||
           usageSystem.total_tokens > 0
         ) {
-          emitter.emit(
-            'tool_llm_usage',
-            JSON.stringify({
-              target: 'system',
-              input_tokens: usageSystem.input_tokens,
-              output_tokens: usageSystem.output_tokens,
-              total_tokens: usageSystem.total_tokens,
-            }),
-          );
+          emitStreamEvent(emitter, {
+            type: 'tool_llm_usage',
+            target: 'system',
+            input_tokens: usageSystem.input_tokens,
+            output_tokens: usageSystem.output_tokens,
+            total_tokens: usageSystem.total_tokens,
+          });
         }
       }
 

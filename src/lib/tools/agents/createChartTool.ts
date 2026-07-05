@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { RunnableConfig } from '@langchain/core/runnables';
 import crypto from 'crypto';
 import { ChartSpecSchema } from '@/lib/chart/chartSpec';
+import { emitStreamEvent } from '@/lib/streaming/events';
 
 export const createChartTool = tool(
   async (
@@ -25,13 +26,10 @@ export const createChartTool = tool(
     const chartId = crypto.randomUUID();
 
     try {
-      emitter.emit(
-        'data',
-        JSON.stringify({
-          type: 'chart_spec',
-          data: { chartId, spec },
-        }),
-      );
+      emitStreamEvent(emitter, {
+        type: 'chart_spec',
+        data: { chartId, spec },
+      });
     } catch (err) {
       console.warn('createChartTool: Failed to emit chart_spec event', err);
       return 'Error: Failed to emit chart spec event.';

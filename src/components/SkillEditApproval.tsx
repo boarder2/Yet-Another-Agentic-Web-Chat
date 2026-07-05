@@ -3,20 +3,7 @@
 import { useState, useCallback } from 'react';
 import { BookOpen, X, Check, Ban } from 'lucide-react';
 
-export type PendingSkillEditApproval = {
-  approvalId: string;
-  toolCallId?: string;
-  action: 'create' | 'update' | 'delete';
-  name: string;
-  oldDescription: string;
-  newDescription: string;
-  oldContent: string;
-  newContent: string;
-  scope: 'global' | 'workspace';
-  workspaceId?: string | null;
-  skillId?: string;
-  status: 'pending' | 'accepted' | 'rejected' | 'cancelled';
-};
+export type { PendingSkillEditApproval } from '@/lib/streaming/chatState';
 
 type DiffLine =
   | { type: 'context'; text: string; lineNo: number }

@@ -8,6 +8,7 @@ import { SimplifiedAgentStateType } from '@/lib/state/chatAgentState';
 import { ToolMessage } from '@langchain/core/messages';
 import { removeThinkingBlocks } from '@/lib/utils/contentUtils';
 import { isSoftStop } from '@/lib/utils/runControl';
+import { emitStreamEvent } from '@/lib/streaming/events';
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10 MB
 
 const ALLOWED_MIME_PREFIXES = [
@@ -219,18 +220,16 @@ Be factual and specific. Describe only what you can actually see in the image.`;
           rawUsage.completion_tokens ||
           rawUsage.completionTokens ||
           0;
-        emitter.emit(
-          'tool_llm_usage',
-          JSON.stringify({
-            target: 'system',
-            input_tokens: inputTokens,
-            output_tokens: outputTokens,
-            total_tokens:
-              rawUsage.total_tokens ||
-              rawUsage.totalTokens ||
-              inputTokens + outputTokens,
-          }),
-        );
+        emitStreamEvent(emitter, {
+          type: 'tool_llm_usage',
+          target: 'system',
+          input_tokens: inputTokens,
+          output_tokens: outputTokens,
+          total_tokens:
+            rawUsage.total_tokens ||
+            rawUsage.totalTokens ||
+            inputTokens + outputTokens,
+        });
       }
 
       const analysisContent = removeThinkingBlocks(result.content as string);

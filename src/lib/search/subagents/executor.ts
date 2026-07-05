@@ -15,6 +15,11 @@ import { SubagentDefinition } from './definitions';
 import { CachedEmbeddings } from '@/lib/utils/cachedEmbeddings';
 import { allAgentTools } from '@/lib/tools/agents';
 import { removeThinkingBlocks } from '@/lib/utils/contentUtils';
+import {
+  emitStreamEvent,
+  onStreamEvent,
+  isAgentControlEvent,
+} from '@/lib/streaming/events';
 
 /**
  * SubagentExecutor runs a SimplifiedAgent with subagent-specific constraints
@@ -73,7 +78,8 @@ export class SubagentExecutor {
     });
 
     // Emit start event to parent
-    this.emitSubagentEvent('subagent_started', {
+    emitStreamEvent(this.parentEmitter, {
+      type: 'subagent_started',
       executionId,
       name: this.definition.name,
       task,
@@ -105,43 +111,28 @@ export class SubagentExecutor {
         responseText: '',
       };
 
-      // Listen for data from the isolated emitter
-      isolatedEmitter.on('data', (data: string) => {
-        const parsed = JSON.parse(data);
-
-        // Collect response text
-        if (parsed.type === 'response') {
-          collectedData.responseText += parsed.data || '';
-        }
-
-        // Collect documents from sources_added events
-        if (parsed.type === 'sources_added' || parsed.type === 'sources') {
-          if (Array.isArray(parsed.data)) {
-            collectedData.documents.push(...parsed.data);
+      // Listen for the subagent's own events on the isolated emitter: collect
+      // its response text + documents and capture its token-usage stats.
+      onStreamEvent(isolatedEmitter, (event) => {
+        if (event.type === 'response') {
+          collectedData.responseText += event.data || '';
+        } else if (event.type === 'sources_added' || event.type === 'sources') {
+          if (Array.isArray(event.data)) {
+            collectedData.documents.push(...event.data);
           }
-        }
-      });
-
-      // Capture token usage stats emitted by the subagent
-      isolatedEmitter.on('stats', (data: string) => {
-        try {
-          const parsed = JSON.parse(data);
-          if (parsed.type === 'modelStats' && parsed.data) {
-            capturedTokenUsage = {
-              usageChat: parsed.data.usageChat || {
-                input_tokens: 0,
-                output_tokens: 0,
-                total_tokens: 0,
-              },
-              usageSystem: parsed.data.usageSystem || {
-                input_tokens: 0,
-                output_tokens: 0,
-                total_tokens: 0,
-              },
-            };
-          }
-        } catch (error) {
-          console.error('SubagentExecutor: Error parsing stats event:', error);
+        } else if (event.type === 'model_stats' && event.data) {
+          capturedTokenUsage = {
+            usageChat: event.data.usageChat || {
+              input_tokens: 0,
+              output_tokens: 0,
+              total_tokens: 0,
+            },
+            usageSystem: event.data.usageSystem || {
+              input_tokens: 0,
+              output_tokens: 0,
+              total_tokens: 0,
+            },
+          };
         }
       });
 
@@ -204,7 +195,10 @@ export class SubagentExecutor {
         `SubagentExecutor: Completed ${this.definition.name} in ${endTime - startTime}ms`,
       );
 
-      this.emitSubagentEvent('subagent_completed', execution);
+      emitStreamEvent(this.parentEmitter, {
+        type: 'subagent_completed',
+        ...execution,
+      });
       return execution;
     } catch (error: unknown) {
       console.error(
@@ -228,7 +222,10 @@ export class SubagentExecutor {
         tokenUsage: capturedTokenUsage,
       };
 
-      this.emitSubagentEvent('subagent_error', execution);
+      emitStreamEvent(this.parentEmitter, {
+        type: 'subagent_error',
+        ...execution,
+      });
       return execution;
     }
   }
@@ -257,42 +254,19 @@ export class SubagentExecutor {
   private createIsolatedEmitter(executionId: string): EventEmitter {
     const isolated = new EventEmitter();
 
-    // Forward all events to parent emitter with subagent context wrapper
-    isolated.on('data', (data: string) => {
-      try {
-        const parsed = JSON.parse(data);
-
-        // Wrap in subagent_data envelope
-        this.parentEmitter.emit(
-          'data',
-          JSON.stringify({
-            type: 'subagent_data',
-            subagentId: executionId,
-            subagentName: this.definition.name,
-            data: parsed,
-          }),
-        );
-      } catch (error) {
-        console.error('SubagentExecutor: Error forwarding event:', error);
-      }
+    // Forward the child's wire-bound events to the parent, wrapped in a
+    // subagent_data envelope. Control events (stats/end/error/interrupt/usage)
+    // are the child's own lifecycle signals and are not forwarded.
+    onStreamEvent(isolated, (event) => {
+      if (isAgentControlEvent(event)) return;
+      emitStreamEvent(this.parentEmitter, {
+        type: 'subagent_data',
+        subagentId: executionId,
+        subagentName: this.definition.name,
+        data: event,
+      });
     });
 
     return isolated;
-  }
-
-  /**
-   * Emit a subagent-specific event to the parent emitter
-   */
-  private emitSubagentEvent(
-    type: string,
-    data: Record<string, unknown> | SubagentExecution,
-  ): void {
-    this.parentEmitter.emit(
-      'data',
-      JSON.stringify({
-        type,
-        ...data,
-      }),
-    );
   }
 }

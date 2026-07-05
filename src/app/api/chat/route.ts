@@ -26,6 +26,7 @@ import { buildMemorySection } from '@/lib/prompts/memory/memoryContext';
 import { processExtraction } from '@/lib/utils/memoryExtraction';
 import { distillQueryForEmbedding } from '@/lib/utils/queryDistillation';
 import { SimplifiedAgent } from '@/lib/search/simplifiedAgent';
+import { emitStreamEvent, onStreamEvent } from '@/lib/streaming/events';
 import { buildWorkspaceSystemPromptSuffix } from '@/lib/workspaces/composeSystemPrompt';
 import { workspaceLsTool } from '@/lib/tools/workspace/ls';
 import { workspaceGrepTool } from '@/lib/tools/workspace/grep';
@@ -698,7 +699,7 @@ export const POST = async (req: Request) => {
           } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : String(err);
             console.error('[panel] coordination failed:', err);
-            stream.emit('error', JSON.stringify({ data: msg }));
+            emitStreamEvent(stream, { type: 'agent_error', data: msg });
           }
         })();
       } else {
@@ -723,7 +724,8 @@ export const POST = async (req: Request) => {
       if (autoMemoryAllowed && systemLlm) {
         const capturedChatId = message.chatId;
         const capturedWorkspaceId = resolvedWorkspaceId;
-        stream.on('end', () => {
+        onStreamEvent(stream, (event) => {
+          if (event.type !== 'agent_end') return;
           // Re-query the chat to get the authoritative workspaceId — handleHistorySave
           // runs fire-and-forget, so by stream end the row should exist.
           db.query.chats

@@ -52,10 +52,11 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  e2e:
-    # Full Playwright suite (all projects) against the mocked `test` provider —
-    # offline and deterministic. Runs on every PR and push; a failing suite
-    # fails the check, so a green build is gated on passing tests.
+  test:
+    # `npm run test` (vitest unit tests + full Playwright suite, all projects)
+    # against the mocked `test` provider — offline and deterministic. Runs on
+    # every PR and push; a failing suite fails the check, so a green build is
+    # gated on passing tests.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -72,8 +73,8 @@ jobs:
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
-      - name: Run e2e tests (full suite)
-        run: npm run test:e2e
+      - name: Run tests (unit + full e2e suite)
+        run: npm run test
         env:
           YAAWC_TEST_MODE: 'true'
       - name: Upload test artifacts

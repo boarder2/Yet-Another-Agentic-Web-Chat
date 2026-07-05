@@ -32,8 +32,6 @@ const Chat = ({
   focusMode,
   setFocusMode,
   handleEditMessage,
-  analysisProgress,
-  modelStats,
   systemPromptIds,
   setSystemPromptIds,
   selectedMethodologyId,
@@ -95,28 +93,6 @@ const Chat = ({
     content: string,
     images?: ImageAttachment[],
   ) => void;
-  analysisProgress: {
-    message: string;
-    current: number;
-    total: number;
-  } | null;
-  modelStats?: {
-    usage?: {
-      input_tokens: number;
-      output_tokens: number;
-      total_tokens: number;
-    };
-    usageChat?: {
-      input_tokens: number;
-      output_tokens: number;
-      total_tokens: number;
-    };
-    usageSystem?: {
-      input_tokens: number;
-      output_tokens: number;
-      total_tokens: number;
-    };
-  } | null;
   systemPromptIds: string[];
   setSystemPromptIds: (ids: string[]) => void;
   selectedMethodologyId: string | null;
@@ -370,8 +346,6 @@ const Chat = ({
               sendMessage={sendMessage}
               handleEditMessage={handleEditMessage}
               onThinkBoxToggle={onThinkBoxToggle}
-              analysisProgress={analysisProgress}
-              modelStats={modelStats}
               gatheringSources={gatheringSources}
               actionMessageId={currentMessageId}
               isPrivateSession={isPrivateSession}

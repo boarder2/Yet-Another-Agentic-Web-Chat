@@ -3,22 +3,7 @@
 import { useState, useCallback } from 'react';
 import { FileText, X, Check, CheckCheck, Ban, Bell } from 'lucide-react';
 
-export type PendingEditApproval = {
-  approvalId: string;
-  toolCallId?: string;
-  action: 'edit' | 'create';
-  workspaceId: string;
-  fileId?: string;
-  file: string;
-  oldString?: string;
-  newString?: string;
-  content?: string;
-  replaceAll?: boolean;
-  occurrences?: number;
-  workspaceAutoAccept: boolean;
-  fileAutoAccept: number | null;
-  status: 'pending' | 'accepted' | 'rejected' | 'cancelled';
-};
+export type { PendingEditApproval } from '@/lib/streaming/chatState';
 
 // ---- Diff renderer ----
 

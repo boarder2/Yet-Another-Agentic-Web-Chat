@@ -12,6 +12,7 @@ import {
 import { getCodeExecutionConfig } from '@/lib/config';
 import { ChartSpecSchema } from '@/lib/chart/chartSpec';
 import { persistFromToolConfig } from '@/lib/utils/persistToolContext';
+import { emitStreamEvent } from '@/lib/streaming/events';
 
 const CHART_ENVELOPE_RE = /^__CHART__(\{.*\})$/;
 
@@ -133,13 +134,10 @@ export const codeExecutionTool = tool(
     if (!approval.approved) {
       // Surface the denial as a result event so the approval modal resolves on
       // every attached tab (the acting tab already hides via local state).
-      emitter.emit(
-        'data',
-        JSON.stringify({
-          type: 'code_execution_result',
-          data: { denied: true, denyReason: approval.reason, toolCallId },
-        }),
-      );
+      emitStreamEvent(emitter, {
+        type: 'code_execution_result',
+        data: { denied: true, denyReason: approval.reason, toolCallId },
+      });
 
       const denialMessage = approval.reason
         ? `Code execution was denied by the user. User feedback: "${approval.reason}"`
@@ -210,18 +208,15 @@ export const codeExecutionTool = tool(
           `[Chart created${chartTitle ? ` — title: "${chartTitle}"` : ''}. To display it, copy this tag verbatim into your response where the chart should appear: <Chart id="${chartId}"/>]`,
         );
         try {
-          emitter.emit(
-            'data',
-            JSON.stringify({
-              type: 'chart_spec',
-              data: {
-                chartId,
-                spec: validation.data,
-                source: 'code_execution',
-                toolCallId,
-              },
-            }),
-          );
+          emitStreamEvent(emitter, {
+            type: 'chart_spec',
+            data: {
+              chartId,
+              spec: validation.data,
+              source: 'code_execution',
+              toolCallId,
+            },
+          });
         } catch (err) {
           console.warn(
             'codeExecutionTool: Failed to emit chart_spec event',
@@ -232,21 +227,18 @@ export const codeExecutionTool = tool(
       cleanedStdout = processedLines.join('\n');
     }
 
-    emitter.emit(
-      'data',
-      JSON.stringify({
-        type: 'code_execution_result',
-        data: {
-          stdout: cleanedStdout,
-          stderr: result.stderr,
-          exitCode: result.exitCode,
-          timedOut: result.timedOut,
-          oomKilled: result.oomKilled,
-          toolCallId,
-          chartIds,
-        },
-      }),
-    );
+    emitStreamEvent(emitter, {
+      type: 'code_execution_result',
+      data: {
+        stdout: cleanedStdout,
+        stderr: result.stderr,
+        exitCode: result.exitCode,
+        timedOut: result.timedOut,
+        oomKilled: result.oomKilled,
+        toolCallId,
+        chartIds,
+      },
+    });
 
     let resultText = '';
     if (result.timedOut) {

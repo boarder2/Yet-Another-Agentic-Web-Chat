@@ -12,6 +12,7 @@ import db from '@/lib/db';
 import { workspaceFiles } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import fs from 'node:fs/promises';
+import { emitStreamEvent } from '@/lib/streaming/events';
 
 const WorkspaceEditSchema = z.object({
   file: z.string().describe('Filename to edit (must exist in the workspace).'),
@@ -266,17 +267,14 @@ export function workspaceEditTool(opts: {
         bytes: Buffer.from(newText, 'utf8'),
       });
 
-      opts.emitter.emit(
-        'data',
-        JSON.stringify({
-          type: 'workspace_file_changed',
-          data: {
-            workspaceId: opts.workspaceId,
-            file: input.file,
-            action: 'edit',
-          },
-        }),
-      );
+      emitStreamEvent(opts.emitter, {
+        type: 'workspace_file_changed',
+        data: {
+          workspaceId: opts.workspaceId,
+          file: input.file,
+          action: 'edit',
+        },
+      });
 
       return new Command({
         update: {

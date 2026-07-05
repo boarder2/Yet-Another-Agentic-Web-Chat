@@ -48,29 +48,6 @@ interface SearchTabsProps {
     thinkBoxId: string,
     expanded: boolean,
   ) => void;
-  analysisProgress?: {
-    message: string;
-    current: number;
-    total: number;
-    subMessage?: string;
-  } | null;
-  modelStats?: {
-    usage?: {
-      input_tokens: number;
-      output_tokens: number;
-      total_tokens: number;
-    };
-    usageChat?: {
-      input_tokens: number;
-      output_tokens: number;
-      total_tokens: number;
-    };
-    usageSystem?: {
-      input_tokens: number;
-      output_tokens: number;
-      total_tokens: number;
-    };
-  } | null;
   gatheringSources?: Array<{
     searchQuery: string;
     sources: Document[];
@@ -95,8 +72,6 @@ const MessageTabs = ({
   rewrite,
   sendMessage,
   onThinkBoxToggle,
-  analysisProgress,
-  modelStats,
   gatheringSources,
   actionMessageId,
   isPrivateSession,
@@ -247,8 +222,6 @@ const MessageTabs = ({
         <div className="flex flex-col space-y-4 animate-fadeIn">
           {loading && isLast && (
             <MessageBoxLoading
-              progress={analysisProgress || null}
-              modelStats={modelStats}
               actionMessageId={actionMessageId}
               gatheringSources={gatheringSources}
             />

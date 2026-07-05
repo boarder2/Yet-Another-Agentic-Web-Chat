@@ -1,6 +1,7 @@
 import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { RunnableConfig } from '@langchain/core/runnables';
+import { emitStreamEvent } from '@/lib/streaming/events';
 
 const TodoItemSchema = z.object({
   content: z.string(),
@@ -49,18 +50,15 @@ export const todoListTool = tool(
 
     // Emit todo_update event with structured data
     try {
-      emitter.emit(
-        'data',
-        JSON.stringify({
-          type: 'todo_update',
-          data: {
-            todos: todos.map((t) => ({
-              content: t.content,
-              status: t.status,
-            })),
-          },
-        }),
-      );
+      emitStreamEvent(emitter, {
+        type: 'todo_update',
+        data: {
+          todos: todos.map((t) => ({
+            content: t.content,
+            status: t.status,
+          })),
+        },
+      });
     } catch (err) {
       console.warn('TodoListTool: Failed to emit todo_update event', err);
     }

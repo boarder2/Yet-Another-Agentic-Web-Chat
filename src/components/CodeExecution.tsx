@@ -9,21 +9,7 @@ import {
 } from './CodeExecutionWarning';
 import { Terminal, X } from 'lucide-react';
 
-export type PendingExecution = {
-  executionId: string;
-  code: string;
-  description?: string;
-  toolCallId?: string;
-  status: 'pending' | 'approved' | 'denied' | 'completed' | 'cancelled';
-  result?: {
-    stdout?: string;
-    stderr?: string;
-    exitCode?: number;
-    timedOut?: boolean;
-    oomKilled?: boolean;
-    denied?: boolean;
-  };
-};
+export type { PendingExecution } from '@/lib/streaming/chatState';
 
 export function CodeExecutionApproval({
   executionId,

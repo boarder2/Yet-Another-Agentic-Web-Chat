@@ -11,6 +11,7 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { UPLOADS_DIR } from '@/lib/dataDir';
+import { emitStreamEvent } from '@/lib/streaming/events';
 
 // ─── Backend interface (extensible to OpenAI etc.) ────────────────────────
 
@@ -258,16 +259,14 @@ export const imageGenerationTool = tool(
 
       // Emit token usage for stats tracking
       if (emitter && usage) {
-        emitter.emit(
-          'tool_llm_usage',
-          JSON.stringify({
-            target: 'image_gen',
-            modelName: generationConfig?.model || 'unknown',
-            input_tokens: usage.inputTokens,
-            output_tokens: usage.outputTokens,
-            total_tokens: usage.totalTokens,
-          }),
-        );
+        emitStreamEvent(emitter, {
+          type: 'tool_llm_usage',
+          target: 'image_gen',
+          modelName: generationConfig?.model || 'unknown',
+          input_tokens: usage.inputTokens,
+          output_tokens: usage.outputTokens,
+          total_tokens: usage.totalTokens,
+        });
       }
 
       if (messageId && isSoftStop(messageId)) {

@@ -45,6 +45,11 @@ import { getModelName } from '../utils/modelUtils';
 import { CachedEmbeddings } from '../utils/cachedEmbeddings';
 import { buildPersonalizationSection } from '../utils/personalization';
 import { TokenUsage } from '../utils/queryDistillation';
+import {
+  emitStreamEvent,
+  STREAM_EVENT_CHANNEL,
+  type AgentEmitEvent,
+} from '@/lib/streaming/events';
 import { resolveSkillsForChat } from '@/lib/skills/resolve';
 import { buildSkillsPromptSection } from '@/lib/skills/promptSection';
 import { setRunContext, cleanupSkillsForRun } from '@/lib/skills/runStore';
@@ -353,7 +358,7 @@ export class SimplifiedAgent {
   }
 
   private emitResponse(text: string) {
-    this.emitter.emit('data', JSON.stringify({ type: 'response', data: text }));
+    emitStreamEvent(this.emitter, { type: 'response', data: text });
   }
 
   /**
@@ -378,42 +383,37 @@ export class SimplifiedAgent {
     },
   ) {
     const imageGenTokens = usageImageGen?.total_tokens ?? 0;
-    this.emitter.emit(
-      'stats',
-      JSON.stringify({
-        type: 'modelStats',
-        data: {
-          modelName: getModelName(this.chatLlm),
-          modelNameChat: getModelName(this.chatLlm),
-          modelNameSystem: getModelName(this.systemLlm),
-          usage: {
-            input_tokens:
-              usageChat.input_tokens +
-              usageSystem.input_tokens +
-              (usageImageGen?.input_tokens ?? 0),
-            output_tokens:
-              usageChat.output_tokens +
-              usageSystem.output_tokens +
-              (usageImageGen?.output_tokens ?? 0),
-            total_tokens:
-              usageChat.total_tokens +
-              usageSystem.total_tokens +
-              imageGenTokens,
-          },
-          usageChat,
-          usageSystem,
-          usageImageGen: usageImageGen
-            ? {
-                modelName: usageImageGen.modelName,
-                input_tokens: usageImageGen.input_tokens,
-                output_tokens: usageImageGen.output_tokens,
-                total_tokens: usageImageGen.total_tokens,
-              }
-            : undefined,
-          firstChatCallInputTokens: this.firstChatCallInputTokens,
+    emitStreamEvent(this.emitter, {
+      type: 'model_stats',
+      data: {
+        modelName: getModelName(this.chatLlm),
+        modelNameChat: getModelName(this.chatLlm),
+        modelNameSystem: getModelName(this.systemLlm),
+        usage: {
+          input_tokens:
+            usageChat.input_tokens +
+            usageSystem.input_tokens +
+            (usageImageGen?.input_tokens ?? 0),
+          output_tokens:
+            usageChat.output_tokens +
+            usageSystem.output_tokens +
+            (usageImageGen?.output_tokens ?? 0),
+          total_tokens:
+            usageChat.total_tokens + usageSystem.total_tokens + imageGenTokens,
         },
-      }),
-    );
+        usageChat,
+        usageSystem,
+        usageImageGen: usageImageGen
+          ? {
+              modelName: usageImageGen.modelName,
+              input_tokens: usageImageGen.input_tokens,
+              output_tokens: usageImageGen.output_tokens,
+              total_tokens: usageImageGen.total_tokens,
+            }
+          : undefined,
+        firstChatCallInputTokens: this.firstChatCallInputTokens,
+      },
+    });
   }
 
   /**
@@ -666,7 +666,7 @@ export class SimplifiedAgent {
     initialDocuments?: Document[],
   ): Promise<void> {
     // Declared outside try so the catch block can clean it up
-    let toolLlmUsageHandler: ((data: string) => void) | null = null;
+    let toolLlmUsageHandler: ((event: AgentEmitEvent) => void) | null = null;
     let skillRunId: string | null = null;
 
     try {
@@ -1038,18 +1038,15 @@ export class SimplifiedAgent {
                   // Ignore attribute extraction errors
                 }
 
-                this.emitter.emit(
-                  'data',
-                  JSON.stringify({
-                    type: 'tool_call_started',
-                    data: {
-                      // Provide initial markup with status running; toolCallId used for later update.
-                      content: `<ToolCall type="${encodeHtmlAttribute(type)}" status="running" toolCallId="${encodeHtmlAttribute(runId)}"${extraAttr}></ToolCall>`,
-                      toolCallId: runId,
-                      status: 'running',
-                    },
-                  }),
-                );
+                emitStreamEvent(this.emitter, {
+                  type: 'tool_call_started',
+                  data: {
+                    // Provide initial markup with status running; toolCallId used for later update.
+                    content: `<ToolCall type="${encodeHtmlAttribute(type)}" status="running" toolCallId="${encodeHtmlAttribute(runId)}"${extraAttr}></ToolCall>`,
+                    toolCallId: runId,
+                    status: 'running',
+                  },
+                });
               } catch (emitErr) {
                 console.warn('Failed to emit tool_call_started event', emitErr);
               }
@@ -1108,17 +1105,14 @@ export class SimplifiedAgent {
                 if (errorMsg) {
                   if (toolCalls[runId]) delete toolCalls[runId];
                   try {
-                    this.emitter.emit(
-                      'data',
-                      JSON.stringify({
-                        type: 'tool_call_error',
-                        data: {
-                          toolCallId: runId,
-                          status: 'error',
-                          error: errorMsg.substring(0, 500),
-                        },
-                      }),
-                    );
+                    emitStreamEvent(this.emitter, {
+                      type: 'tool_call_error',
+                      data: {
+                        toolCallId: runId,
+                        status: 'error',
+                        error: errorMsg.substring(0, 500),
+                      },
+                    });
                   } catch (emitErr) {
                     console.warn(
                       'Failed to emit tool_call_error event',
@@ -1163,17 +1157,14 @@ export class SimplifiedAgent {
 
               // Emit success update so UI can swap spinner for checkmark
               try {
-                this.emitter.emit(
-                  'data',
-                  JSON.stringify({
-                    type: 'tool_call_success',
-                    data: {
-                      toolCallId: runId,
-                      status: 'success',
-                      ...(extra ? { extra } : {}),
-                    },
-                  }),
-                );
+                emitStreamEvent(this.emitter, {
+                  type: 'tool_call_success',
+                  data: {
+                    toolCallId: runId,
+                    status: 'success',
+                    ...(extra ? { extra } : {}),
+                  },
+                });
               } catch (emitErr) {
                 console.warn('Failed to emit tool_call_success event', emitErr);
               }
@@ -1223,17 +1214,14 @@ export class SimplifiedAgent {
                 'Unknown tool error';
               // Emit error update to UI
               try {
-                this.emitter.emit(
-                  'data',
-                  JSON.stringify({
-                    type: 'tool_call_error',
-                    data: {
-                      toolCallId: runId,
-                      status: 'error',
-                      error: message.substring(0, 500),
-                    },
-                  }),
-                );
+                emitStreamEvent(this.emitter, {
+                  type: 'tool_call_error',
+                  data: {
+                    toolCallId: runId,
+                    status: 'error',
+                    error: message.substring(0, 500),
+                  },
+                });
               } catch (emitErr) {
                 console.warn('Failed to emit tool_call_error event', emitErr);
               }
@@ -1287,23 +1275,25 @@ export class SimplifiedAgent {
 
       // Listen for token usage emitted by tools (url_fetch, deep_research)
       // that make their own LLM calls outside the agent's streamEvents chain.
-      toolLlmUsageHandler = (data: string) => {
+      // Shares the single event channel with every other event, so ignore all
+      // but tool_llm_usage.
+      toolLlmUsageHandler = (event: AgentEmitEvent) => {
+        if (event.type !== 'tool_llm_usage') return;
         try {
-          const usage = JSON.parse(data);
-          if (usage.target === 'image_gen') {
-            usageImageGen.modelName = usage.modelName || 'unknown';
-            usageImageGen.input_tokens += usage.input_tokens || 0;
-            usageImageGen.output_tokens += usage.output_tokens || 0;
-            usageImageGen.total_tokens += usage.total_tokens || 0;
-          } else if (usage.target === 'chat') {
-            usageChat.input_tokens += usage.input_tokens || 0;
-            usageChat.output_tokens += usage.output_tokens || 0;
-            usageChat.total_tokens += usage.total_tokens || 0;
+          if (event.target === 'image_gen') {
+            usageImageGen.modelName = event.modelName || 'unknown';
+            usageImageGen.input_tokens += event.input_tokens || 0;
+            usageImageGen.output_tokens += event.output_tokens || 0;
+            usageImageGen.total_tokens += event.total_tokens || 0;
+          } else if (event.target === 'chat') {
+            usageChat.input_tokens += event.input_tokens || 0;
+            usageChat.output_tokens += event.output_tokens || 0;
+            usageChat.total_tokens += event.total_tokens || 0;
           } else {
             // Default to system
-            usageSystem.input_tokens += usage.input_tokens || 0;
-            usageSystem.output_tokens += usage.output_tokens || 0;
-            usageSystem.total_tokens += usage.total_tokens || 0;
+            usageSystem.input_tokens += event.input_tokens || 0;
+            usageSystem.output_tokens += event.output_tokens || 0;
+            usageSystem.total_tokens += event.total_tokens || 0;
           }
           // Emit updated stats to client
           this.emitModelStats(usageChat, usageSystem, usageImageGen);
@@ -1314,21 +1304,18 @@ export class SimplifiedAgent {
           );
         }
       };
-      this.emitter.on('tool_llm_usage', toolLlmUsageHandler);
+      this.emitter.on(STREAM_EVENT_CHANNEL, toolLlmUsageHandler);
 
       // Seed pre-merged citation set (panel orchestrator) into the collected
       // documents + emit them so the UI numbers them ahead of any new searches.
       if (seededDocuments.length > 0) {
         collectNewDocs(seededDocuments);
-        this.emitter.emit(
-          'data',
-          JSON.stringify({
-            type: 'sources_added',
-            data: seededDocuments,
-            searchQuery: 'Panel sources',
-            searchUrl: '',
-          }),
-        );
+        emitStreamEvent(this.emitter, {
+          type: 'sources_added',
+          data: seededDocuments,
+          searchQuery: 'Panel sources',
+          searchUrl: '',
+        });
       }
 
       try {
@@ -1349,17 +1336,14 @@ export class SimplifiedAgent {
               const syntheticId = `firefoxAI-${Date.now()}`;
               try {
                 // Emit single started event already marked success to avoid double UI churn
-                this.emitter.emit(
-                  'data',
-                  JSON.stringify({
-                    type: 'tool_call_started',
-                    data: {
-                      content: `<ToolCall type="firefoxAI" status="success" toolCallId="${syntheticId}"></ToolCall>`,
-                      toolCallId: syntheticId,
-                      status: 'success',
-                    },
-                  }),
-                );
+                emitStreamEvent(this.emitter, {
+                  type: 'tool_call_started',
+                  data: {
+                    content: `<ToolCall type="firefoxAI" status="success" toolCallId="${syntheticId}"></ToolCall>`,
+                    toolCallId: syntheticId,
+                    status: 'success',
+                  },
+                });
               } catch (e) {
                 console.warn(
                   'Failed to emit firefoxAI synthetic tool event',
@@ -1386,15 +1370,12 @@ export class SimplifiedAgent {
             for (const [searchQuery, docs] of Object.entries(
               groupedBySearchQuery,
             )) {
-              this.emitter.emit(
-                'data',
-                JSON.stringify({
-                  type: 'sources_added',
-                  data: docs,
-                  searchQuery,
-                  searchUrl: '',
-                }),
-              );
+              emitStreamEvent(this.emitter, {
+                type: 'sources_added',
+                data: docs,
+                searchQuery,
+                searchUrl: '',
+              });
             }
           };
 
@@ -1615,18 +1596,18 @@ export class SimplifiedAgent {
             );
             if (pendingInterrupts.length > 0) {
               // runHost listens for 'interrupts' and handles DB persistence + status transition
-              this.emitter.emit(
-                'interrupts',
-                JSON.stringify(pendingInterrupts),
-              );
+              emitStreamEvent(this.emitter, {
+                type: 'interrupt',
+                interrupts: pendingInterrupts,
+              });
               if (toolLlmUsageHandler) {
                 this.emitter.removeListener(
-                  'tool_llm_usage',
+                  STREAM_EVENT_CHANNEL,
                   toolLlmUsageHandler,
                 );
               }
               if (skillRunId) cleanupSkillsForRun(skillRunId);
-              return; // Do NOT emit 'end' — run is now paused at an interrupt
+              return; // Do NOT emit agent_end — run is now paused at an interrupt
             }
           } catch (stateErr) {
             console.warn(
@@ -1746,15 +1727,12 @@ ${url ? `<url>${url}</url>` : ''}
 
       // Emit the final sources used for the response
       if (collectedDocuments.length > 0) {
-        this.emitter.emit(
-          'data',
-          JSON.stringify({
-            type: 'sources',
-            data: collectedDocuments,
-            searchQuery: '',
-            searchUrl: '',
-          }),
-        );
+        emitStreamEvent(this.emitter, {
+          type: 'sources',
+          data: collectedDocuments,
+          searchQuery: '',
+          searchUrl: '',
+        });
       }
 
       // If we didn't get any streamed tokens but have a final result, emit it
@@ -1791,7 +1769,7 @@ ${url ? `<url>${url}</url>` : ''}
       }
 
       // Clean up tool_llm_usage listener before final emission
-      this.emitter.removeListener('tool_llm_usage', toolLlmUsageHandler);
+      this.emitter.removeListener(STREAM_EVENT_CHANNEL, toolLlmUsageHandler);
 
       // Emit model stats and end signal after streaming is complete
       console.log(
@@ -1803,11 +1781,11 @@ ${url ? `<url>${url}</url>` : ''}
       this.emitModelStats(usageChat, usageSystem, usageImageGen);
 
       if (skillRunId) cleanupSkillsForRun(skillRunId);
-      this.emitter.emit('end');
+      emitStreamEvent(this.emitter, { type: 'agent_end' });
     } catch (error: unknown) {
       // Clean up tool_llm_usage listener on error
       if (toolLlmUsageHandler) {
-        this.emitter.removeListener('tool_llm_usage', toolLlmUsageHandler);
+        this.emitter.removeListener(STREAM_EVENT_CHANNEL, toolLlmUsageHandler);
       }
 
       if (skillRunId) cleanupSkillsForRun(skillRunId);
@@ -1825,7 +1803,7 @@ ${url ? `<url>${url}</url>` : ''}
         );
       }
 
-      this.emitter.emit('end');
+      emitStreamEvent(this.emitter, { type: 'agent_end' });
     }
   }
 
@@ -2137,17 +2115,14 @@ ${url ? `<url>${url}</url>` : ''}
                 } catch {
                   // ignore attribute extraction errors
                 }
-                this.emitter.emit(
-                  'data',
-                  JSON.stringify({
-                    type: 'tool_call_started',
-                    data: {
-                      content: `<ToolCall type="${encodeHtmlAttribute(toolName)}" status="running" toolCallId="${encodeHtmlAttribute(cbRunId)}"${extraAttr}></ToolCall>`,
-                      toolCallId: cbRunId,
-                      status: 'running',
-                    },
-                  }),
-                );
+                emitStreamEvent(this.emitter, {
+                  type: 'tool_call_started',
+                  data: {
+                    content: `<ToolCall type="${encodeHtmlAttribute(toolName)}" status="running" toolCallId="${encodeHtmlAttribute(cbRunId)}"${extraAttr}></ToolCall>`,
+                    toolCallId: cbRunId,
+                    status: 'running',
+                  },
+                });
               },
               handleToolEnd: (output: unknown, cbRunId: string) => {
                 const name = resumeToolCalls.get(cbRunId);
@@ -2174,31 +2149,25 @@ ${url ? `<url>${url}</url>` : ''}
                   if (extra) {
                     const markupId =
                       resumeMcpMarkupByRunId.get(cbRunId) ?? cbRunId;
-                    this.emitter.emit(
-                      'data',
-                      JSON.stringify({
-                        type: 'tool_call_success',
-                        data: {
-                          toolCallId: markupId,
-                          status: 'success',
-                          extra,
-                        },
-                      }),
-                    );
+                    emitStreamEvent(this.emitter, {
+                      type: 'tool_call_success',
+                      data: {
+                        toolCallId: markupId,
+                        status: 'success',
+                        extra,
+                      },
+                    });
                   }
                   return;
                 }
-                this.emitter.emit(
-                  'data',
-                  JSON.stringify({
-                    type: 'tool_call_success',
-                    data: {
-                      toolCallId: cbRunId,
-                      status: 'success',
-                      ...(extra ? { extra } : {}),
-                    },
-                  }),
-                );
+                emitStreamEvent(this.emitter, {
+                  type: 'tool_call_success',
+                  data: {
+                    toolCallId: cbRunId,
+                    status: 'success',
+                    ...(extra ? { extra } : {}),
+                  },
+                });
               },
               handleToolError: (err: unknown, cbRunId: string) => {
                 if (isGraphInterrupt(err)) {
@@ -2214,17 +2183,14 @@ ${url ? `<url>${url}</url>` : ''}
                 const msg =
                   (err instanceof Error ? err.message : String(err)) ||
                   'Unknown tool error';
-                this.emitter.emit(
-                  'data',
-                  JSON.stringify({
-                    type: 'tool_call_error',
-                    data: {
-                      toolCallId: cbRunId,
-                      status: 'error',
-                      error: msg.substring(0, 500),
-                    },
-                  }),
-                );
+                emitStreamEvent(this.emitter, {
+                  type: 'tool_call_error',
+                  data: {
+                    toolCallId: cbRunId,
+                    status: 'error',
+                    error: msg.substring(0, 500),
+                  },
+                });
               },
             },
           ],
@@ -2252,7 +2218,10 @@ ${url ? `<url>${url}</url>` : ''}
             (t: { interrupts?: unknown[] }) => t.interrupts ?? [],
           );
           if (pendingInterrupts.length > 0) {
-            this.emitter.emit('interrupts', JSON.stringify(pendingInterrupts));
+            emitStreamEvent(this.emitter, {
+              type: 'interrupt',
+              interrupts: pendingInterrupts,
+            });
             if (skillRunId) cleanupSkillsForRun(skillRunId);
             return;
           }
@@ -2265,14 +2234,17 @@ ${url ? `<url>${url}</url>` : ''}
       }
 
       if (skillRunId) cleanupSkillsForRun(skillRunId);
-      this.emitter.emit('end');
+      emitStreamEvent(this.emitter, { type: 'agent_end' });
     } catch (error: unknown) {
       if (toolLlmUsageHandler) {
-        this.emitter.removeListener('tool_llm_usage', toolLlmUsageHandler);
+        this.emitter.removeListener(STREAM_EVENT_CHANNEL, toolLlmUsageHandler);
       }
       if (skillRunId) cleanupSkillsForRun(skillRunId);
       console.error('[SimplifiedAgent] doResume error:', error);
-      this.emitter.emit('error', JSON.stringify({ data: String(error) }));
+      emitStreamEvent(this.emitter, {
+        type: 'agent_error',
+        data: String(error),
+      });
     }
   }
 

@@ -7,6 +7,7 @@ import {
   MAX_SOURCES_PER_WIDGET,
 } from '@/lib/dashboard/sources';
 import { runCodeWidget } from '@/lib/dashboard/codeWidgetRunner';
+import { emitStreamEvent } from '@/lib/streaming/events';
 
 export interface WidgetBuilderState {
   title: string;
@@ -218,17 +219,14 @@ export function createWidgetBuilderTools(ctx: WidgetBuilderContext) {
       // user Accepts) from body.widget.
       if (ctx.autoAccept) ctx.state = proposed;
 
-      emitter.emit(
-        'data',
-        JSON.stringify({
-          type: 'widget_proposal',
-          data: {
-            revision: ctx.revision,
-            proposed,
-            rationale: input.rationale,
-          },
-        }),
-      );
+      emitStreamEvent(emitter, {
+        type: 'widget_proposal',
+        data: {
+          revision: ctx.revision,
+          proposed,
+          rationale: input.rationale,
+        },
+      });
       return ctx.autoAccept
         ? 'Auto-apply is ON: this change has been applied to the working copy and the preview is running automatically. Do NOT ask the user to approve it — speak as if it is already in effect. If the preview fails you will receive the error to fix.'
         : 'Proposal sent for the user to Accept or Reject. It is NOT applied — your working copy is unchanged and preview_widget_output still runs the OLD code. STOP NOW: end your turn with a one-line summary. Do not preview, do not propose again, and do not claim you changed anything. When the user Accepts, the change is applied and previewed for you, and you get a new turn with any error to fix.';

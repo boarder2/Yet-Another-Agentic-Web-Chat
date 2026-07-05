@@ -12,6 +12,7 @@ import {
 } from '@/lib/utils/memoryCategories';
 import computeSimilarity from '@/lib/utils/computeSimilarity';
 import { findConflictsWithLLM } from '@/lib/utils/memoryDeduplication';
+import { formatMemoriesList } from '@/lib/utils/memoryFormatting';
 
 const DUPLICATE_THRESHOLD = 0.8;
 
@@ -232,31 +233,7 @@ export const listMemoriesTool = tool(
     try {
       const allMemories = await db.select().from(memories).all();
 
-      if (allMemories.length === 0) {
-        return 'No memories stored yet.';
-      }
-
-      const grouped: Record<string, string[]> = {};
-      for (const memory of allMemories) {
-        const cat = memory.category || 'Uncategorized';
-        if (!grouped[cat]) grouped[cat] = [];
-        grouped[cat].push(memory.content);
-      }
-
-      // Build id lookup for output
-      const idMap = new Map(allMemories.map((m) => [m.content, m.id]));
-
-      let result = `You have ${allMemories.length} stored memories:\n\n`;
-      for (const [category, items] of Object.entries(grouped)) {
-        result += `**${category}**:\n`;
-        for (const item of items) {
-          const id = idMap.get(item);
-          result += `- [id: ${id}] ${item}\n`;
-        }
-        result += '\n';
-      }
-
-      return result;
+      return formatMemoriesList(allMemories);
     } catch (error) {
       console.error('list_memories tool error:', error);
       return 'Error: Failed to retrieve memories.';

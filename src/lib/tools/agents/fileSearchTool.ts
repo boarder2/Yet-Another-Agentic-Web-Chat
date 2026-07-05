@@ -1,6 +1,4 @@
-import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { RunnableConfig } from '@langchain/core/runnables';
 import { Document } from '@langchain/core/documents';
 import { Command, getCurrentTaskInput } from '@langchain/langgraph';
 import { ToolMessage } from '@langchain/core/messages';
@@ -9,8 +7,7 @@ import {
   processFilesToDocuments,
   getRankedDocs,
 } from '@/lib/utils/fileProcessing';
-import { CachedEmbeddings } from '@/lib/utils/cachedEmbeddings';
-import { persistFromToolConfig } from '@/lib/utils/persistToolContext';
+import { defineTool } from '@/lib/tools/defineTool';
 
 // Schema for file search tool input
 const FileSearchToolSchema = z.object({
@@ -28,23 +25,18 @@ const FileSearchToolSchema = z.object({
  * 3. Ranking and filtering results by relevance
  * 4. Returning relevant file sections as documents
  */
-export const fileSearchTool = tool(
-  async (
-    input: z.infer<typeof FileSearchToolSchema>,
-    config?: RunnableConfig,
-  ) => {
+export const fileSearchTool = defineTool(
+  async (input: z.infer<typeof FileSearchToolSchema>, runtime) => {
     try {
       const { query, maxResults = 12, similarityThreshold = 0.3 } = input;
 
       const currentState = getCurrentTaskInput() as SimplifiedAgentStateType;
       let currentDocCount = currentState.relevantDocuments?.length ?? 0;
 
-      // Get signal for cancellation support
-      const retrievalSignal: AbortSignal | undefined =
-        config?.configurable?.retrievalSignal;
+      const { retrievalSignal, embeddings, systemLlm } = runtime.context;
 
       // Check for cancellation early
-      if (retrievalSignal?.aborted || config?.signal?.aborted) {
+      if (retrievalSignal?.aborted || runtime.signal?.aborted) {
         console.log('FileSearchTool: Operation cancelled');
         return new Command({
           update: {
@@ -52,17 +44,15 @@ export const fileSearchTool = tool(
             messages: [
               new ToolMessage({
                 content: 'File search cancelled.',
-                tool_call_id: (
-                  config as unknown as { toolCall: { id: string } }
-                )?.toolCall.id,
+                tool_call_id: runtime.toolCallId,
               }),
             ],
           },
         });
       }
 
-      // Get fileIds from config (provided by the agent)
-      const fileIds: string[] = config?.configurable?.fileIds || [];
+      // Get fileIds from context (provided by the agent)
+      const fileIds: string[] = runtime.context.fileIds || [];
 
       console.log(
         `FileSearchTool: Processing ${fileIds.length} files for query: "${query}"`,
@@ -77,25 +67,21 @@ export const fileSearchTool = tool(
             messages: [
               new ToolMessage({
                 content: 'No files attached to search.',
-                tool_call_id: (
-                  config as unknown as { toolCall: { id: string } }
-                )?.toolCall.id,
+                tool_call_id: runtime.toolCallId,
               }),
             ],
           },
         });
       }
 
-      // Get embeddings from config
-      if (!config?.configurable?.embeddings) {
-        throw new Error('Embeddings not available in config');
+      // Get embeddings from context
+      if (!embeddings) {
+        throw new Error('Embeddings not available in context');
       }
       // Ensure system LLM is present for any LLM-based extraction steps (future)
-      if (!config?.configurable?.systemLlm) {
-        throw new Error('System LLM not available in config');
+      if (!systemLlm) {
+        throw new Error('System LLM not available in context');
       }
-
-      const embeddings: CachedEmbeddings = config.configurable.embeddings;
 
       // Step 1: Process files to documents
       console.log('FileSearchTool: Processing files to documents...');
@@ -109,9 +95,7 @@ export const fileSearchTool = tool(
             messages: [
               new ToolMessage({
                 content: 'No searchable content found in attached files.',
-                tool_call_id: (
-                  config as unknown as { toolCall: { id: string } }
-                )?.toolCall.id,
+                tool_call_id: runtime.toolCallId,
               }),
             ],
           },
@@ -169,8 +153,7 @@ export const fileSearchTool = tool(
               `[${(d.metadata?.title as string | undefined) ?? 'file'}] ${d.pageContent}`,
           )
           .join('\n\n');
-      await persistFromToolConfig({
-        config,
+      await runtime.persist({
         kind: 'file_search',
         body: persistBody,
         metadataExtras: { query, fileCount: fileIds.length },
@@ -186,8 +169,7 @@ export const fileSearchTool = tool(
                 processedFiles: fileIds.length,
                 relevantSections: rankedDocuments.length,
               }),
-              tool_call_id: (config as unknown as { toolCall: { id: string } })
-                ?.toolCall.id,
+              tool_call_id: runtime.toolCallId,
             }),
           ],
         },
@@ -203,8 +185,7 @@ export const fileSearchTool = tool(
           messages: [
             new ToolMessage({
               content: 'Error occurred during file search: ' + errorMessage,
-              tool_call_id: (config as unknown as { toolCall: { id: string } })
-                ?.toolCall.id,
+              tool_call_id: runtime.toolCallId,
             }),
           ],
         },

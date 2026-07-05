@@ -1,6 +1,4 @@
-import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { RunnableConfig } from '@langchain/core/runnables';
 import db from '@/lib/db';
 import { memories } from '@/lib/db/schema';
 import { eq, inArray } from 'drizzle-orm';
@@ -13,16 +11,16 @@ import {
 import computeSimilarity from '@/lib/utils/computeSimilarity';
 import { findConflictsWithLLM } from '@/lib/utils/memoryDeduplication';
 import { formatMemoriesList } from '@/lib/utils/memoryFormatting';
+import { defineTool } from '@/lib/tools/defineTool';
 
 const DUPLICATE_THRESHOLD = 0.8;
 
-export const saveMemoryTool = tool(
+export const saveMemoryTool = defineTool(
   async (
     input: { content: string; sensitivityOverride?: boolean },
-    config?: RunnableConfig,
+    runtime,
   ): Promise<string> => {
-    const embeddings = config?.configurable?.embeddings;
-    const systemLlm = config?.configurable?.systemLlm;
+    const { embeddings, systemLlm } = runtime.context;
 
     if (!input.content || input.content.trim().length === 0) {
       return 'Error: No content provided to save.';
@@ -111,8 +109,7 @@ export const saveMemoryTool = tool(
 
       const id = crypto.randomUUID();
       const now = new Date();
-      const chatId = config?.configurable?.chatId;
-      const workspaceId = config?.configurable?.workspaceId ?? null;
+      const { chatId, workspaceId = null } = runtime.context;
 
       await db
         .insert(memories)
@@ -146,12 +143,9 @@ export const saveMemoryTool = tool(
   },
 );
 
-export const deleteMemoryTool = tool(
-  async (
-    input: { query: string; id?: string },
-    config?: RunnableConfig,
-  ): Promise<string> => {
-    const embeddings = config?.configurable?.embeddings;
+export const deleteMemoryTool = defineTool(
+  async (input: { query: string; id?: string }, runtime): Promise<string> => {
+    const { embeddings } = runtime.context;
 
     try {
       // If an explicit ID is provided, delete directly without search
@@ -228,7 +222,7 @@ export const deleteMemoryTool = tool(
   },
 );
 
-export const listMemoriesTool = tool(
+export const listMemoriesTool = defineTool(
   async (): Promise<string> => {
     try {
       const allMemories = await db.select().from(memories).all();

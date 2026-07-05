@@ -1,12 +1,12 @@
-import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { DateTime, Interval } from 'luxon';
 import { parseDate, getDateParseErrorMessage } from '@/lib/utils/dates';
+import { defineTool } from './defineTool';
 
 /**
  * Tool that calculates the difference between two dates
  */
-export const dateDifferenceTool = tool(
+export const dateDifferenceTool = defineTool(
   ({ startDate, endDate }: { startDate: string; endDate: string }): string => {
     try {
       console.log(

@@ -60,7 +60,7 @@ User Query → SimplifiedAgent (with all tools including deep_research)
   - LangGraph tool wrapping SubagentExecutor
   - Returns documents and summary via Command pattern
   - Prevents recursion: subagent's allowedTools excludes `deep_research`
-  - On success, persists findings via `persistFromToolConfig` (kind: `deep_research`)
+  - On success, persists findings via `runtime.persist(...)` (kind: `deep_research`)
   - Forwards subagent token usage (chat + system) to parent as `tool_llm_usage` events
   - Tool description instructs the agent to call `read_skill("deep-research")` before first use
 
@@ -95,7 +95,7 @@ User Query → SimplifiedAgent (with all tools including deep_research)
    - Chat Model for reasoning
 6. Child agent researches independently and streams tool events
 7. SubagentExecutor captures token usage from isolated emitter's `stats` event and returns it in the `SubagentExecution` result
-8. On success, `deepResearchTool` persists the summary via `persistFromToolConfig` (kind: `deep_research`)
+8. On success, `deepResearchTool` persists the summary via `runtime.persist(...)` (kind: `deep_research`)
 9. Token usage (chat + system split) is forwarded to the parent emitter as `tool_llm_usage` events
 10. Results (documents + summary) return to the main agent via Command pattern
 11. Main agent integrates findings into its final response

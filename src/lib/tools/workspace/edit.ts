@@ -1,9 +1,6 @@
-import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { RunnableConfig } from '@langchain/core/runnables';
 import { ToolMessage } from '@langchain/core/messages';
 import { Command, interrupt } from '@langchain/langgraph';
-import { isSoftStop } from '@/lib/utils/runControl';
 import { getFileByName, replaceFile } from '@/lib/workspaces/files';
 import { getText } from '@/lib/workspaces/extract';
 import { hasNulByte, blobPath } from '@/lib/workspaces/paths';
@@ -13,6 +10,7 @@ import { workspaceFiles } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import fs from 'node:fs/promises';
 import { emitStreamEvent } from '@/lib/streaming/events';
+import { defineTool } from '@/lib/tools/defineTool';
 
 const WorkspaceEditSchema = z.object({
   file: z.string().describe('Filename to edit (must exist in the workspace).'),
@@ -42,20 +40,11 @@ function diffLineCount(
   return removed + added;
 }
 
-export function workspaceEditTool(opts: {
-  workspaceId: string;
-  emitter: import('node:events').EventEmitter;
-  interactiveSession: boolean;
-  messageId: string;
-}) {
-  return tool(
-    async (
-      input: z.infer<typeof WorkspaceEditSchema>,
-      config?: RunnableConfig,
-    ) => {
-      const toolCallId =
-        (config as unknown as { toolCall?: { id?: string } })?.toolCall?.id ??
-        'workspace_edit';
+export function workspaceEditTool() {
+  return defineTool(
+    async (input: z.infer<typeof WorkspaceEditSchema>, runtime) => {
+      const toolCallId = runtime.toolCallId;
+      const { workspaceId, emitter, interactiveSession } = runtime.context;
 
       const err = (code: string, hint: string) =>
         new Command({
@@ -69,20 +58,7 @@ export function workspaceEditTool(opts: {
           },
         });
 
-      if (isSoftStop(opts.messageId)) {
-        return new Command({
-          update: {
-            messages: [
-              new ToolMessage({
-                content: 'Operation stopped by user.',
-                tool_call_id: toolCallId,
-              }),
-            ],
-          },
-        });
-      }
-
-      if (!opts.interactiveSession || !opts.emitter) {
+      if (!interactiveSession || !emitter || !workspaceId) {
         return err(
           'interactive_only',
           'Editing requires an interactive session.',
@@ -90,7 +66,7 @@ export function workspaceEditTool(opts: {
       }
 
       // 1. Resolve file
-      const fileRow = await getFileByName(opts.workspaceId, input.file).catch(
+      const fileRow = await getFileByName(workspaceId, input.file).catch(
         () => null,
       );
       if (!fileRow) {
@@ -154,7 +130,7 @@ export function workspaceEditTool(opts: {
       }
 
       // 5. Approval gate
-      const ws = await getWorkspace(opts.workspaceId);
+      const ws = await getWorkspace(workspaceId);
       const workspaceAutoAccept = ws?.autoAcceptFileEdits === 1;
       const fileAutoAccept = fileRow.autoAcceptEdits; // null | 0 | 1
       const shouldPrompt =
@@ -174,7 +150,7 @@ export function workspaceEditTool(opts: {
           markupKey: input.file,
           payload: {
             action: 'edit',
-            workspaceId: opts.workspaceId,
+            workspaceId: workspaceId,
             fileId: fileRow.id,
             file: fileRow.name,
             oldString,
@@ -262,15 +238,15 @@ export function workspaceEditTool(opts: {
         : text.replace(oldString, newString);
 
       const updated = await replaceFile({
-        workspaceId: opts.workspaceId,
+        workspaceId: workspaceId,
         fileId: fileRow.id,
         bytes: Buffer.from(newText, 'utf8'),
       });
 
-      emitStreamEvent(opts.emitter, {
+      emitStreamEvent(emitter, {
         type: 'workspace_file_changed',
         data: {
-          workspaceId: opts.workspaceId,
+          workspaceId: workspaceId,
           file: input.file,
           action: 'edit',
         },

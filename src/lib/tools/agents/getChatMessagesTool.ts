@@ -1,20 +1,15 @@
-import { tool } from '@langchain/core/tools';
-import { RunnableConfig } from '@langchain/core/runnables';
 import { z } from 'zod';
 import { getMessageById } from '@/lib/db/messageLookup';
+import { defineTool } from '@/lib/tools/defineTool';
 
 const schema = z.object({
   messageId: z.coerce.number().int(),
 });
 
-export const getChatMessagesTool = tool(
-  async (
-    input: { messageId: number },
-    config?: RunnableConfig,
-  ): Promise<string> => {
+export const getChatMessagesTool = defineTool(
+  async (input: { messageId: number }, runtime): Promise<string> => {
     try {
-      const configurable = config?.configurable ?? {};
-      const workspaceId: string | undefined = configurable.workspaceId;
+      const { workspaceId } = runtime.context;
 
       const result = getMessageById(input.messageId, {
         workspaceId: workspaceId ?? null,

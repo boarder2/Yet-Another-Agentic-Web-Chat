@@ -1,10 +1,9 @@
 import db from '@/lib/db';
 import { messages as messagesSchema } from '@/lib/db/schema';
 import crypto from 'crypto';
-import type { RunnableConfig } from '@langchain/core/runnables';
-import type { EventEmitter } from 'events';
 import { getRunContext } from '@/lib/skills/runStore';
 import { emitStreamEvent } from '@/lib/streaming/events';
+import type { ToolContext } from '@/lib/tools/toolContext';
 
 const runTotals = new Map<string, number>();
 
@@ -95,23 +94,22 @@ export async function persistToolContextRow(
 }
 
 /**
- * Tool-side convenience: pull runId/chatId/parentMessageId from RunnableConfig,
- * persist a context row, and emit a `context_grew` SSE event on the agent's
- * emitter so the UI can flash an inflation badge live during the turn.
+ * Tool-side convenience: pull runId/chatId/parentMessageId from the tool's
+ * `ToolContext` (see `defineTool.ts`), persist a context row, and emit a
+ * `context_grew` SSE event on the agent's emitter so the UI can flash an
+ * inflation badge live during the turn.
  *
  * Best-effort: failures are logged but never throw — context persistence must
  * never break tool execution.
  */
-export async function persistFromToolConfig(args: {
-  config?: RunnableConfig;
+export async function persistFromToolContext(args: {
+  context: Pick<ToolContext, 'runId' | 'emitter'>;
   kind: ContextRowKind;
   body: string;
   metadataExtras?: Record<string, unknown>;
 }): Promise<void> {
-  const { config, kind, body, metadataExtras } = args;
-  if (!config?.configurable) return;
-  const runId = config.configurable.runId as string | undefined;
-  if (!runId) return;
+  const { context, kind, body, metadataExtras } = args;
+  const { runId, emitter } = context;
   const ctx = getRunContext(runId);
   if (!ctx || !ctx.chatId || !ctx.parentMessageId) return;
 
@@ -128,15 +126,12 @@ export async function persistFromToolConfig(args: {
     const running = (runTotals.get(runId) ?? 0) + persistedTokens;
     runTotals.set(runId, running);
 
-    const emitter = config.configurable.emitter as EventEmitter | undefined;
-    if (emitter) {
-      emitStreamEvent(emitter, {
-        type: 'context_grew',
-        kind,
-        tokens: persistedTokens,
-        totalEstimated: running,
-      });
-    }
+    emitStreamEvent(emitter, {
+      type: 'context_grew',
+      kind,
+      tokens: persistedTokens,
+      totalEstimated: running,
+    });
   } catch (err) {
     console.warn(`[persistToolContext] failed for kind=${kind}:`, err);
   }

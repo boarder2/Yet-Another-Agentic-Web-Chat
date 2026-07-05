@@ -31,3 +31,11 @@ _Avoid_: event forwarding, proxying
 **Stream effect**:
 A `StreamEffect` value the reducer returns alongside new state to request a side effect (toast, scroll, cache invalidation, suggestion fetch); `ChatWindow` performs them. The reducer itself stays pure.
 _Avoid_: side-effect callback, action
+
+**Tool context**:
+The typed, run-scoped data every tool receives via LangChain's `ToolRuntime.context` (IDs, the emitter, and other invocation-time config assembled once per run). Distinct from LangChain's own generic "context" mechanism — this is YAAWC's specific schema for it.
+_Avoid_: configurable, config.configurable
+
+**Soft stop**:
+A user-initiated request to stop an in-flight run, checked by tools before they execute. Distinct from LangGraph's `interrupt()` (which pauses for resumable human input) and from `retrievalSignal` (an `AbortSignal` for in-flight cancellation) — soft stop is a pre-execution gate backed by an in-memory per-`messageId` registry.
+_Avoid_: cancellation, interrupt

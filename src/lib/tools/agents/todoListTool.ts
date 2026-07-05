@@ -1,7 +1,6 @@
-import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { RunnableConfig } from '@langchain/core/runnables';
 import { emitStreamEvent } from '@/lib/streaming/events';
+import { defineTool } from '@/lib/tools/defineTool';
 
 const TodoItemSchema = z.object({
   content: z.string(),
@@ -25,12 +24,12 @@ const TodoListToolSchema = z.object({
  *
  * No LLM calls are made — this is pure state management and event emission.
  */
-export const todoListTool = tool(
+export const todoListTool = defineTool(
   async (
     input: z.infer<typeof TodoListToolSchema>,
-    config?: RunnableConfig,
+    runtime,
   ): Promise<string> => {
-    const emitter = config?.configurable?.emitter;
+    const { emitter } = runtime.context;
 
     if (!emitter) {
       console.warn('TodoListTool: No emitter available in config');

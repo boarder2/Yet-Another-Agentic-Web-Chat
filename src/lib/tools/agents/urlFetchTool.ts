@@ -1,16 +1,14 @@
-import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { RunnableConfig } from '@langchain/core/runnables';
 import { Document } from '@langchain/core/documents';
 import { getWebContent } from '@/lib/utils/documents';
 import { removeThinkingBlocks } from '@/lib/utils/contentUtils';
-import { persistFromToolConfig } from '@/lib/utils/persistToolContext';
 import { Command, getCurrentTaskInput } from '@langchain/langgraph';
 import { SimplifiedAgentStateType } from '@/lib/state/chatAgentState';
 import { ToolMessage } from '@langchain/core/messages';
 // import { getLangfuseCallbacks } from '@/lib/tracing/langfuse';
 import { isSoftStop } from '@/lib/utils/runControl';
 import { emitStreamEvent } from '@/lib/streaming/events';
+import { defineTool } from '@/lib/tools/defineTool';
 
 // Schema for URL fetch tool input
 const URLFetchToolSchema = z.object({
@@ -35,11 +33,8 @@ const URLFetchToolSchema = z.object({
  * 3. Generating summaries using LLM when content is too long
  * 4. Returning processed documents with metadata
  */
-export const urlFetchTool = tool(
-  async (
-    input: z.infer<typeof URLFetchToolSchema>,
-    config?: RunnableConfig,
-  ) => {
+export const urlFetchTool = defineTool(
+  async (input: z.infer<typeof URLFetchToolSchema>, runtime) => {
     try {
       const {
         urls,
@@ -62,34 +57,28 @@ export const urlFetchTool = tool(
             messages: [
               new ToolMessage({
                 content: 'No search results found.',
-                tool_call_id: (
-                  config as unknown as { toolCall: { id: string } }
-                )?.toolCall.id,
+                tool_call_id: runtime.toolCallId,
               }),
             ],
           },
         });
       }
 
-      // Get LLM from config
-      if (!config?.configurable?.systemLlm) {
-        throw new Error('System LLM not available in config');
+      // Get LLM from context
+      const {
+        systemLlm: llm,
+        emitter,
+        retrievalSignal,
+        messageId,
+      } = runtime.context;
+      if (!llm) {
+        throw new Error('System LLM not available in context');
       }
-      const llm = config.configurable.systemLlm;
-      const emitter = config.configurable?.emitter as
-        | import('events').EventEmitter
-        | undefined;
-      const retrievalSignal: AbortSignal | undefined = (
-        config as unknown as Record<string, Record<string, unknown>>
-      )?.configurable?.retrievalSignal as AbortSignal | undefined;
-      const messageId: string | undefined = (
-        config as unknown as Record<string, Record<string, unknown>>
-      )?.configurable?.messageId as string | undefined;
       const documents: Document[] = [];
 
       // Process each URL
       for (const url of urls) {
-        if (config?.signal?.aborted) {
+        if (runtime.signal?.aborted) {
           console.warn('URLFetchTool: Operation aborted by signal');
           break;
         }
@@ -168,7 +157,7 @@ ${webContent.pageContent}
 Provide a comprehensive summary of the above web page content, focusing on information relevant to the user's query. Remember: preserve all markdown links from the input.`;
 
             const result = await llm.invoke(summarizationPrompt, {
-              signal: retrievalSignal || config?.signal,
+              signal: retrievalSignal || runtime.signal,
               // ...getLangfuseCallbacks(),
             });
 
@@ -228,8 +217,7 @@ Provide a comprehensive summary of the above web page content, focusing on infor
 
             documents.push(document);
 
-            await persistFromToolConfig({
-              config,
+            await runtime.persist({
               kind: 'url_fetch',
               body: `[url_fetch ${url}]\nTitle: ${
                 webContent.metadata.title || ''
@@ -273,8 +261,7 @@ Provide a comprehensive summary of the above web page content, focusing on infor
               content: JSON.stringify({
                 document: documents,
               }),
-              tool_call_id: (config as unknown as { toolCall: { id: string } })
-                ?.toolCall.id,
+              tool_call_id: runtime.toolCallId,
             }),
           ],
         },
@@ -289,8 +276,7 @@ Provide a comprehensive summary of the above web page content, focusing on infor
           messages: [
             new ToolMessage({
               content: 'Error occurred during URL processing: ' + errorMessage,
-              tool_call_id: (config as unknown as { toolCall: { id: string } })
-                ?.toolCall.id,
+              tool_call_id: runtime.toolCallId,
             }),
           ],
         },

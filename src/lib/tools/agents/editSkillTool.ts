@@ -1,9 +1,7 @@
-import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { RunnableConfig } from '@langchain/core/runnables';
 import { ToolMessage } from '@langchain/core/messages';
 import { Command, interrupt } from '@langchain/langgraph';
-import { isSoftStop } from '@/lib/utils/runControl';
+import { defineTool } from '@/lib/tools/defineTool';
 import {
   createUserSkill,
   updateUserSkill,
@@ -48,32 +46,10 @@ const EditSkillSchema = z.object({
     ),
 });
 
-export const editSkillTool = tool(
-  async (input: z.infer<typeof EditSkillSchema>, config?: RunnableConfig) => {
-    const messageId = config?.configurable?.messageId as string | undefined;
-    const workspaceId = config?.configurable?.workspaceId as
-      | string
-      | null
-      | undefined;
-    const interactiveSession =
-      config?.configurable?.interactiveSession === true;
-    const emitter = config?.configurable?.emitter;
-    const toolCallId =
-      (config as unknown as { toolCall?: { id?: string } })?.toolCall?.id ??
-      'edit_skill';
-
-    if (messageId && isSoftStop(messageId)) {
-      return new Command({
-        update: {
-          messages: [
-            new ToolMessage({
-              content: 'Operation stopped by user.',
-              tool_call_id: toolCallId,
-            }),
-          ],
-        },
-      });
-    }
+export const editSkillTool = defineTool(
+  async (input: z.infer<typeof EditSkillSchema>, runtime) => {
+    const { workspaceId, interactiveSession, emitter } = runtime.context;
+    const toolCallId = runtime.toolCallId;
 
     if (!interactiveSession || !emitter) {
       return new Command({

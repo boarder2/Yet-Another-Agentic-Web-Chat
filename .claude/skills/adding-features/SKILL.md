@@ -16,44 +16,28 @@ Tools live in `src/lib/tools/agents/`. Each tool follows a consistent pattern.
 1. **Create the tool file** (`src/lib/tools/agents/myTool.ts`):
 
 ```typescript
-import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { getCurrentTaskInput } from '@langchain/langgraph';
 import { Command } from '@langchain/langgraph';
 import { Document } from '@langchain/core/documents';
 import { ToolMessage } from '@langchain/core/messages';
 import { SimplifiedAgentStateType } from '@/lib/state/chatAgentState';
-import { isSoftStop } from '@/lib/utils/runControl';
+import { defineTool } from '@/lib/tools/defineTool';
 
 const myToolSchema = z.object({
   query: z.string().describe('The search query'),
 });
 
-export const myTool = tool(
-  async (input, config) => {
-    // Access infrastructure from config
-    const systemLlm = config.configurable?.systemLlm;
-    const embeddings = config.configurable?.embeddings;
-    const emitter = config.configurable?.emitter;
-    const messageId = config.configurable?.messageId as string | undefined;
+export const myTool = defineTool(
+  async (input, runtime) => {
+    // Access infrastructure from the typed ToolContext (see src/lib/tools/toolContext.ts)
+    const { systemLlm, embeddings, emitter } = runtime.context;
 
     // Access current agent state
     const currentState = getCurrentTaskInput() as SimplifiedAgentStateType;
 
-    // Check soft-stop before doing expensive work
-    if (messageId && isSoftStop(messageId)) {
-      return new Command({
-        update: {
-          messages: [
-            new ToolMessage({
-              content: 'Aborted',
-              tool_call_id: (config as unknown as { toolCall: { id: string } })
-                ?.toolCall.id,
-            }),
-          ],
-        },
-      });
-    }
+    // Soft-stop is enforced automatically by defineTool before this handler
+    // runs — no manual isSoftStop check needed here.
 
     // Do the work...
     const documents: Document[] = [];
@@ -66,8 +50,7 @@ export const myTool = tool(
         messages: [
           new ToolMessage({
             content: summary,
-            tool_call_id: (config as unknown as { toolCall: { id: string } })
-              ?.toolCall.id,
+            tool_call_id: runtime.toolCallId,
           }),
         ],
       },

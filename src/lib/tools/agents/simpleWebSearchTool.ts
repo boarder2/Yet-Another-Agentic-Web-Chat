@@ -1,13 +1,10 @@
 import { getWebSearchProvider } from '@/lib/search/providers';
 import { SimplifiedAgentStateType } from '@/lib/state/chatAgentState';
-import { isSoftStop } from '@/lib/utils/runControl';
 import { ToolMessage } from '@langchain/core/messages';
-import { RunnableConfig } from '@langchain/core/runnables';
-import { tool } from '@langchain/core/tools';
 import { Command, getCurrentTaskInput } from '@langchain/langgraph';
 import { Document } from '@langchain/core/documents';
 import { z } from 'zod';
-import { persistFromToolConfig } from '@/lib/utils/persistToolContext';
+import { defineTool } from '@/lib/tools/defineTool';
 
 const MAX_RESULTS = 20;
 
@@ -21,46 +18,18 @@ const SimpleWebSearchToolSchema = z.object({
  * Runs web search through the configured search provider and returns the first
  * 20 results as Documents, in provider order. No similarity ranking.
  */
-export const simpleWebSearchTool = tool(
-  async (
-    input: z.infer<typeof SimpleWebSearchToolSchema>,
-    config?: RunnableConfig,
-  ) => {
+export const simpleWebSearchTool = defineTool(
+  async (input: z.infer<typeof SimpleWebSearchToolSchema>, runtime) => {
     try {
       const { query } = input;
       const currentState = getCurrentTaskInput() as SimplifiedAgentStateType;
       let currentDocCount = currentState.relevantDocuments?.length ?? 0;
 
-      const retrievalSignal: AbortSignal | undefined = (
-        config as unknown as Record<string, Record<string, unknown>>
-      )?.configurable?.retrievalSignal as AbortSignal | undefined;
-      const messageId: string | undefined = (
-        config as unknown as Record<string, Record<string, unknown>>
-      )?.configurable?.messageId as string | undefined;
-      const isPrivate: boolean = Boolean(
-        (config as unknown as Record<string, Record<string, unknown>>)
-          ?.configurable?.isPrivate,
-      );
+      const { retrievalSignal, isPrivate } = runtime.context;
 
       console.log(
         `SimpleWebSearchTool: Performing web search for query: "${query}" (private=${isPrivate})`,
       );
-
-      if (messageId && isSoftStop(messageId)) {
-        return new Command({
-          update: {
-            relevantDocuments: [],
-            messages: [
-              new ToolMessage({
-                content: 'Soft-stop set; skipping web search.',
-                tool_call_id: (
-                  config as unknown as { toolCall: { id: string } }
-                )?.toolCall.id,
-              }),
-            ],
-          },
-        });
-      }
 
       const provider = getWebSearchProvider({ isPrivate });
       const searchResults = await provider.webSearch(
@@ -80,9 +49,7 @@ export const simpleWebSearchTool = tool(
             messages: [
               new ToolMessage({
                 content: 'No search results found.',
-                tool_call_id: (
-                  config as unknown as { toolCall: { id: string } }
-                )?.toolCall.id,
+                tool_call_id: runtime.toolCallId,
               }),
             ],
           },
@@ -109,8 +76,7 @@ export const simpleWebSearchTool = tool(
         `SimpleWebSearchTool: Created ${documents.length} documents from search results`,
       );
 
-      await persistFromToolConfig({
-        config,
+      await runtime.persist({
         kind: 'web_search',
         body: `[web_search query="${query}" provider=${provider.id}]\n${documents
           .map(
@@ -127,8 +93,7 @@ export const simpleWebSearchTool = tool(
           messages: [
             new ToolMessage({
               content: JSON.stringify({ document: documents }),
-              tool_call_id: (config as unknown as { toolCall: { id: string } })
-                ?.toolCall.id,
+              tool_call_id: runtime.toolCallId,
             }),
           ],
         },
@@ -148,9 +113,7 @@ export const simpleWebSearchTool = tool(
             messages: [
               new ToolMessage({
                 content: 'Web search aborted by soft-stop.',
-                tool_call_id: (
-                  config as unknown as { toolCall: { id: string } }
-                )?.toolCall.id,
+                tool_call_id: runtime.toolCallId,
               }),
             ],
           },
@@ -163,8 +126,7 @@ export const simpleWebSearchTool = tool(
           messages: [
             new ToolMessage({
               content: 'Error occurred during web search: ' + errorMessage,
-              tool_call_id: (config as unknown as { toolCall: { id: string } })
-                ?.toolCall.id,
+              tool_call_id: runtime.toolCallId,
             }),
           ],
         },

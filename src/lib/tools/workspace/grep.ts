@@ -1,20 +1,16 @@
-import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { RunnableConfig } from '@langchain/core/runnables';
 import { listFiles } from '@/lib/workspaces/files';
 import { getText, isImageMime } from '@/lib/workspaces/extract';
 import { grepText } from '@/lib/workspaces/grep';
-import { persistFromToolConfig } from '@/lib/utils/persistToolContext';
+import { defineTool } from '@/lib/tools/defineTool';
 
 const RESULT_BYTES_CAP = 64 * 1024;
 
-export function workspaceGrepTool(workspaceId: string) {
-  return tool(
-    async (
-      { pattern, regex = false, maxMatches = 50 },
-      config?: RunnableConfig,
-    ) => {
-      const files = await listFiles(workspaceId);
+export function workspaceGrepTool() {
+  return defineTool(
+    async ({ pattern, regex = false, maxMatches = 50 }, runtime) => {
+      const { workspaceId } = runtime.context;
+      const files = await listFiles(workspaceId ?? '');
       const out: { file: string; line: number; snippet: string }[] = [];
       let bytes = 0;
       for (const f of files) {
@@ -48,8 +44,7 @@ export function workspaceGrepTool(workspaceId: string) {
       }
       if (out.length === 0) return JSON.stringify({ error: 'no_match' });
       const result = JSON.stringify({ matches: out });
-      await persistFromToolConfig({
-        config,
+      await runtime.persist({
         kind: 'workspace_grep',
         body: `[workspace_grep pattern="${pattern}" regex=${regex}]\n${result}`,
         metadataExtras: { pattern, regex },

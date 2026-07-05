@@ -1,35 +1,24 @@
-import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { RunnableConfig } from '@langchain/core/runnables';
 import { Document } from '@langchain/core/documents';
 import { getImageSearchProvider } from '@/lib/search/providers';
 import { Command, getCurrentTaskInput } from '@langchain/langgraph';
 import { SimplifiedAgentStateType } from '@/lib/state/chatAgentState';
 import { ToolMessage } from '@langchain/core/messages';
-import { persistFromToolConfig } from '@/lib/utils/persistToolContext';
+import { defineTool } from '@/lib/tools/defineTool';
 
 const ImageSearchToolSchema = z.object({
   query: z.string(),
   maxResults: z.number().optional().default(12),
 });
 
-export const imageSearchTool = tool(
-  async (
-    input: z.infer<typeof ImageSearchToolSchema>,
-    config?: RunnableConfig,
-  ) => {
+export const imageSearchTool = defineTool(
+  async (input: z.infer<typeof ImageSearchToolSchema>, runtime) => {
     try {
       const { query, maxResults = 12 } = input;
       const currentState = getCurrentTaskInput() as SimplifiedAgentStateType;
       let currentDocCount = currentState.relevantDocuments?.length ?? 0;
 
-      const retrievalSignal: AbortSignal | undefined = (
-        config as unknown as Record<string, Record<string, unknown>>
-      )?.configurable?.retrievalSignal as AbortSignal | undefined;
-      const isPrivate: boolean = Boolean(
-        (config as unknown as Record<string, Record<string, unknown>>)
-          ?.configurable?.isPrivate,
-      );
+      const { retrievalSignal, isPrivate } = runtime.context;
 
       const provider = getImageSearchProvider({ isPrivate });
       if (!provider || !provider.imageSearch) {
@@ -39,9 +28,7 @@ export const imageSearchTool = tool(
               new ToolMessage({
                 content:
                   'Image search is not available with the currently configured search provider.',
-                tool_call_id: (
-                  config as unknown as { toolCall: { id: string } }
-                )?.toolCall?.id,
+                tool_call_id: runtime.toolCallId,
               }),
             ],
           },
@@ -68,9 +55,7 @@ export const imageSearchTool = tool(
             messages: [
               new ToolMessage({
                 content: 'No image results found.',
-                tool_call_id: (
-                  config as unknown as { toolCall: { id: string } }
-                )?.toolCall?.id,
+                tool_call_id: runtime.toolCallId,
               }),
             ],
           },
@@ -94,8 +79,7 @@ export const imageSearchTool = tool(
           }),
       );
 
-      await persistFromToolConfig({
-        config,
+      await runtime.persist({
         kind: 'image_search',
         body: `[image_search query="${query}" provider=${provider.id}]\n${images
           .map((img) => `${img.title || 'Image'}: ${img.url} (${img.img_src})`)
@@ -109,8 +93,7 @@ export const imageSearchTool = tool(
           messages: [
             new ToolMessage({
               content: JSON.stringify({ images }),
-              tool_call_id: (config as unknown as { toolCall: { id: string } })
-                ?.toolCall?.id,
+              tool_call_id: runtime.toolCallId,
             }),
           ],
         },
@@ -125,8 +108,7 @@ export const imageSearchTool = tool(
           messages: [
             new ToolMessage({
               content: 'Error occurred during image search: ' + errorMessage,
-              tool_call_id: (config as unknown as { toolCall: { id: string } })
-                ?.toolCall?.id,
+              tool_call_id: runtime.toolCallId,
             }),
           ],
         },

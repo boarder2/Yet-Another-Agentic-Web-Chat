@@ -1,8 +1,6 @@
-import { tool } from '@langchain/core/tools';
-import { RunnableConfig } from '@langchain/core/runnables';
 import { z } from 'zod';
 import { extractExcerpt, searchChatsByKeywords } from '@/lib/db/chatSearch';
-import { persistFromToolConfig } from '@/lib/utils/persistToolContext';
+import { defineTool } from '@/lib/tools/defineTool';
 
 const schema = z.object({
   keywords: z
@@ -17,7 +15,7 @@ const schema = z.object({
   limit: z.number().int().min(1).max(20).optional().default(10),
 });
 
-export const chatHistorySearchTool = tool(
+export const chatHistorySearchTool = defineTool(
   async (
     input: {
       keywords: string[];
@@ -25,12 +23,10 @@ export const chatHistorySearchTool = tool(
       before?: string;
       limit: number;
     },
-    config?: RunnableConfig,
+    runtime,
   ): Promise<string> => {
     try {
-      const configurable = config?.configurable ?? {};
-      const workspaceId: string | undefined = configurable.workspaceId;
-      const currentChatId: string | undefined = configurable.chatId;
+      const { workspaceId, chatId: currentChatId } = runtime.context;
 
       const results = await searchChatsByKeywords({
         keywords: input.keywords,
@@ -79,8 +75,7 @@ export const chatHistorySearchTool = tool(
         }
       }
 
-      await persistFromToolConfig({
-        config,
+      await runtime.persist({
         kind: 'chat_history_search',
         body: output,
         metadataExtras: { query: input.keywords.join(' ') },

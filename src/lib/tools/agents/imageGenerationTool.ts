@@ -1,6 +1,4 @@
-import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { RunnableConfig } from '@langchain/core/runnables';
 import { Command, getCurrentTaskInput } from '@langchain/langgraph';
 import { SimplifiedAgentStateType } from '@/lib/state/chatAgentState';
 import { ToolMessage } from '@langchain/core/messages';
@@ -12,6 +10,7 @@ import fs from 'fs';
 import crypto from 'crypto';
 import { UPLOADS_DIR } from '@/lib/dataDir';
 import { emitStreamEvent } from '@/lib/streaming/events';
+import { defineTool } from '@/lib/tools/defineTool';
 
 // ─── Backend interface (extensible to OpenAI etc.) ────────────────────────
 
@@ -184,35 +183,11 @@ const ImageGenerationToolSchema = z.object({
 
 // ─── Tool implementation ──────────────────────────────────────────────────
 
-export const imageGenerationTool = tool(
-  async (
-    input: z.infer<typeof ImageGenerationToolSchema>,
-    config?: RunnableConfig,
-  ) => {
+export const imageGenerationTool = defineTool(
+  async (input: z.infer<typeof ImageGenerationToolSchema>, runtime) => {
     try {
       const { query, aspectRatio, imageSize } = input;
-
-      const messageId: string | undefined = (
-        config as unknown as Record<string, Record<string, unknown>>
-      )?.configurable?.messageId as string | undefined;
-      const retrievalSignal: AbortSignal | undefined = (
-        config as unknown as Record<string, Record<string, unknown>>
-      )?.configurable?.retrievalSignal as AbortSignal | undefined;
-
-      if (messageId && isSoftStop(messageId)) {
-        return new Command({
-          update: {
-            messages: [
-              new ToolMessage({
-                content: 'Operation stopped by user.',
-                tool_call_id: (
-                  config as unknown as { toolCall: { id: string } }
-                )?.toolCall.id,
-              }),
-            ],
-          },
-        });
-      }
+      const { messageId, retrievalSignal, emitter } = runtime.context;
 
       const backend = getImageGenerationBackend();
       if (!backend) {
@@ -222,9 +197,7 @@ export const imageGenerationTool = tool(
               new ToolMessage({
                 content:
                   'Image generation is not available. Check that it is enabled in settings and a valid OpenRouter API key with an image model is configured.',
-                tool_call_id: (
-                  config as unknown as { toolCall: { id: string } }
-                )?.toolCall.id,
+                tool_call_id: runtime.toolCallId,
               }),
             ],
           },
@@ -243,10 +216,6 @@ export const imageGenerationTool = tool(
       const combinedSignal = retrievalSignal
         ? AbortSignal.any([retrievalSignal, AbortSignal.timeout(120000)])
         : AbortSignal.timeout(120000);
-
-      const emitter = (
-        config as unknown as Record<string, Record<string, unknown>>
-      )?.configurable?.emitter as import('events').EventEmitter | undefined;
 
       const { imageBuffer, mimeType, usage } = await backend.generate(
         {
@@ -275,9 +244,7 @@ export const imageGenerationTool = tool(
             messages: [
               new ToolMessage({
                 content: 'Operation stopped by user.',
-                tool_call_id: (
-                  config as unknown as { toolCall: { id: string } }
-                )?.toolCall.id,
+                tool_call_id: runtime.toolCallId,
               }),
             ],
           },
@@ -318,8 +285,7 @@ export const imageGenerationTool = tool(
                 _instruction:
                   'The image has been generated and will be displayed to the user automatically. Respond with a brief, friendly natural language message about the image you just created. Do not output JSON, action objects, or any structured format — just plain conversational text.',
               }),
-              tool_call_id: (config as unknown as { toolCall: { id: string } })
-                ?.toolCall?.id,
+              tool_call_id: runtime.toolCallId,
             }),
           ],
         },
@@ -334,8 +300,7 @@ export const imageGenerationTool = tool(
           messages: [
             new ToolMessage({
               content: 'Image generation failed: ' + errorMessage,
-              tool_call_id: (config as unknown as { toolCall: { id: string } })
-                ?.toolCall?.id,
+              tool_call_id: runtime.toolCallId,
             }),
           ],
         },

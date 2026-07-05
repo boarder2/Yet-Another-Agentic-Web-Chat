@@ -1,6 +1,4 @@
-import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { RunnableConfig } from '@langchain/core/runnables';
 import { Document } from '@langchain/core/documents';
 import { HumanMessage } from '@langchain/core/messages';
 import { Command, getCurrentTaskInput } from '@langchain/langgraph';
@@ -9,6 +7,7 @@ import { ToolMessage } from '@langchain/core/messages';
 import { removeThinkingBlocks } from '@/lib/utils/contentUtils';
 import { isSoftStop } from '@/lib/utils/runControl';
 import { emitStreamEvent } from '@/lib/streaming/events';
+import { defineTool } from '@/lib/tools/defineTool';
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10 MB
 
 const ALLOWED_MIME_PREFIXES = [
@@ -27,11 +26,8 @@ const ImageAnalysisToolSchema = z.object({
  * ImageAnalysisTool - Fetches an image from a URL and analyzes it using a
  * vision-capable system LLM, returning a description/analysis as a document.
  */
-export const imageAnalysisTool = tool(
-  async (
-    input: z.infer<typeof ImageAnalysisToolSchema>,
-    config?: RunnableConfig,
-  ) => {
+export const imageAnalysisTool = defineTool(
+  async (input: z.infer<typeof ImageAnalysisToolSchema>, runtime) => {
     try {
       const { url, query } = input;
 
@@ -39,35 +35,16 @@ export const imageAnalysisTool = tool(
         `ImageAnalysisTool: Analyzing image at "${url}" for query: "${query}"`,
       );
 
-      const messageId: string | undefined = (
-        config as unknown as Record<string, Record<string, unknown>>
-      )?.configurable?.messageId as string | undefined;
-      const retrievalSignal: AbortSignal | undefined = (
-        config as unknown as Record<string, Record<string, unknown>>
-      )?.configurable?.retrievalSignal as AbortSignal | undefined;
+      const {
+        messageId,
+        retrievalSignal,
+        systemLlm: llm,
+        emitter,
+      } = runtime.context;
 
-      if (messageId && isSoftStop(messageId)) {
-        return new Command({
-          update: {
-            messages: [
-              new ToolMessage({
-                content: 'Operation stopped by user.',
-                tool_call_id: (
-                  config as unknown as { toolCall: { id: string } }
-                )?.toolCall.id,
-              }),
-            ],
-          },
-        });
+      if (!llm) {
+        throw new Error('System LLM not available in context');
       }
-
-      if (!config?.configurable?.systemLlm) {
-        throw new Error('System LLM not available in config');
-      }
-      const llm = config.configurable.systemLlm;
-      const emitter = config.configurable?.emitter as
-        | import('events').EventEmitter
-        | undefined;
 
       // Fetch the image
       let imageBuffer: Buffer;
@@ -112,9 +89,7 @@ export const imageAnalysisTool = tool(
             messages: [
               new ToolMessage({
                 content: `Failed to fetch image from URL: ${msg}`,
-                tool_call_id: (
-                  config as unknown as { toolCall: { id: string } }
-                )?.toolCall.id,
+                tool_call_id: runtime.toolCallId,
               }),
             ],
           },
@@ -134,9 +109,7 @@ export const imageAnalysisTool = tool(
             messages: [
               new ToolMessage({
                 content: `URL did not return a supported image format. Content-Type: ${contentType}`,
-                tool_call_id: (
-                  config as unknown as { toolCall: { id: string } }
-                )?.toolCall.id,
+                tool_call_id: runtime.toolCallId,
               }),
             ],
           },
@@ -149,9 +122,7 @@ export const imageAnalysisTool = tool(
             messages: [
               new ToolMessage({
                 content: 'Image URL returned empty content.',
-                tool_call_id: (
-                  config as unknown as { toolCall: { id: string } }
-                )?.toolCall.id,
+                tool_call_id: runtime.toolCallId,
               }),
             ],
           },
@@ -165,9 +136,7 @@ export const imageAnalysisTool = tool(
             messages: [
               new ToolMessage({
                 content: 'Operation stopped by user.',
-                tool_call_id: (
-                  config as unknown as { toolCall: { id: string } }
-                )?.toolCall.id,
+                tool_call_id: runtime.toolCallId,
               }),
             ],
           },
@@ -198,7 +167,7 @@ Be factual and specific. Describe only what you can actually see in the image.`;
       });
 
       const result = await llm.invoke([humanMessage], {
-        signal: retrievalSignal || config?.signal,
+        signal: retrievalSignal || runtime.signal,
       });
 
       // Emit token usage
@@ -244,9 +213,7 @@ Be factual and specific. Describe only what you can actually see in the image.`;
               new ToolMessage({
                 content:
                   'The image could not be analyzed — the vision model returned no useful content.',
-                tool_call_id: (
-                  config as unknown as { toolCall: { id: string } }
-                )?.toolCall.id,
+                tool_call_id: runtime.toolCallId,
               }),
             ],
           },
@@ -278,8 +245,7 @@ Be factual and specific. Describe only what you can actually see in the image.`;
           messages: [
             new ToolMessage({
               content: JSON.stringify({ document: [document] }),
-              tool_call_id: (config as unknown as { toolCall: { id: string } })
-                ?.toolCall.id,
+              tool_call_id: runtime.toolCallId,
             }),
           ],
         },
@@ -294,8 +260,7 @@ Be factual and specific. Describe only what you can actually see in the image.`;
           messages: [
             new ToolMessage({
               content: 'Error occurred during image analysis: ' + errorMessage,
-              tool_call_id: (config as unknown as { toolCall: { id: string } })
-                ?.toolCall.id,
+              tool_call_id: runtime.toolCallId,
             }),
           ],
         },

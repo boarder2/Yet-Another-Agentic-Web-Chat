@@ -1,9 +1,7 @@
-import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { RunnableConfig } from '@langchain/core/runnables';
 import { ToolMessage } from '@langchain/core/messages';
 import { Command, interrupt } from '@langchain/langgraph';
-import { isSoftStop } from '@/lib/utils/runControl';
+import { defineTool } from '@/lib/tools/defineTool';
 
 const AskUserToolSchema = z.object({
   question: z.string().max(500).describe('One focused question.'),
@@ -30,28 +28,10 @@ const AskUserToolSchema = z.object({
     .describe('Brief reason shown to user for why you are asking.'),
 });
 
-export const askUserTool = tool(
-  async (input: z.infer<typeof AskUserToolSchema>, config?: RunnableConfig) => {
-    const messageId = config?.configurable?.messageId;
-    const interactiveSession =
-      config?.configurable?.interactiveSession === true;
-    const emitter = config?.configurable?.emitter;
-    const toolCallId =
-      (config as unknown as { toolCall?: { id?: string } })?.toolCall?.id ??
-      'ask_user';
-
-    if (messageId && isSoftStop(messageId)) {
-      return new Command({
-        update: {
-          messages: [
-            new ToolMessage({
-              content: 'Operation stopped by user.',
-              tool_call_id: toolCallId,
-            }),
-          ],
-        },
-      });
-    }
+export const askUserTool = defineTool(
+  async (input: z.infer<typeof AskUserToolSchema>, runtime) => {
+    const { interactiveSession, emitter } = runtime.context;
+    const toolCallId = runtime.toolCallId;
 
     if (!interactiveSession || !emitter) {
       return new Command({

@@ -54,6 +54,7 @@ import { resolveSkillsForChat } from '@/lib/skills/resolve';
 import { buildSkillsPromptSection } from '@/lib/skills/promptSection';
 import { setRunContext, cleanupSkillsForRun } from '@/lib/skills/runStore';
 import type { Skill } from '@/lib/skills/types';
+import { toolContextSchema, type ToolContext } from '@/lib/tools/toolContext';
 
 /**
  * Normalize usage metadata from different LLM providers
@@ -471,6 +472,7 @@ export class SimplifiedAgent {
         model: this.chatLlm,
         tools: allTools,
         stateSchema: SimplifiedAgentState,
+        contextSchema: toolContextSchema,
         systemPrompt: enhancedSystemPrompt,
         checkpointer:
           this.interactiveSession && this.threadId
@@ -757,17 +759,16 @@ export class SimplifiedAgent {
       });
 
       // Configure the agent run
-      const config: RunnableConfig = {
+      const config: RunnableConfig & { context: ToolContext } = {
         configurable: {
           thread_id: this.threadId ?? `simplified_agent_${Date.now()}`,
+        },
+        context: {
           llm: this.chatLlm,
           systemLlm: this.systemLlm,
           embeddings: this.embeddings,
           fileIds,
-          personaInstructions: this.personaInstructions,
-          focusMode,
           emitter: this.emitter,
-          firefoxAIDetected,
           // Pass through message and retrieval controls for tools
           messageId: this.messageId,
           runId,
@@ -1850,24 +1851,11 @@ ${url ? `<url>${url}</url>` : ''}
           import('@/lib/tools/workspace/create'),
         ]);
         resumeExtraTools.push(
-          workspaceLsTool(this.workspaceId),
-          workspaceGrepTool(this.workspaceId),
-          workspaceReadTool({
-            workspaceId: this.workspaceId,
-            visionCapable: false,
-          }),
-          workspaceEditTool({
-            workspaceId: this.workspaceId,
-            emitter: this.emitter,
-            interactiveSession: this.interactiveSession,
-            messageId: this.messageId ?? '',
-          }),
-          workspaceCreateFileTool({
-            workspaceId: this.workspaceId,
-            emitter: this.emitter,
-            interactiveSession: this.interactiveSession,
-            messageId: this.messageId ?? '',
-          }),
+          workspaceLsTool(),
+          workspaceGrepTool(),
+          workspaceReadTool({ visionCapable: false }),
+          workspaceEditTool(),
+          workspaceCreateFileTool(),
         );
       }
 
@@ -1885,9 +1873,6 @@ ${url ? `<url>${url}</url>` : ''}
       const builtNames = new Set<string>();
       try {
         const mcpTools = await buildMcpLangchainTools({
-          emitter: this.emitter,
-          interactiveSession: this.interactiveSession,
-          messageId: this.messageId ?? '',
           workspaceId: this.workspaceId,
         });
         resumeExtraTools.push(...mcpTools);
@@ -1903,13 +1888,7 @@ ${url ? `<url>${url}</url>` : ''}
       // already-granted call can complete and its tool_call_id isn't left dangling.
       for (const snapshot of pinnedMcpDescriptors) {
         if (!builtNames.has(snapshot.namespacedName)) {
-          resumeExtraTools.push(
-            buildToolForDescriptor(snapshot, {
-              emitter: this.emitter,
-              interactiveSession: this.interactiveSession,
-              messageId: this.messageId ?? '',
-            }),
-          );
+          resumeExtraTools.push(buildToolForDescriptor(snapshot));
         }
       }
 
@@ -1924,17 +1903,16 @@ ${url ? `<url>${url}</url>` : ''}
         resumeExtraTools.length > 0 ? resumeExtraTools : undefined,
       );
 
-      const config: RunnableConfig = {
+      const config: RunnableConfig & { context: ToolContext } = {
         configurable: {
           thread_id: this.threadId ?? '',
+        },
+        context: {
           llm: this.chatLlm,
           systemLlm: this.systemLlm,
           embeddings: this.embeddings,
           fileIds,
-          personaInstructions: this.personaInstructions,
-          focusMode,
           emitter: this.emitter,
-          firefoxAIDetected: false,
           messageId: this.messageId,
           runId,
           retrievalSignal: this.retrievalSignal,

@@ -1,29 +1,23 @@
-import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { RunnableConfig } from '@langchain/core/runnables';
 import { HumanMessage, ToolMessage } from '@langchain/core/messages';
 import { Command } from '@langchain/langgraph';
 import { getFileByName, readFileBytes } from '@/lib/workspaces/files';
 import { getText, isImageMime } from '@/lib/workspaces/extract';
-import { persistFromToolConfig } from '@/lib/utils/persistToolContext';
+import { defineTool } from '@/lib/tools/defineTool';
 
-export function workspaceReadTool(opts: {
-  workspaceId: string;
-  visionCapable: boolean;
-}) {
-  return tool(
-    async ({ file, startLine, endLine }, config?: RunnableConfig) => {
-      const toolCallId =
-        (config as unknown as { toolCall?: { id?: string } })?.toolCall?.id ??
-        'workspace_read';
+export function workspaceReadTool(opts: { visionCapable: boolean }) {
+  return defineTool(
+    async ({ file, startLine, endLine }, runtime) => {
+      const toolCallId = runtime.toolCallId;
+      const { workspaceId } = runtime.context;
 
-      const row = await getFileByName(opts.workspaceId, file);
+      const row = await getFileByName(workspaceId ?? '', file);
       if (!row) return JSON.stringify({ error: 'file_not_found' });
 
       if (isImageMime(row.mime)) {
         if (!opts.visionCapable)
           return JSON.stringify({ error: 'image_requires_vision_model' });
-        const r = await readFileBytes(opts.workspaceId, row.id);
+        const r = await readFileBytes(workspaceId ?? '', row.id);
         if (!r) return JSON.stringify({ error: 'file_not_found' });
         const dataUrl = `data:${row.mime};base64,${r.bytes.toString('base64')}`;
         // OpenAI (and compatible providers) only support image_url in user-role
@@ -72,8 +66,7 @@ export function workspaceReadTool(opts: {
       const b = Math.min(lines.length, endLine ?? lines.length);
       const sliced = lines.slice(a - 1, b).join('\n');
 
-      await persistFromToolConfig({
-        config,
+      await runtime.persist({
         kind: 'workspace_read',
         body: `[workspace_read ${row.name}:${a}-${b}/${lines.length}]\n${sliced}`,
         metadataExtras: { path: row.name, startLine: a, endLine: b },

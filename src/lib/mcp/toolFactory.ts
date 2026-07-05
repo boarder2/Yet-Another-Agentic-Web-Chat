@@ -3,13 +3,13 @@ import 'server-only';
 import {
   tool,
   DynamicStructuredTool,
+  type ToolRuntime,
   type ToolSchemaBase,
 } from '@langchain/core/tools';
-import type { RunnableConfig } from '@langchain/core/runnables';
 import { ToolMessage } from '@langchain/core/messages';
 import { Command, interrupt } from '@langchain/langgraph';
-import type { EventEmitter } from 'node:events';
-import { isSoftStop } from '@/lib/utils/runControl';
+import { toolContextSchema } from '@/lib/tools/toolContext';
+import { isContextSoftStopped, softStopCommand } from '@/lib/tools/defineTool';
 import {
   callMcpTool,
   getEnabledServerToolConfigs,
@@ -25,9 +25,6 @@ import {
 // ── Tool factory ──────────────────────────────────────────────────────────
 
 export interface McpToolFactoryOpts {
-  emitter: EventEmitter;
-  interactiveSession: boolean;
-  messageId: string;
   workspaceId?: string | null;
 }
 
@@ -36,11 +33,14 @@ export interface McpToolFactoryOpts {
  * MCP tools are approval-gated via interrupt(). Non-interactive sessions
  * (panel executors, subagents) get a stub that always returns an error message.
  *
- * The abort signal for in-flight calls is read from RunnableConfig.configurable
- * at call time (same pattern as simpleWebSearchTool).
+ * Runtime infrastructure (emitter, interactiveSession, messageId, retrieval
+ * signal) is read from the tool's `ToolContext` at call time — same as local
+ * tools (see `defineTool.ts`) — not passed in here. `workspaceId` stays a
+ * build-time param since it filters which server tools even get constructed,
+ * before `context` exists at invoke time.
  */
 export async function buildMcpLangchainTools(
-  opts: McpToolFactoryOpts,
+  opts: McpToolFactoryOpts = {},
 ): Promise<DynamicStructuredTool[]> {
   const [descriptors, configs, scopes] = await Promise.all([
     getToolDescriptorsForEnabledServers(),
@@ -62,7 +62,7 @@ export async function buildMcpLangchainTools(
       )
     )
       continue;
-    tools.push(buildToolForDescriptor(descriptor, opts, requiresApproval));
+    tools.push(buildToolForDescriptor(descriptor, requiresApproval));
   }
   return tools;
 }
@@ -77,11 +77,13 @@ export async function buildMcpLangchainTools(
  */
 export function buildToolForDescriptor(
   descriptor: McpToolDescriptor,
-  opts: McpToolFactoryOpts,
   requiresApproval = true,
 ): DynamicStructuredTool {
   // MCP tool inputSchema is JSON Schema; @langchain/core accepts it directly
   // (validated via @cfworker/json-schema), so no Zod conversion is needed.
+  // Dynamic JSON-Schema tools can't go through `defineTool` (Zod-only), so the
+  // soft-stop + toolCallId handling below calls its shared helpers directly to
+  // stay byte-for-byte identical to local tools.
   const inputSchema =
     descriptor.inputSchema && typeof descriptor.inputSchema === 'object'
       ? descriptor.inputSchema
@@ -90,11 +92,10 @@ export function buildToolForDescriptor(
   return tool(
     async (
       args: Record<string, unknown>,
-      config?: RunnableConfig,
+      runtime: ToolRuntime<unknown, typeof toolContextSchema>,
     ): Promise<Command | ToolMessage | string> => {
-      const toolCallId =
-        (config as unknown as { toolCall?: { id?: string } })?.toolCall?.id ??
-        descriptor.namespacedName;
+      const { context } = runtime;
+      const toolCallId = runtime.toolCallId;
 
       const makeMsg = (content: string) =>
         new Command({
@@ -104,15 +105,15 @@ export function buildToolForDescriptor(
         });
 
       // Non-interactive (panel executors, subagents): MCP tools not available
-      if (!opts.interactiveSession) {
+      if (!context.interactiveSession) {
         return makeMsg(
           'MCP tools require an interactive session and cannot be used here.',
         );
       }
 
       // Soft-stop check
-      if (isSoftStop(opts.messageId)) {
-        return makeMsg('Operation stopped by user.');
+      if (isContextSoftStopped(context)) {
+        return softStopCommand(toolCallId);
       }
 
       // Approval interrupt — skipped for auto-run tools (approval: 'never').
@@ -155,18 +156,13 @@ export function buildToolForDescriptor(
         }
       }
 
-      // Retrieve abort signal from configurable (same pattern as other tools)
-      const signal = (
-        config?.configurable as Record<string, unknown> | undefined
-      )?.retrievalSignal as AbortSignal | undefined;
-
       // Execute the tool
       try {
         const { content, isError } = await callMcpTool(
           descriptor.serverId,
           descriptor.toolName,
           args,
-          { signal, timeout: 60_000 },
+          { signal: context.retrievalSignal, timeout: 60_000 },
         );
         if (isError) {
           return makeMsg(`MCP tool error: ${content}`);

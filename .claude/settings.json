@@ -2,6 +2,9 @@
   "enabledPlugins": {
     "typescript-lsp@claude-plugins-official": true
   },
+  "showClearContextOnPlanAccept": true,
+  "feedbackSurveyRate": 0,
+  "plansDirectory": ".ai/plan",
   "hooks": {
     "PreToolUse": [
       {

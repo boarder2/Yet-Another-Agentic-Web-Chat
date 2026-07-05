@@ -1,11 +1,8 @@
-import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { RunnableConfig } from '@langchain/core/runnables';
-import { Command, getCurrentTaskInput } from '@langchain/langgraph';
-import { SimplifiedAgentStateType } from '@/lib/state/chatAgentState';
+import { Command } from '@langchain/langgraph';
 import { ToolMessage } from '@langchain/core/messages';
 import { retrievePdfDoc } from '@/lib/utils/documents';
-import { persistFromToolConfig } from '@/lib/utils/persistToolContext';
+import { defineTool } from '@/lib/tools/defineTool';
 
 // Schema for PDF transcript tool input
 const PDFLoaderToolSchema = z.object({
@@ -20,18 +17,14 @@ const PDFLoaderToolSchema = z.object({
  * 2. Fetch the PDF content using a PDF parsing library
  * 3. Return the content as a string
  */
-export const pdfLoaderTool = tool(
-  async (
-    input: z.infer<typeof PDFLoaderToolSchema>,
-    config?: RunnableConfig,
-  ) => {
+export const pdfLoaderTool = defineTool(
+  async (input: z.infer<typeof PDFLoaderToolSchema>, runtime) => {
     try {
       const { pdfUrl } = input;
+      const { retrievalSignal } = runtime.context;
 
       // Check for cancellation early
-      const retrievalSignal: AbortSignal | undefined =
-        config?.configurable?.retrievalSignal;
-      if (retrievalSignal?.aborted || config?.signal?.aborted) {
+      if (retrievalSignal?.aborted || runtime.signal?.aborted) {
         console.log('[pdfLoaderTool] Operation cancelled');
         return new Command({
           update: {
@@ -39,16 +32,12 @@ export const pdfLoaderTool = tool(
             messages: [
               new ToolMessage({
                 content: 'PDF loading cancelled.',
-                tool_call_id: (
-                  config as unknown as { toolCall: { id: string } }
-                )?.toolCall.id,
+                tool_call_id: runtime.toolCallId,
               }),
             ],
           },
         });
       }
-
-      const _currentState = getCurrentTaskInput() as SimplifiedAgentStateType;
 
       console.log(`[pdfLoaderTool] Retrieving content for PDF: "${pdfUrl}"`);
 
@@ -62,9 +51,7 @@ export const pdfLoaderTool = tool(
             messages: [
               new ToolMessage({
                 content: 'No transcript available for this video.',
-                tool_call_id: (
-                  config as unknown as { toolCall: { id: string } }
-                )?.toolCall.id,
+                tool_call_id: runtime.toolCallId,
               }),
             ],
           },
@@ -73,8 +60,7 @@ export const pdfLoaderTool = tool(
 
       console.log(`[pdfLoaderTool] Retrieved document from PDF: ${pdfUrl}`);
 
-      await persistFromToolConfig({
-        config,
+      await runtime.persist({
         kind: 'pdf_loader',
         body: `[pdf_loader ${pdfUrl}]\n${doc.pageContent ?? ''}`,
         metadataExtras: { source: pdfUrl },
@@ -88,8 +74,7 @@ export const pdfLoaderTool = tool(
               content: JSON.stringify({
                 document: [doc],
               }),
-              tool_call_id: (config as unknown as { toolCall: { id: string } })
-                ?.toolCall.id,
+              tool_call_id: runtime.toolCallId,
             }),
           ],
         },
@@ -107,8 +92,7 @@ export const pdfLoaderTool = tool(
           messages: [
             new ToolMessage({
               content: 'Error occurred during image search: ' + errorMessage,
-              tool_call_id: (config as unknown as { toolCall: { id: string } })
-                ?.toolCall?.id,
+              tool_call_id: runtime.toolCallId,
             }),
           ],
         },

@@ -1,16 +1,12 @@
-import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { RunnableConfig } from '@langchain/core/runnables';
 import crypto from 'crypto';
 import { ChartSpecSchema } from '@/lib/chart/chartSpec';
 import { emitStreamEvent } from '@/lib/streaming/events';
+import { defineTool } from '@/lib/tools/defineTool';
 
-export const createChartTool = tool(
-  async (
-    input: z.infer<typeof ChartSpecSchema>,
-    config?: RunnableConfig,
-  ): Promise<string> => {
-    const emitter = config?.configurable?.emitter;
+export const createChartTool = defineTool(
+  async (input: z.infer<typeof ChartSpecSchema>, runtime): Promise<string> => {
+    const { emitter } = runtime.context;
 
     const validation = ChartSpecSchema.safeParse(input);
     if (!validation.success) {

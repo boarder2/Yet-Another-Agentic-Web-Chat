@@ -1,9 +1,6 @@
-import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { RunnableConfig } from '@langchain/core/runnables';
 import { ToolMessage } from '@langchain/core/messages';
 import { Command, interrupt } from '@langchain/langgraph';
-import { isSoftStop } from '@/lib/utils/runControl';
 import {
   executeCode,
   checkDockerAvailable,
@@ -11,8 +8,8 @@ import {
 } from '@/lib/sandbox/dockerExecutor';
 import { getCodeExecutionConfig } from '@/lib/config';
 import { ChartSpecSchema } from '@/lib/chart/chartSpec';
-import { persistFromToolConfig } from '@/lib/utils/persistToolContext';
 import { emitStreamEvent } from '@/lib/streaming/events';
+import { defineTool } from '@/lib/tools/defineTool';
 
 const CHART_ENVELOPE_RE = /^__CHART__(\{.*\})$/;
 
@@ -29,31 +26,10 @@ const CodeExecutionToolSchema = z.object({
     .describe('Node.js JS. Use console.log for output.'),
 });
 
-export const codeExecutionTool = tool(
-  async (
-    input: z.infer<typeof CodeExecutionToolSchema>,
-    config?: RunnableConfig,
-  ) => {
-    const messageId = config?.configurable?.messageId;
-    const emitter = config?.configurable?.emitter;
-    const interactiveSession =
-      config?.configurable?.interactiveSession === true;
-    const toolCallId =
-      (config as unknown as { toolCall?: { id?: string } })?.toolCall?.id ??
-      'code_execution';
-
-    if (messageId && isSoftStop(messageId)) {
-      return new Command({
-        update: {
-          messages: [
-            new ToolMessage({
-              content: 'Operation stopped by user.',
-              tool_call_id: toolCallId,
-            }),
-          ],
-        },
-      });
-    }
+export const codeExecutionTool = defineTool(
+  async (input: z.infer<typeof CodeExecutionToolSchema>, runtime) => {
+    const { emitter, interactiveSession } = runtime.context;
+    const toolCallId = runtime.toolCallId;
 
     if (!interactiveSession || !emitter) {
       return new Command({
@@ -251,8 +227,7 @@ export const codeExecutionTool = tool(
       if (result.stderr) resultText += `\n\nStderr:\n${result.stderr}`;
     }
 
-    await persistFromToolConfig({
-      config,
+    await runtime.persist({
       kind: 'code_execution',
       body: `[code_execution]\nCode:\n${input.code}\n\nResult:\n${resultText}`,
       metadataExtras: { language: 'javascript' },

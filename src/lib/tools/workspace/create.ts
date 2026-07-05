@@ -1,9 +1,6 @@
-import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { RunnableConfig } from '@langchain/core/runnables';
 import { ToolMessage } from '@langchain/core/messages';
 import { Command, interrupt } from '@langchain/langgraph';
-import { isSoftStop } from '@/lib/utils/runControl';
 import { getFileByName, createFile } from '@/lib/workspaces/files';
 import { hasNulByte, validateFilename } from '@/lib/workspaces/paths';
 import { getWorkspace } from '@/lib/workspaces/service';
@@ -11,6 +8,7 @@ import db from '@/lib/db';
 import { workspaceFiles } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { emitStreamEvent } from '@/lib/streaming/events';
+import { defineTool } from '@/lib/tools/defineTool';
 
 const WorkspaceCreateFileSchema = z.object({
   file: z
@@ -25,20 +23,11 @@ const WorkspaceCreateFileSchema = z.object({
     ),
 });
 
-export function workspaceCreateFileTool(opts: {
-  workspaceId: string;
-  emitter: import('node:events').EventEmitter;
-  interactiveSession: boolean;
-  messageId: string;
-}) {
-  return tool(
-    async (
-      input: z.infer<typeof WorkspaceCreateFileSchema>,
-      config?: RunnableConfig,
-    ) => {
-      const toolCallId =
-        (config as unknown as { toolCall?: { id?: string } })?.toolCall?.id ??
-        'workspace_create_file';
+export function workspaceCreateFileTool() {
+  return defineTool(
+    async (input: z.infer<typeof WorkspaceCreateFileSchema>, runtime) => {
+      const toolCallId = runtime.toolCallId;
+      const { workspaceId, emitter, interactiveSession } = runtime.context;
 
       const err = (code: string, hint: string) =>
         new Command({
@@ -52,20 +41,7 @@ export function workspaceCreateFileTool(opts: {
           },
         });
 
-      if (isSoftStop(opts.messageId)) {
-        return new Command({
-          update: {
-            messages: [
-              new ToolMessage({
-                content: 'Operation stopped by user.',
-                tool_call_id: toolCallId,
-              }),
-            ],
-          },
-        });
-      }
-
-      if (!opts.interactiveSession || !opts.emitter) {
+      if (!interactiveSession || !emitter || !workspaceId) {
         return err(
           'interactive_only',
           'Editing requires an interactive session.',
@@ -95,7 +71,7 @@ export function workspaceCreateFileTool(opts: {
       }
 
       // 4. Existence check
-      const existing = await getFileByName(opts.workspaceId, input.file).catch(
+      const existing = await getFileByName(workspaceId, input.file).catch(
         () => null,
       );
       if (existing) {
@@ -103,7 +79,7 @@ export function workspaceCreateFileTool(opts: {
       }
 
       // 5. Approval gate
-      const ws = await getWorkspace(opts.workspaceId);
+      const ws = await getWorkspace(workspaceId);
       const workspaceAutoAccept = ws?.autoAcceptFileEdits === 1;
       const shouldPrompt = !workspaceAutoAccept;
 
@@ -116,7 +92,7 @@ export function workspaceCreateFileTool(opts: {
           markupKey: input.file,
           payload: {
             action: 'create',
-            workspaceId: opts.workspaceId,
+            workspaceId: workspaceId,
             file: input.file,
             content: input.content,
             workspaceAutoAccept,
@@ -182,7 +158,7 @@ export function workspaceCreateFileTool(opts: {
         const shouldSetAutoAccept = createResponse.decision === 'accept_always';
 
         const row = await createFile({
-          workspaceId: opts.workspaceId,
+          workspaceId: workspaceId,
           name: input.file,
           mime: input.mime ?? null,
           bytes,
@@ -195,10 +171,10 @@ export function workspaceCreateFileTool(opts: {
             .where(eq(workspaceFiles.id, row.id));
         }
 
-        emitStreamEvent(opts.emitter, {
+        emitStreamEvent(emitter, {
           type: 'workspace_file_changed',
           data: {
-            workspaceId: opts.workspaceId,
+            workspaceId: workspaceId,
             file: input.file,
             action: 'create',
           },
@@ -222,16 +198,16 @@ export function workspaceCreateFileTool(opts: {
 
       // No prompt needed
       const row = await createFile({
-        workspaceId: opts.workspaceId,
+        workspaceId: workspaceId,
         name: input.file,
         mime: input.mime ?? null,
         bytes,
       });
 
-      emitStreamEvent(opts.emitter, {
+      emitStreamEvent(emitter, {
         type: 'workspace_file_changed',
         data: {
-          workspaceId: opts.workspaceId,
+          workspaceId: workspaceId,
           file: input.file,
           action: 'create',
         },

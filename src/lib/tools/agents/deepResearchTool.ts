@@ -1,13 +1,11 @@
 import { SimplifiedAgentStateType } from '@/lib/state/chatAgentState';
 import { ToolMessage } from '@langchain/core/messages';
-import { RunnableConfig } from '@langchain/core/runnables';
-import { tool } from '@langchain/core/tools';
 import { Command, getCurrentTaskInput } from '@langchain/langgraph';
 import { z } from 'zod';
 import { SubagentExecutor } from '@/lib/search/subagents/executor';
 import { getSubagentDefinition } from '@/lib/search/subagents/definitions';
-import { persistFromToolConfig } from '@/lib/utils/persistToolContext';
 import { emitStreamEvent } from '@/lib/streaming/events';
+import { defineTool } from '@/lib/tools/defineTool';
 
 // Schema for deep research tool input
 const DeepResearchToolSchema = z.object({
@@ -25,28 +23,26 @@ const DeepResearchToolSchema = z.object({
  * Use this when the main agent discovers that a sub-problem requires significantly
  * more investigation than a single web search can provide.
  */
-export const deepResearchTool = tool(
-  async (
-    input: z.infer<typeof DeepResearchToolSchema>,
-    config?: RunnableConfig,
-  ) => {
+export const deepResearchTool = defineTool(
+  async (input: z.infer<typeof DeepResearchToolSchema>, runtime) => {
     try {
       const { task } = input;
 
       // Get current state for conversation history context
       const currentState = getCurrentTaskInput() as SimplifiedAgentStateType;
 
-      // Extract infrastructure from config.configurable
-      const chatLlm = config?.configurable?.llm;
-      const systemLlm = config?.configurable?.systemLlm;
-      const embeddings = config?.configurable?.embeddings;
-      const emitter = config?.configurable?.emitter;
-      const signal = config?.signal;
-      const retrievalSignal = config?.configurable?.retrievalSignal;
-      const messageId = config?.configurable?.messageId || 'unknown';
-      const fileIds = config?.configurable?.fileIds || [];
-      const userLocation = config?.configurable?.userLocation;
-      const userProfile = config?.configurable?.userProfile;
+      const {
+        llm: chatLlm,
+        systemLlm,
+        embeddings,
+        emitter,
+        retrievalSignal,
+        messageId = 'unknown',
+        fileIds = [],
+        userLocation,
+        userProfile,
+      } = runtime.context;
+      const signal = runtime.signal;
 
       // Validate required config
       if (!chatLlm || !systemLlm || !embeddings || !emitter) {
@@ -123,8 +119,7 @@ export const deepResearchTool = tool(
       }
 
       if (execution.status === 'success' && execution.summary) {
-        await persistFromToolConfig({
-          config,
+        await runtime.persist({
           kind: 'deep_research',
           body: `[deep_research task="${task}"]\n${execution.summary}`,
           metadataExtras: {
@@ -146,8 +141,7 @@ export const deepResearchTool = tool(
                 execution.status === 'success'
                   ? `Deep research completed. Findings:\n\n${execution.summary}`
                   : `Deep research encountered an error: ${execution.error || 'Unknown error'}`,
-              tool_call_id: (config as unknown as { toolCall: { id: string } })
-                ?.toolCall.id,
+              tool_call_id: runtime.toolCallId,
             }),
           ],
         },
@@ -163,8 +157,7 @@ export const deepResearchTool = tool(
               content:
                 'Error during deep research: ' +
                 (error instanceof Error ? error.message : 'Unknown error'),
-              tool_call_id: (config as unknown as { toolCall: { id: string } })
-                ?.toolCall.id,
+              tool_call_id: runtime.toolCallId,
             }),
           ],
         },

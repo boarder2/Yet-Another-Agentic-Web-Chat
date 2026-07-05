@@ -398,24 +398,11 @@ export const POST = async (req: Request) => {
 
         const visionCapable = !!body.imageCapable;
         workspaceExtraTools.push(
-          workspaceLsTool(resolvedWorkspaceId),
-          workspaceGrepTool(resolvedWorkspaceId),
-          workspaceReadTool({
-            workspaceId: resolvedWorkspaceId,
-            visionCapable,
-          }),
-          workspaceEditTool({
-            workspaceId: resolvedWorkspaceId,
-            emitter: stream,
-            interactiveSession: true,
-            messageId: message.messageId,
-          }),
-          workspaceCreateFileTool({
-            workspaceId: resolvedWorkspaceId,
-            emitter: stream,
-            interactiveSession: true,
-            messageId: message.messageId,
-          }),
+          workspaceLsTool(),
+          workspaceGrepTool(),
+          workspaceReadTool({ visionCapable }),
+          workspaceEditTool(),
+          workspaceCreateFileTool(),
         );
       } catch (err) {
         console.warn('Failed to build workspace context:', err);
@@ -606,9 +593,6 @@ export const POST = async (req: Request) => {
       const extraTools: any[] = [...workspaceExtraTools];
       try {
         const mcpTools = await buildMcpLangchainTools({
-          emitter: stream,
-          interactiveSession: true,
-          messageId: message.messageId,
           workspaceId: resolvedWorkspaceId,
         });
         extraTools.push(...mcpTools);

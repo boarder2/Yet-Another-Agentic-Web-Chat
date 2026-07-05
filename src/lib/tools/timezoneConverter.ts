@@ -1,11 +1,11 @@
-import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { parseDate, getDateParseErrorMessage } from '@/lib/utils/dates';
+import { defineTool } from './defineTool';
 
 /**
  * Tool that converts a date from one timezone to another
  */
-export const timezoneConverterTool = tool(
+export const timezoneConverterTool = defineTool(
   ({
     dateString,
     toTimezone,

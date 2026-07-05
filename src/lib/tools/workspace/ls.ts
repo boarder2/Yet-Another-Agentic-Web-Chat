@@ -1,13 +1,12 @@
-import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { RunnableConfig } from '@langchain/core/runnables';
 import { listFiles } from '@/lib/workspaces/files';
-import { persistFromToolConfig } from '@/lib/utils/persistToolContext';
+import { defineTool } from '@/lib/tools/defineTool';
 
-export function workspaceLsTool(workspaceId: string) {
-  return tool(
-    async (_input: unknown, config?: RunnableConfig) => {
-      const files = await listFiles(workspaceId);
+export function workspaceLsTool() {
+  return defineTool(
+    async (_input, runtime) => {
+      const { workspaceId } = runtime.context;
+      const files = await listFiles(workspaceId ?? '');
       const result = JSON.stringify({
         files: files.map((f) => ({
           name: f.name,
@@ -16,8 +15,7 @@ export function workspaceLsTool(workspaceId: string) {
           mtime: Number(f.updatedAt),
         })),
       });
-      await persistFromToolConfig({
-        config,
+      await runtime.persist({
         kind: 'workspace_ls',
         body: `[workspace_ls]\n${result}`,
         metadataExtras: { path: '/' },

@@ -1,6 +1,4 @@
-import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { RunnableConfig } from '@langchain/core/runnables';
 import { Source, WidgetTheme } from '@/lib/types/widget';
 import {
   fetchSourceWithMeta,
@@ -8,6 +6,7 @@ import {
 } from '@/lib/dashboard/sources';
 import { runCodeWidget } from '@/lib/dashboard/codeWidgetRunner';
 import { emitStreamEvent } from '@/lib/streaming/events';
+import { defineTool } from '@/lib/tools/defineTool';
 
 export interface WidgetBuilderState {
   title: string;
@@ -89,7 +88,7 @@ function applySourceOps(
 }
 
 export function createWidgetBuilderTools(ctx: WidgetBuilderContext) {
-  const readCurrentWidget = tool(
+  const readCurrentWidget = defineTool(
     async () =>
       JSON.stringify({
         title: ctx.state.title,
@@ -104,7 +103,7 @@ export function createWidgetBuilderTools(ctx: WidgetBuilderContext) {
     },
   );
 
-  const sampleSource = tool(
+  const sampleSource = defineTool(
     async (input: {
       urlIndex: number;
       maxChars?: number;
@@ -133,7 +132,7 @@ export function createWidgetBuilderTools(ctx: WidgetBuilderContext) {
     },
   );
 
-  const previewWidgetOutput = tool(
+  const previewWidgetOutput = defineTool(
     async () => {
       if (ctx.previewBudget.remaining <= 0) {
         return `Error: preview limit (${MAX_PREVIEW_PER_TURN} per turn) reached. Propose a change and let the user preview.`;
@@ -163,7 +162,7 @@ export function createWidgetBuilderTools(ctx: WidgetBuilderContext) {
     },
   );
 
-  const proposeWidgetChanges = tool(
+  const proposeWidgetChanges = defineTool(
     async (
       input: {
         rationale: string;
@@ -177,9 +176,9 @@ export function createWidgetBuilderTools(ctx: WidgetBuilderContext) {
           type?: Source['type'];
         }>;
       },
-      config?: RunnableConfig,
+      runtime,
     ) => {
-      const emitter = config?.configurable?.emitter;
+      const { emitter } = runtime.context;
       if (!emitter) return 'Error: proposal transport unavailable.';
 
       let code = ctx.state.code;

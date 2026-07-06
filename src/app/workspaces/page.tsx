@@ -7,12 +7,16 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import PageHeader from '@/components/PageHeader';
 import WorkspaceIcon from '@/components/Workspaces/WorkspaceIcon';
-import WorkspaceSettingsFields from '@/components/Workspaces/WorkspaceSettingsFields';
+import WorkspaceSettingsFields, {
+  WorkspaceModelOverrideField,
+} from '@/components/Workspaces/WorkspaceSettingsFields';
 import { workspaceColorClasses } from '@/lib/workspaces/appearance';
 import {
   useWorkspacesList,
   useCreateWorkspace,
 } from '@/lib/hooks/api/useWorkspaces';
+import type { WorkspaceModelOverride } from '@/lib/workspaces/types';
+import { captureCurrentSelection } from '@/lib/models/presets';
 
 interface CreateModalProps {
   onClose: () => void;
@@ -28,6 +32,9 @@ const CreateModal = ({ onClose, onCreated }: CreateModalProps) => {
   const [icon, setIcon] = useState<string | null>(null);
   const [autoMemory, setAutoMemory] = useState(false);
   const [autoAcceptFileEdits, setAutoAcceptFileEdits] = useState(false);
+  const [useCustomModels, setUseCustomModels] = useState(false);
+  const [modelOverride, setModelOverride] =
+    useState<WorkspaceModelOverride | null>(null);
   const [error, setError] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -42,6 +49,7 @@ const CreateModal = ({ onClose, onCreated }: CreateModalProps) => {
         icon: icon ?? undefined,
         autoMemoryEnabled: autoMemory ? 1 : 0,
         autoAcceptFileEdits: autoAcceptFileEdits ? 1 : 0,
+        ...(useCustomModels && modelOverride ? { modelOverride } : {}),
       },
       {
         onSuccess: (data) => {
@@ -77,6 +85,16 @@ const CreateModal = ({ onClose, onCreated }: CreateModalProps) => {
             autoAcceptFileEdits={autoAcceptFileEdits}
             onAutoAcceptFileEditsChange={setAutoAcceptFileEdits}
             autoFocusName
+          />
+          <WorkspaceModelOverrideField
+            useCustomModels={useCustomModels}
+            onUseCustomModelsChange={(enabled) => {
+              setUseCustomModels(enabled);
+              if (enabled)
+                setModelOverride((prev) => prev ?? captureCurrentSelection());
+            }}
+            modelOverride={modelOverride}
+            onModelOverrideChange={setModelOverride}
           />
           {error && <p className="text-xs text-danger">{error}</p>}
           <div className="flex justify-end gap-2 mt-1">

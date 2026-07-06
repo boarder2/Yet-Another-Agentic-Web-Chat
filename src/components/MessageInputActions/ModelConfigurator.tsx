@@ -33,15 +33,18 @@ import {
 import { toast } from 'sonner';
 import ModelPicker from '@/components/models/ModelPicker';
 import PresetOption from '@/components/models/PresetOption';
+import type { WorkspaceModelOverride } from '@/lib/workspaces/types';
 
 const EMPTY_PRESETS: ModelPresetList = [];
 
 export default function ModelConfigurator({
   showModelName,
   truncateModelName = true,
+  modelOverride,
 }: {
   showModelName?: boolean;
   truncateModelName?: boolean;
+  modelOverride?: WorkspaceModelOverride | null;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -148,6 +151,71 @@ export default function ModelConfigurator({
 
   const buttonClass =
     'p-1 group flex items-center text-fg/50 rounded-floating hover:bg-surface-2 active:scale-95 transition duration-200 hover:text-fg';
+
+  if (modelOverride) {
+    const chatName =
+      chatProviders[modelOverride.chatProvider]?.[modelOverride.chatModel]
+        ?.displayName ?? modelOverride.chatModel;
+    const systemName =
+      chatProviders[modelOverride.systemProvider]?.[modelOverride.systemModel]
+        ?.displayName ?? modelOverride.systemModel;
+    return (
+      <Popover className="relative">
+        <PopoverButton
+          type="button"
+          className={buttonClass}
+          aria-label="Models set by workspace"
+        >
+          <Cpu size={18} />
+          {computedShowName && (
+            <span
+              className={cn(
+                'ml-2 text-xs font-medium overflow-hidden text-ellipsis whitespace-nowrap',
+                { 'max-w-44': truncateModelName },
+              )}
+            >
+              Set by workspace
+            </span>
+          )}
+        </PopoverButton>
+
+        <Transition
+          as={Fragment}
+          enter="transition ease-out duration-100"
+          enterFrom="opacity-0 scale-95"
+          enterTo="opacity-100 scale-100"
+          leave="transition ease-in duration-75"
+          leaveFrom="opacity-100 scale-100"
+          leaveTo="opacity-0 scale-95"
+        >
+          <PopoverPanel className="absolute right-0 bottom-full z-50 mb-2 w-72 rounded-floating bg-surface border border-surface-2 shadow-floating overflow-hidden">
+            <div className="px-3 py-2 border-b border-surface-2">
+              <span className="text-xs font-semibold text-fg/80">
+                Models · set by workspace
+              </span>
+            </div>
+            <div className="px-3 py-2 space-y-1 text-xs">
+              <div className="flex justify-between gap-3">
+                <span className="text-fg/50">Chat</span>
+                <span className="text-fg/90 text-right truncate">
+                  {chatName} · {modelOverride.chatProvider}
+                </span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-fg/50">System</span>
+                <span className="text-fg/90 text-right truncate">
+                  {systemName} · {modelOverride.systemProvider}
+                </span>
+              </div>
+            </div>
+            <div className="border-t border-surface-2 px-3 py-2 text-xs text-fg/50">
+              Change this in the workspace&apos;s settings.
+            </div>
+          </PopoverPanel>
+        </Transition>
+      </Popover>
+    );
+  }
 
   return (
     <>

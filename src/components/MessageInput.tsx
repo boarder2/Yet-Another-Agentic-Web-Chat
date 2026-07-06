@@ -1,12 +1,26 @@
 import Image from 'next/image';
-import { ArrowRight, ArrowUp, LoaderCircle, Square, X } from 'lucide-react';
+import {
+  ArrowRight,
+  ArrowUp,
+  LoaderCircle,
+  Square,
+  TriangleAlert,
+  X,
+} from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
 import {
   subscribeLocalStorage,
   useLocalStorageString,
 } from '@/lib/hooks/useLocalStorage';
-import { DEFAULT_CONTEXT_WINDOW, SELECTION_KEYS } from '@/lib/models/presets';
+import {
+  DEFAULT_CONTEXT_WINDOW,
+  SELECTION_KEYS,
+  isModelRefAvailable,
+} from '@/lib/models/presets';
+import { useWorkspace } from '@/lib/hooks/api/useWorkspaces';
+import { WORKSPACE_MODEL_UNAVAILABLE_MESSAGE } from '@/lib/workspaces/types';
+import { useModels } from '@/lib/hooks/api/useModels';
 import { File, ImageAttachment } from './ChatWindow';
 import Attach from './MessageInputActions/Attach';
 import ContextIndicator from './MessageInputActions/ContextIndicator';
@@ -55,6 +69,7 @@ const MessageInput = ({
   onCompact,
   compacting,
   enabledSkills,
+  workspaceId,
 }: {
   sendMessage: (
     message: string,
@@ -94,7 +109,29 @@ const MessageInput = ({
   onCompact?: (instructions?: string) => void;
   compacting?: boolean;
   enabledSkills?: Array<{ name: string; description: string }>;
+  workspaceId?: string | null;
 }) => {
+  const { data: workspace } = useWorkspace(workspaceId);
+  const modelOverride = workspace?.modelOverride ?? null;
+  const { data: modelsData } = useModels();
+  // When a workspace pins a model, the composer's model-derived affordances
+  // (image attach/paste, context-usage meter) must follow the pin — the server
+  // enforces its imageCapable/contextWindowSize, not the global selection.
+  const effectiveImageCapable = modelOverride
+    ? (modelOverride.imageCapable ?? false)
+    : imageCapable;
+  const pinInvalid =
+    !!modelOverride &&
+    (!isModelRefAvailable(
+      modelOverride.chatProvider,
+      modelOverride.chatModel,
+      modelsData?.chatModelProviders,
+    ) ||
+      !isModelRefAvailable(
+        modelOverride.systemProvider,
+        modelOverride.systemModel,
+        modelsData?.chatModelProviders,
+      ));
   const [message, setMessage] = useState(initialMessage || '');
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [contextWindowSizeStr] = useLocalStorageString(
@@ -128,7 +165,7 @@ const MessageInput = ({
   };
 
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    if (!imageCapable) return;
+    if (!effectiveImageCapable) return;
     const items = e.clipboardData?.items;
     if (!items) return;
     const imageFiles: globalThis.File[] = [];
@@ -320,8 +357,13 @@ const MessageInput = ({
 
   // Function to handle message submission
   const handleSubmitMessage = () => {
-    // Only submit if we have a non-empty message or images, and not currently loading
-    if (loading || (message.trim().length === 0 && pendingImages.length === 0))
+    // Only submit if we have a non-empty message or images, not currently
+    // loading, and (when workspace-pinned) the pinned model is available.
+    if (
+      loading ||
+      (message.trim().length === 0 && pendingImages.length === 0) ||
+      pinInvalid
+    )
       return;
 
     sendMessage(message);
@@ -372,6 +414,12 @@ const MessageInput = ({
       }}
       className="w-full"
     >
+      {pinInvalid && (
+        <div className="flex items-center gap-2 mb-2 px-3 py-2 rounded-control border border-warning bg-warning-soft text-warning dark:text-warning text-xs">
+          <TriangleAlert size={14} className="shrink-0" />
+          <span>{WORKSPACE_MODEL_UNAVAILABLE_MESSAGE}</span>
+        </div>
+      )}
       <div className="relative flex flex-col bg-surface px-3 pt-4 pb-2 rounded-surface w-full border border-surface-2">
         {(pendingImages.length > 0 || isUploadingImage) && (
           <div className="flex flex-row gap-2 mb-2 overflow-x-auto pb-1">
@@ -454,11 +502,14 @@ const MessageInput = ({
               setFiles={setFiles}
               pendingImages={pendingImages}
               setPendingImages={setPendingImages}
-              imageCapable={imageCapable}
+              imageCapable={effectiveImageCapable}
             />
           </div>
           <div className="flex flex-row items-center space-x-2">
-            <ModelConfigurator showModelName={false} />
+            <ModelConfigurator
+              showModelName={false}
+              modelOverride={modelOverride}
+            />
             <SystemPromptSelector
               selectedPromptIds={systemPromptIds}
               onSelectedPromptIdsChange={setSystemPromptIds}
@@ -484,7 +535,10 @@ const MessageInput = ({
             )}
             {estimatedUsage !== undefined && onCompact && (
               <ContextIndicator
-                chatModelContextWindow={parseInt(contextWindowSizeStr, 10)}
+                chatModelContextWindow={
+                  modelOverride?.contextWindowSize ??
+                  parseInt(contextWindowSizeStr, 10)
+                }
                 estimatedUsage={estimatedUsage}
                 messageCount={messageCount ?? 0}
                 onCompact={onCompact}
@@ -523,7 +577,9 @@ const MessageInput = ({
                 )}
                 <button
                   disabled={
-                    message.trim().length === 0 && pendingImages.length === 0
+                    (message.trim().length === 0 &&
+                      pendingImages.length === 0) ||
+                    pinInvalid
                   }
                   className="bg-accent text-accent-fg disabled:text-accent-fg/50 disabled:bg-accent/20 hover:bg-accent-700 transition duration-100 rounded-pill p-2"
                   type="submit"

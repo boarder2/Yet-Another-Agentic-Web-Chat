@@ -161,4 +161,75 @@ test.describe('workspaces CRUD', () => {
     expect(archived.filter((n) => n === nameA)).toHaveLength(1);
     expect(archived.filter((n) => n === nameB)).toHaveLength(0);
   });
+
+  test('creating a workspace with "Use custom models" enabled pins the model at creation', async ({
+    page,
+    request,
+  }) => {
+    const listPage = new WorkspacesPage(page);
+    await listPage.goto();
+
+    const wsId = await listPage.createWorkspaceWithCustomModels(
+      `ws-create-pin-${Date.now()}`,
+    );
+
+    // The pin is persisted at creation (pre-filled from the current global
+    // selection — test/test-direct, the seeded e2e default), not left null.
+    await expect
+      .poll(async () => {
+        const res = await request.get(`/api/workspaces/${wsId}`);
+        return (await res.json()).workspace.modelOverride;
+      })
+      .toMatchObject({
+        chatProvider: 'test',
+        chatModel: 'test-direct',
+        systemProvider: 'test',
+        systemModel: 'test-direct',
+      });
+  });
+
+  test('toggling "Use custom models" pins then clears the workspace model override', async ({
+    page,
+    request,
+  }) => {
+    const wsId = await seedWorkspace(request, {
+      name: `ws-model-override-${Date.now()}`,
+    });
+
+    const detailPage = new WorkspaceDetailPage(page);
+    await detailPage.goto(wsId);
+
+    // No override to start.
+    const initial = await request.get(`/api/workspaces/${wsId}`);
+    expect((await initial.json()).workspace.modelOverride ?? null).toBeNull();
+
+    // Enabling pre-fills from the current global selection (test/test-direct,
+    // the seeded e2e default — see e2e/serial/model-picker.spec.ts) and PATCHes
+    // immediately.
+    await detailPage.toggleCustomModels();
+    await detailPage.closeSettings();
+
+    await expect
+      .poll(async () => {
+        const res = await request.get(`/api/workspaces/${wsId}`);
+        return (await res.json()).workspace.modelOverride;
+      })
+      .toMatchObject({
+        chatProvider: 'test',
+        chatModel: 'test-direct',
+        systemProvider: 'test',
+        systemModel: 'test-direct',
+      });
+
+    // Disabling clears the override immediately.
+    await detailPage.toggleCustomModels();
+    await detailPage.closeSettings();
+
+    await expect
+      .poll(async () => {
+        const res = await request.get(`/api/workspaces/${wsId}`);
+        return (await res.json()).workspace.modelOverride ?? null;
+      })
+      .toBeNull();
+  });
 });

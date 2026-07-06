@@ -153,6 +153,7 @@ const EmptyChat = ({
       setPendingImages={setPendingImages}
       imageCapable={imageCapable}
       isPrivateSession={isPrivateSession}
+      workspaceId={workspaceId}
       enabledSkills={enabledSkills}
     />
   );

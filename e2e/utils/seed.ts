@@ -1,4 +1,5 @@
 import { expect, type APIRequestContext } from '@playwright/test';
+import type { WorkspaceModelOverride } from '../../src/lib/workspaces/types';
 import { uid, uniq, baseURL } from './helpers';
 import { streamChatUntil, type ChatEvent } from './sse';
 
@@ -20,12 +21,19 @@ async function postJson(
 
 export async function seedWorkspace(
   request: APIRequestContext,
-  overrides?: Partial<{ name: string; description: string }>,
+  overrides?: Partial<{
+    name: string;
+    description: string;
+    modelOverride: WorkspaceModelOverride | null;
+  }>,
 ): Promise<string> {
   const body = await postJson(request, '/api/workspaces', {
     name: overrides?.name ?? uniq('ws'),
     ...(overrides?.description !== undefined
       ? { description: overrides.description }
+      : {}),
+    ...(overrides?.modelOverride !== undefined
+      ? { modelOverride: overrides.modelOverride }
       : {}),
   });
   return (body as { workspace: { id: string } }).workspace.id;

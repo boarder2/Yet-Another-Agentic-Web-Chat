@@ -14,9 +14,14 @@ export class WorkspaceDetailPage extends BasePage {
     'button[title="Workspace settings"]',
   );
 
-  /** The settings modal (WorkspaceModal). */
+  /**
+   * The settings modal (WorkspaceModal) panel. Scoped to the element that
+   * contains the modal's Close button — the Models section's ModelPicker
+   * renders its own `rounded-floating` popover-trigger buttons inside this
+   * same overlay, which would otherwise also match `[class*="rounded-floating"]`.
+   */
   private readonly settingsModal = this.page.locator(
-    '.fixed.inset-0.z-50 [class*="rounded-floating"]',
+    '.fixed.inset-0.z-50 [class*="rounded-floating"]:has(button[aria-label="Close"])',
   );
 
   async goto(id: string) {
@@ -67,6 +72,20 @@ export class WorkspaceDetailPage extends BasePage {
     await this.openSettings();
     const btn = this.settingsModal.getByRole('button', { name: 'Unarchive' });
     await btn.click();
+    await this.page.waitForTimeout(500);
+  }
+
+  /** The "Models" section within the settings modal (model-override UI). */
+  private readonly modelsSection = this.settingsModal.locator('section', {
+    hasText: 'Models',
+  });
+
+  /** Toggle "Use custom models for this workspace" via the settings modal. */
+  async toggleCustomModels() {
+    await this.openSettings();
+    await this.modelsSection
+      .getByRole('switch', { name: 'Use custom models for this workspace' })
+      .click();
     await this.page.waitForTimeout(500);
   }
 

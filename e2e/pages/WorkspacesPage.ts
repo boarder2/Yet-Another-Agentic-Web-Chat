@@ -53,6 +53,22 @@ export class WorkspacesPage extends BasePage {
     return match?.[1] ?? '';
   }
 
+  /**
+   * Create a workspace with "Use custom models" enabled, pinning the current
+   * global selection at creation time. Returns the new workspace id.
+   */
+  async createWorkspaceWithCustomModels(name: string): Promise<string> {
+    await this.openCreateModal();
+    await this.page.getByRole('textbox', { name: 'Workspace name' }).fill(name);
+    await this.page
+      .getByRole('switch', { name: 'Use custom models for this workspace' })
+      .click();
+    await this.page.getByRole('button', { name: 'Create' }).click();
+    await this.page.waitForURL(/\/workspaces\/[^/?#]+/);
+    const match = this.page.url().match(/\/workspaces\/([^/?#]+)/);
+    return match?.[1] ?? '';
+  }
+
   /** Toggle between Active and Archived view. */
   async toggleArchived() {
     await this.archiveToggle.click();

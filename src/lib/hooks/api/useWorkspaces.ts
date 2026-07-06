@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api/client';
 import { qk } from '@/lib/api/keys';
+import type { WorkspaceModelOverride } from '@/lib/workspaces/types';
 
 export interface Workspace {
   id: string;
@@ -14,6 +15,7 @@ export interface Workspace {
   sourceUrls?: string[];
   autoMemoryEnabled?: 0 | 1 | null;
   autoAcceptFileEdits?: 0 | 1;
+  modelOverride?: WorkspaceModelOverride | null;
   archivedAt: string | null;
   createdAt?: string;
   updatedAt?: string;
@@ -53,6 +55,7 @@ export function useCreateWorkspace() {
       icon?: string | null;
       autoMemoryEnabled?: number;
       autoAcceptFileEdits?: number;
+      modelOverride?: WorkspaceModelOverride | null;
     }) =>
       apiFetch<{ workspace: Workspace }>('/api/workspaces', {
         method: 'POST',

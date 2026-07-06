@@ -218,6 +218,8 @@ Note: The old `{"type":"init"}`, `{"type":"modelStats"}`, and `{"type":"end"}` e
 ```
 User → POST /api/chat
   → Idempotency check (getRun): if live run exists, re-subscribe
+  → Resolve workspace (from chat record, fallback to body.workspaceId)
+  → If workspace.modelOverride: overwrite body.chatModel/systemModel/imageCapable
   → resolveChatAndEmbedding() → chatLlm, systemLlm, embedding
   → Memory retrieval (if memoryEnabled)
   → handleHistorySave() — persists user message to DB
@@ -235,3 +237,5 @@ User → POST /api/chat
 ## Model Routing
 
 If `systemModel` is omitted, falls back to `chatModel`. Both support `contextWindowSize`. `selectedSystemPromptIds` is treated as persona prompt IDs (despite the legacy name).
+
+A workspace can pin its own chat/system model (`workspaces.modelOverride`, set via Workspace Settings). When present, the server overwrites the request's `chatModel`/`systemModel`/`imageCapable` before resolution — the client-sent values are discarded, so a stale client or direct API call can't bypass the pin. An unresolvable pinned model is a 400 with a workspace-specific message rather than the generic "Invalid model" error.

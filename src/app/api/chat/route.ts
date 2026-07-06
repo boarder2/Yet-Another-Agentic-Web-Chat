@@ -28,6 +28,7 @@ import { distillQueryForEmbedding } from '@/lib/utils/queryDistillation';
 import { SimplifiedAgent } from '@/lib/search/simplifiedAgent';
 import { emitStreamEvent, onStreamEvent } from '@/lib/streaming/events';
 import { buildWorkspaceSystemPromptSuffix } from '@/lib/workspaces/composeSystemPrompt';
+import { WORKSPACE_MODEL_UNAVAILABLE_MESSAGE } from '@/lib/workspaces/types';
 import { workspaceLsTool } from '@/lib/tools/workspace/ls';
 import { workspaceGrepTool } from '@/lib/tools/workspace/grep';
 import { workspaceReadTool } from '@/lib/tools/workspace/read';
@@ -224,6 +225,44 @@ export const POST = async (req: Request) => {
       });
     }
 
+    // --- Workspace context (load early so workspaceId is available for model-
+    // override enforcement and memory scoping). Load workspaceId from the CHAT
+    // RECORD (authoritative), not the request body. For a new chat the row is
+    // created in handleHistorySave (fire-and-forget below), so fall back to
+    // body.workspaceId only for the very first message. ---
+    let resolvedWorkspaceId: string | null = null;
+    let resolvedWorkspace: typeof workspaces.$inferSelect | null = null;
+    {
+      const existingChat = await db.query.chats.findFirst({
+        where: eq(chats.id, message.chatId),
+      });
+      resolvedWorkspaceId =
+        existingChat?.workspaceId ?? body.workspaceId ?? null;
+      if (resolvedWorkspaceId) {
+        resolvedWorkspace =
+          (await db.query.workspaces.findFirst({
+            where: eq(workspaces.id, resolvedWorkspaceId),
+          })) ?? null;
+      }
+    }
+
+    // A workspace with a pinned model set overrides whatever the client sent —
+    // enforced server-side so a stale client or direct API call can't bypass it.
+    if (resolvedWorkspace?.modelOverride) {
+      const ov = resolvedWorkspace.modelOverride;
+      body.chatModel = {
+        provider: ov.chatProvider,
+        name: ov.chatModel,
+        contextWindowSize: ov.contextWindowSize,
+      };
+      body.systemModel = {
+        provider: ov.systemProvider,
+        name: ov.systemModel,
+        contextWindowSize: ov.contextWindowSize,
+      };
+      body.imageCapable = ov.imageCapable ?? false;
+    }
+
     let chatLlm: BaseChatModel | undefined;
     let systemLlm: BaseChatModel | undefined;
     let embedding: CachedEmbeddings;
@@ -237,7 +276,18 @@ export const POST = async (req: Request) => {
       systemLlm = resolved.systemLlm;
       embedding = resolved.embedding;
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Invalid model';
+      // A pin only sets the chat/system model (never embedding, and system
+      // falls back to chat), so the pin is at fault iff the chat model failed —
+      // don't misattribute an embedding-config error to the workspace pin.
+      const pinAtFault =
+        !!resolvedWorkspace?.modelOverride &&
+        e instanceof Error &&
+        e.message === 'Invalid chat model';
+      const msg = pinAtFault
+        ? WORKSPACE_MODEL_UNAVAILABLE_MESSAGE
+        : e instanceof Error
+          ? e.message
+          : 'Invalid model';
       return Response.json({ error: msg }, { status: 400 });
     }
 
@@ -313,26 +363,6 @@ export const POST = async (req: Request) => {
         !priv && sendProfile
           ? getStringSetting(settings, 'personalization.about', '')
           : undefined;
-    }
-
-    // --- Workspace context (load early so workspaceId is available for memory scoping) ---
-    // Load workspaceId from the CHAT RECORD (authoritative), not the request body.
-    // For a new chat the row is created in handleHistorySave (fire-and-forget below),
-    // so fall back to body.workspaceId only for the very first message.
-    let resolvedWorkspaceId: string | null = null;
-    let resolvedWorkspace: typeof workspaces.$inferSelect | null = null;
-    {
-      const existingChat = await db.query.chats.findFirst({
-        where: eq(chats.id, message.chatId),
-      });
-      resolvedWorkspaceId =
-        existingChat?.workspaceId ?? body.workspaceId ?? null;
-      if (resolvedWorkspaceId) {
-        resolvedWorkspace =
-          (await db.query.workspaces.findFirst({
-            where: eq(workspaces.id, resolvedWorkspaceId),
-          })) ?? null;
-      }
     }
 
     // --- Memory retrieval ---

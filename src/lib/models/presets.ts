@@ -96,29 +96,35 @@ export function createPreset(
 }
 
 /**
- * Cross-checks a preset's chat/system provider+model against the live model
- * catalog. `custom_openai` is skipped (its model is configured separately and
+ * Cross-checks a single provider+model against the live model catalog.
+ * `custom_openai` is always available (its model is configured separately and
  * is not enumerable). Returns true when the catalog is not yet loaded so we
  * don't flash a spurious "unavailable" badge during load.
  */
+export function isModelRefAvailable(
+  provider: string,
+  model: string,
+  modelsData:
+    | Record<string, Record<string, { displayName: string }>>
+    | undefined,
+): boolean {
+  if (!modelsData) return true;
+  if (provider === 'custom_openai') return true;
+  const providerModels = modelsData[provider];
+  return !!providerModels && !!providerModels[model];
+}
+
+/** Cross-checks a preset's chat/system provider+model against the live model catalog. */
 export function isPresetAvailable(
   preset: ModelPreset,
   modelsData:
     | Record<string, Record<string, { displayName: string }>>
     | undefined,
 ): boolean {
-  if (!modelsData) return true;
-  if (preset.chatProvider !== 'custom_openai') {
-    const chatProviderModels = modelsData[preset.chatProvider];
-    if (!chatProviderModels || !chatProviderModels[preset.chatModel])
-      return false;
-  }
-  if (preset.systemProvider !== 'custom_openai') {
-    const sysProviderModels = modelsData[preset.systemProvider];
-    if (!sysProviderModels || !sysProviderModels[preset.systemModel])
-      return false;
-  }
-  return true;
+  return (
+    isModelRefAvailable(preset.chatProvider, preset.chatModel, modelsData) &&
+    isModelRefAvailable(preset.systemProvider, preset.systemModel, modelsData)
+  );
 }
 
 /** Compact one-line summary of a preset for list rows. */

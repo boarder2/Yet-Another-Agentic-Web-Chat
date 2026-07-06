@@ -1,13 +1,17 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import WorkspaceSettingsFields from './WorkspaceSettingsFields';
+import WorkspaceSettingsFields, {
+  WorkspaceModelOverrideField,
+} from './WorkspaceSettingsFields';
 import { useEffect, useRef, useState } from 'react';
 import {
   usePatchWorkspace,
   useArchiveWorkspace,
   useDeleteWorkspace,
 } from '@/lib/hooks/api/useWorkspaces';
+import type { WorkspaceModelOverride } from '@/lib/workspaces/types';
+import { captureCurrentSelection } from '@/lib/models/presets';
 
 interface Workspace {
   id: string;
@@ -18,6 +22,7 @@ interface Workspace {
   focusMode?: string | null;
   autoMemoryEnabled?: 0 | 1 | null;
   autoAcceptFileEdits?: 0 | 1;
+  modelOverride?: WorkspaceModelOverride | null;
   archivedAt?: string | null;
 }
 
@@ -37,6 +42,11 @@ export default function SettingsTab({ workspace }: { workspace: Workspace }) {
   );
   const [color, setColor] = useState<string | null>(workspace.color ?? null);
   const [icon, setIcon] = useState<string | null>(workspace.icon ?? null);
+  const [useCustomModels, setUseCustomModels] = useState<boolean>(
+    !!workspace.modelOverride,
+  );
+  const [modelOverride, setModelOverride] =
+    useState<WorkspaceModelOverride | null>(workspace.modelOverride ?? null);
   const [isArchived, setIsArchived] = useState(!!workspace.archivedAt);
   const [deleting, setDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -107,6 +117,28 @@ export default function SettingsTab({ workspace }: { workspace: Workspace }) {
           onAutoAcceptFileEditsChange={(enabled) => {
             setAutoAcceptFileEdits(enabled);
             applyPatch({ autoAcceptFileEdits: enabled ? 1 : 0 });
+          }}
+        />
+      </section>
+
+      <section className="space-y-3">
+        <h3 className="text-sm font-semibold">Models</h3>
+        <WorkspaceModelOverrideField
+          useCustomModels={useCustomModels}
+          onUseCustomModelsChange={(enabled) => {
+            setUseCustomModels(enabled);
+            if (enabled) {
+              const next = modelOverride ?? captureCurrentSelection();
+              setModelOverride(next);
+              applyPatch({ modelOverride: next });
+            } else {
+              applyPatch({ modelOverride: null });
+            }
+          }}
+          modelOverride={modelOverride}
+          onModelOverrideChange={(next) => {
+            setModelOverride(next);
+            applyPatch({ modelOverride: next });
           }}
         />
       </section>

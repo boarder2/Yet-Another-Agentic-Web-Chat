@@ -61,6 +61,7 @@ const Chat = ({
   setPendingImages,
   imageCapable = false,
   isPrivateSession = false,
+  workspaceId,
   searchCapabilities,
   topPadding,
   estimatedUsage,
@@ -144,6 +145,7 @@ const Chat = ({
   setPendingImages: (images: ImageAttachment[]) => void;
   imageCapable?: boolean;
   isPrivateSession?: boolean;
+  workspaceId?: string | null;
   searchCapabilities?: {
     web: boolean;
     images: boolean;
@@ -565,6 +567,7 @@ const Chat = ({
           setPendingImages={setPendingImages}
           imageCapable={imageCapable}
           isPrivateSession={isPrivateSession}
+          workspaceId={workspaceId}
           estimatedUsage={estimatedUsage}
           messageCount={messageCount}
           onCompact={onCompact}

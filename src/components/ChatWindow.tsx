@@ -1708,6 +1708,7 @@ const ChatWindow = ({
                   workspaceId={selectedWorkspaceId ?? workspaceId}
                 />
                 <Chat
+                  workspaceId={selectedWorkspaceId ?? workspaceId}
                   loading={loading}
                   messages={messages}
                   skillNames={enabledUserSkillNames}

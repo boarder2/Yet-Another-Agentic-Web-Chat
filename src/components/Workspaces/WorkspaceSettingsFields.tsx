@@ -4,6 +4,8 @@ import { cn } from '@/lib/utils';
 import { Description, Field, Label } from '@headlessui/react';
 import AppSwitch from '@/components/ui/AppSwitch';
 import AppearancePicker from './AppearancePicker';
+import ModelPicker from '@/components/models/ModelPicker';
+import type { WorkspaceModelOverride } from '@/lib/workspaces/types';
 
 interface WorkspaceSettingsFieldsProps {
   name: string;
@@ -145,6 +147,48 @@ export default function WorkspaceSettingsFields({
           onChange={onAutoAcceptFileEditsChange}
         />
       </Field>
+    </>
+  );
+}
+
+export function WorkspaceModelOverrideField({
+  useCustomModels,
+  onUseCustomModelsChange,
+  modelOverride,
+  onModelOverrideChange,
+}: {
+  useCustomModels: boolean;
+  onUseCustomModelsChange: (enabled: boolean) => void;
+  modelOverride: WorkspaceModelOverride | null;
+  onModelOverrideChange: (next: WorkspaceModelOverride) => void;
+}) {
+  return (
+    <>
+      <Field className="flex items-center justify-between">
+        <div>
+          <Label className="text-sm font-medium">
+            Use custom models for this workspace
+          </Label>
+          <Description className="text-xs text-fg/60">
+            Pin a chat and system model for every chat in this workspace,
+            overriding the global selection.
+          </Description>
+        </div>
+        <AppSwitch
+          checked={useCustomModels}
+          onChange={onUseCustomModelsChange}
+        />
+      </Field>
+
+      {useCustomModels && modelOverride && (
+        <ModelPicker
+          value={modelOverride}
+          onChange={onModelOverrideChange}
+          fields={{ system: true, vision: true, contextWindow: true }}
+          presets="none"
+          layout="inline"
+        />
+      )}
     </>
   );
 }

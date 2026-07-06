@@ -7,6 +7,7 @@ import {
   uniqueIndex,
   index,
 } from 'drizzle-orm/sqlite-core';
+import type { WorkspaceModelOverride } from '@/lib/workspaces/types';
 
 export const messages = sqliteTable('messages', {
   id: integer('id').primaryKey(),
@@ -200,6 +201,9 @@ export const workspaces = sqliteTable('workspaces', {
     .default(sql`'[]'`),
   autoMemoryEnabled: integer('auto_memory_enabled'),
   autoAcceptFileEdits: integer('auto_accept_file_edits').notNull().default(0),
+  modelOverride: text('model_override', {
+    mode: 'json',
+  }).$type<WorkspaceModelOverride | null>(),
   archivedAt: integer('archived_at', { mode: 'timestamp' }),
   createdAt: integer('created_at', { mode: 'timestamp' })
     .notNull()

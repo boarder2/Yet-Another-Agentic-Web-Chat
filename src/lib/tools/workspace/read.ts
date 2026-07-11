@@ -52,7 +52,7 @@ export function workspaceReadTool(opts: { visionCapable: boolean }) {
         });
       }
 
-      const text = await getText(row.sha256, row.mime);
+      const text = await getText(row);
       if (text === null) return JSON.stringify({ error: 'binary_file' });
       const lines = text.split(/\r?\n/);
       const needsRange = lines.length > 500;

@@ -8,19 +8,10 @@ import {
   memories,
 } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { blobPath, WORKSPACE_FILES_ROOT } from './paths';
-import fs from 'fs';
-import path from 'path';
+import { workspaceDir } from './paths';
+import fs from 'node:fs/promises';
 
 export async function deleteWorkspace(workspaceId: string): Promise<void> {
-  // 1. Collect all blob hashes used by this workspace's files
-  const files = await db
-    .select({ sha256: workspaceFiles.sha256 })
-    .from(workspaceFiles)
-    .where(eq(workspaceFiles.workspaceId, workspaceId))
-    .all();
-
-  // 2. Delete all DB rows in dependency order
   await db
     .delete(workspaceSystemPrompts)
     .where(eq(workspaceSystemPrompts.workspaceId, workspaceId))
@@ -50,20 +41,7 @@ export async function deleteWorkspace(workspaceId: string): Promise<void> {
 
   await db.delete(workspaces).where(eq(workspaces.id, workspaceId)).execute();
 
-  // 3. GC blobs that are now unreferenced across all workspaces
-  for (const { sha256 } of files) {
-    const stillUsed = await db
-      .select({ id: workspaceFiles.id })
-      .from(workspaceFiles)
-      .where(eq(workspaceFiles.sha256, sha256))
-      .get();
-    if (!stillUsed) {
-      const blobFile = path.join(WORKSPACE_FILES_ROOT, blobPath(sha256));
-      try {
-        fs.unlinkSync(blobFile);
-      } catch {
-        // already gone — ignore
-      }
-    }
-  }
+  // No blob is shared across workspaces, so the whole tree goes — including any
+  // orphans left behind by a crash mid-write.
+  await fs.rm(workspaceDir(workspaceId), { recursive: true, force: true });
 }

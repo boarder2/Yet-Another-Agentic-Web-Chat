@@ -3,6 +3,7 @@ import {
   seedWorkspace,
   seedWorkspaceFile,
   seedSystemPrompt,
+  fileSha,
 } from '../utils/seed';
 
 // ---------------------------------------------------------------------------
@@ -335,7 +336,10 @@ test.describe('PUT /api/workspaces/[id]/files/[fileId]', () => {
       content: 'old',
     });
     const res = await request.put(`/api/workspaces/${wsId}/files/${fileId}`, {
-      data: { content: 'new content' },
+      data: {
+        content: 'new content',
+        expectedSha: await fileSha(request, wsId, fileId),
+      },
     });
     expect(res.status()).toBe(200);
     const body = await res.json();
@@ -356,17 +360,30 @@ test.describe('PUT /api/workspaces/[id]/files/[fileId]', () => {
       content: 'x',
     });
     const res = await request.put(`/api/workspaces/${wsId}/files/${fileId}`, {
-      data: {},
+      data: { expectedSha: await fileSha(request, wsId, fileId) },
     });
     expect(res.status()).toBe(400);
     expect(await res.json()).toEqual({ error: 'content required' });
+  });
+
+  test('rejects missing expectedSha with 400', async ({ request }) => {
+    const wsId = await seedWorkspace(request);
+    const fileId = await seedWorkspaceFile(request, wsId, {
+      name: 'nosha.txt',
+      content: 'x',
+    });
+    const res = await request.put(`/api/workspaces/${wsId}/files/${fileId}`, {
+      data: { content: 'y' },
+    });
+    expect(res.status()).toBe(400);
+    expect(await res.json()).toEqual({ error: 'expectedSha required' });
   });
 
   test('returns 404 for nonexistent fileId', async ({ request }) => {
     const wsId = await seedWorkspace(request);
     const res = await request.put(
       `/api/workspaces/${wsId}/files/nonexistent-file`,
-      { data: { content: 'x' } },
+      { data: { content: 'x', expectedSha: 'a'.repeat(64) } },
     );
     expect(res.status()).toBe(404);
     expect(await res.json()).toMatchObject({ error: 'Not found' });

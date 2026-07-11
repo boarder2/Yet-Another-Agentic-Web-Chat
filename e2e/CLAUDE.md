@@ -10,15 +10,16 @@ Tests assert **correct** behavior — what the feature is _supposed_ to do, deri
 
 `src/lib/providers/test.ts` is scriptable by model id — select the behavior a spec needs by choosing the model rather than special-casing a spec against real provider output. Extend it with new variants as scenarios require.
 
-| Model id          | Behavior                                                                                                                                       |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `test-direct`     | Answers immediately with fixed text, no tools.                                                                                                 |
-| `test-tool`       | Emits one `file_search` tool call, then a fixed answer.                                                                                        |
-| `test-tool-multi` | Emits two sequential `file_search` tool calls (each after the prior result), then a fixed answer.                                              |
-| `test-ask-user`   | Emits an `ask_user` tool call (triggers a real LangGraph interrupt — the run pauses `awaiting_user`); on resume, answers with fixed text.      |
-| `test-structured` | If tools are bound (`withStructuredOutput`), returns a matching tool call with deterministic args; otherwise answers with `<suggestions>` XML. |
-| `test-slow`       | Paces token delivery (300ms/token) so a spec can observe a run mid-stream.                                                                     |
-| `test-embed`      | Deterministic fixed-vector embeddings.                                                                                                         |
+| Model id              | Behavior                                                                                                                                       |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `test-direct`         | Answers immediately with fixed text, no tools.                                                                                                 |
+| `test-tool`           | Emits one `file_search` tool call, then a fixed answer.                                                                                        |
+| `test-tool-multi`     | Emits two sequential `file_search` tool calls (each after the prior result), then a fixed answer.                                              |
+| `test-ask-user`       | Emits an `ask_user` tool call (triggers a real LangGraph interrupt — the run pauses `awaiting_user`); on resume, answers with fixed text.      |
+| `test-structured`     | If tools are bound (`withStructuredOutput`), returns a matching tool call with deterministic args; otherwise answers with `<suggestions>` XML. |
+| `test-slow`           | Paces token delivery (300ms/token) so a spec can observe a run mid-stream.                                                                     |
+| `test-workspace-edit` | Emits one `workspace_edit` tool call whose args are scripted by the prompt (`<file>\|<oldString>\|<newString>`).                               |
+| `test-embed`          | Deterministic fixed-vector embeddings.                                                                                                         |
 
 ## Setup
 
@@ -77,7 +78,7 @@ Extend `e2e/fixtures/index.ts`. Do not import from `@playwright/test` directly i
 
 ## Seed & SSE Helpers
 
-`e2e/utils/seed.ts` — API-based data factories, reused across API and UI specs to set up state without going through the UI: `seedWorkspace`, `seedChat`, `seedMemory`, `seedSkill`, `seedSystemPrompt`, `seedScheduledTask`, `seedWorkspaceFile`, `seedScheduledChat`. Each returns the created id. `seedAwaitingApproval` starts a `test-ask-user` run and returns once it pauses at the interrupt (`chatId`/`messageId`/`approvalId`/`question`); pair it with `cancelAwaitingRun` when a spec doesn't resolve the approval via `runs/resume` itself, so no unresolved approval leaks into other specs.
+`e2e/utils/seed.ts` — API-based data factories, reused across API and UI specs to set up state without going through the UI: `seedWorkspace`, `seedChat`, `seedMemory`, `seedSkill`, `seedSystemPrompt`, `seedScheduledTask`, `seedWorkspaceFile`, `seedScheduledChat`. Each returns the created id. `seedAwaitingApproval` starts a `test-ask-user` run and returns once it pauses at the interrupt (`chatId`/`messageId`/`approvalId`/`question`); pair it with `cancelAwaitingRun` when a spec doesn't resolve the approval via `runs/resume` itself, so no unresolved approval leaks into other specs. `seedAwaitingWorkspaceEdit` does the same for a `workspace_edit` run, parking it at the edit-approval interrupt so a spec can set up UI state before letting the edit land. `fileSha` reads a workspace file's current sha — the CAS token every write needs.
 
 `e2e/utils/sse.ts` — parses the chat SSE stream: `collectSseEvents` (from a raw string or a Playwright `APIResponse`), `eventsOfType`, `joinResponseText`, `extractSources`. `streamChatUntil` reads `/api/chat` via raw `fetch` and stops as soon as a predicate matches — needed for a paused (`awaiting_user`) run, whose connection otherwise stays open indefinitely and would hang the Playwright `request` fixture.
 

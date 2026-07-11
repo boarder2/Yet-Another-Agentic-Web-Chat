@@ -17,7 +17,7 @@ export function workspaceGrepTool() {
         if (isImageMime(f.mime)) continue;
         let text: string | null;
         try {
-          text = await getText(f.sha256, f.mime);
+          text = await getText(f);
         } catch {
           continue;
         }

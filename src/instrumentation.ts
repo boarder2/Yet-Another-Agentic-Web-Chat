@@ -14,6 +14,16 @@ export async function register() {
       );
     }
 
+    // Move workspace file blobs off the legacy global-dedup layout. Fault-isolated:
+    // it keeps the legacy tree and retries next boot rather than half-migrating.
+    try {
+      const { migrateWorkspaceBlobs } =
+        await import('./lib/workspaces/migrateBlobs');
+      migrateWorkspaceBlobs();
+    } catch (err) {
+      console.error('[workspaces] Failed to migrate file blobs:', err);
+    }
+
     // Encryption-at-rest boot sequence. The passphrase is required and never
     // auto-generated — if it's unset, skip the migrations (nothing to encrypt
     // into) and log a single actionable warning; the app itself blocks usage

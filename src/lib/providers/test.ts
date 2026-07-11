@@ -109,6 +109,35 @@ class FakeChatModel extends BaseChatModel {
       return;
     }
 
+    // Scripted by the prompt: "<file>|<oldString>|<newString>".
+    if (this.modelName.includes('workspace-edit') && !hasToolResult) {
+      const [file, oldString, newString] = lastHumanText(messages).split('|');
+      yield new ChatGenerationChunk({
+        text: '',
+        message: new AIMessageChunk({
+          content: '',
+          tool_calls: [
+            {
+              name: 'workspace_edit',
+              args: {
+                file: (file ?? '').trim(),
+                oldString: oldString ?? '',
+                newString: newString ?? '',
+              },
+              id: 'test-workspace-edit-call-1',
+              type: 'tool_call',
+            },
+          ],
+          usage_metadata: {
+            input_tokens: 12,
+            output_tokens: 4,
+            total_tokens: 16,
+          },
+        }),
+      });
+      return;
+    }
+
     if (this.modelName.includes('ask-user') && !hasToolResult) {
       yield new ChatGenerationChunk({
         text: '',
@@ -334,6 +363,12 @@ export async function loadTestChatModels(): Promise<Record<string, ChatModel>> {
       displayName: 'Test (slow stream)',
       model: new FakeChatModel({
         modelName: 'test-slow',
+      }) as unknown as BaseChatModel,
+    },
+    'test-workspace-edit': {
+      displayName: 'Test (workspace edit)',
+      model: new FakeChatModel({
+        modelName: 'test-workspace-edit',
       }) as unknown as BaseChatModel,
     },
   };

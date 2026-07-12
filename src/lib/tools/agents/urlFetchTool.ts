@@ -7,7 +7,6 @@ import { SimplifiedAgentStateType } from '@/lib/state/chatAgentState';
 import { ToolMessage } from '@langchain/core/messages';
 // import { getLangfuseCallbacks } from '@/lib/tracing/langfuse';
 import { isSoftStop } from '@/lib/utils/runControl';
-import { emitStreamEvent } from '@/lib/streaming/events';
 import { defineTool } from '@/lib/tools/defineTool';
 
 // Schema for URL fetch tool input
@@ -67,9 +66,9 @@ export const urlFetchTool = defineTool(
       // Get LLM from context
       const {
         systemLlm: llm,
-        emitter,
         retrievalSignal,
         messageId,
+        systemRecorder,
       } = runtime.context;
       if (!llm) {
         throw new Error('System LLM not available in context');
@@ -161,7 +160,7 @@ Provide a comprehensive summary of the above web page content, focusing on infor
               // ...getLangfuseCallbacks(),
             });
 
-            // Emit token usage from this LLM call so parent agent can accumulate it.
+            // Record token usage from this LLM call onto the turn's system model row.
             // Prefer usage_metadata (standardized LangChain field); fall back to
             // response_metadata.usage for OpenAI-format providers (LM Studio, etc.)
             // that don't populate usage_metadata but do include prompt_tokens/completion_tokens.
@@ -171,7 +170,7 @@ Provide a comprehensive summary of the above web page content, focusing on infor
                 | Record<string, number>
                 | null
                 | undefined);
-            if (emitter && usageData) {
+            if (usageData) {
               const rawUsage = usageData as Record<string, number>;
               const inputTokens =
                 rawUsage.input_tokens ||
@@ -183,9 +182,7 @@ Provide a comprehensive summary of the above web page content, focusing on infor
                 rawUsage.completion_tokens ||
                 rawUsage.completionTokens ||
                 0;
-              emitStreamEvent(emitter, {
-                type: 'tool_llm_usage',
-                target: 'system',
+              systemRecorder.record({
                 input_tokens: inputTokens,
                 output_tokens: outputTokens,
                 total_tokens:

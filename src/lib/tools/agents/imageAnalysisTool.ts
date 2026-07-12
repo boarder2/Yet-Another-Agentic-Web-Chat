@@ -6,7 +6,6 @@ import { SimplifiedAgentStateType } from '@/lib/state/chatAgentState';
 import { ToolMessage } from '@langchain/core/messages';
 import { removeThinkingBlocks } from '@/lib/utils/contentUtils';
 import { isSoftStop } from '@/lib/utils/runControl';
-import { emitStreamEvent } from '@/lib/streaming/events';
 import { defineTool } from '@/lib/tools/defineTool';
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10 MB
 
@@ -39,7 +38,7 @@ export const imageAnalysisTool = defineTool(
         messageId,
         retrievalSignal,
         systemLlm: llm,
-        emitter,
+        systemRecorder,
       } = runtime.context;
 
       if (!llm) {
@@ -170,14 +169,14 @@ Be factual and specific. Describe only what you can actually see in the image.`;
         signal: retrievalSignal || runtime.signal,
       });
 
-      // Emit token usage
+      // Record token usage onto the turn's system model row.
       const usageData =
         result.usage_metadata ??
         (result.response_metadata?.usage as
           | Record<string, number>
           | null
           | undefined);
-      if (emitter && usageData) {
+      if (usageData) {
         const rawUsage = usageData as Record<string, number>;
         const inputTokens =
           rawUsage.input_tokens ||
@@ -189,9 +188,7 @@ Be factual and specific. Describe only what you can actually see in the image.`;
           rawUsage.completion_tokens ||
           rawUsage.completionTokens ||
           0;
-        emitStreamEvent(emitter, {
-          type: 'tool_llm_usage',
-          target: 'system',
+        systemRecorder.record({
           input_tokens: inputTokens,
           output_tokens: outputTokens,
           total_tokens:

@@ -24,9 +24,9 @@ Phase 1 runs only on a **new** message; **resume never re-runs Phase 1** (it reu
    - Executors get chat history + retrieved memory **and** the active persona/methodology (so each researches in the user's voice), but memory tools are off.
    - Toolset is the focus-mode toolset minus the prompting/mutating/recursive set (`filterExecutorTools`, see below).
    - After all settle (`Promise.allSettled`; `runOne` never throws), sources are merged + deduped into one ordered citation set with 1-based `sourceId`s. Dedup key: real `url`, else a meaningful `source` (NOT the `file_search` sentinel), else `title::pageContent`. If zero executors succeed, it throws.
-   - Token usage is folded into the run via `handler.addInitialChatUsage` / `addInitialSystemUsage` (executor generation → chat tokens; their internal chains → system tokens).
+   - Token usage: the coordinator receives the turn's shared `TokenTracker` and, per executor N, registers a chat-role recorder (executor's own model) and a system-role recorder (shared system model) under `scope: 'panel_executor:N'`; those recorders feed the child `SimplifiedAgent`. `panel_executor_completed.usage` is `tracker.scopeUsage('panel_executor:N')` (the frozen `PanelUsage` shape). See `src/lib/tokens/tracker.ts`.
 
-2. **Phase 2 — synthesis**: the chat model runs as an **ordinary agent** (full tools, interrupts/resume unchanged) via `handler.searchAndAnswer(..., workspaceTools, mergedSources)`. The merged citation set is passed as `initialDocuments`; a synthesis `SystemMessage` from `buildOrchestratorSynthesisContext()` (`src/lib/prompts/panel/orchestrator.ts`) is appended to history ahead of the query.
+2. **Phase 2 — synthesis**: the chat model runs as an **ordinary agent** (full tools, interrupts/resume unchanged) via `handler.searchAndAnswer(..., workspaceTools, mergedSources)`. The merged citation set is passed as `initialDocuments`; a synthesis `SystemMessage` from `buildOrchestratorSynthesisContext()` (`src/lib/prompts/panel/orchestrator.ts`) is appended to history ahead of the query. Synthesis runs on the turn's root chat recorder, so a model reused as both executor and synthesizer collapses into one `ModelStatsV2.perModel` row.
 
 ## Executor tool restrictions
 

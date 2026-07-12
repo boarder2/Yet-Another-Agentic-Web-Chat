@@ -10,6 +10,6 @@ Use /tdd where possible, at pre-agreed seams.
 
 Run typechecking regularly, single test files regularly, and the full test suite once at the end.
 
-Once done, use /code-review to review the work.
+Once done, use /code-review to review the work and fix high impact issues.
 
 Iterate until the build, linting, and full test suite pass without issues and code review is clean. Do not skip linting, even pre-existing issues must be fixed.

@@ -61,7 +61,7 @@ User Query → SimplifiedAgent (with all tools including deep_research)
   - Returns documents and summary via Command pattern
   - Prevents recursion: subagent's allowedTools excludes `deep_research`
   - On success, persists findings via `runtime.persist(...)` (kind: `deep_research`)
-  - Forwards subagent token usage (chat + system) to parent as `tool_llm_usage` events
+  - Passes the turn's shared `TokenTracker` (`ctx.tracker`) and the root chat/system model identities (`tracker.rootIdentity('chat'/'system')`) into `SubagentExecutor`
   - Tool description instructs the agent to call `read_skill("deep-research")` before first use
 
 - **SubagentExecutor** (`src/lib/search/subagents/executor.ts`)
@@ -70,6 +70,7 @@ User Query → SimplifiedAgent (with all tools including deep_research)
   - Provides isolated event streaming with subagent context
   - Passes empty `personaInstructions` to SimplifiedAgent — subagent behavior is controlled entirely by `customSystemPrompt` from the subagent definition, NOT by persona/formatting instructions
   - Forwards `userLocation`/`userProfile` from the parent agent for location-aware research
+  - Registers its own chat/system `Recorder`s on the shared tracker under `scope: 'subagent:<executionId>'`; `SubagentExecution.tokenUsage` is `tracker.scopeUsage(scope)` (the frozen `PanelUsage`-shaped chat/system split) — see `src/lib/tokens/tracker.ts`
 
 - **Definitions** (`src/lib/search/subagents/definitions.ts`)
   - Subagent configurations (system prompt, allowed tools, model selection)
@@ -93,12 +94,11 @@ User Query → SimplifiedAgent (with all tools including deep_research)
    - Filtered tools (web_search, url_fetch, image_search, image_analysis, pdf_loader — no deep_research)
    - Limited context (last 5 messages)
    - Chat Model for reasoning
-6. Child agent researches independently and streams tool events
-7. SubagentExecutor captures token usage from isolated emitter's `stats` event and returns it in the `SubagentExecution` result
+6. Child agent researches independently and streams tool events; its `Recorder`s (registered on the shared `TokenTracker` under the subagent's `scope`) record usage as LLM calls complete, each emitting a live `model_stats` snapshot straight to the turn's root stream
+7. After the child agent finishes, SubagentExecutor reads `tracker.scopeUsage(scope)` and returns it as `SubagentExecution.tokenUsage`
 8. On success, `deepResearchTool` persists the summary via `runtime.persist(...)` (kind: `deep_research`)
-9. Token usage (chat + system split) is forwarded to the parent emitter as `tool_llm_usage` events
-10. Results (documents + summary) return to the main agent via Command pattern
-11. Main agent integrates findings into its final response
+9. Results (documents + summary) return to the main agent via Command pattern
+10. Main agent integrates findings into its final response
 
 ## UI Integration
 

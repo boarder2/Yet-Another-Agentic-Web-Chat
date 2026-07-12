@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { EventEmitter } from 'events';
 import { HumanMessage, AIMessage, BaseMessage } from '@langchain/core/messages';
 import { SimplifiedAgent } from '@/lib/search/simplifiedAgent';
+import { createTurnTracker } from '@/lib/tokens/tracker';
 import { onStreamEvent } from '@/lib/streaming/events';
 import {
   resolveChatAndEmbedding,
@@ -93,6 +94,15 @@ export async function POST(req: NextRequest) {
   req.signal.addEventListener('abort', () => abortController.abort());
   const emitter = new EventEmitter();
 
+  // Widget builder doesn't surface a token-usage popover, but SimplifiedAgent
+  // requires a tracker to attribute any LLM calls it makes.
+  const unknownModel = { provider: 'unknown', name: 'unknown' };
+  const { tracker, chatRecorder, systemRecorder } = createTurnTracker(
+    emitter,
+    body.chatModel ?? unknownModel,
+    body.systemModel ?? body.chatModel ?? unknownModel,
+  );
+
   const agent = new SimplifiedAgent(
     chatLlm,
     systemLlm,
@@ -100,6 +110,7 @@ export async function POST(req: NextRequest) {
     emitter,
     '',
     abortController.signal,
+    { tracker, chatRecorder, systemRecorder },
     `widget-builder-${Date.now()}`,
     abortController.signal,
   );

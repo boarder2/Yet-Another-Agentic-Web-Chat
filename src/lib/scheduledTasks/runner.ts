@@ -25,6 +25,7 @@ import {
 } from '@/lib/utils/prompts';
 import { updateToolCallMarkup } from '@/lib/utils/toolCallMarkup';
 import { SimplifiedAgent } from '@/lib/search/simplifiedAgent';
+import { createTurnTracker } from '@/lib/tokens/tracker';
 import { onStreamEvent } from '@/lib/streaming/events';
 
 export async function runScheduledTask(
@@ -102,6 +103,11 @@ export async function runScheduledTask(
     // 8. Create agent
     const abortController = new AbortController();
     const emitter = new EventEmitter();
+    const { tracker, chatRecorder, systemRecorder } = createTurnTracker(
+      emitter,
+      task.chatModel,
+      task.systemModel,
+    );
     const agent = new SimplifiedAgent(
       chatLlm,
       systemLlm,
@@ -109,6 +115,7 @@ export async function runScheduledTask(
       emitter,
       personaInstructionsContent,
       abortController.signal,
+      { tracker, chatRecorder, systemRecorder },
       userMessageId,
       abortController.signal,
       undefined, // userLocation

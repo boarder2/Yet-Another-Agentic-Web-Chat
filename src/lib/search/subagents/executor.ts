@@ -20,6 +20,7 @@ import {
   onStreamEvent,
   isAgentControlEvent,
 } from '@/lib/streaming/events';
+import type { TokenTracker } from '@/lib/tokens/tracker';
 
 /**
  * SubagentExecutor runs a SimplifiedAgent with subagent-specific constraints
@@ -35,6 +36,9 @@ export class SubagentExecutor {
   private retrievalSignal?: AbortSignal;
   private userLocation?: string;
   private userProfile?: string;
+  private tracker: TokenTracker;
+  private chatModelRef: { provider: string; model: string };
+  private systemModelRef: { provider: string; model: string };
 
   constructor(
     definition: SubagentDefinition,
@@ -44,9 +48,12 @@ export class SubagentExecutor {
     parentEmitter: EventEmitter,
     signal: AbortSignal,
     messageId: string,
-    retrievalSignal?: AbortSignal,
-    userLocation?: string,
-    userProfile?: string,
+    retrievalSignal: AbortSignal | undefined,
+    userLocation: string | undefined,
+    userProfile: string | undefined,
+    tracker: TokenTracker,
+    chatModelRef: { provider: string; model: string },
+    systemModelRef: { provider: string; model: string },
   ) {
     this.definition = definition;
     this.chatLlm = chatLlm;
@@ -58,6 +65,9 @@ export class SubagentExecutor {
     this.retrievalSignal = retrievalSignal;
     this.userLocation = userLocation;
     this.userProfile = userProfile;
+    this.tracker = tracker;
+    this.chatModelRef = chatModelRef;
+    this.systemModelRef = systemModelRef;
   }
 
   /**
@@ -85,34 +95,18 @@ export class SubagentExecutor {
       task,
     });
 
-    // Track token usage across try/catch boundary
-    let capturedTokenUsage:
-      | {
-          usageChat: {
-            input_tokens: number;
-            output_tokens: number;
-            total_tokens: number;
-          };
-          usageSystem: {
-            input_tokens: number;
-            output_tokens: number;
-            total_tokens: number;
-          };
-        }
-      | undefined;
+    const scope = `subagent:${executionId}`;
 
     try {
       // Create isolated emitter to capture subagent events
       const isolatedEmitter = this.createIsolatedEmitter(executionId);
 
-      // Collect documents, response text, and token usage from isolated emitter
+      // Collect documents and response text from the isolated emitter.
       const collectedData = {
         documents: [] as Document[],
         responseText: '',
       };
 
-      // Listen for the subagent's own events on the isolated emitter: collect
-      // its response text + documents and capture its token-usage stats.
       onStreamEvent(isolatedEmitter, (event) => {
         if (event.type === 'response') {
           collectedData.responseText += event.data || '';
@@ -120,19 +114,6 @@ export class SubagentExecutor {
           if (Array.isArray(event.data)) {
             collectedData.documents.push(...event.data);
           }
-        } else if (event.type === 'model_stats' && event.data) {
-          capturedTokenUsage = {
-            usageChat: event.data.usageChat || {
-              input_tokens: 0,
-              output_tokens: 0,
-              total_tokens: 0,
-            },
-            usageSystem: event.data.usageSystem || {
-              input_tokens: 0,
-              output_tokens: 0,
-              total_tokens: 0,
-            },
-          };
         }
       });
 
@@ -140,6 +121,20 @@ export class SubagentExecutor {
       const selectedLlm = this.definition.useSystemModel
         ? this.systemLlm
         : this.chatLlm;
+      const selectedModelRef = this.definition.useSystemModel
+        ? this.systemModelRef
+        : this.chatModelRef;
+
+      const chatRecorder = this.tracker.register({
+        ...selectedModelRef,
+        role: 'chat',
+        scope,
+      });
+      const systemRecorder = this.tracker.register({
+        ...this.systemModelRef,
+        role: 'system',
+        scope,
+      });
 
       // Create SimplifiedAgent with subagent configuration
       // Note: personaInstructions is empty — the subagent's behavior is controlled
@@ -151,6 +146,7 @@ export class SubagentExecutor {
         isolatedEmitter,
         '', // No persona instructions for subagents — definition.systemPrompt is used as customSystemPrompt
         this.signal,
+        { tracker: this.tracker, chatRecorder, systemRecorder },
         `${this.messageId}_${executionId}`,
         this.retrievalSignal || this.signal, // Use retrievalSignal if available, fallback to signal
         this.userLocation,
@@ -188,7 +184,7 @@ export class SubagentExecutor {
         endTime,
         documents: collectedData.documents,
         summary: removeThinkingBlocks(collectedData.responseText).trim(),
-        tokenUsage: capturedTokenUsage,
+        tokenUsage: this.tracker.scopeUsage(scope),
       };
 
       console.log(
@@ -219,7 +215,7 @@ export class SubagentExecutor {
         summary: '',
         error:
           (error instanceof Error ? error.message : null) || 'Unknown error',
-        tokenUsage: capturedTokenUsage,
+        tokenUsage: this.tracker.scopeUsage(scope),
       };
 
       emitStreamEvent(this.parentEmitter, {

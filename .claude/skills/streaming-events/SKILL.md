@@ -11,7 +11,7 @@ The `SimplifiedAgent` emits granular lifecycle events for tool execution, todo u
 
 One module owns the whole vocabulary and the single agent→UI channel:
 
-- **`events.ts`** — two discriminated unions plus the transport. `AgentEmitEvent` is what producers emit; `StreamEvent` is the NDJSON wire form the client reads. Producers call `emitStreamEvent(emitter, event)` / consumers `onStreamEvent(emitter, handler)` on ONE channel (`STREAM_EVENT_CHANNEL = 'stream_event'`) — no more per-type channels. `isAgentControlEvent` separates control events (`model_stats`, `interrupt`, `agent_end`, `agent_error`, `tool_llm_usage`) from wire-bound ones. `parseStreamEvent` (wire line → typed) and `normalizeStreamEvent` (legacy type aliases → canonical, e.g. `user_question_pending` → `ask_user_pending`) bridge the client.
+- **`events.ts`** — two discriminated unions plus the transport. `AgentEmitEvent` is what producers emit; `StreamEvent` is the NDJSON wire form the client reads. Producers call `emitStreamEvent(emitter, event)` / consumers `onStreamEvent(emitter, handler)` on ONE channel (`STREAM_EVENT_CHANNEL = 'stream_event'`) — no more per-type channels. `isAgentControlEvent` separates control events (`model_stats`, `interrupt`, `agent_end`, `agent_error`) from wire-bound ones. `parseStreamEvent` (wire line → typed) and `normalizeStreamEvent` (legacy type aliases → canonical, e.g. `user_question_pending` → `ask_user_pending`) bridge the client.
 - **`reducer.ts`** — `reduceStreamEvent(state, event) → { state, effects }`, one pure transition per event, shared by the live-send and reconnect/attach paths. Mode differences fold into rules: bucket key is `event.messageId ?? activeAiMessageId` (live events carry the assistant id, which the reducer adopts so id-less `*_answered`/`*_stale`/`*_cancelled` bucket right); replay-gating is the `inReplay` state field (attach only, until `replay_complete`); idempotency guards and the rich `messageEnd` finalization apply in both modes.
 - **`effects.ts`** — `StreamEffect`, the data the reducer returns for side effects (`toastError`, `setLoading`, `bumpScroll`, `invalidateActiveRuns`, `invalidateWorkspace`, `fetchSuggestions`, `refreshSkills`). `ChatWindow` interprets them; the reducer never performs them.
 
@@ -85,17 +85,17 @@ These events are emitted by tools that interrupt the LangGraph run for user appr
 
 ## Other Milestone Events
 
-| Event Type               | Emitted By                                                  | UI Behavior                                                                                             |
-| ------------------------ | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `sources_added`          | `SimplifiedAgent` (during stream)                           | Populates in-progress sources panel grouped by `searchQuery`                                            |
-| `sources`                | `SimplifiedAgent` (on completion)                           | Sets final sources on the finished assistant message                                                    |
-| `chart_spec`             | `createChartTool` / `codeExecutionTool`                     | Renders a chart widget keyed by `chartId` in the message                                                |
-| `workspace_file_changed` | `workspace_edit` / `workspace_create_file` tools            | Invalidates TanStack Query for the affected workspace                                                   |
-| `replay_complete`        | `runHost.ts` (after replaying persisted events)             | Sentinel that flips the reducer's `inReplay` off (and corrects seed content) so live tokens append      |
-| `stats`                  | `runHost` (translated from the `model_stats` control event) | Updates live token usage display                                                                        |
-| `context_grew`           | `runHost.ts`                                                | Shows context-grew indicator                                                                            |
-| `response`               | `SimplifiedAgent.emitResponse()`                            | Streams assistant text tokens to the in-progress message                                                |
-| `widget_proposal`        | `propose_widget_changes` (widget-builder tools)             | `WidgetChatPanel` renders a `WidgetProposalCard` (delta + Accept/Reject); carries a base-revision stamp |
+| Event Type               | Emitted By                                                                                                                                   | UI Behavior                                                                                             |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `sources_added`          | `SimplifiedAgent` (during stream)                                                                                                            | Populates in-progress sources panel grouped by `searchQuery`                                            |
+| `sources`                | `SimplifiedAgent` (on completion)                                                                                                            | Sets final sources on the finished assistant message                                                    |
+| `chart_spec`             | `createChartTool` / `codeExecutionTool`                                                                                                      | Renders a chart widget keyed by `chartId` in the message                                                |
+| `workspace_file_changed` | `workspace_edit` / `workspace_create_file` tools                                                                                             | Invalidates TanStack Query for the affected workspace                                                   |
+| `replay_complete`        | `runHost.ts` (after replaying persisted events)                                                                                              | Sentinel that flips the reducer's `inReplay` off (and corrects seed content) so live tokens append      |
+| `stats`                  | `runHost` (translated from the `model_stats` control event, emitted by `TokenTracker.register().record()` — see `src/lib/tokens/tracker.ts`) | Updates live token usage display                                                                        |
+| `context_grew`           | `runHost.ts`                                                                                                                                 | Shows context-grew indicator                                                                            |
+| `response`               | `SimplifiedAgent.emitResponse()`                                                                                                             | Streams assistant text tokens to the in-progress message                                                |
+| `widget_proposal`        | `propose_widget_changes` (widget-builder tools)                                                                                              | `WidgetChatPanel` renders a `WidgetProposalCard` (delta + Accept/Reject); carries a base-revision stamp |
 
 ## Widget-builder stream (dashboard code widgets)
 
@@ -116,7 +116,7 @@ the full event vocabulary and renders only `response` (markdown) + proposals.
 ### Backend (Event Emission)
 
 - Emission logic lives in `src/lib/search/simplifiedAgent.ts`. Callbacks (`handleToolStart`, `handleToolEnd`, `handleToolError`) are registered on each `agent.streamEvents()` call — once in `searchAndAnswer()` and once in `doResume()`. Both paths `emitStreamEvent` identical `AgentEmitEvent` shapes on the single channel.
-- `model_stats` is a control event; `runHost` translates it to the `stats` wire event. `interrupt`/`agent_end`/`agent_error`/`tool_llm_usage` are control events too (see `isAgentControlEvent`) — never forwarded verbatim to the wire.
+- `model_stats` is a control event, emitted by the turn's `TokenTracker` (`src/lib/tokens/tracker.ts`) on every `Recorder.record()` call — `runHost` translates it to the `stats` wire event. `interrupt`/`agent_end`/`agent_error` are control events too (see `isAgentControlEvent`) — never forwarded verbatim to the wire.
 - `runHost` is the synthesis point: it stamps the assistant `messageId`, accumulates markup, and adds events with no producer (`messageEnd`, `replay_complete`, `gone`, `*_pending`/`*_answered`). Milestone events are buffered and persisted via `src/lib/runs/runEventsPersistence.ts` for run reconstruction after server restart or eviction.
 
 ### Frontend (Event Handling)

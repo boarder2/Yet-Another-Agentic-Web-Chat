@@ -527,6 +527,20 @@ async function performResume(items: ResumeItem[]): Promise<void> {
       else emitAnsweredAndMarkup(run, approval, response);
     }
 
+    const resumeChatModelRef = snapshot.chatModelRef as {
+      provider: string;
+      name: string;
+    };
+    const resumeSystemModelRef =
+      (snapshot.systemModelRef as { provider: string; name: string } | null) ??
+      resumeChatModelRef;
+    const { createTurnTracker } = await import('@/lib/tokens/tracker');
+    const { tracker, chatRecorder, systemRecorder } = createTurnTracker(
+      run.emitter,
+      resumeChatModelRef,
+      resumeSystemModelRef,
+    );
+
     const handler = new SimplifiedAgent(
       resolved.chatLlm,
       resolved.systemLlm,
@@ -534,6 +548,7 @@ async function performResume(items: ResumeItem[]): Promise<void> {
       run.emitter,
       (snapshot.personaInstructions as string) ?? '',
       run.abortController.signal,
+      { tracker, chatRecorder, systemRecorder },
       userMessageId,
       run.retrievalController.signal,
       snapshot.userLocation as string | undefined,
@@ -544,16 +559,12 @@ async function performResume(items: ResumeItem[]): Promise<void> {
       (snapshot.interactiveSession as boolean) ?? true,
       (snapshot.methodologyInstructions as string) ?? '',
       (snapshot.isPrivate as boolean) ?? false,
-      undefined,
       (snapshot.workspaceSuffix as string) ?? '',
       snapshot.workspaceId as string | null | undefined,
       (snapshot.aiMessageId as string) ?? run.aiMessageId,
     );
     handler.setThreadId(chat.activeRunThreadId);
-    handler.setModelRefs(
-      snapshot.chatModelRef as { provider: string; name: string },
-      snapshot.systemModelRef as { provider: string; name: string } | null,
-    );
+    handler.setModelRefs(resumeChatModelRef, resumeSystemModelRef);
 
     // Single pending interrupt → bare value; multiple → map keyed by the
     // engine interrupt id so LangGraph routes each value to the right interrupt.
@@ -830,7 +841,7 @@ export async function attachRunHost(params: {
   let sources: Record<string, unknown>[] = [];
   let searchQuery: string | undefined;
   let searchUrl: string | undefined;
-  let modelStats: ModelStats = { modelName: '' };
+  let modelStats: ModelStats = { version: 2, perModel: [] };
   let terminated = false;
 
   let flushTimer: ReturnType<typeof setTimeout> | null = null;

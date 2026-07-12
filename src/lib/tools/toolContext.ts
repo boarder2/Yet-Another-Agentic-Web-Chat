@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { EventEmitter } from 'events';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import type { CachedEmbeddings } from '@/lib/utils/cachedEmbeddings';
+import type { TokenTracker, Recorder } from '@/lib/tokens/tracker';
 
 /**
  * Per-run context handed to every tool via LangChain's native `ToolRuntime`
@@ -25,6 +26,9 @@ export const toolContextSchema = z.object({
   runId: z.string(),
   userLocation: z.string().optional(),
   userProfile: z.string().optional(),
+  tracker: z.custom<TokenTracker>(),
+  chatRecorder: z.custom<Recorder>(),
+  systemRecorder: z.custom<Recorder>(),
 });
 
 export type ToolContext = z.infer<typeof toolContextSchema>;

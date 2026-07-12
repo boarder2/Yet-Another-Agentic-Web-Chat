@@ -5,7 +5,7 @@ import {
   type ChatStreamState,
   type StreamAction,
 } from './reducer';
-import type { StreamEvent } from './events';
+import type { StreamEvent, ModelStatsV1 } from './events';
 import type { Message } from './chatState';
 
 const AI = 'ai1';
@@ -309,7 +309,7 @@ describe('finalization and errors', () => {
     const row = state.messages.find((m) => m.messageId === AI);
     expect(row?.content).toBe('hello');
     expect(row?.runStatus).toBeUndefined();
-    expect(row?.modelStats?.modelName).toBe('m');
+    expect((row?.modelStats as ModelStatsV1 | undefined)?.modelName).toBe('m');
     expect(state.todoItems).toHaveLength(0);
     expect(state.liveModelStats).toBeNull();
     expect(effects.map((e) => e.kind)).toEqual(
@@ -319,6 +319,42 @@ describe('finalization and errors', () => {
         'fetchSuggestions',
       ]),
     );
+  });
+
+  it('finalizes on messageEnd with v2 modelStats (per-model rows)', () => {
+    let s = liveStart();
+    s = reduceStreamEvent(s, ev({ type: 'response', data: 'hello' })).state;
+    const { state } = run(s, [
+      ev({
+        type: 'messageEnd',
+        messageId: AI,
+        modelStats: {
+          version: 2,
+          perModel: [
+            {
+              provider: 'openai',
+              model: 'gpt-5',
+              usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+            },
+          ],
+          usedLocation: false,
+        },
+        searchQuery: 'q',
+      }),
+    ]);
+    const row = state.messages.find((m) => m.messageId === AI);
+    expect(row?.modelStats).toMatchObject({
+      version: 2,
+      perModel: [
+        {
+          provider: 'openai',
+          model: 'gpt-5',
+          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        },
+      ],
+      usedLocation: false,
+    });
+    expect(state.liveModelStats).toBeNull();
   });
 
   it('clears pending maps and signals on error', () => {

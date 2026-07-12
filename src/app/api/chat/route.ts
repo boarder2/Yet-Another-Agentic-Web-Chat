@@ -26,6 +26,7 @@ import { buildMemorySection } from '@/lib/prompts/memory/memoryContext';
 import { processExtraction } from '@/lib/utils/memoryExtraction';
 import { distillQueryForEmbedding } from '@/lib/utils/queryDistillation';
 import { SimplifiedAgent } from '@/lib/search/simplifiedAgent';
+import { createTurnTracker } from '@/lib/tokens/tracker';
 import { emitStreamEvent, onStreamEvent } from '@/lib/streaming/events';
 import { buildWorkspaceSystemPromptSuffix } from '@/lib/workspaces/composeSystemPrompt';
 import { WORKSPACE_MODEL_UNAVAILABLE_MESSAGE } from '@/lib/workspaces/types';
@@ -97,12 +98,6 @@ type Body = {
   imageCapable?: boolean;
   invokedSkills?: string[];
   panel?: PanelConfig;
-};
-
-type TokenUsage = {
-  input_tokens: number;
-  output_tokens: number;
-  total_tokens: number;
 };
 
 const handleHistorySave = async (
@@ -293,6 +288,15 @@ export const POST = async (req: Request) => {
 
     const aiMessageId = crypto.randomBytes(7).toString('hex');
 
+    // Token tracker for this turn — created before model resolution's usage
+    // (query distillation) so root recorders exist for every downstream user.
+    const stream = new EventEmitter();
+    const { tracker, chatRecorder, systemRecorder } = createTurnTracker(
+      stream,
+      body.chatModel,
+      body.systemModel,
+    );
+
     // System instructions deprecated; only use persona prompts
     const personaInstructionsContent = await getPersonaInstructionsOnly(
       selectedSystemPromptIds || [],
@@ -368,11 +372,6 @@ export const POST = async (req: Request) => {
     // --- Memory retrieval ---
     let memorySection = '';
     let memoriesUsed: Array<{ id: string; content: string }> = [];
-    let distillationUsage: TokenUsage = {
-      input_tokens: 0,
-      output_tokens: 0,
-      total_tokens: 0,
-    };
 
     if (body.memoryEnabled) {
       try {
@@ -386,7 +385,7 @@ export const POST = async (req: Request) => {
             abortController.signal,
           );
           queryForEmbedding = distillResult.query;
-          distillationUsage = distillResult.usage;
+          systemRecorder.record(distillResult.usage);
           if (distillResult.usage.total_tokens > 0) {
             console.log(
               `[memoryRetrieval] Query distilled (${message.content.length} → ${queryForEmbedding.length} chars), tokens input: ${distillResult.usage.input_tokens}, tokens output: ${distillResult.usage.output_tokens}, total tokens: ${distillResult.usage.total_tokens}\nDistilled query: "${queryForEmbedding}"`,
@@ -413,8 +412,6 @@ export const POST = async (req: Request) => {
         );
       }
     }
-
-    const stream = new EventEmitter();
 
     let workspaceSuffix = '';
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -550,6 +547,7 @@ export const POST = async (req: Request) => {
       stream,
       personaInstructionsContent,
       abortController.signal,
+      { tracker, chatRecorder, systemRecorder },
       message.messageId,
       retrievalController.signal,
       body.userLocation,
@@ -560,7 +558,6 @@ export const POST = async (req: Request) => {
       true,
       methodologyInstructions,
       body.isPrivate,
-      distillationUsage,
       workspaceSuffix,
       resolvedWorkspaceId,
       aiMessageId,
@@ -671,22 +668,17 @@ export const POST = async (req: Request) => {
               memorySection,
               personaInstructions: personaInstructionsContent,
               methodologyInstructions,
+              tracker,
+              systemModelRef: body.systemModel ?? body.chatModel,
             });
 
-            const { executorResults, mergedSources, totalUsage } =
-              await coordinator.run(
-                message.content,
-                history,
-                body.files,
-                body.focusMode,
-                body.messageImageIds,
-              );
-
-            // Seed the run's token totals with the executors' work, keeping the
-            // chat/system split intact: their chat-model generation counts as
-            // chat tokens, their tool/internal chains as system tokens.
-            handler.addInitialSystemUsage(totalUsage.usageSystem);
-            handler.addInitialChatUsage(totalUsage.usageChat);
+            const { executorResults, mergedSources } = await coordinator.run(
+              message.content,
+              history,
+              body.files,
+              body.focusMode,
+              body.messageImageIds,
+            );
 
             // Inject the synthesis context as a system turn ahead of the query.
             const synthesisContext = buildOrchestratorSynthesisContext({

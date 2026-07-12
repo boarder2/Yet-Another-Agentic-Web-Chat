@@ -81,7 +81,7 @@ test.describe('POST /api/chat (test-direct)', () => {
     expect(text).toBe('This is a deterministic test answer.');
   });
 
-  test('emits a messageEnd event with model stats', async ({ request }) => {
+  test('emits a messageEnd event with v2 model stats', async ({ request }) => {
     const { events } = await postChat(request, { content: 'end-event' });
 
     const endEvents = eventsOfType(events, 'messageEnd');
@@ -89,20 +89,58 @@ test.describe('POST /api/chat (test-direct)', () => {
     const end = endEvents[0];
     expect(typeof end.messageId).toBe('string');
     expect(typeof end.modelStats).toBe('object');
-    const stats = end.modelStats as Record<string, unknown> | undefined;
+    const stats = end.modelStats as Record<string, unknown>;
     expect(stats).toBeTruthy();
-    expect(typeof stats!.responseTime).toBe('number');
+    expect(stats.version).toBe(2);
+    expect(typeof stats.responseTime).toBe('number');
   });
 
-  test('emits a stats event with deterministic model name', async ({
+  test('emits a stats event with a per-model row for the test model', async ({
     request,
   }) => {
     const { events } = await postChat(request, { content: 'stats-event' });
 
     const statsEvents = eventsOfType(events, 'stats');
     expect(statsEvents.length).toBeGreaterThanOrEqual(1);
-    const stats = statsEvents[0].data as Record<string, unknown>;
-    expect(stats.modelName).toBe('test-direct');
+    const stats = statsEvents[statsEvents.length - 1].data as Record<
+      string,
+      unknown
+    >;
+    expect(stats.version).toBe(2);
+    const perModel = stats.perModel as Array<{
+      provider: string;
+      model: string;
+      usage: {
+        input_tokens: number;
+        output_tokens: number;
+        total_tokens: number;
+      };
+    }>;
+    expect(perModel.length).toBeGreaterThanOrEqual(1);
+    const row = perModel.find((r) => r.model === 'test-direct');
+    expect(row).toBeTruthy();
+    expect(row!.provider).toBe('test');
+    expect(row!.usage.total_tokens).toBeGreaterThan(0);
+  });
+
+  test('persisted messageEnd modelStats carries v2 metadata to the DB row', async ({
+    request,
+  }) => {
+    const { chatId, events } = await postChat(request, {
+      content: 'persisted-v2-stats',
+    });
+    const end = eventsOfType(events, 'messageEnd')[0];
+
+    const getRes = await request.get(`/api/chats/${chatId}`);
+    expect(getRes.ok()).toBeTruthy();
+    const body = await getRes.json();
+    const assistantMsg = (
+      body.messages as Array<{ messageId: string; metadata?: string }>
+    ).find((m) => m.messageId === end.messageId);
+    expect(assistantMsg).toBeTruthy();
+    const metadata = JSON.parse(assistantMsg!.metadata ?? '{}');
+    expect(metadata.modelStats?.version).toBe(2);
+    expect(Array.isArray(metadata.modelStats?.perModel)).toBe(true);
   });
 
   test('webSearch focus mode succeeds and messages persist', async ({
@@ -299,6 +337,57 @@ test.describe('POST /api/chat (test-direct)', () => {
     expect(res.status()).toBe(400);
     const body = await res.json();
     expect(body.error).toContain('provider + name');
+  });
+
+  test('panel turn: executor models appear as perModel rows and panel_executor_completed carries usage', async ({
+    request,
+  }) => {
+    const chatId = uid();
+    const messageId = uid();
+    const res = await request.post('/api/chat', {
+      data: {
+        message: { messageId, chatId, content: 'panel-usage-turn' },
+        focusMode: 'webSearch',
+        files: [],
+        chatModel: { provider: 'test', name: 'test-direct' },
+        systemModel: { provider: 'test', name: 'test-direct' },
+        selectedSystemPromptIds: [],
+        panel: {
+          executors: [
+            { provider: 'test', name: 'test-direct' },
+            { provider: 'test', name: 'test-tool' },
+          ],
+        },
+      },
+    });
+    expect(res.ok()).toBeTruthy();
+    const events = await collectSseEvents(res);
+
+    const completedEvents = eventsOfType(events, 'panel_executor_completed');
+    expect(completedEvents.length).toBe(2);
+    for (const completed of completedEvents) {
+      const usage = completed.usage as
+        | {
+            usageChat: { total_tokens: number };
+            usageSystem: { total_tokens: number };
+          }
+        | undefined;
+      expect(usage).toBeTruthy();
+      // Each executor's chat-model answer accrues chat tokens.
+      expect(usage!.usageChat.total_tokens).toBeGreaterThan(0);
+    }
+
+    // Both executor models — plus the root chat/system model reused for
+    // synthesis — show up as distinct per-model rows (identity-only rollup).
+    const end = eventsOfType(events, 'messageEnd')[0];
+    const stats = end.modelStats as {
+      version: number;
+      perModel: Array<{ provider: string; model: string }>;
+    };
+    expect(stats.version).toBe(2);
+    const modelNames = stats.perModel.map((r) => r.model);
+    expect(modelNames).toContain('test-direct');
+    expect(modelNames).toContain('test-tool');
   });
 
   test('resending a messageId edits the message (nuke-and-rebuild)', async ({

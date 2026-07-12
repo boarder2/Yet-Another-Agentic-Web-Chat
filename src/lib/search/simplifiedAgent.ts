@@ -41,57 +41,19 @@ import { Document } from '@langchain/core/documents';
 import { webSearchResponsePrompt } from '../prompts/templates';
 import { formatDateForLLM } from '../utils';
 import { prepHistoryMessages } from '../utils/contentUtils';
-import { getModelName } from '../utils/modelUtils';
 import { CachedEmbeddings } from '../utils/cachedEmbeddings';
 import { buildPersonalizationSection } from '../utils/personalization';
-import { TokenUsage } from '../utils/queryDistillation';
-import {
-  emitStreamEvent,
-  STREAM_EVENT_CHANNEL,
-  type AgentEmitEvent,
-} from '@/lib/streaming/events';
+import { emitStreamEvent } from '@/lib/streaming/events';
 import { resolveSkillsForChat } from '@/lib/skills/resolve';
 import { buildSkillsPromptSection } from '@/lib/skills/promptSection';
 import { setRunContext, cleanupSkillsForRun } from '@/lib/skills/runStore';
 import type { Skill } from '@/lib/skills/types';
 import { toolContextSchema, type ToolContext } from '@/lib/tools/toolContext';
-
-/**
- * Normalize usage metadata from different LLM providers
- */
-function normalizeUsageMetadata(usageData: Record<string, number>): {
-  input_tokens: number;
-  output_tokens: number;
-  total_tokens: number;
-} {
-  if (!usageData) return { input_tokens: 0, output_tokens: 0, total_tokens: 0 };
-
-  // Handle different provider formats
-  const inputTokens =
-    usageData.input_tokens ||
-    usageData.prompt_tokens ||
-    usageData.promptTokens ||
-    usageData.usedTokens ||
-    0;
-
-  const outputTokens =
-    usageData.output_tokens ||
-    usageData.completion_tokens ||
-    usageData.completionTokens ||
-    0;
-
-  const totalTokens =
-    usageData.total_tokens ||
-    usageData.totalTokens ||
-    usageData.usedTokens ||
-    inputTokens + outputTokens;
-
-  return {
-    input_tokens: inputTokens,
-    output_tokens: outputTokens,
-    total_tokens: totalTokens,
-  };
-}
+import {
+  normalizeUsageMetadata,
+  type TokenTracker,
+  type Recorder,
+} from '@/lib/tokens/tracker';
 
 /**
  * Extract text content from LLM message content (handles both string and array formats)
@@ -201,14 +163,10 @@ export class SimplifiedAgent {
   private resolvedSkills: Skill[] = [];
   private invokedSkillNames: Set<string> = new Set();
   private isPrivate: boolean;
-  private initialSystemUsage: TokenUsage;
-  private initialChatUsage: TokenUsage = {
-    input_tokens: 0,
-    output_tokens: 0,
-    total_tokens: 0,
-  };
+  private tracker: TokenTracker;
+  private chatRecorder: Recorder;
+  private systemRecorder: Recorder;
   private workspaceSuffix: string;
-  private firstChatCallInputTokens = 0;
   private aiMessageId?: string;
   private threadId?: string;
   private chatModelRef?: {
@@ -230,6 +188,11 @@ export class SimplifiedAgent {
     emitter: EventEmitter,
     personaInstructions: string = '',
     signal: AbortSignal,
+    tokenTracking: {
+      tracker: TokenTracker;
+      chatRecorder: Recorder;
+      systemRecorder: Recorder;
+    },
     messageId?: string,
     retrievalSignal?: AbortSignal,
     userLocation?: string,
@@ -240,7 +203,6 @@ export class SimplifiedAgent {
     interactiveSession: boolean = false,
     methodologyInstructions: string = '',
     isPrivate: boolean = false,
-    initialSystemUsage?: TokenUsage,
     workspaceSuffix: string = '',
     workspaceId?: string | null,
     aiMessageId?: string,
@@ -261,11 +223,9 @@ export class SimplifiedAgent {
     this.chatId = chatId;
     this.interactiveSession = interactiveSession;
     this.isPrivate = isPrivate;
-    this.initialSystemUsage = initialSystemUsage ?? {
-      input_tokens: 0,
-      output_tokens: 0,
-      total_tokens: 0,
-    };
+    this.tracker = tokenTracking.tracker;
+    this.chatRecorder = tokenTracking.chatRecorder;
+    this.systemRecorder = tokenTracking.systemRecorder;
     this.workspaceSuffix = workspaceSuffix;
     this.workspaceId = workspaceId;
     this.aiMessageId = aiMessageId;
@@ -277,38 +237,6 @@ export class SimplifiedAgent {
 
   public setThreadId(threadId: string) {
     this.threadId = threadId;
-  }
-
-  /** Add to the pre-seeded system-token usage (e.g. panel executor system/tool
-   *  totals) so the run's reported system tokens include work done before this
-   *  agent ran. */
-  public addInitialSystemUsage(usage: {
-    input_tokens: number;
-    output_tokens: number;
-    total_tokens: number;
-  }) {
-    this.initialSystemUsage = {
-      input_tokens: this.initialSystemUsage.input_tokens + usage.input_tokens,
-      output_tokens:
-        this.initialSystemUsage.output_tokens + usage.output_tokens,
-      total_tokens: this.initialSystemUsage.total_tokens + usage.total_tokens,
-    };
-  }
-
-  /** Add to the pre-seeded chat-token usage (e.g. panel executor chat-model
-   *  generation totals) so the run's reported chat tokens reflect the executor
-   *  models' answer generation alongside this agent's own chat tokens, rather
-   *  than misattributing that work to the system bucket. */
-  public addInitialChatUsage(usage: {
-    input_tokens: number;
-    output_tokens: number;
-    total_tokens: number;
-  }) {
-    this.initialChatUsage = {
-      input_tokens: this.initialChatUsage.input_tokens + usage.input_tokens,
-      output_tokens: this.initialChatUsage.output_tokens + usage.output_tokens,
-      total_tokens: this.initialChatUsage.total_tokens + usage.total_tokens,
-    };
   }
 
   /** Stash the panel config so it lands in the resume config snapshot. */
@@ -360,61 +288,6 @@ export class SimplifiedAgent {
 
   private emitResponse(text: string) {
     emitStreamEvent(this.emitter, { type: 'response', data: text });
-  }
-
-  /**
-   * Emit model usage statistics to the client
-   */
-  private emitModelStats(
-    usageChat: {
-      input_tokens: number;
-      output_tokens: number;
-      total_tokens: number;
-    },
-    usageSystem: {
-      input_tokens: number;
-      output_tokens: number;
-      total_tokens: number;
-    },
-    usageImageGen?: {
-      modelName: string;
-      input_tokens: number;
-      output_tokens: number;
-      total_tokens: number;
-    },
-  ) {
-    const imageGenTokens = usageImageGen?.total_tokens ?? 0;
-    emitStreamEvent(this.emitter, {
-      type: 'model_stats',
-      data: {
-        modelName: getModelName(this.chatLlm),
-        modelNameChat: getModelName(this.chatLlm),
-        modelNameSystem: getModelName(this.systemLlm),
-        usage: {
-          input_tokens:
-            usageChat.input_tokens +
-            usageSystem.input_tokens +
-            (usageImageGen?.input_tokens ?? 0),
-          output_tokens:
-            usageChat.output_tokens +
-            usageSystem.output_tokens +
-            (usageImageGen?.output_tokens ?? 0),
-          total_tokens:
-            usageChat.total_tokens + usageSystem.total_tokens + imageGenTokens,
-        },
-        usageChat,
-        usageSystem,
-        usageImageGen: usageImageGen
-          ? {
-              modelName: usageImageGen.modelName,
-              input_tokens: usageImageGen.input_tokens,
-              output_tokens: usageImageGen.output_tokens,
-              total_tokens: usageImageGen.total_tokens,
-            }
-          : undefined,
-        firstChatCallInputTokens: this.firstChatCallInputTokens,
-      },
-    });
   }
 
   /**
@@ -667,8 +540,6 @@ export class SimplifiedAgent {
     extraTools?: any[],
     initialDocuments?: Document[],
   ): Promise<void> {
-    // Declared outside try so the catch block can clean it up
-    let toolLlmUsageHandler: ((event: AgentEmitEvent) => void) | null = null;
     let skillRunId: string | null = null;
 
     try {
@@ -779,6 +650,9 @@ export class SimplifiedAgent {
           workspaceId: this.workspaceId,
           interactiveSession: this.interactiveSession,
           isPrivate: this.isPrivate,
+          tracker: this.tracker,
+          chatRecorder: this.chatRecorder,
+          systemRecorder: this.systemRecorder,
         },
         recursionLimit: 150, // Increased to handle complex multi-task research with todo_list
         signal: this.retrievalSignal,
@@ -1252,60 +1126,7 @@ export class SimplifiedAgent {
         return fresh;
       };
       let currentResponseBuffer = '';
-      // Separate usage trackers for chat (final answer) and system (tools/internal chains).
-      // Pre-seed each with any pre-agent LLM usage (e.g. query distillation into
-      // system; panel executor chat-model generation into chat).
-      const usageChat = {
-        input_tokens: this.initialChatUsage.input_tokens,
-        output_tokens: this.initialChatUsage.output_tokens,
-        total_tokens: this.initialChatUsage.total_tokens,
-      };
-      const usageImageGen: {
-        modelName: string;
-        input_tokens: number;
-        output_tokens: number;
-        total_tokens: number;
-      } = { modelName: '', input_tokens: 0, output_tokens: 0, total_tokens: 0 };
-      const usageSystem = {
-        input_tokens: this.initialSystemUsage.input_tokens,
-        output_tokens: this.initialSystemUsage.output_tokens,
-        total_tokens: this.initialSystemUsage.total_tokens,
-      };
-
       let initialMessageSent = false;
-
-      // Listen for token usage emitted by tools (url_fetch, deep_research)
-      // that make their own LLM calls outside the agent's streamEvents chain.
-      // Shares the single event channel with every other event, so ignore all
-      // but tool_llm_usage.
-      toolLlmUsageHandler = (event: AgentEmitEvent) => {
-        if (event.type !== 'tool_llm_usage') return;
-        try {
-          if (event.target === 'image_gen') {
-            usageImageGen.modelName = event.modelName || 'unknown';
-            usageImageGen.input_tokens += event.input_tokens || 0;
-            usageImageGen.output_tokens += event.output_tokens || 0;
-            usageImageGen.total_tokens += event.total_tokens || 0;
-          } else if (event.target === 'chat') {
-            usageChat.input_tokens += event.input_tokens || 0;
-            usageChat.output_tokens += event.output_tokens || 0;
-            usageChat.total_tokens += event.total_tokens || 0;
-          } else {
-            // Default to system
-            usageSystem.input_tokens += event.input_tokens || 0;
-            usageSystem.output_tokens += event.output_tokens || 0;
-            usageSystem.total_tokens += event.total_tokens || 0;
-          }
-          // Emit updated stats to client
-          this.emitModelStats(usageChat, usageSystem, usageImageGen);
-        } catch (error) {
-          console.error(
-            'SimplifiedAgent: Error processing tool_llm_usage:',
-            error,
-          );
-        }
-      };
-      this.emitter.on(STREAM_EVENT_CHANNEL, toolLlmUsageHandler);
 
       // Seed pre-merged citation set (panel orchestrator) into the collected
       // documents + emit them so the UI numbers them ahead of any new searches.
@@ -1484,7 +1305,7 @@ export class SimplifiedAgent {
           // In LangChain/LangGraph v1.x, AsyncLocalStorage propagates parent callbacks into
           // tool executions, so system model llm.invoke() calls inside tools also fire
           // on_chat_model_end in this stream. Those events have langgraph_node === 'tools'
-          // and must be excluded — their tokens are reported via tool_llm_usage instead.
+          // and must be excluded — their tokens are reported via ctx.systemRecorder instead.
           // Additionally guard by activeAgentLlmRunIds to exclude child SimplifiedAgent
           // LLM calls (which also have langgraph_node === 'model_request' from the child's graph).
           if (
@@ -1497,34 +1318,21 @@ export class SimplifiedAgent {
 
             if (output.usage_metadata) {
               const normalized = normalizeUsageMetadata(output.usage_metadata);
-              if (!this.firstChatCallInputTokens) {
-                this.firstChatCallInputTokens = normalized.input_tokens;
-              }
-              usageChat.input_tokens += normalized.input_tokens;
-              usageChat.output_tokens += normalized.output_tokens;
-              usageChat.total_tokens += normalized.total_tokens;
               console.log(
                 'SimplifiedAgent: Collected usage from usage_metadata:',
                 normalized,
               );
-              // Emit live snapshot
-              this.emitModelStats(usageChat, usageSystem, usageImageGen);
+              this.chatRecorder.record(normalized);
             } else if (output.response_metadata?.usage) {
               // Fallback to response_metadata for different model providers
               const normalized = normalizeUsageMetadata(
                 output.response_metadata.usage,
               );
-              if (!this.firstChatCallInputTokens) {
-                this.firstChatCallInputTokens = normalized.input_tokens;
-              }
-              usageChat.input_tokens += normalized.input_tokens;
-              usageChat.output_tokens += normalized.output_tokens;
-              usageChat.total_tokens += normalized.total_tokens;
               console.log(
                 'SimplifiedAgent: Collected usage from response_metadata:',
                 normalized,
               );
-              this.emitModelStats(usageChat, usageSystem, usageImageGen);
+              this.chatRecorder.record(normalized);
             }
           }
           // Drain activeAgentLlmRunIds AFTER the token-counting check above so the
@@ -1545,22 +1353,16 @@ export class SimplifiedAgent {
             const output = event.data.output;
 
             // Only count tokens from the agent node. System model calls inside tools
-            // report via tool_llm_usage and have langgraph_node === 'tools'.
+            // report via ctx.systemRecorder and have langgraph_node === 'tools'.
             if (output.llmOutput?.tokenUsage) {
               const normalized = normalizeUsageMetadata(
                 output.llmOutput.tokenUsage,
               );
-              if (!this.firstChatCallInputTokens) {
-                this.firstChatCallInputTokens = normalized.input_tokens;
-              }
-              usageChat.input_tokens += normalized.input_tokens;
-              usageChat.output_tokens += normalized.output_tokens;
-              usageChat.total_tokens += normalized.total_tokens;
               console.log(
                 'SimplifiedAgent: Collected usage from llmOutput:',
                 normalized,
               );
-              this.emitModelStats(usageChat, usageSystem, usageImageGen);
+              this.chatRecorder.record(normalized);
             }
           }
 
@@ -1601,12 +1403,6 @@ export class SimplifiedAgent {
                 type: 'interrupt',
                 interrupts: pendingInterrupts,
               });
-              if (toolLlmUsageHandler) {
-                this.emitter.removeListener(
-                  STREAM_EVENT_CHANNEL,
-                  toolLlmUsageHandler,
-                );
-              }
               if (skillRunId) cleanupSkillsForRun(skillRunId);
               return; // Do NOT emit agent_end — run is now paused at an interrupt
             }
@@ -1701,10 +1497,7 @@ ${url ? `<url>${url}</url>` : ''}
                 event.data.output.usage_metadata ||
                 event.data.output.response_metadata?.usage;
               if (meta) {
-                const normalized = normalizeUsageMetadata(meta);
-                usageChat.input_tokens += normalized.input_tokens;
-                usageChat.output_tokens += normalized.output_tokens;
-                usageChat.total_tokens += normalized.total_tokens;
+                this.chatRecorder.record(normalizeUsageMetadata(meta));
               }
             }
             if (
@@ -1715,10 +1508,7 @@ ${url ? `<url>${url}</url>` : ''}
               const t =
                 event.data.output.llmOutput?.tokenUsage ||
                 event.data.output.estimatedTokenUsage;
-              const normalized = normalizeUsageMetadata(t);
-              usageChat.input_tokens += normalized.input_tokens;
-              usageChat.output_tokens += normalized.output_tokens;
-              usageChat.total_tokens += normalized.total_tokens;
+              this.chatRecorder.record(normalizeUsageMetadata(t));
             }
           }
         } else {
@@ -1769,26 +1559,11 @@ ${url ? `<url>${url}</url>` : ''}
         );
       }
 
-      // Clean up tool_llm_usage listener before final emission
-      this.emitter.removeListener(STREAM_EVENT_CHANNEL, toolLlmUsageHandler);
-
-      // Emit model stats and end signal after streaming is complete
-      console.log(
-        'SimplifiedAgent: Usage collected — chat:',
-        usageChat,
-        'system:',
-        usageSystem,
-      );
-      this.emitModelStats(usageChat, usageSystem, usageImageGen);
+      console.log('SimplifiedAgent: Usage collected:', this.tracker.statsV2());
 
       if (skillRunId) cleanupSkillsForRun(skillRunId);
       emitStreamEvent(this.emitter, { type: 'agent_end' });
     } catch (error: unknown) {
-      // Clean up tool_llm_usage listener on error
-      if (toolLlmUsageHandler) {
-        this.emitter.removeListener(STREAM_EVENT_CHANNEL, toolLlmUsageHandler);
-      }
-
       if (skillRunId) cleanupSkillsForRun(skillRunId);
 
       console.error('SimplifiedAgent: Error during search and answer:', error);
@@ -1819,7 +1594,6 @@ ${url ? `<url>${url}</url>` : ''}
     pinnedMcpDescriptors: import('@/lib/mcp/types').McpToolDescriptor[] = [],
     mcpMarkupIds: Record<string, string> = {},
   ): Promise<void> {
-    const toolLlmUsageHandler: ((data: string) => void) | null = null;
     let skillRunId: string | null = null;
 
     try {
@@ -1922,6 +1696,9 @@ ${url ? `<url>${url}</url>` : ''}
           workspaceId: this.workspaceId,
           interactiveSession: this.interactiveSession,
           isPrivate: this.isPrivate,
+          tracker: this.tracker,
+          chatRecorder: this.chatRecorder,
+          systemRecorder: this.systemRecorder,
         },
         recursionLimit: 150,
         signal: this.retrievalSignal,
@@ -2214,9 +1991,6 @@ ${url ? `<url>${url}</url>` : ''}
       if (skillRunId) cleanupSkillsForRun(skillRunId);
       emitStreamEvent(this.emitter, { type: 'agent_end' });
     } catch (error: unknown) {
-      if (toolLlmUsageHandler) {
-        this.emitter.removeListener(STREAM_EVENT_CHANNEL, toolLlmUsageHandler);
-      }
       if (skillRunId) cleanupSkillsForRun(skillRunId);
       console.error('[SimplifiedAgent] doResume error:', error);
       emitStreamEvent(this.emitter, {

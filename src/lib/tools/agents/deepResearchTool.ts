@@ -4,7 +4,6 @@ import { Command, getCurrentTaskInput } from '@langchain/langgraph';
 import { z } from 'zod';
 import { SubagentExecutor } from '@/lib/search/subagents/executor';
 import { getSubagentDefinition } from '@/lib/search/subagents/definitions';
-import { emitStreamEvent } from '@/lib/streaming/events';
 import { defineTool } from '@/lib/tools/defineTool';
 
 // Schema for deep research tool input
@@ -41,6 +40,7 @@ export const deepResearchTool = defineTool(
         fileIds = [],
         userLocation,
         userProfile,
+        tracker,
       } = runtime.context;
       const signal = runtime.signal;
 
@@ -59,6 +59,14 @@ export const deepResearchTool = defineTool(
 
       console.log(`DeepResearchTool: Spawning subagent for task: "${task}"`);
 
+      const chatModelRef = tracker.rootIdentity('chat');
+      const systemModelRef = tracker.rootIdentity('system');
+      if (!chatModelRef || !systemModelRef) {
+        throw new Error(
+          'Root chat/system model identity not registered for deep_research',
+        );
+      }
+
       // Create SubagentExecutor (reuses existing infrastructure)
       const executor = new SubagentExecutor(
         definition,
@@ -71,6 +79,9 @@ export const deepResearchTool = defineTool(
         retrievalSignal, // Pass retrievalSignal for cancellation support
         userLocation,
         userProfile,
+        tracker,
+        chatModelRef,
+        systemModelRef,
       );
 
       // Execute subagent with conversation history
@@ -84,39 +95,6 @@ export const deepResearchTool = defineTool(
       console.log(
         `DeepResearchTool: Subagent completed with status: ${execution.status}`,
       );
-
-      // Emit subagent token usage to parent so it can be accumulated.
-      // The subagent tracks chat vs system model usage separately;
-      // forward each to the correct parent accumulator.
-      if (execution.tokenUsage) {
-        const { usageChat, usageSystem } = execution.tokenUsage;
-        if (
-          usageChat.input_tokens > 0 ||
-          usageChat.output_tokens > 0 ||
-          usageChat.total_tokens > 0
-        ) {
-          emitStreamEvent(emitter, {
-            type: 'tool_llm_usage',
-            target: 'chat',
-            input_tokens: usageChat.input_tokens,
-            output_tokens: usageChat.output_tokens,
-            total_tokens: usageChat.total_tokens,
-          });
-        }
-        if (
-          usageSystem.input_tokens > 0 ||
-          usageSystem.output_tokens > 0 ||
-          usageSystem.total_tokens > 0
-        ) {
-          emitStreamEvent(emitter, {
-            type: 'tool_llm_usage',
-            target: 'system',
-            input_tokens: usageSystem.input_tokens,
-            output_tokens: usageSystem.output_tokens,
-            total_tokens: usageSystem.total_tokens,
-          });
-        }
-      }
 
       if (execution.status === 'success' && execution.summary) {
         await runtime.persist({

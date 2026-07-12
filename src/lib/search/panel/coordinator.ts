@@ -37,6 +37,7 @@ import {
   type AgentEmitEvent,
   type PanelUsage,
 } from '@/lib/streaming/events';
+import type { TokenTracker } from '@/lib/tokens/tracker';
 
 export type { PanelUsage };
 
@@ -54,7 +55,6 @@ export interface PanelExecutorResult {
 export interface PanelCoordinatorResult {
   executorResults: PanelExecutorResult[];
   mergedSources: Document[];
-  totalUsage: PanelUsage;
 }
 
 export interface ResolvedExecutor {
@@ -96,6 +96,8 @@ export class PanelCoordinator {
   private memorySection: string;
   private personaInstructions: string;
   private methodologyInstructions: string;
+  private tracker: TokenTracker;
+  private systemModelRef: { provider: string; model: string };
 
   constructor(params: {
     executors: ResolvedExecutor[];
@@ -110,6 +112,9 @@ export class PanelCoordinator {
     memorySection?: string;
     personaInstructions?: string;
     methodologyInstructions?: string;
+    tracker: TokenTracker;
+    /** Identity of the system model shared by every executor's internal calls. */
+    systemModelRef: { provider: string; name: string };
   }) {
     this.executors = params.executors;
     this.systemLlm = params.systemLlm;
@@ -123,6 +128,11 @@ export class PanelCoordinator {
     this.memorySection = params.memorySection ?? '';
     this.personaInstructions = params.personaInstructions ?? '';
     this.methodologyInstructions = params.methodologyInstructions ?? '';
+    this.tracker = params.tracker;
+    this.systemModelRef = {
+      provider: params.systemModelRef.provider,
+      model: params.systemModelRef.name,
+    };
   }
 
   /** Run all executors concurrently and merge their sources. */
@@ -169,23 +179,7 @@ export class PanelCoordinator {
 
     const mergedSources = this.mergeSources(executorResults);
 
-    const totalUsage: PanelUsage = {
-      usageChat: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
-      usageSystem: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
-    };
-    for (const e of executorResults) {
-      if (!e.usage) continue;
-      for (const k of [
-        'input_tokens',
-        'output_tokens',
-        'total_tokens',
-      ] as const) {
-        totalUsage.usageChat[k] += e.usage.usageChat[k];
-        totalUsage.usageSystem[k] += e.usage.usageSystem[k];
-      }
-    }
-
-    return { executorResults, mergedSources, totalUsage };
+    return { executorResults, mergedSources };
   }
 
   private async runOne(
@@ -198,6 +192,18 @@ export class PanelCoordinator {
     messageImageIds?: string[],
   ): Promise<PanelExecutorResult> {
     const modelName = getModelName(executor.llm) || executor.ref.name;
+    const scope = `panel_executor:${idx}`;
+    const chatRecorder = this.tracker.register({
+      provider: executor.ref.provider,
+      model: executor.ref.name,
+      role: 'chat',
+      scope,
+    });
+    const systemRecorder = this.tracker.register({
+      ...this.systemModelRef,
+      role: 'system',
+      scope,
+    });
 
     this.emit({
       type: 'panel_executor_started',
@@ -207,7 +213,6 @@ export class PanelCoordinator {
 
     const isolated = new EventEmitter();
     const collected = { text: '', documents: [] as Document[] };
-    let usage: PanelUsage | undefined;
 
     onStreamEvent(isolated, (event) => {
       if (event.type === 'response') {
@@ -225,19 +230,6 @@ export class PanelCoordinator {
         // it as authoritative and replace — appending here would double-count
         // every source (inflating sourceCount and duplicating URL-less docs).
         if (Array.isArray(event.data)) collected.documents = event.data;
-      } else if (event.type === 'model_stats' && event.data) {
-        usage = {
-          usageChat: event.data.usageChat || {
-            input_tokens: 0,
-            output_tokens: 0,
-            total_tokens: 0,
-          },
-          usageSystem: event.data.usageSystem || {
-            input_tokens: 0,
-            output_tokens: 0,
-            total_tokens: 0,
-          },
-        };
       }
     });
 
@@ -249,6 +241,7 @@ export class PanelCoordinator {
         isolated,
         this.personaInstructions, // executors research in the user's configured voice
         this.signal,
+        { tracker: this.tracker, chatRecorder, systemRecorder },
         `${this.messageId}_panel_${idx}`,
         this.retrievalSignal ?? this.signal,
         this.userLocation,
@@ -277,6 +270,7 @@ export class PanelCoordinator {
       // resolves, and the isolated listeners above are synchronous, so by this
       // point `collected` is fully populated — no flush delay is needed.
       const text = removeThinkingBlocks(collected.text).trim();
+      const usage = this.tracker.scopeUsage(scope);
       this.emit({
         type: 'panel_executor_completed',
         executorIdx: idx,
@@ -309,7 +303,7 @@ export class PanelCoordinator {
         status: 'error',
         text: '',
         sources: [],
-        usage,
+        usage: this.tracker.scopeUsage(scope),
         error,
       };
     }

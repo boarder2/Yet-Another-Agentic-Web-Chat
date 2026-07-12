@@ -13,6 +13,8 @@ Stack: Next.js (App Router) + React 19 + Tailwind 4, TanStack Query (client data
 
 **Stream events** (`src/lib/streaming/`): the one seam between agent and UI. Producers emit typed `AgentEmitEvent`s on a single emitter channel; `runHost` synthesizes the NDJSON wire `StreamEvent`s (adds the assistant `messageId`, `messageEnd`, replay/`gone`), buffered + replayed by `runHub`. The client parses each line and folds it through one pure reducer (`reducer.ts`, `reduce(state, event) → {state, effects}`) shared by the live-send and reconnect/attach paths — replay-gating is reducer state (`inReplay`); `ChatWindow` interprets the returned `StreamEffect`s. Unit-tested (`*.test.ts`), the exception to the e2e-only policy.
 
+**Token tracking**: a single `TokenTracker` (`src/lib/tokens/tracker.ts`) is created per user-visible turn and passed down to the agent, its tools (via `ToolContext.tracker`/`chatRecorder`/`systemRecorder`), and any child runs (panel executors, `deep_research` subagents, each tagged with a `scope`). It emits per-model `model_stats`/`stats`/`messageEnd.modelStats` snapshots (`ModelStatsV2`, one row per `(provider, model)`); `ModelStatsV1` is kept only to render historical messages.
+
 ## Focus Modes
 
 - **Web Search**: default, all tools

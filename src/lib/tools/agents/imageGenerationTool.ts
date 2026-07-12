@@ -9,7 +9,6 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { UPLOADS_DIR } from '@/lib/dataDir';
-import { emitStreamEvent } from '@/lib/streaming/events';
 import { defineTool } from '@/lib/tools/defineTool';
 
 // ─── Backend interface (extensible to OpenAI etc.) ────────────────────────
@@ -187,7 +186,7 @@ export const imageGenerationTool = defineTool(
   async (input: z.infer<typeof ImageGenerationToolSchema>, runtime) => {
     try {
       const { query, aspectRatio, imageSize } = input;
-      const { messageId, retrievalSignal, emitter } = runtime.context;
+      const { messageId, retrievalSignal, tracker } = runtime.context;
 
       const backend = getImageGenerationBackend();
       if (!backend) {
@@ -226,12 +225,14 @@ export const imageGenerationTool = defineTool(
         combinedSignal,
       );
 
-      // Emit token usage for stats tracking
-      if (emitter && usage) {
-        emitStreamEvent(emitter, {
-          type: 'tool_llm_usage',
-          target: 'image_gen',
-          modelName: generationConfig?.model || 'unknown',
+      // Record token usage for this call's (provider, model) row.
+      if (usage) {
+        const recorder = tracker.register({
+          provider: generationConfig?.provider || 'unknown',
+          model: generationConfig?.model || 'unknown',
+          role: 'image_gen',
+        });
+        recorder.record({
           input_tokens: usage.inputTokens,
           output_tokens: usage.outputTokens,
           total_tokens: usage.totalTokens,

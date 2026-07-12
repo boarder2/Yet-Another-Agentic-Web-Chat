@@ -8,7 +8,7 @@
  * - {@link AgentEmitEvent} — what producers (the agent, its tools, the panel
  *   coordinator, subagent executors) emit and what run-host / runner consume.
  *   Includes control events (`model_stats`, `interrupt`, `agent_end`,
- *   `agent_error`, `tool_llm_usage`) that never reach a client.
+ *   `agent_error`) that never reach a client.
  * - {@link StreamEvent} — the wire vocabulary: what run-host pushes into the
  *   hub, what `run_events` persists, and what the client reducer consumes. The
  *   run host translates control events into wire events (`model_stats`→`stats`,
@@ -31,7 +31,8 @@ export type TokenUsage = {
   total_tokens: number;
 };
 
-export type ModelStats = {
+export type ModelStatsV1 = {
+  version?: undefined;
   modelName: string; // chat model name (legacy total field)
   responseTime?: number;
   usage?: TokenUsage; // combined usage (legacy)
@@ -46,6 +47,21 @@ export type ModelStats = {
   firstChatCallInputTokens?: number;
   projectedNextInputTokens?: number;
 };
+
+/** Per-model token tracking (ModelStats v2) — see `src/lib/tokens/tracker.ts`. */
+export type ModelStatsV2 = {
+  version: 2;
+  perModel: Array<{ provider: string; model: string; usage: TokenUsage }>;
+  responseTime?: number;
+  firstChatCallInputTokens?: number;
+  projectedNextInputTokens?: number;
+  usedLocation?: boolean;
+  usedPersonalization?: boolean;
+  memoriesUsed?: number;
+};
+
+/** Absent `version` ⇒ v1 (historical messages only; new messages emit only v2). */
+export type ModelStats = ModelStatsV1 | ModelStatsV2;
 
 /** Kinds of tool that raise an approval interrupt. Drives `${kind}_*` events. */
 export type ToolKind =
@@ -120,8 +136,6 @@ export type WidgetProposalData = {
   proposed: unknown;
   rationale: string;
 };
-export type ToolLlmUsageTarget = 'chat' | 'system' | 'image_gen';
-
 // ── Agent-emit vocabulary (producer → run host) ──────────────────────────────
 
 export type AgentEmitEvent =
@@ -179,15 +193,7 @@ export type AgentEmitEvent =
   | { type: 'model_stats'; data: ModelStats }
   | { type: 'interrupt'; interrupts: LangGraphInterrupt[] }
   | { type: 'agent_end' }
-  | { type: 'agent_error'; data: string }
-  | {
-      type: 'tool_llm_usage';
-      target: ToolLlmUsageTarget;
-      modelName?: string;
-      input_tokens: number;
-      output_tokens: number;
-      total_tokens: number;
-    };
+  | { type: 'agent_error'; data: string };
 
 // ── Wire vocabulary (run host → client) ──────────────────────────────────────
 
@@ -337,7 +343,6 @@ const AGENT_CONTROL_TYPES = new Set<string>([
   'interrupt',
   'agent_end',
   'agent_error',
-  'tool_llm_usage',
 ]);
 
 /**

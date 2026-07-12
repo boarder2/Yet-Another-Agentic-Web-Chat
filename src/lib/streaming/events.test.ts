@@ -71,7 +71,6 @@ describe('isAgentControlEvent', () => {
       'interrupt',
       'agent_end',
       'agent_error',
-      'tool_llm_usage',
     ]) {
       expect(isAgentControlEvent({ type })).toBe(true);
     }

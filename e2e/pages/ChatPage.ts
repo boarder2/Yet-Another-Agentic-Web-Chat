@@ -80,10 +80,15 @@ export class ChatPage extends BasePage {
       .filter({ hasText: 'Agent Panel' });
   }
 
-  async toggleAgentPanelEnabled() {
-    await this.agentPanel()
-      .getByRole('switch', { name: 'Enable agent panel' })
-      .click();
+  /** Drive the panel switch to a known state — the selection is DB-synced, so a
+   * blind toggle would invert whatever the composer hydrated. */
+  async setAgentPanelEnabled(enabled: boolean) {
+    const toggle = this.agentPanel().getByRole('switch', {
+      name: 'Enable agent panel',
+    });
+    if ((await toggle.getAttribute('aria-checked')) !== String(enabled)) {
+      await toggle.click();
+    }
   }
 
   /** Add one executor model to the panel by its picker display name (e.g.
@@ -110,7 +115,7 @@ export class ChatPage extends BasePage {
    * popover so it doesn't cover the composer for subsequent interactions. */
   async configureAgentPanel(executorDisplayNames: string[]) {
     await this.openAgentPanel();
-    await this.toggleAgentPanelEnabled();
+    await this.setAgentPanelEnabled(true);
     for (const name of executorDisplayNames) {
       await this.addPanelExecutor(name);
     }

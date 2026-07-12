@@ -7,15 +7,20 @@ const TOOL_ANSWER = 'Based on the document, the answer is deterministic.';
 test.describe('agent panel', () => {
   // panelSelection is a DB-backed, instance-wide setting (not scoped per-chat)
   // — cross-device sync of the composer's active selection is a real feature
-  // (see src/lib/settings/keys.ts). This spec's `serial` project (one worker)
-  // keeps a concurrently-running spec from ever reading a dirty selection;
-  // reset it after each test so the next test in the suite starts clean.
-  test.afterEach(async ({ request }) => {
-    await request.patch('/api/settings', {
-      data: {
-        panelSelection: JSON.stringify({ enabled: false, executors: [] }),
-      },
-    });
+  // (see src/lib/settings/keys.ts) — so each test must leave it clean or the
+  // next one hydrates a dirty selection. Reset it through the page's own
+  // settings layer and wait for that write to reach the DB: an out-of-band
+  // PATCH would race the composer's debounced flush, which the browser re-sends
+  // with keepalive on pagehide and would land *after* the reset.
+  test.afterEach(async ({ page }) => {
+    const flushed = page.waitForResponse(
+      (r) =>
+        r.url().includes('/api/settings') &&
+        r.request().method() === 'PATCH' &&
+        (r.request().postData() ?? '').includes('"panelSelection":null'),
+    );
+    await page.evaluate(() => localStorage.removeItem('panelSelection'));
+    await flushed;
   });
 
   test('enabling requires 2-4 executors before it is usable', async ({
@@ -25,7 +30,7 @@ test.describe('agent panel', () => {
     await chat.goto('/');
 
     await chat.openAgentPanel();
-    await chat.toggleAgentPanelEnabled();
+    await chat.setAgentPanelEnabled(true);
     await expect(
       page.getByText('Select 2–4 executors to use the panel.'),
     ).toBeVisible();

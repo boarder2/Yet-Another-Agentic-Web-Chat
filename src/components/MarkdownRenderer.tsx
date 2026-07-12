@@ -1,5 +1,6 @@
 'use client';
 
+import { memo } from 'react';
 import { cn } from '@/lib/utils';
 import Markdown, { MarkdownToJSX } from 'markdown-to-jsx';
 import ThinkBox from './ThinkBox';
@@ -275,6 +276,71 @@ const ChartElement = ({ id }: { id?: string }) => {
   return <ChartWidget spec={spec} />;
 };
 
+// Override components must live at module scope: markdown-to-jsx element types
+// need referential identity across renders, or React remounts the subtree of
+// every overridden element (resetting widget state, restarting spinners) on
+// each streamed token.
+const SkillTokenElement = ({ children }: { children?: React.ReactNode }) => (
+  <span className="text-accent font-mono">{children}</span>
+);
+
+const StrongElement = ({ children }: { children?: React.ReactNode }) => (
+  <strong className="font-bold">{children}</strong>
+);
+
+const PreElement = ({ children }: { children?: React.ReactNode }) => children;
+
+const NullElement = () => null;
+
+const MarkdownAnchor = ({
+  sources,
+  ...props
+}: React.ComponentProps<'a'> & {
+  sources?: Document[];
+  'data-citation'?: string;
+}) => {
+  // Check if this is a citation link with data-citation attribute
+  const citationNumber = props['data-citation'];
+
+  if (sources && citationNumber) {
+    const number = parseInt(citationNumber);
+    const source = sources[number - 1];
+
+    if (source) {
+      return (
+        <CitationLink
+          number={number.toString()}
+          source={source}
+          url={props.href}
+        />
+      );
+    }
+  }
+
+  // Rewrite absolute URLs pointing to internal chat paths so the LLM
+  // can't accidentally anchor them to a hallucinated domain.
+  const href = props.href ?? '';
+  let resolvedHref = href;
+  try {
+    const parsed = new URL(href);
+    if (/^\/(workspaces\/[^/]+\/)?c\/[a-f0-9]+\/?$/.test(parsed.pathname)) {
+      resolvedHref = parsed.pathname;
+    }
+  } catch {
+    // href is already relative — leave it alone
+  }
+
+  // Default link behavior
+  return (
+    <a
+      {...props}
+      href={resolvedHref}
+      target="_blank"
+      rel="noopener noreferrer"
+    />
+  );
+};
+
 const ThinkTagProcessor = ({
   children,
   id,
@@ -336,9 +402,7 @@ const MarkdownRenderer = ({
         component: ChartElement,
       },
       SkillToken: {
-        component: ({ children }) => (
-          <span className="text-accent font-mono">{children}</span>
-        ),
+        component: SkillTokenElement,
       },
       // Fenced code blocks — dispatches yaawc:* widget envelopes, falls back
       // to the plain code block renderer for everything else.
@@ -346,64 +410,20 @@ const MarkdownRenderer = ({
         component: WidgetOrCodeBlock,
       },
       strong: {
-        component: ({ children }) => (
-          <strong className="font-bold">{children}</strong>
-        ),
+        component: StrongElement,
       },
       pre: {
-        component: ({ children }) => children,
+        component: PreElement,
       },
       a: {
-        component: (props) => {
-          // Check if this is a citation link with data-citation attribute
-          const citationNumber = props['data-citation'];
-
-          if (sources && citationNumber) {
-            const number = parseInt(citationNumber);
-            const source = sources[number - 1];
-
-            if (source) {
-              return (
-                <CitationLink
-                  number={number.toString()}
-                  source={source}
-                  url={props.href}
-                />
-              );
-            }
-          }
-
-          // Rewrite absolute URLs pointing to internal chat paths so the LLM
-          // can't accidentally anchor them to a hallucinated domain.
-          const href = props.href ?? '';
-          let resolvedHref = href;
-          try {
-            const parsed = new URL(href);
-            if (
-              /^\/(workspaces\/[^/]+\/)?c\/[a-f0-9]+\/?$/.test(parsed.pathname)
-            ) {
-              resolvedHref = parsed.pathname;
-            }
-          } catch {
-            // href is already relative — leave it alone
-          }
-
-          // Default link behavior
-          return (
-            <a
-              {...props}
-              href={resolvedHref}
-              target="_blank"
-              rel="noopener noreferrer"
-            />
-          );
-        },
+        component: MarkdownAnchor,
+        props: { sources },
       },
       // Prevent rendering of certain HTML elements for security
-      iframe: () => null, // Don't render iframes
-      script: () => null, // Don't render scripts
-      object: () => null, // Don't render objects
-      style: () => null, // Don't render styles
+      iframe: NullElement,
+      script: NullElement,
+      object: NullElement,
+      style: NullElement,
     },
   };
 
@@ -485,4 +505,6 @@ const MarkdownRenderer = ({
   );
 };
 
-export default MarkdownRenderer;
+// Memoized so a streaming commit only re-parses the message whose content
+// actually changed, not every message in the chat.
+export default memo(MarkdownRenderer);

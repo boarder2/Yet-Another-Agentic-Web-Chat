@@ -59,23 +59,23 @@ The `todo_list` tool emits `todo_update` events for research progress tracking. 
 
 Emitted by `SubagentExecutor` (`src/lib/search/subagents/executor.ts`). Nested tool calls are an array field on the subagent's payload (`toolCalls: ToolCallPayload[]`), not nested markup — see the `subagent-architecture` skill.
 
-| Event Type           | Payload                                                          | UI Behavior                                              |
-| -------------------- | ---------------------------------------------------------------- | -------------------------------------------------------- |
-| `subagent_started`   | `{ executionId, name, task, status: "running" }`                 | Appends a `yaawc:subagent` widget to in-progress message |
-| `subagent_data`      | `{ executionId, data }` — nested `response`/`tool_call_*` events | Patches the subagent widget's `responseText`/`toolCalls` |
-| `subagent_completed` | `{ executionId, … }`                                             | Widget `status` → `"success"`                            |
-| `subagent_error`     | `{ executionId, … }`                                             | Widget `status` → `"error"`                              |
+| Event Type           | Payload                                                          | UI Behavior                                                                                                   |
+| -------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `subagent_started`   | `{ executionId, name, task, status: "running" }`                 | Appends a `yaawc:subagent` widget to in-progress message                                                      |
+| `subagent_data`      | `{ executionId, data }` — nested `response`/`tool_call_*` events | Patches the subagent widget's `responseText`/`toolCalls` (response tokens are buffered like top-level tokens) |
+| `subagent_completed` | `{ executionId, … }`                                             | Widget `status` → `"success"`                                                                                 |
+| `subagent_error`     | `{ executionId, … }`                                             | Widget `status` → `"error"`                                                                                   |
 
 ## Agent Panel Events
 
 Emitted by `PanelCoordinator` (`src/lib/search/panel/coordinator.ts`) during Phase 1 fan-out. All executors share ONE `yaawc:panel` widget (`{ id, columns: [...] }`), patched via `startPanelColumn`/`appendPanelColumnToken`/`setPanelColumnStatus` in `src/lib/widgets/envelope.ts`, rendered by `PanelColumns.tsx`.
 
-| Event Type                 | Payload                                             | UI Behavior                                           |
-| -------------------------- | --------------------------------------------------- | ----------------------------------------------------- |
-| `panel_executor_started`   | `{ executorIdx, model }`                            | Adds an executor column (status running). Idempotent. |
-| `panel_executor_data`      | `{ executorIdx, token }` — streamed response tokens | Accumulates into that column's `responseText`         |
-| `panel_executor_completed` | `{ executorIdx, model, sourceCount, usage }`        | Column → success; shows source + token counts         |
-| `panel_executor_error`     | `{ executorIdx, model, error }`                     | Column → error                                        |
+| Event Type                 | Payload                                             | UI Behavior                                                                    |
+| -------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `panel_executor_started`   | `{ executorIdx, model }`                            | Adds an executor column (status running). Idempotent.                          |
+| `panel_executor_data`      | `{ executorIdx, token }` — streamed response tokens | Accumulates into that column's `responseText` (buffered like top-level tokens) |
+| `panel_executor_completed` | `{ executorIdx, model, sourceCount, usage }`        | Column → success; shows source + token counts                                  |
+| `panel_executor_error`     | `{ executorIdx, model, error }`                     | Column → error                                                                 |
 
 `_started/_completed/_error` are persisted milestones; `_data` is not (the accumulated `responseText` lives in the persisted message content, like `subagent_data`). The chat model's synthesized final answer streams via the normal `response` path below the columns.
 

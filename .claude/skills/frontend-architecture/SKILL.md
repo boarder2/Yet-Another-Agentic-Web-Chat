@@ -214,7 +214,7 @@ The `messageHandler()` function dispatches by event `type`:
 | `tool_call_started`                                 | Append a `yaawc:tool_call` widget to message content (`appendWidget`)                                                |
 | `tool_call_success` / `tool_call_error`             | Patch the widget's JSON payload (`updateWidget`)                                                                     |
 | `subagent_started`                                  | Append a `yaawc:subagent` widget                                                                                     |
-| `subagent_data`                                     | Forward nested tool/response events; patched into the widget's `toolCalls` array / `responseText`                    |
+| `subagent_data`                                     | Forward nested tool/response events; patched into the widget's `toolCalls` array / `responseText` (tokens buffered)  |
 | `subagent_completed` / `subagent_error`             | Patch the widget with final status/summary/error                                                                     |
 | `todo_update`                                       | Update `todoItems` state (renders in TodoWidget)                                                                     |
 | `stats`                                             | Update `liveModelStats` for token display                                                                            |

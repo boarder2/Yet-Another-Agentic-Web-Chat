@@ -43,6 +43,17 @@ import type { StreamEffect } from './effects';
 /** How many response tokens accumulate before the assistant row is re-rendered. */
 const RESPONSE_BUFFER_THRESHOLD = 5;
 
+/** Buffered nested response tokens for one subagent/panel widget, committed in
+ *  batches (like top-level response tokens) so each token doesn't rewrite —
+ *  and re-render — the whole assistant row. */
+interface PendingWidgetTokens {
+  msgId: string;
+  kind: 'subagent' | 'panel';
+  id: string; // subagent executionId, or panel executor idx as a string
+  text: string;
+  count: number;
+}
+
 export type LiveContextGrew = {
   kind: string;
   tokens: number;
@@ -62,6 +73,7 @@ export interface ChatStreamState {
   receivedMessage: string;
   rowAdded: boolean;
   tokenCount: number;
+  pendingWidgetTokens: Record<string, PendingWidgetTokens>;
   sources: Document[];
   codeExecutionRunIds: Record<string, string>;
   userQuestionRunIds: Record<string, string>;
@@ -117,6 +129,7 @@ export function initialChatStreamState(
     receivedMessage: '',
     rowAdded: false,
     tokenCount: 0,
+    pendingWidgetTokens: {},
     sources: [],
     codeExecutionRunIds: {},
     userQuestionRunIds: {},
@@ -174,6 +187,56 @@ function transformAssistant(
   );
 }
 
+function applyWidgetTokens(content: string, p: PendingWidgetTokens): string {
+  return p.kind === 'subagent'
+    ? updateWidget<SubagentPayload>(content, 'subagent', p.id, (current) => ({
+        ...current,
+        responseText: (current.responseText ?? '') + p.text,
+      }))
+    : appendPanelColumnToken(content, Number(p.id), p.text);
+}
+
+/** Commit all buffered nested widget tokens into the row content. */
+function flushWidgetTokens(state: ChatStreamState): ChatStreamState {
+  const pending = Object.values(state.pendingWidgetTokens);
+  if (pending.length === 0) return state;
+  let receivedMessage = state.receivedMessage;
+  let messages = state.messages;
+  for (const p of pending) {
+    receivedMessage = applyWidgetTokens(receivedMessage, p);
+    messages = messages.map((m) =>
+      m.messageId === p.msgId
+        ? { ...m, content: applyWidgetTokens(m.content, p) }
+        : m,
+    );
+  }
+  return { ...state, receivedMessage, messages, pendingWidgetTokens: {} };
+}
+
+/** Accumulate one nested widget token, committing the widget's buffer every
+ *  RESPONSE_BUFFER_THRESHOLD tokens. */
+function bufferWidgetToken(
+  state: ChatStreamState,
+  target: Pick<PendingWidgetTokens, 'msgId' | 'kind' | 'id'>,
+  token: string,
+): { state: ChatStreamState; flushed: boolean } {
+  const key = `${target.kind}:${target.msgId}:${target.id}`;
+  const prev = state.pendingWidgetTokens[key];
+  const entry: PendingWidgetTokens = {
+    ...target,
+    text: (prev?.text ?? '') + token,
+    count: (prev?.count ?? 0) + 1,
+  };
+  const next: ChatStreamState = {
+    ...state,
+    pendingWidgetTokens: { ...state.pendingWidgetTokens, [key]: entry },
+  };
+  if (entry.count < RESPONSE_BUFFER_THRESHOLD) {
+    return { state: next, flushed: false };
+  }
+  return { state: flushWidgetTokens(next), flushed: true };
+}
+
 /** Set the status of every matching item across all buckets of a pending map. */
 function sweepStatus<T>(
   record: Record<string, T[]>,
@@ -220,6 +283,13 @@ function reduceStreamAction(
   state: ChatStreamState,
   action: StreamAction,
 ): ReduceResult {
+  // Any action other than a nested widget token commits buffered tokens first,
+  // so event ordering within the row content is preserved.
+  const buffersToken =
+    action.type === 'panel_executor_data' ||
+    (action.type === 'subagent_data' && action.data.type === 'response');
+  if (!buffersToken) state = flushWidgetTokens(state);
+
   const effects: StreamEffect[] = [];
   const scroll = () => effects.push({ kind: 'bumpScroll' });
 
@@ -494,18 +564,16 @@ function reduceStreamAction(
       const msgId = msgIdFor(state, action);
       const nested = action.data;
       const executionId = action.subagentId;
+      if (nested.type === 'response') {
+        const buffered = bufferWidgetToken(
+          state,
+          { msgId, kind: 'subagent', id: executionId },
+          nested.data || '',
+        );
+        if (buffered.flushed) scroll();
+        return { state: buffered.state, effects };
+      }
       const transform = (content: string): string => {
-        if (nested.type === 'response') {
-          return updateWidget<SubagentPayload>(
-            content,
-            'subagent',
-            executionId,
-            (current) => ({
-              ...current,
-              responseText: (current.responseText ?? '') + (nested.data || ''),
-            }),
-          );
-        }
         if (nested.type === 'tool_call_started') {
           const { toolCallId, toolType, status, attrs } = nested.data;
           return updateWidget<SubagentPayload>(
@@ -590,14 +658,13 @@ function reduceStreamAction(
     case 'panel_executor_data': {
       if (state.inReplay) return { state, effects };
       const msgId = msgIdFor(state, action);
-      const idx = action.executorIdx;
-      const token = action.token ?? '';
-      const apply = (content: string) =>
-        appendPanelColumnToken(content, idx, token);
-      const receivedMessage = apply(state.receivedMessage);
-      const messages = transformAssistant(state, msgId, apply);
-      scroll();
-      return { state: { ...state, receivedMessage, messages }, effects };
+      const buffered = bufferWidgetToken(
+        state,
+        { msgId, kind: 'panel', id: String(action.executorIdx) },
+        action.token ?? '',
+      );
+      if (buffered.flushed) scroll();
+      return { state: buffered.state, effects };
     }
 
     case 'chart_spec': {

@@ -334,8 +334,8 @@ let pendingWorkspaceFirstSend: {
 } | null = null;
 
 // Fields of ChatStreamState that affect what is rendered. A reducer transition
-// that touches none of these (response-token buffering) skips the re-render,
-// matching the old handler's every-5-tokens commit cadence.
+// that touches none of these (response-token and nested widget-token buffering)
+// skips the re-render, matching the old handler's every-5-tokens commit cadence.
 const RENDER_KEYS = [
   'messages',
   'liveModelStats',
@@ -475,17 +475,20 @@ const ChatWindow = ({
   // Non-stream message writes (initial load, rewrite/delete, suggestions) fold
   // through the reducer's `set_messages` action, keeping one write path for the
   // consolidated messages slice.
-  const setMessages = (v: SetStateAction<Message[]>) =>
-    applyStreamState(
-      (s) =>
-        reduceStreamEvent(s, {
-          type: 'set_messages',
-          updater:
-            typeof v === 'function'
-              ? (v as (prev: Message[]) => Message[])
-              : () => v,
-        }).state,
-    );
+  const setMessages = useCallback(
+    (v: SetStateAction<Message[]>) =>
+      applyStreamState(
+        (s) =>
+          reduceStreamEvent(s, {
+            type: 'set_messages',
+            updater:
+              typeof v === 'function'
+                ? (v as (prev: Message[]) => Message[])
+                : () => v,
+          }).state,
+      ),
+    [applyStreamState],
+  );
   const setPendingExecutions = (
     v: SetStateAction<Record<string, PendingExecution[]>>,
   ) => setField('pendingExecutions', v);
@@ -1468,26 +1471,28 @@ const ChatWindow = ({
     }
   };
 
-  const handleThinkBoxToggle = (
-    messageId: string,
-    thinkBoxId: string,
-    expanded: boolean,
-  ) => {
-    setMessages((prev) =>
-      prev.map((message) => {
-        if (message.messageId === messageId) {
-          const expandedThinkBoxes = new Set(message.expandedThinkBoxes || []);
-          if (expanded) {
-            expandedThinkBoxes.add(thinkBoxId);
-          } else {
-            expandedThinkBoxes.delete(thinkBoxId);
+  // Stable identity: passed down to memoized MarkdownRenderer via MessageBox.
+  const handleThinkBoxToggle = useCallback(
+    (messageId: string, thinkBoxId: string, expanded: boolean) => {
+      setMessages((prev) =>
+        prev.map((message) => {
+          if (message.messageId === messageId) {
+            const expandedThinkBoxes = new Set(
+              message.expandedThinkBoxes || [],
+            );
+            if (expanded) {
+              expandedThinkBoxes.add(thinkBoxId);
+            } else {
+              expandedThinkBoxes.delete(thinkBoxId);
+            }
+            return { ...message, expandedThinkBoxes };
           }
-          return { ...message, expandedThinkBoxes };
-        }
-        return message;
-      }),
-    );
-  };
+          return message;
+        }),
+      );
+    },
+    [setMessages],
+  );
 
   useEffect(() => {
     if (isReady && initialMessage && isConfigReady) {

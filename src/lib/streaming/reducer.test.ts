@@ -375,6 +375,70 @@ describe('finalization and errors', () => {
   });
 });
 
+describe('nested widget token buffering', () => {
+  const started = ev({
+    type: 'subagent_started',
+    executionId: 's1',
+    name: 'researcher',
+    task: 'dig',
+  });
+  const tok = (data: string) =>
+    ev({
+      type: 'subagent_data',
+      subagentId: 's1',
+      subagentName: 'researcher',
+      data: { type: 'response', data },
+    });
+
+  it('buffers subagent response tokens, committing every 5', () => {
+    const { state } = run(liveStart(), [
+      started,
+      tok('a'),
+      tok('b'),
+      tok('c'),
+      tok('d'),
+    ]);
+    expect(rowContent(state)).not.toContain('responseText');
+    const after = reduceStreamEvent(state, tok('e')).state;
+    expect(rowContent(after)).toContain('"responseText":"abcde"');
+    expect(after.receivedMessage).toContain('"responseText":"abcde"');
+    expect(after.pendingWidgetTokens).toEqual({});
+  });
+
+  it('flushes buffered tokens before any other event applies', () => {
+    const { state } = run(liveStart(), [started, tok('a'), tok('b')]);
+    const done = reduceStreamEvent(
+      state,
+      ev({ type: 'subagent_completed', id: 's1', summary: 'done' }),
+    ).state;
+    expect(rowContent(done)).toContain('"responseText":"ab"');
+    expect(rowContent(done)).toContain('"status":"success"');
+  });
+
+  it('buffers panel executor tokens per column', () => {
+    const panelTok = (executorIdx: number, token: string) =>
+      ev({ type: 'panel_executor_data', executorIdx, token });
+    const { state } = run(liveStart(), [
+      ev({ type: 'panel_executor_started', executorIdx: 0, model: 'm1' }),
+      ev({ type: 'panel_executor_started', executorIdx: 1, model: 'm2' }),
+      panelTok(0, 'a'),
+      panelTok(1, 'x'),
+      panelTok(0, 'b'),
+    ]);
+    // Interleaved columns buffer independently — nothing committed yet.
+    expect(rowContent(state)).toContain('"responseText":""');
+    const after = run(state, [
+      panelTok(0, 'c'),
+      panelTok(0, 'd'),
+      panelTok(0, 'e'),
+    ]).state;
+    // Column 0 hit the threshold; the flush commits column 1's buffer too.
+    expect(rowContent(after)).toContain('"responseText":"abcde"');
+    expect(rowContent(after)).toContain('"responseText":"x"');
+    expect(after.pendingWidgetTokens).toEqual({});
+  });
+});
+
 describe('replay idempotency', () => {
   it('yields identical row content when a subagent milestone is replayed', () => {
     const started = ev({

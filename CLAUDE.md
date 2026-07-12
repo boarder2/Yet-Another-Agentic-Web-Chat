@@ -28,6 +28,10 @@ Stack: Next.js (App Router) + React 19 + Tailwind 4, TanStack Query (client data
 
 Optional composer mode (research modes only) that fans one prompt across **2–4 executor models in parallel** (`PanelCoordinator`, `src/lib/search/panel/`), then has the **turn's chat model** synthesize one answer. Request shape: `body.panel` (`src/lib/types/panel.ts`); wired in `api/chat/route.ts`.
 
+## Workspace Files
+
+`src/lib/workspaces/`. Blobs live at `<DATA_DIR>/workspace-files/<workspaceId>/<fileId>/<sha256>` — content-addressed _within_ a file, never shared across files, so no blob needs a reference count. The row `UPDATE` is the commit point (stage blob → update row → unlink the old sha), so a crash leaks an orphan rather than dangling a row; orphans are reclaimed when the workspace is deleted. Every write is a compare-and-swap: `replaceFile` **requires** the sha it is replacing, so a concurrent write can never be silently lost — losers get a `ConflictError` (API `409`, agent `stale_state`, editor conflict banner). Legacy globally-deduplicated blobs are migrated on boot (`migrateBlobs.ts`).
+
 ## MCP Servers
 
 Remote MCP servers (Settings → MCP Servers) whose tools are injected into every tool-running focus mode, with per-tool enable/auto-run config. Connection layer + auth in `src/lib/mcp/`; API under `/api/mcp/*`.

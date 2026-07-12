@@ -153,10 +153,15 @@ Note: The old `{"type":"init"}`, `{"type":"modelStats"}`, and `{"type":"end"}` e
 | `/api/workspaces/[id]/archive`        | POST           | Archive a workspace                                                                                                            |
 | `/api/workspaces/[id]/unarchive`      | POST           | Unarchive a workspace                                                                                                          |
 | `/api/workspaces/[id]/files`          | GET/POST       | List or upload workspace files                                                                                                 |
-| `/api/workspaces/[id]/files/[fileId]` | GET/PUT/DELETE | Get, update, or delete a workspace file                                                                                        |
+| `/api/workspaces/[id]/files/[fileId]` | GET/PUT/DELETE | Get, update, or delete a workspace file. PUT body: `{ content, expectedSha }` — see below                                      |
 | `/api/workspaces/[id]/system-prompts` | GET            | List system prompts scoped to a workspace                                                                                      |
 | `/api/workspaces/[id]/urls`           | GET/POST       | Manage workspace URL sources                                                                                                   |
 | `/api/workspaces/[id]/urls/check`     | POST           | Validate a URL                                                                                                                 |
+
+Writing a file is a compare-and-swap: `PUT` **requires** `expectedSha` (the sha the
+edit was based on; `400` without it). If the row has moved on, the write is rejected
+with `409` and `{ error, currentSha }` rather than clobbering the newer version — the
+editor renders a conflict banner and the agent maps it onto its `stale_state` error.
 
 ## Memories
 

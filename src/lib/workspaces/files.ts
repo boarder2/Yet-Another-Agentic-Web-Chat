@@ -1,31 +1,42 @@
 import fs from 'node:fs/promises';
-import path from 'node:path';
 import crypto from 'node:crypto';
 import db from '@/lib/db';
 import { workspaceFiles } from '@/lib/db/schema';
-import { eq, and, ne } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import {
   WORKSPACE_FILES_ROOT,
   blobPath,
+  fileDir,
   validateFilename,
   hasNulByte,
 } from './paths';
 
-async function ensureDir(p: string) {
-  await fs.mkdir(p, { recursive: true });
+export type FileRow = typeof workspaceFiles.$inferSelect;
+
+/** A write lost the compare-and-swap: the file changed since it was read. */
+export class ConflictError extends Error {
+  constructor(readonly currentSha: string) {
+    super('file changed since it was read');
+    this.name = 'ConflictError';
+  }
 }
 
-async function writeBlob(buf: Buffer): Promise<string> {
+/**
+ * Write bytes into the file's own directory and return their sha. The blob is
+ * staged only — nothing references it until the row UPDATE commits, so a crash
+ * here leaks an orphan rather than dangling a row.
+ */
+async function stageBlob(
+  workspaceId: string,
+  fileId: string,
+  buf: Buffer,
+): Promise<string> {
   const sha256 = crypto.createHash('sha256').update(buf).digest('hex');
-  const target = blobPath(sha256);
-  await ensureDir(path.dirname(target));
-  try {
-    await fs.access(target);
-  } catch {
-    const tmp = `${target}.${crypto.randomUUID()}.tmp`;
-    await fs.writeFile(tmp, buf);
-    await fs.rename(tmp, target);
-  }
+  const target = blobPath(workspaceId, fileId, sha256);
+  await fs.mkdir(fileDir(workspaceId, fileId), { recursive: true });
+  const tmp = `${target}.${crypto.randomUUID()}.tmp`;
+  await fs.writeFile(tmp, buf);
+  await fs.rename(tmp, target);
   return sha256;
 }
 
@@ -33,12 +44,16 @@ const SNIFF_BYTES = 8192;
 const binaryByShaCache = new Map<string, boolean>();
 const BINARY_CACHE_MAX = 1024;
 
-async function sniffIsBinary(sha256: string): Promise<boolean> {
-  const hit = binaryByShaCache.get(sha256);
+/** Cached by sha: binary-ness is a property of the content, not of the file. */
+async function sniffIsBinary(row: FileRow): Promise<boolean> {
+  const hit = binaryByShaCache.get(row.sha256);
   if (hit !== undefined) return hit;
   let isBinary = false;
   try {
-    const fh = await fs.open(blobPath(sha256), 'r');
+    const fh = await fs.open(
+      blobPath(row.workspaceId, row.id, row.sha256),
+      'r',
+    );
     try {
       const buf = Buffer.alloc(SNIFF_BYTES);
       const { bytesRead } = await fh.read(buf, 0, SNIFF_BYTES, 0);
@@ -54,7 +69,7 @@ async function sniffIsBinary(sha256: string): Promise<boolean> {
     const first = binaryByShaCache.keys().next().value;
     if (first !== undefined) binaryByShaCache.delete(first);
   }
-  binaryByShaCache.set(sha256, isBinary);
+  binaryByShaCache.set(row.sha256, isBinary);
   return isBinary;
 }
 
@@ -64,7 +79,7 @@ export async function listFiles(workspaceId: string) {
     .from(workspaceFiles)
     .where(eq(workspaceFiles.workspaceId, workspaceId));
   return Promise.all(
-    rows.map(async (r) => ({ ...r, isBinary: await sniffIsBinary(r.sha256) })),
+    rows.map(async (r) => ({ ...r, isBinary: await sniffIsBinary(r) })),
   );
 }
 
@@ -98,13 +113,12 @@ export async function getFileByName(workspaceId: string, name: string) {
 export async function readFileBytes(
   workspaceId: string,
   fileId: string,
-): Promise<{
-  row: typeof workspaceFiles.$inferSelect;
-  bytes: Buffer;
-} | null> {
+): Promise<{ row: FileRow; bytes: Buffer } | null> {
   const row = await getFile(workspaceId, fileId);
   if (!row) return null;
-  const bytes = await fs.readFile(blobPath(row.sha256));
+  const bytes = await fs.readFile(
+    blobPath(row.workspaceId, row.id, row.sha256),
+  );
   return { row, bytes };
 }
 
@@ -115,10 +129,13 @@ export async function createFile(opts: {
   bytes: Buffer;
 }) {
   validateFilename(opts.name);
-  const sha256 = await writeBlob(opts.bytes);
+  // The blob path is keyed by file id, so the id must exist before the bytes do.
+  const id = crypto.randomUUID();
+  const sha256 = await stageBlob(opts.workspaceId, id, opts.bytes);
   const [row] = await db
     .insert(workspaceFiles)
     .values({
+      id,
       workspaceId: opts.workspaceId,
       name: opts.name,
       mime: opts.mime ?? null,
@@ -129,15 +146,23 @@ export async function createFile(opts: {
   return row;
 }
 
+/**
+ * Compare-and-swap write. `expectedSha` is mandatory: every caller must prove it
+ * read the version it is replacing, so a concurrent write can never be silently
+ * lost. The row UPDATE is the commit point — the new blob is staged before it and
+ * the old one is dropped after it.
+ */
 export async function replaceFile(opts: {
   workspaceId: string;
   fileId: string;
   bytes: Buffer;
+  expectedSha: string;
   mime?: string | null;
 }) {
   const existing = await getFile(opts.workspaceId, opts.fileId);
   if (!existing) return null;
-  const sha256 = await writeBlob(opts.bytes);
+
+  const sha256 = await stageBlob(opts.workspaceId, opts.fileId, opts.bytes);
   const [row] = await db
     .update(workspaceFiles)
     .set({
@@ -146,9 +171,28 @@ export async function replaceFile(opts: {
       mime: opts.mime ?? existing.mime,
       updatedAt: new Date(),
     })
-    .where(eq(workspaceFiles.id, opts.fileId))
+    .where(
+      and(
+        eq(workspaceFiles.id, opts.fileId),
+        eq(workspaceFiles.workspaceId, opts.workspaceId),
+        eq(workspaceFiles.sha256, opts.expectedSha),
+      ),
+    )
     .returning();
-  await maybeGcBlob(existing.sha256, existing.id);
+
+  if (!row) {
+    // Lost the swap. The staged blob is only reachable from the sha we failed to
+    // publish, so drop it — unless the winner published the same bytes.
+    const current = await getFile(opts.workspaceId, opts.fileId);
+    if (current && current.sha256 !== sha256) {
+      await unlinkBlob(opts.workspaceId, opts.fileId, sha256);
+    }
+    throw new ConflictError(current?.sha256 ?? opts.expectedSha);
+  }
+
+  if (sha256 !== opts.expectedSha) {
+    await unlinkBlob(opts.workspaceId, opts.fileId, opts.expectedSha);
+  }
   return row;
 }
 
@@ -156,26 +200,16 @@ export async function deleteFile(workspaceId: string, fileId: string) {
   const existing = await getFile(workspaceId, fileId);
   if (!existing) return false;
   await db.delete(workspaceFiles).where(eq(workspaceFiles.id, fileId));
-  await maybeGcBlob(existing.sha256, existing.id);
+  await fs.rm(fileDir(workspaceId, fileId), { recursive: true, force: true });
   return true;
 }
 
-async function maybeGcBlob(sha256: string, excludeFileId: string) {
-  const refs = await db
-    .select({ id: workspaceFiles.id })
-    .from(workspaceFiles)
-    .where(
-      and(
-        eq(workspaceFiles.sha256, sha256),
-        ne(workspaceFiles.id, excludeFileId),
-      ),
-    );
-  if (refs.length === 0) {
-    try {
-      await fs.unlink(blobPath(sha256));
-    } catch {
-      /* already gone */
-    }
+/** Names one blob rather than sweeping the dir, so a concurrent stage survives. */
+async function unlinkBlob(workspaceId: string, fileId: string, sha256: string) {
+  try {
+    await fs.unlink(blobPath(workspaceId, fileId, sha256));
+  } catch {
+    /* already gone */
   }
 }
 

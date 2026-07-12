@@ -27,23 +27,26 @@ export function isExtractableBinary(mime?: string | null): boolean {
   );
 }
 
-export async function getText(
-  sha256: string,
-  mime?: string | null,
-): Promise<string | null> {
-  const hit = cache.get(sha256);
+/** Cached by sha: the extracted text is a function of the content alone. */
+export async function getText(row: {
+  workspaceId: string;
+  id: string;
+  sha256: string;
+  mime?: string | null;
+}): Promise<string | null> {
+  const hit = cache.get(row.sha256);
   if (hit !== undefined) {
-    lruTouch(sha256, hit);
+    lruTouch(row.sha256, hit);
     return hit;
   }
-  const buf = await fs.readFile(blobPath(sha256));
+  const buf = await fs.readFile(blobPath(row.workspaceId, row.id, row.sha256));
   let text: string | null = null;
-  if (isExtractableBinary(mime)) {
+  if (isExtractableBinary(row.mime)) {
     const { extractText } = await import('@/lib/workspaces/extractAdapter');
-    text = await extractText(buf, mime);
+    text = await extractText(buf, row.mime);
   } else if (!hasNulByte(buf)) {
     text = buf.toString('utf8');
   }
-  if (text !== null) lruTouch(sha256, text);
+  if (text !== null) lruTouch(row.sha256, text);
   return text;
 }

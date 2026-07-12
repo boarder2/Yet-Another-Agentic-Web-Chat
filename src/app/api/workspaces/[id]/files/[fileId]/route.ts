@@ -4,6 +4,7 @@ import {
   replaceFile,
   deleteFile,
   getFile,
+  ConflictError,
 } from '@/lib/workspaces/files';
 import { hasNulByte } from '@/lib/workspaces/paths';
 import db from '@/lib/db';
@@ -43,6 +44,11 @@ export async function PUT(
   const body = await req.json();
   if (typeof body.content !== 'string')
     return NextResponse.json({ error: 'content required' }, { status: 400 });
+  if (typeof body.expectedSha !== 'string')
+    return NextResponse.json(
+      { error: 'expectedSha required' },
+      { status: 400 },
+    );
   const existing = await getFile(id, fileId);
   if (!existing)
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -54,8 +60,25 @@ export async function PUT(
       { error: 'cannot save binary content' },
       { status: 400 },
     );
-  const row = await replaceFile({ workspaceId: id, fileId, bytes });
-  return NextResponse.json({ file: row });
+
+  try {
+    const row = await replaceFile({
+      workspaceId: id,
+      fileId,
+      bytes,
+      expectedSha: body.expectedSha,
+    });
+    if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    return NextResponse.json({ file: row });
+  } catch (e) {
+    if (e instanceof ConflictError) {
+      return NextResponse.json(
+        { error: 'File changed since it was loaded', currentSha: e.currentSha },
+        { status: 409 },
+      );
+    }
+    throw e;
+  }
 }
 
 export async function DELETE(

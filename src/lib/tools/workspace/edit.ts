@@ -1,7 +1,11 @@
 import { z } from 'zod';
 import { ToolMessage } from '@langchain/core/messages';
 import { Command, interrupt } from '@langchain/langgraph';
-import { getFileByName, replaceFile } from '@/lib/workspaces/files';
+import {
+  getFileByName,
+  replaceFile,
+  ConflictError,
+} from '@/lib/workspaces/files';
 import { getText } from '@/lib/workspaces/extract';
 import { hasNulByte, blobPath } from '@/lib/workspaces/paths';
 import { getWorkspace } from '@/lib/workspaces/service';
@@ -58,6 +62,12 @@ export function workspaceEditTool() {
           },
         });
 
+      const stale = (reason?: string) =>
+        err(
+          'stale_state',
+          `${reason ?? 'The file changed since this edit was proposed.'} Re-read it with \`workspace_read\` and propose the edit again.`,
+        );
+
       if (!interactiveSession || !emitter || !workspaceId) {
         return err(
           'interactive_only',
@@ -75,7 +85,7 @@ export function workspaceEditTool() {
 
       // 2. NUL-byte sniff on blob
       const blobBytes = await fs
-        .readFile(blobPath(fileRow.sha256))
+        .readFile(blobPath(workspaceId, fileRow.id, fileRow.sha256))
         .catch(() => null);
       if (!blobBytes) {
         return err('file_not_found', 'List files with `workspace_ls`.');
@@ -85,7 +95,7 @@ export function workspaceEditTool() {
       }
 
       // 3. Load text
-      const text = await getText(fileRow.sha256, fileRow.mime);
+      const text = await getText(fileRow);
       if (text === null) {
         return err('not_editable', 'This file type is not editable.');
       }
@@ -184,11 +194,7 @@ export function workspaceEditTool() {
         // Stale discriminator: the file changed while awaiting approval, so the
         // approved diff no longer applies. Surface it so the agent re-reads + retries.
         if (response && (response as Record<string, unknown>).__stale) {
-          const reason = (response as { reason?: string }).reason;
-          return err(
-            'stale_state',
-            `${reason ?? 'The file changed since this edit was proposed.'} Re-read it with \`workspace_read\` and propose the edit again.`,
-          );
+          return stale((response as { reason?: string }).reason);
         }
 
         const editResponse = response as {
@@ -237,11 +243,24 @@ export function workspaceEditTool() {
         ? text.split(oldString).join(newString)
         : text.replace(oldString, newString);
 
-      const updated = await replaceFile({
-        workspaceId: workspaceId,
-        fileId: fileRow.id,
-        bytes: Buffer.from(newText, 'utf8'),
-      });
+      // `text` came from fileRow.sha256, so that is the version this diff applies
+      // to. Auto-accepted edits skip the approval pause and its freshness check,
+      // making this CAS their only guard against clobbering a concurrent write.
+      let updated;
+      try {
+        updated = await replaceFile({
+          workspaceId: workspaceId,
+          fileId: fileRow.id,
+          bytes: Buffer.from(newText, 'utf8'),
+          expectedSha: fileRow.sha256,
+        });
+      } catch (e) {
+        if (e instanceof ConflictError) return stale();
+        throw e;
+      }
+      if (!updated) {
+        return err('file_not_found', 'List files with `workspace_ls`.');
+      }
 
       emitStreamEvent(emitter, {
         type: 'workspace_file_changed',
@@ -260,7 +279,7 @@ export function workspaceEditTool() {
                 ok: true,
                 file: input.file,
                 occurrences: replaceAll ? occurrences : 1,
-                newSha256: updated?.sha256,
+                newSha256: updated.sha256,
               }),
               tool_call_id: toolCallId,
             }),

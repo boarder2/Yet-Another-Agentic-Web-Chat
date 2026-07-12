@@ -25,6 +25,7 @@ export async function seedWorkspace(
     name: string;
     description: string;
     modelOverride: WorkspaceModelOverride | null;
+    autoAcceptFileEdits: 0 | 1;
   }>,
 ): Promise<string> {
   const body = await postJson(request, '/api/workspaces', {
@@ -34,6 +35,9 @@ export async function seedWorkspace(
       : {}),
     ...(overrides?.modelOverride !== undefined
       ? { modelOverride: overrides.modelOverride }
+      : {}),
+    ...(overrides?.autoAcceptFileEdits !== undefined
+      ? { autoAcceptFileEdits: overrides.autoAcceptFileEdits }
       : {}),
   });
   return (body as { workspace: { id: string } }).workspace.id;
@@ -169,6 +173,19 @@ export async function seedWorkspaceFile(
   return (body as { file: { id: string } }).file.id;
 }
 
+/** Current version stamp of a workspace file — the CAS token every write needs. */
+export async function fileSha(
+  request: APIRequestContext,
+  workspaceId: string,
+  fileId: string,
+): Promise<string> {
+  const res = await request.get(
+    `/api/workspaces/${workspaceId}/files/${fileId}`,
+  );
+  const body = (await res.json()) as { file: { sha256: string } };
+  return body.file.sha256;
+}
+
 export interface AwaitingApproval {
   chatId: string;
   messageId: string;
@@ -221,6 +238,50 @@ export async function seedAwaitingApproval(
     messageId,
     approvalId: data.approvalId as string,
     question: data.question as string,
+    events,
+  };
+}
+
+/**
+ * Start a workspace-edit run with the `test-workspace-edit` model and stop
+ * reading its SSE stream once it pauses at the edit-approval interrupt. Leaves
+ * the run parked there, so a spec can set up UI state and only then resolve the
+ * approval via `runs/resume` — no wall-clock racing against the agent.
+ */
+export async function seedAwaitingWorkspaceEdit(
+  workspaceId: string,
+  edit: { file: string; oldString: string; newString: string },
+): Promise<AwaitingApproval> {
+  const chatId = uid();
+  const messageId = uid();
+  const events = await streamChatUntil(
+    baseURL(),
+    {
+      message: {
+        messageId,
+        chatId,
+        // The test model reads its tool-call args straight out of the prompt.
+        content: `${edit.file}|${edit.oldString}|${edit.newString}`,
+      },
+      focusMode: 'webSearch',
+      files: [],
+      chatModel: { provider: 'test', name: 'test-workspace-edit' },
+      systemModel: { provider: 'test', name: 'test-workspace-edit' },
+      selectedSystemPromptIds: [],
+      workspaceId,
+    },
+    (evts) => evts.some((e) => e.type === 'workspace_edit_pending'),
+  );
+  const pending = events.find((e) => e.type === 'workspace_edit_pending');
+  if (!pending) {
+    throw new Error('workspace_edit_pending event never arrived');
+  }
+  const data = pending.data as Record<string, unknown>;
+  return {
+    chatId,
+    messageId,
+    approvalId: data.approvalId as string,
+    question: '',
     events,
   };
 }

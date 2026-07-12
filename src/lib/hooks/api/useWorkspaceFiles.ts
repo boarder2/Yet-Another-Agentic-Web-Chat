@@ -9,6 +9,8 @@ export interface FileMeta {
   name: string;
   mime?: string | null;
   size: number;
+  /** Version stamp — echoed back on save so a concurrent write can't be lost. */
+  sha256: string;
   isBinary?: boolean;
   autoAcceptEdits?: number | null;
   updatedAt: number;
@@ -90,12 +92,15 @@ export function useSaveWorkspaceFileContent(
 ) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (content: string) =>
-      apiFetch(`/api/workspaces/${workspaceId}/files/${fileId}`, {
-        method: 'PUT',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ content }),
-      }),
+    mutationFn: (vars: { content: string; expectedSha: string }) =>
+      apiFetch<{ file: FileMeta }>(
+        `/api/workspaces/${workspaceId}/files/${fileId}`,
+        {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(vars),
+        },
+      ),
     onSuccess: () =>
       qc.invalidateQueries({
         queryKey: [...qk.workspaceFiles(workspaceId), fileId, 'content'],

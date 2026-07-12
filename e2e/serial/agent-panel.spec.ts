@@ -122,4 +122,30 @@ test.describe('agent panel', () => {
     ]);
     expect(match![2].trim()).toBe(DIRECT_ANSWER);
   });
+
+  test('an executor answer with a chart and citations keeps the panel widget renderable', async ({
+    page,
+  }) => {
+    const chat = new ChatPage(page);
+
+    await chat.goto('/');
+    await chat.configureAgentPanel(['Test (chart answer)', 'Test (direct)']);
+    await chat.sendMessage(`panel-chart-${Date.now()}`);
+    await chat.waitForStreamComplete();
+
+    const header = page.getByRole('button', { name: /Agent Panel · 2 models/ });
+    await expect(header).toBeVisible();
+    await header.click();
+
+    // The executor's `<Chart id/>` and `[1]` citation ride inside the panel
+    // envelope's one-line JSON payload. If any message-level rewrite reaches in
+    // there, the payload stops parsing and the widget degrades to a raw code
+    // block — so assert the column rendered, chart and all.
+    const columns = page.locator('div.hidden.sm\\:flex');
+    await expect(
+      columns.getByText('Charted the deterministic findings'),
+    ).toBeVisible();
+    await expect(columns.locator('.recharts-wrapper').first()).toBeVisible();
+    await expect(page.getByText('yaawc:panel')).toHaveCount(0);
+  });
 });

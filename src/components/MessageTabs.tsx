@@ -24,6 +24,7 @@ import SearchImages from './SearchImages';
 import SearchVideos from './SearchVideos';
 import MessageBoxLoading from './MessageBoxLoading';
 import { Document } from '@langchain/core/documents';
+import { mapOutsideWidgets } from '@/lib/widgets/envelope';
 
 type PanelType = 'sources' | 'images' | 'videos';
 
@@ -141,32 +142,38 @@ const MessageTabs = ({
       message?.sources &&
       message.sources.length > 0
     ) {
-      return processedMessage.replace(regex, (_, capturedContent: string) => {
-        const numbers = capturedContent
-          .split(',')
-          .map((numStr) => numStr.trim());
+      // Widget envelopes are skipped: their payload is one line of JSON, and
+      // splicing citation HTML into it destroys the widget. Executor/subagent
+      // citations are numbered per-run anyway, so they wouldn't index into this
+      // message's merged sources.
+      return mapOutsideWidgets(processedMessage, (text) =>
+        text.replace(regex, (_, capturedContent: string) => {
+          const numbers = capturedContent
+            .split(',')
+            .map((numStr) => numStr.trim());
 
-        const linksHtml = numbers
-          .map((numStr) => {
-            const number = parseInt(numStr);
+          const linksHtml = numbers
+            .map((numStr) => {
+              const number = parseInt(numStr);
 
-            if (isNaN(number) || number <= 0) {
-              return `[${numStr}]`;
-            }
+              if (isNaN(number) || number <= 0) {
+                return `[${numStr}]`;
+              }
 
-            const source = message.sources?.[number - 1];
-            const url = source?.metadata?.url;
+              const source = message.sources?.[number - 1];
+              const url = source?.metadata?.url;
 
-            if (url) {
-              return `<a href="${url}" target="_blank" data-citation="${number}" className="bg-surface px-1 rounded-control ml-1 no-underline text-xs relative hover:bg-surface-2 transition-colors duration-200">${numStr}</a>`;
-            } else {
-              return `[${numStr}]`;
-            }
-          })
-          .join('');
+              if (url) {
+                return `<a href="${url}" target="_blank" data-citation="${number}" className="bg-surface px-1 rounded-control ml-1 no-underline text-xs relative hover:bg-surface-2 transition-colors duration-200">${numStr}</a>`;
+              } else {
+                return `[${numStr}]`;
+              }
+            })
+            .join('');
 
-        return linksHtml;
-      });
+          return linksHtml;
+        }),
+      );
     }
 
     return processedMessage;

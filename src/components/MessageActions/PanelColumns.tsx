@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import Markdown, { MarkdownToJSX } from 'markdown-to-jsx';
 import { cn } from '@/lib/utils';
+import ChartElement, { spaceChartTags } from '../ChartElement';
 import type { PanelColumnPayload } from '@/lib/widgets/envelope';
 import { removeThinkingBlocks } from '@/lib/utils/contentStripping';
 
@@ -41,6 +42,7 @@ function decodeLegacyPanelData(data: string): PanelColumnPayload[] {
 
 const columnMarkdownOptions: MarkdownToJSX.Options = {
   overrides: {
+    Chart: { component: ChartElement },
     code: {
       component: ({ className, children }) =>
         className ? (
@@ -82,7 +84,7 @@ const StatusIcon: React.FC<{ status: string }> = ({ status }) => {
 };
 
 const Column: React.FC<{ ex: PanelColumnPayload }> = ({ ex }) => {
-  const text = removeThinkingBlocks(ex.responseText || '');
+  const text = spaceChartTags(removeThinkingBlocks(ex.responseText || ''));
   return (
     <div className="flex flex-col min-w-0 border border-surface-2 rounded-surface bg-surface overflow-hidden">
       <div className="px-3 py-2 flex items-center gap-2 border-b border-surface-2 bg-surface-2/40">

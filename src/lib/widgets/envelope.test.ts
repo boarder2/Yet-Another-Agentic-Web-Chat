@@ -7,6 +7,8 @@ import {
   findWidget,
   parseWidgetFence,
   stripWidgets,
+  maskWidgets,
+  unmaskWidgets,
   neutralizeSpoofedFences,
   balanceDanglingFence,
   upsertNestedToolCall,
@@ -283,6 +285,43 @@ describe('stripWidgets', () => {
 
   it('is a no-op on content with no widgets', () => {
     expect(stripWidgets('just prose')).toBe('just prose');
+  });
+});
+
+describe('maskWidgets / unmaskWidgets', () => {
+  it('round-trips content containing widgets', () => {
+    const content = `Before\n\n${appendWidget('', 'tool_call', toolCall())}After`;
+    const { text, fences } = maskWidgets(content);
+    expect(text).not.toContain('yaawc:tool_call');
+    expect(fences).toHaveLength(1);
+    expect(unmaskWidgets(text, fences)).toBe(content);
+  });
+
+  it('hides payload text from preprocessing that rewrites markup', () => {
+    // A panel executor that emits a chart puts `<Chart id="…"/>` in its answer,
+    // which lands verbatim in the panel payload's one JSON line. Preprocessing
+    // that block-spaces chart tags would split that line and destroy the fence.
+    const spaceCharts = (s: string) =>
+      s.replace(/(<Chart\b[^>]*\/>)/g, '\n\n$1\n\n');
+    const withChart = appendPanelColumnToken(
+      startPanelColumn('', 0, 'gpt-5'),
+      0,
+      'Scores:\n\n<Chart id="c1"/>\n\nAs shown.',
+    );
+
+    expect(spaceCharts(withChart)).not.toBe(withChart); // naive pass corrupts it
+
+    const { text, fences } = maskWidgets(withChart);
+    const processed = unmaskWidgets(spaceCharts(text), fences);
+    expect(processed).toBe(withChart);
+    const panel = findWidget<PanelPayload>(processed, 'panel', PANEL_WIDGET_ID);
+    expect(panel?.columns[0].responseText).toContain('<Chart id="c1"/>');
+  });
+
+  it('leaves widget-free content untouched', () => {
+    const { text, fences } = maskWidgets('just prose');
+    expect(text).toBe('just prose');
+    expect(unmaskWidgets(text, fences)).toBe('just prose');
   });
 });
 

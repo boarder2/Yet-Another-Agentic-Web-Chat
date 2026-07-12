@@ -11,9 +11,12 @@ import { decodeBase64 } from '@/lib/utils/html';
 import { ToolCall } from './MessageActions/ToolCall';
 import { SubagentExecution } from './MessageActions/SubagentExecution';
 import { PanelColumns } from './MessageActions/PanelColumns';
-import ChartWidget from './ChartWidget';
-import { useChartSpec } from '@/lib/chart/ChartSpecContext';
-import { parseWidgetFence } from '@/lib/widgets/envelope';
+import ChartElement, { spaceChartTags } from './ChartElement';
+import {
+  maskWidgets,
+  parseWidgetFence,
+  unmaskWidgets,
+} from '@/lib/widgets/envelope';
 
 /**
  * Pattern matching known custom element closing tags (ToolCall, SubagentExecution, Chart).
@@ -55,13 +58,17 @@ const ensureBlockElements = (text: string): string => {
     /@@WIDGET_(\d+)@@/g,
     (_m, i: string) => placeholders[Number(i)],
   );
-  return restored
-    .replace(
-      /(<SubagentExecution\b[^>]*>[\s\S]*?<\/SubagentExecution>)/g,
-      '\n\n$1\n\n',
-    )
-    .replace(/(<PanelColumns\b[^>]*>[\s\S]*?<\/PanelColumns>)/g, '\n\n$1\n\n')
-    .replace(/(<Chart\b[^>]*\/>)/g, '\n\n$1\n\n');
+  return spaceChartTags(
+    restored
+      .replace(
+        /(<SubagentExecution\b[^>]*>[\s\S]*?<\/SubagentExecution>)/g,
+        '\n\n$1\n\n',
+      )
+      .replace(
+        /(<PanelColumns\b[^>]*>[\s\S]*?<\/PanelColumns>)/g,
+        '\n\n$1\n\n',
+      ),
+  );
 };
 
 /**
@@ -263,19 +270,6 @@ const WidgetOrCodeBlock = ({
   );
 };
 
-const ChartElement = ({ id }: { id?: string }) => {
-  const spec = useChartSpec(id ?? '');
-  if (!id) return null;
-  if (!spec) {
-    return (
-      <div className="my-3 bg-surface border border-surface-2 rounded-surface px-4 py-3 text-sm text-fg/60 italic">
-        Loading chart…
-      </div>
-    );
-  }
-  return <ChartWidget spec={spec} />;
-};
-
 // Override components must live at module scope: markdown-to-jsx element types
 // need referential identity across renders, or React remounts the subtree of
 // every overridden element (resetting widget state, restarting spinners) on
@@ -438,14 +432,21 @@ const MarkdownRenderer = ({
     className,
   );
 
+  // Widget payloads are opaque model text on a single JSON line: preprocessing
+  // below must not rewrite inside them, so they ride through as placeholders and
+  // are restored on the way into markdown-to-jsx.
+  const { text: masked, fences } = maskWidgets(content);
+  const forMarkdown = (text: string) =>
+    unmaskWidgets(ensureBlockElements(text), fences);
+
   // For showThinking=false, strip think blocks entirely and render as plain markdown
   if (!showThinking) {
-    const stripped = removeThinkTags(content);
+    const stripped = removeThinkTags(masked);
     if (!stripped || stripped.length === 0) return null;
     return (
       <div className="relative">
         <Markdown className={proseClassName} options={markdownOverrides}>
-          {ensureBlockElements(stripped)}
+          {forMarkdown(stripped)}
         </Markdown>
       </div>
     );
@@ -453,7 +454,7 @@ const MarkdownRenderer = ({
 
   // Split content into segments so <think> blocks are extracted before markdown-to-jsx
   // processes them (the library would mis-parse multi-paragraph think blocks as plain text).
-  const segments = splitByThinkBlocks(content);
+  const segments = splitByThinkBlocks(masked);
 
   // Fast path: no think blocks present — render content directly
   if (segments.length === 0) return null;
@@ -461,7 +462,7 @@ const MarkdownRenderer = ({
     return (
       <div className="relative">
         <Markdown className={proseClassName} options={markdownOverrides}>
-          {ensureBlockElements(content)}
+          {forMarkdown(masked)}
         </Markdown>
       </div>
     );
@@ -481,7 +482,7 @@ const MarkdownRenderer = ({
               onToggle={handleThinkBoxToggle}
             >
               <MarkdownRenderer
-                content={segment.content}
+                content={unmaskWidgets(segment.content, fences)}
                 showThinking={false}
                 sources={sources}
               />
@@ -497,7 +498,7 @@ const MarkdownRenderer = ({
             className={proseClassName}
             options={markdownOverrides}
           >
-            {ensureBlockElements(segment.content)}
+            {forMarkdown(segment.content)}
           </Markdown>
         );
       })}

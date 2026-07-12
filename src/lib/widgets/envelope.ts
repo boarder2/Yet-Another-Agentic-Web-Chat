@@ -93,6 +93,9 @@ export type ParsedWidget =
 
 type WithId = { id: string };
 
+/** A complete envelope: reserved info string + its one-line JSON payload. */
+const WIDGET_FENCE = '```yaawc:[a-zA-Z0-9_]+\\n[^\\n]*\\n```';
+
 function fenceRegex(kind: WidgetKind): RegExp {
   return new RegExp('```yaawc:' + kind + '\\n([^\\n]*)\\n```', 'g');
 }
@@ -334,7 +337,48 @@ export function setPanelColumnStatus(
 
 /** Remove all `yaawc:*` widget fences from `content` (LLM context, clipboard). */
 export function stripWidgets(content: string): string {
-  return content.replace(/```yaawc:[a-zA-Z0-9_]+\n[^\n]*\n```\n?/g, '');
+  return content.replace(new RegExp(WIDGET_FENCE + '\\n?', 'g'), '');
+}
+
+const MASK = (i: number) => `@@yaawc-widget-${i}@@`;
+const MASK_RE = /@@yaawc-widget-(\d+)@@/g;
+
+/**
+ * Replace every envelope with an inert single-line placeholder, returning the
+ * removed fences for {@link unmaskWidgets}.
+ *
+ * A payload is verbatim model text inside one line of JSON, so it can contain
+ * anything markdown preprocessing looks for — `<Chart .../>`, `<think>`, a
+ * legacy `<ToolCall>` tag. Rewriting inside a payload (say, padding a match
+ * with blank lines) destroys the one-line invariant the fence depends on and
+ * the whole widget stops parsing. Preprocessors mask first and restore last, so
+ * envelopes stay opaque.
+ */
+export function maskWidgets(content: string): {
+  text: string;
+  fences: string[];
+} {
+  const fences: string[] = [];
+  const text = content.replace(new RegExp(WIDGET_FENCE, 'g'), (fence) => {
+    fences.push(fence);
+    return MASK(fences.length - 1);
+  });
+  return { text, fences };
+}
+
+/** Restore the fences removed by {@link maskWidgets}. */
+export function unmaskWidgets(text: string, fences: string[]): string {
+  if (fences.length === 0) return text;
+  return text.replace(MASK_RE, (m, i: string) => fences[Number(i)] ?? m);
+}
+
+/** Rewrite `content` with `fn`, leaving widget envelopes untouched. */
+export function mapOutsideWidgets(
+  content: string,
+  fn: (text: string) => string,
+): string {
+  const { text, fences } = maskWidgets(content);
+  return unmaskWidgets(fn(text), fences);
 }
 
 /**

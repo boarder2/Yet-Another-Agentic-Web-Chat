@@ -19,6 +19,9 @@ const STRUCTURED_TOOL_ARGS: Record<string, Record<string, unknown>> = {
   },
 };
 
+/** Leading text of the chart model's answer; e2e asserts on it. */
+export const CHART_ANSWER_PREFIX = 'Charted the deterministic findings';
+
 const STRUCTURED_SUGGESTIONS_ANSWER = [
   '<suggestions>',
   'What else should I know about this topic?',
@@ -191,6 +194,39 @@ class FakeChatModel extends BaseChatModel {
       return;
     }
 
+    // Charts the way the real thing works: call create_chart, then place the
+    // returned id in the answer. The answer also carries a `[1]` citation, so
+    // both message-level rewrites (citation linkification, chart block-spacing)
+    // run over whatever widget envelope this model's text ends up inside.
+    if (this.modelName.includes('chart') && !hasToolResult) {
+      yield new ChatGenerationChunk({
+        text: '',
+        message: new AIMessageChunk({
+          content: '',
+          tool_calls: [
+            {
+              name: 'create_chart',
+              args: {
+                type: 'bar',
+                title: 'Deterministic chart',
+                data: [{ label: 'a', value: 1 }],
+                series: [{ key: 'value' }],
+                xKey: 'label',
+              },
+              id: 'test-create-chart-call-1',
+              type: 'tool_call',
+            },
+          ],
+          usage_metadata: {
+            input_tokens: 12,
+            output_tokens: 4,
+            total_tokens: 16,
+          },
+        }),
+      });
+      return;
+    }
+
     if (this.modelName.includes('tool') && !hasToolResult) {
       yield new ChatGenerationChunk({
         text: '',
@@ -215,7 +251,9 @@ class FakeChatModel extends BaseChatModel {
     }
 
     let answer: string;
-    if (this.modelName.includes('ask-user')) {
+    if (this.modelName.includes('chart')) {
+      answer = `${CHART_ANSWER_PREFIX} [1].\n\n<Chart id="${lastChartId(messages)}"/>\n\nDone.`;
+    } else if (this.modelName.includes('ask-user')) {
       answer = 'Thanks for your answer — resuming now.';
     } else if (this.modelName.includes('tool-multi')) {
       answer =
@@ -320,6 +358,21 @@ function hashVector(text: string, dims: number): number[] {
   return vec;
 }
 
+/** The chart id `create_chart` handed back, read out of its tool result. */
+function lastChartId(messages: BaseMessage[]): string {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.getType() !== 'tool' || typeof m.content !== 'string') continue;
+    try {
+      const { chartId } = JSON.parse(m.content);
+      if (typeof chartId === 'string') return chartId;
+    } catch {
+      // not a create_chart result
+    }
+  }
+  return '';
+}
+
 function lastHumanText(messages: BaseMessage[]): string {
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
@@ -345,6 +398,12 @@ export async function loadTestChatModels(): Promise<Record<string, ChatModel>> {
       displayName: 'Test (tool loop)',
       model: new FakeChatModel({
         modelName: 'test-tool',
+      }) as unknown as BaseChatModel,
+    },
+    'test-chart': {
+      displayName: 'Test (chart answer)',
+      model: new FakeChatModel({
+        modelName: 'test-chart',
       }) as unknown as BaseChatModel,
     },
     'test-tool-multi': {

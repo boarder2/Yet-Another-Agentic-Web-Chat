@@ -224,6 +224,11 @@ export class PanelCoordinator {
       } else if (event.type === 'sources_added') {
         // Incremental per-search batches: accumulate.
         if (Array.isArray(event.data)) collected.documents.push(...event.data);
+      } else if (event.type === 'chart_spec') {
+        // Executors keep `create_chart`, and place a <Chart id/> in their answer
+        // text. The spec is addressed by id on the parent message, so it has to
+        // escape the isolated emitter or the column can never resolve the chart.
+        this.emit(event);
       } else if (event.type === 'sources') {
         // The final `sources` event re-emits the agent's COMPLETE document
         // set (the same docs already streamed via `sources_added`), so treat

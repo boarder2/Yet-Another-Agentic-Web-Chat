@@ -107,20 +107,16 @@ describe('response streaming', () => {
   });
 });
 
-describe('tool call markup', () => {
-  it('appends started markup and updates status on success', () => {
+describe('tool call widgets', () => {
+  it('appends a tool_call envelope and updates status on success', () => {
     const started = ev({
       type: 'tool_call_started',
-      data: {
-        content:
-          '<ToolCall type="x" status="running" toolCallId="t1"></ToolCall>',
-        toolCallId: 't1',
-        status: 'running',
-      },
+      data: { toolCallId: 't1', toolType: 'x', status: 'running' },
     });
     let s = reduceStreamEvent(liveStart(), started).state;
-    expect(rowContent(s)).toContain('toolCallId="t1"');
-    expect(rowContent(s)).toContain('status="running"');
+    expect(rowContent(s)).toContain('yaawc:tool_call');
+    expect(rowContent(s)).toContain('"id":"t1"');
+    expect(rowContent(s)).toContain('"status":"running"');
     s = reduceStreamEvent(
       s,
       ev({
@@ -128,21 +124,16 @@ describe('tool call markup', () => {
         data: { toolCallId: 't1', status: 'success' },
       }),
     ).state;
-    expect(rowContent(s)).toContain('status="success"');
+    expect(rowContent(s)).toContain('"status":"success"');
   });
 
-  it('is idempotent: replaying the same started event does not duplicate markup', () => {
+  it('is idempotent: replaying the same started event does not duplicate the widget', () => {
     const started = ev({
       type: 'tool_call_started',
-      data: {
-        content:
-          '<ToolCall type="x" status="running" toolCallId="t1"></ToolCall>',
-        toolCallId: 't1',
-        status: 'running',
-      },
+      data: { toolCallId: 't1', toolType: 'x', status: 'running' },
     });
     const s = run(liveStart(), [started, started]).state;
-    const occurrences = (rowContent(s)!.match(/toolCallId="t1"/g) ?? []).length;
+    const occurrences = (rowContent(s)!.match(/"id":"t1"/g) ?? []).length;
     expect(occurrences).toBe(1);
   });
 });

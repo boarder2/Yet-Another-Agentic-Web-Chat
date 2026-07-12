@@ -90,15 +90,30 @@ export type PanelUsage = {
   usageSystem: TokenUsage;
 };
 
+/**
+ * Total tokens (chat + system) reported for a completed panel executor, or
+ * `undefined` when no usage is present. Shared by the live/replay handlers and
+ * runHost so every path derives the per-column token badge identically.
+ */
+export function panelExecutorTokens(usage: unknown): number | undefined {
+  if (!usage || typeof usage !== 'object') return undefined;
+  const u = usage as {
+    usageChat?: { total_tokens?: number };
+    usageSystem?: { total_tokens?: number };
+  };
+  return (u.usageChat?.total_tokens ?? 0) + (u.usageSystem?.total_tokens ?? 0);
+}
+
 export type ToolCallStartedData = {
-  content: string;
   toolCallId: string;
+  toolType: string;
   status: 'running' | 'success';
+  attrs?: Record<string, unknown>;
 };
 export type ToolCallSuccessData = {
   toolCallId: string;
   status: 'success';
-  extra?: Record<string, string>;
+  extra?: Record<string, string | number | boolean>;
 };
 export type ToolCallErrorData = {
   toolCallId: string;

@@ -76,12 +76,10 @@ User Query → SimplifiedAgent (with all tools including deep_research)
   - Subagent configurations (system prompt, allowed tools, model selection)
   - Currently defines only `deep_research`
 
-- **Subagent Markup Utilities** (`src/lib/utils/subagentMarkup.ts`)
-  - Pure string transforms for mutating `<SubagentExecution>` markup embedded in assistant message content
-  - `applySubagentNestedToolCall`: inserts/updates nested ToolCall markup (idempotent)
-  - `applySubagentResponseToken`: accumulates streaming response tokens into `responseText` attribute
-  - `applySubagentStatus`: applies terminal status (success/error) with summary/error attributes
-  - Shared by the live streaming handler and reconnect/replay handler in ChatWindow to keep both paths consistent
+- **Widget codec** (`src/lib/widgets/envelope.ts`)
+  - The subagent's UI state is a single `yaawc:subagent` fenced-JSON widget (`{ id, name, task, status, toolCalls, responseText?, summary?, error?, tokenUsage? }`) — nested tool calls are a typed **array** field, not nested markup, which is what makes them immune to the markdown-parser block-splitting bug nested `<ToolCall>` tags used to hit
+  - `upsertNestedToolCall`/`patchNestedToolCall` insert/update an entry in the `toolCalls` array (idempotent on id); `updateWidget` (with an updater function) applies them, accumulates `responseText`, and sets the terminal `status`/`summary`/`error`
+  - Shared by the live streaming handler (`reducer.ts`) and the server persistence handler (`runHost.ts`) to keep both paths consistent
 
 ## Execution Flow
 
@@ -115,9 +113,9 @@ Subagent activity is displayed in real-time via the `SubagentExecution` componen
 
 Streaming events:
 
-- `subagent_started`: Appends `<SubagentExecution>` markup with running status
-- `subagent_data`: Nested events (tool calls, response tokens) forwarded to parent with subagent context; tool call markup is persisted in both client state and server-side `recievedMessage` for history
-- `subagent_completed`/`subagent_error`: Updates markup with final status and results
+- `subagent_started`: Appends a `yaawc:subagent` widget with running status and an empty `toolCalls` array
+- `subagent_data`: Nested events (tool calls, response tokens) forwarded to parent with subagent context; nested tool calls are upserted/patched into the widget's `toolCalls` array in both client state and server-side `recievedMessage` for history
+- `subagent_completed`/`subagent_error`: Patches the widget with final status, summary/error, and results
 
 ## Tool Restrictions
 

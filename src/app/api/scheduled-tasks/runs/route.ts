@@ -6,6 +6,7 @@ import {
   messages as messagesSchema,
 } from '@/lib/db/schema';
 import { and, desc, eq, isNotNull, inArray, sql } from 'drizzle-orm';
+import { removeToolCallMarkup } from '@/lib/utils/contentStripping';
 
 export const runtime = 'nodejs';
 
@@ -65,14 +66,8 @@ export async function GET(req: NextRequest) {
     for (const msg of assistantMsgs) {
       if (!previewMap.has(msg.chatId)) {
         const content = msg.content || '';
-        // Strip ToolCall tags for preview
-        const cleaned = content
-          .replace(/<ToolCall[^>]*>[\s\S]*?<\/ToolCall>/gi, '')
-          .replace(
-            /<SubagentExecution[^>]*>[\s\S]*?<\/SubagentExecution>/gi,
-            '',
-          )
-          .trim();
+        // Strip widget markup (both fenced envelopes and legacy tags) for preview.
+        const cleaned = removeToolCallMarkup(content).trim();
         const meta = msg.metadata as Record<string, unknown> | null;
         const sources = (meta?.sources as unknown[] | undefined) || [];
         previewMap.set(msg.chatId, {

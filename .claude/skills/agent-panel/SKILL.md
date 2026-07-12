@@ -34,7 +34,7 @@ Phase 1 runs only on a **new** message; **resume never re-runs Phase 1** (it reu
 
 ## Streaming events
 
-`panel_executor_started` / `_data` / `_completed` / `_error` (payloads + UI handling documented in the `streaming-events` skill). All executors share **one** `<PanelColumns data="base64json">` markup block, mutated via `src/lib/utils/panelMarkup.ts`, rendered by `src/components/MessageActions/PanelColumns.tsx` (columns; tabs on mobile), and stripped from history by `removeToolCallMarkup`.
+`panel_executor_started` / `_data` / `_completed` / `_error` (payloads + UI handling documented in the `streaming-events` skill). All executors share **one** `yaawc:panel` fenced-JSON widget (`{ id, columns: [{ idx, model, status, responseText?, sourceCount?, tokens?, error? }] }`), patched via `startPanelColumn`/`appendPanelColumnToken`/`setPanelColumnStatus` in `src/lib/widgets/envelope.ts`, rendered by `src/components/MessageActions/PanelColumns.tsx` (columns; tabs on mobile), and stripped from history by `removeToolCallMarkup`. Pre-migration messages render the old `<PanelColumns data="base64json">` tag via a frozen legacy path (`decodeLegacyPanelData` next to the renderer).
 
 ## UI & persistence
 

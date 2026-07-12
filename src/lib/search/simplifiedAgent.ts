@@ -18,7 +18,6 @@ import {
 //   getLangfuseCallbacks,
 //   getLangfuseHandler,
 // } from '@/lib/tracing/langfuse';
-import { encodeHtmlAttribute, encodeBase64 } from '@/lib/utils/html';
 import {
   pushCallbackRunId,
   dropCallbackRunId as dropCodeCallbackRunId,
@@ -728,7 +727,7 @@ export class SimplifiedAgent {
                 const type = toolName.trim();
                 // We only include lightweight identifying args for now; avoid large payloads.
                 const TOOL_ARG_MAX_LENGTH = 350;
-                let extraAttr = '';
+                const attrs: Record<string, unknown> = {};
                 try {
                   if (input && typeof input === 'string') {
                     // Construct an object from the input json string if possible
@@ -745,50 +744,39 @@ export class SimplifiedAgent {
                   if (input && typeof input === 'object') {
                     const inputObj = input as Record<string, unknown>;
                     if (typeof inputObj.query === 'string') {
-                      const q = encodeHtmlAttribute(
-                        inputObj.query.slice(0, TOOL_ARG_MAX_LENGTH),
+                      attrs.query = inputObj.query.slice(
+                        0,
+                        TOOL_ARG_MAX_LENGTH,
                       );
-                      extraAttr += ` query="${q}"`;
                     }
                     // For read_skill, surface the skill name as query for UI display
                     if (
                       toolName === 'read_skill' &&
                       typeof inputObj.name === 'string'
                     ) {
-                      const n = encodeHtmlAttribute(
-                        inputObj.name.slice(0, TOOL_ARG_MAX_LENGTH),
-                      );
-                      extraAttr += ` query="${n}"`;
+                      attrs.query = inputObj.name.slice(0, TOOL_ARG_MAX_LENGTH);
                     }
                     if (Array.isArray(inputObj.urls)) {
-                      const count = inputObj.urls.length;
-                      extraAttr += ` count="${count}"`;
+                      attrs.count = inputObj.urls.length;
                     }
                     if (typeof inputObj.url === 'string') {
-                      const u = encodeHtmlAttribute(
-                        inputObj.url.slice(0, TOOL_ARG_MAX_LENGTH),
-                      );
-                      extraAttr += ` url="${u}"`;
+                      attrs.url = inputObj.url.slice(0, TOOL_ARG_MAX_LENGTH);
                     }
                     if (typeof inputObj.pdfUrl === 'string') {
-                      const u = encodeHtmlAttribute(
-                        inputObj.pdfUrl.slice(0, TOOL_ARG_MAX_LENGTH),
-                      );
-                      extraAttr += ` url="${u}"`;
+                      attrs.url = inputObj.pdfUrl.slice(0, TOOL_ARG_MAX_LENGTH);
                     }
                     // Memory tools: extract content for display
                     if (
                       typeof inputObj.content === 'string' &&
                       !inputObj.query
                     ) {
-                      const c = encodeHtmlAttribute(
-                        inputObj.content.slice(0, TOOL_ARG_MAX_LENGTH),
+                      attrs.query = inputObj.content.slice(
+                        0,
+                        TOOL_ARG_MAX_LENGTH,
                       );
-                      extraAttr += ` query="${c}"`;
                     }
                   }
-                  // For code_execution, include the code as a base64-encoded attribute
-                  // to avoid breaking the markdown parser with long/complex content
+                  // For code_execution, include the code as a plain string field.
                   if (
                     type === 'code_execution' &&
                     input &&
@@ -796,15 +784,14 @@ export class SimplifiedAgent {
                   ) {
                     const inputObj = input as Record<string, unknown>;
                     if (typeof inputObj.code === 'string') {
-                      const c = encodeBase64(inputObj.code);
-                      extraAttr += ` code="${c}"`;
+                      attrs.code = inputObj.code;
                       // Store correlation: code content → callback runId
                       // Used by codeExecutionTool to include the correct markup toolCallId
                       // in its code_execution_pending event (fixes race with async Docker checks)
                       pushCallbackRunId(inputObj.code, runId);
                     }
                     if (typeof inputObj.description === 'string') {
-                      extraAttr += ` description="${encodeHtmlAttribute(inputObj.description.slice(0, 100))}"`;
+                      attrs.description = inputObj.description.slice(0, 100);
                     }
                   }
                   // For ask_user, store correlation and include question as attribute
@@ -815,12 +802,12 @@ export class SimplifiedAgent {
                   ) {
                     const inputObj = input as Record<string, unknown>;
                     if (typeof inputObj.question === 'string') {
-                      extraAttr += ` query="${encodeHtmlAttribute(inputObj.question.slice(0, 200))}"`;
+                      attrs.query = inputObj.question.slice(0, 200);
                       // Store correlation: question text → callback runId
                       pushQuestionCallbackRunId(inputObj.question, runId);
                     }
                     if (typeof inputObj.context === 'string') {
-                      extraAttr += ` context="${encodeHtmlAttribute(inputObj.context.slice(0, 200))}"`;
+                      attrs.context = inputObj.context.slice(0, 200);
                     }
                   }
                   if (
@@ -830,7 +817,7 @@ export class SimplifiedAgent {
                   ) {
                     const inputObj = input as Record<string, unknown>;
                     if (inputObj.messageId !== undefined) {
-                      extraAttr += ` query="${encodeHtmlAttribute(String(inputObj.messageId))}"`;
+                      attrs.query = String(inputObj.messageId);
                     }
                   }
                   if (
@@ -843,7 +830,7 @@ export class SimplifiedAgent {
                       const joined = inputObj.keywords
                         .filter((k) => typeof k === 'string')
                         .join(', ');
-                      extraAttr += ` query="${encodeHtmlAttribute(joined.slice(0, TOOL_ARG_MAX_LENGTH))}"`;
+                      attrs.query = joined.slice(0, TOOL_ARG_MAX_LENGTH);
                     }
                   }
                   // For workspace tools, extract relevant args for display
@@ -860,20 +847,23 @@ export class SimplifiedAgent {
                       type === 'workspace_read' &&
                       typeof inputObj.file === 'string'
                     ) {
-                      extraAttr += ` query="${encodeHtmlAttribute(inputObj.file.slice(0, TOOL_ARG_MAX_LENGTH))}"`;
+                      attrs.query = inputObj.file.slice(0, TOOL_ARG_MAX_LENGTH);
                     }
                     if (
                       type === 'workspace_grep' &&
                       typeof inputObj.pattern === 'string'
                     ) {
-                      extraAttr += ` query="${encodeHtmlAttribute(inputObj.pattern.slice(0, TOOL_ARG_MAX_LENGTH))}"`;
+                      attrs.query = inputObj.pattern.slice(
+                        0,
+                        TOOL_ARG_MAX_LENGTH,
+                      );
                     }
                     if (
                       (type === 'workspace_edit' ||
                         type === 'workspace_create_file') &&
                       typeof inputObj.file === 'string'
                     ) {
-                      extraAttr += ` query="${encodeHtmlAttribute(inputObj.file.slice(0, TOOL_ARG_MAX_LENGTH))}"`;
+                      attrs.query = inputObj.file.slice(0, TOOL_ARG_MAX_LENGTH);
                       // Correlate filename → callback runId so the interrupt's
                       // *_pending event carries the chip's markupToolCallId and
                       // the chip can be closed to success on resume (markupKey =
@@ -902,7 +892,7 @@ export class SimplifiedAgent {
                       try {
                         const json = JSON.stringify(input);
                         if (json && json !== '{}') {
-                          extraAttr += ` mcpArgs="${encodeBase64(json)}"`;
+                          attrs.mcpArgs = json;
                         }
                       } catch {
                         // ignore arg serialization errors
@@ -916,10 +906,10 @@ export class SimplifiedAgent {
                 emitStreamEvent(this.emitter, {
                   type: 'tool_call_started',
                   data: {
-                    // Provide initial markup with status running; toolCallId used for later update.
-                    content: `<ToolCall type="${encodeHtmlAttribute(type)}" status="running" toolCallId="${encodeHtmlAttribute(runId)}"${extraAttr}></ToolCall>`,
                     toolCallId: runId,
+                    toolType: type,
                     status: 'running',
+                    attrs,
                   },
                 });
               } catch (emitErr) {
@@ -1161,8 +1151,8 @@ export class SimplifiedAgent {
                 emitStreamEvent(this.emitter, {
                   type: 'tool_call_started',
                   data: {
-                    content: `<ToolCall type="firefoxAI" status="success" toolCallId="${syntheticId}"></ToolCall>`,
                     toolCallId: syntheticId,
+                    toolType: 'firefoxAI',
                     status: 'success',
                   },
                 });
@@ -1790,7 +1780,7 @@ ${url ? `<url>${url}</url>` : ''}
                 resumeToolCalls.set(cbRunId, toolName);
 
                 const TOOL_ARG_MAX_LENGTH = 350;
-                let extraAttr = '';
+                const attrs: Record<string, unknown> = {};
                 try {
                   let parsed = input;
                   if (typeof input === 'string') {
@@ -1801,42 +1791,41 @@ ${url ? `<url>${url}</url>` : ''}
                   if (parsed && typeof parsed === 'object') {
                     const obj = parsed as Record<string, unknown>;
                     if (typeof obj.query === 'string')
-                      extraAttr += ` query="${encodeHtmlAttribute(obj.query.slice(0, TOOL_ARG_MAX_LENGTH))}"`;
+                      attrs.query = obj.query.slice(0, TOOL_ARG_MAX_LENGTH);
                     if (
                       toolName === 'read_skill' &&
                       typeof obj.name === 'string'
                     )
-                      extraAttr += ` query="${encodeHtmlAttribute(obj.name.slice(0, TOOL_ARG_MAX_LENGTH))}"`;
-                    if (Array.isArray(obj.urls))
-                      extraAttr += ` count="${obj.urls.length}"`;
+                      attrs.query = obj.name.slice(0, TOOL_ARG_MAX_LENGTH);
+                    if (Array.isArray(obj.urls)) attrs.count = obj.urls.length;
                     if (typeof obj.url === 'string')
-                      extraAttr += ` url="${encodeHtmlAttribute(obj.url.slice(0, TOOL_ARG_MAX_LENGTH))}"`;
+                      attrs.url = obj.url.slice(0, TOOL_ARG_MAX_LENGTH);
                     if (typeof obj.pdfUrl === 'string')
-                      extraAttr += ` url="${encodeHtmlAttribute(obj.pdfUrl.slice(0, TOOL_ARG_MAX_LENGTH))}"`;
+                      attrs.url = obj.pdfUrl.slice(0, TOOL_ARG_MAX_LENGTH);
                     if (typeof obj.content === 'string' && !obj.query)
-                      extraAttr += ` query="${encodeHtmlAttribute(obj.content.slice(0, TOOL_ARG_MAX_LENGTH))}"`;
+                      attrs.query = obj.content.slice(0, TOOL_ARG_MAX_LENGTH);
                     if (toolName === 'code_execution') {
                       if (typeof obj.code === 'string') {
-                        extraAttr += ` code="${encodeBase64(obj.code)}"`;
+                        attrs.code = obj.code;
                         pushCallbackRunId(obj.code, cbRunId);
                       }
                       if (typeof obj.description === 'string')
-                        extraAttr += ` description="${encodeHtmlAttribute(obj.description.slice(0, 100))}"`;
+                        attrs.description = obj.description.slice(0, 100);
                     }
                     if (toolName === 'ask_user') {
                       if (typeof obj.question === 'string') {
-                        extraAttr += ` query="${encodeHtmlAttribute(obj.question.slice(0, 200))}"`;
+                        attrs.query = obj.question.slice(0, 200);
                         pushQuestionCallbackRunId(obj.question, cbRunId);
                       }
                       if (typeof obj.context === 'string')
-                        extraAttr += ` context="${encodeHtmlAttribute(obj.context.slice(0, 200))}"`;
+                        attrs.context = obj.context.slice(0, 200);
                     }
                     if (
                       (toolName === 'workspace_edit' ||
                         toolName === 'workspace_create_file') &&
                       typeof obj.file === 'string'
                     ) {
-                      extraAttr += ` query="${encodeHtmlAttribute(obj.file.slice(0, TOOL_ARG_MAX_LENGTH))}"`;
+                      attrs.query = obj.file.slice(0, TOOL_ARG_MAX_LENGTH);
                       pushQuestionCallbackRunId(obj.file, cbRunId);
                     }
                     if (
@@ -1850,8 +1839,7 @@ ${url ? `<url>${url}</url>` : ''}
                       pushQuestionCallbackRunId(toolName, cbRunId);
                       try {
                         const json = JSON.stringify(obj);
-                        if (json && json !== '{}')
-                          extraAttr += ` mcpArgs="${encodeBase64(json)}"`;
+                        if (json && json !== '{}') attrs.mcpArgs = json;
                       } catch {
                         // ignore arg serialization errors
                       }
@@ -1860,12 +1848,12 @@ ${url ? `<url>${url}</url>` : ''}
                       toolName === 'workspace_read' &&
                       typeof obj.file === 'string'
                     )
-                      extraAttr += ` query="${encodeHtmlAttribute(obj.file.slice(0, TOOL_ARG_MAX_LENGTH))}"`;
+                      attrs.query = obj.file.slice(0, TOOL_ARG_MAX_LENGTH);
                     if (
                       toolName === 'workspace_grep' &&
                       typeof obj.pattern === 'string'
                     )
-                      extraAttr += ` query="${encodeHtmlAttribute(obj.pattern.slice(0, TOOL_ARG_MAX_LENGTH))}"`;
+                      attrs.query = obj.pattern.slice(0, TOOL_ARG_MAX_LENGTH);
                   }
                 } catch {
                   // ignore attribute extraction errors
@@ -1873,9 +1861,10 @@ ${url ? `<url>${url}</url>` : ''}
                 emitStreamEvent(this.emitter, {
                   type: 'tool_call_started',
                   data: {
-                    content: `<ToolCall type="${encodeHtmlAttribute(toolName)}" status="running" toolCallId="${encodeHtmlAttribute(cbRunId)}"${extraAttr}></ToolCall>`,
                     toolCallId: cbRunId,
+                    toolType: toolName,
                     status: 'running',
+                    attrs,
                   },
                 });
               },

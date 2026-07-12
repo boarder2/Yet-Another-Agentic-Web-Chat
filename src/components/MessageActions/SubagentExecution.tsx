@@ -13,6 +13,8 @@ import {
 import { decodeHtmlEntities } from '@/lib/utils/html';
 import Markdown, { MarkdownToJSX } from 'markdown-to-jsx';
 import { cn } from '@/lib/utils';
+import { ToolCall } from './ToolCall';
+import type { ToolCallPayload } from '@/lib/widgets/envelope';
 
 /**
  * Strip think-tag content from text, handling both properly paired
@@ -39,7 +41,8 @@ interface SubagentExecutionProps {
   summary?: string;
   error?: string;
   responseText?: string; // Accumulated response tokens
-  children?: React.ReactNode; // ToolCall markup will be in children
+  toolCalls?: ToolCallPayload[]; // Nested tool calls (current fenced widgets)
+  children?: React.ReactNode; // Nested ToolCall markup (legacy tag markup only)
 }
 
 // Markdown options for subagent responses
@@ -96,13 +99,17 @@ export const SubagentExecution: React.FC<SubagentExecutionProps> = ({
   summary,
   error,
   responseText,
+  toolCalls,
   children,
 }) => {
   const [expanded, setExpanded] = useState(false);
   const [responseExpanded, setResponseExpanded] = useState(false);
 
-  // Children contains the ToolCall markup
-  const hasActivity = children && React.Children.count(children) > 0;
+  // Current fenced widgets carry nested tool calls as a typed array; legacy
+  // tag markup carries them as ToolCall markup in children.
+  const hasActivity = toolCalls
+    ? toolCalls.length > 0
+    : children && React.Children.count(children) > 0;
   const decodedResponse = responseText ? decodeHtmlEntities(responseText) : '';
   const decodedSummary = summary ? decodeHtmlEntities(summary) : '';
 
@@ -180,7 +187,11 @@ export const SubagentExecution: React.FC<SubagentExecutionProps> = ({
               <div className="text-xs font-semibold text-fg/70 uppercase tracking-wide">
                 Activity
               </div>
-              <div className="space-y-1">{children}</div>
+              <div className="space-y-1">
+                {toolCalls
+                  ? toolCalls.map((tc) => <ToolCall key={tc.id} {...tc} />)
+                  : children}
+              </div>
             </div>
           )}
 

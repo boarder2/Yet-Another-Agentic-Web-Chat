@@ -16,19 +16,18 @@
  */
 import type { Document } from '@langchain/core/documents';
 import type { ChartSpec } from '@/lib/chart/chartSpec';
-import { updateToolCallMarkup } from '@/lib/utils/toolCallMarkup';
-import { encodeHtmlAttribute } from '@/lib/utils/html';
 import {
-  applySubagentNestedToolCall,
-  applySubagentResponseToken,
-  applySubagentStatus,
-} from '@/lib/utils/subagentMarkup';
-import {
-  applyPanelExecutorStarted,
-  applyPanelExecutorResponseToken,
-  applyPanelExecutorStatus,
-  panelExecutorTokens,
-} from '@/lib/utils/panelMarkup';
+  appendWidget,
+  updateWidget,
+  neutralizeSpoofedFences,
+  upsertNestedToolCall,
+  patchNestedToolCall,
+  startPanelColumn,
+  appendPanelColumnToken,
+  setPanelColumnStatus,
+  type ToolCallPayload,
+  type SubagentPayload,
+} from '@/lib/widgets/envelope';
 import type {
   Message,
   ModelStats,
@@ -38,7 +37,7 @@ import type {
   PendingSkillEditApproval,
   PendingMcpApproval,
 } from './chatState';
-import type { StreamEvent } from './events';
+import { panelExecutorTokens, type StreamEvent } from './events';
 import type { StreamEffect } from './effects';
 
 /** How many response tokens accumulate before the assistant row is re-rendered. */
@@ -392,7 +391,7 @@ function reduceStreamAction(
 
     case 'response': {
       if (state.inReplay) return { state, effects };
-      const token = action.data ?? '';
+      const token = neutralizeSpoofedFences(action.data ?? '');
       const receivedMessage = state.receivedMessage + token;
       const tokenCount = state.tokenCount + 1;
       // Buffer the row re-render: commit every N tokens, or immediately if the
@@ -417,17 +416,18 @@ function reduceStreamAction(
 
     case 'tool_call_started': {
       const msgId = msgIdFor(state, action);
-      const { content: markup, toolCallId } = action.data;
+      const { toolCallId, toolType, status, attrs } = action.data;
       const current = state.messages.find(
         (m) => m.messageId === msgId,
       )?.content;
-      // Idempotency: don't re-append markup for a tool call already present
-      // (replayed/seeded content).
-      const alreadyPresent =
-        current !== undefined && current.includes(toolCallId);
-      const receivedMessage = alreadyPresent
-        ? state.receivedMessage
-        : (current ?? state.receivedMessage) + markup;
+      const apply = (content: string) =>
+        appendWidget<ToolCallPayload>(content, 'tool_call', {
+          id: toolCallId,
+          type: toolType,
+          status,
+          ...attrs,
+        });
+      const receivedMessage = apply(current ?? state.receivedMessage);
       const messages = upsertAssistant(state, msgId, receivedMessage);
       scroll();
       return {
@@ -440,12 +440,12 @@ function reduceStreamAction(
     case 'tool_call_error': {
       const msgId = msgIdFor(state, action);
       const { toolCallId, status } = action.data;
-      const error =
-        action.type === 'tool_call_error' ? action.data.error : undefined;
-      const extra =
-        action.type === 'tool_call_success' ? action.data.extra : undefined;
+      const patch: Partial<ToolCallPayload> =
+        action.type === 'tool_call_error'
+          ? { status, error: action.data.error }
+          : { status, ...action.data.extra };
       const apply = (content: string) =>
-        updateToolCallMarkup(content, toolCallId, { status, error, extra });
+        updateWidget<ToolCallPayload>(content, 'tool_call', toolCallId, patch);
       const receivedMessage = apply(state.receivedMessage);
       const messages = transformAssistant(state, msgId, apply);
       scroll();
@@ -457,12 +457,15 @@ function reduceStreamAction(
       const current = state.messages.find(
         (m) => m.messageId === msgId,
       )?.content;
-      const marker = `id="${action.executionId}"`;
-      const markup = `<SubagentExecution id="${action.executionId}" name="${encodeHtmlAttribute(action.name ?? '')}" task="${encodeHtmlAttribute(action.task ?? '')}" status="running"></SubagentExecution>\n`;
-      const alreadyPresent = current !== undefined && current.includes(marker);
-      const receivedMessage = alreadyPresent
-        ? state.receivedMessage
-        : (current ?? state.receivedMessage) + markup;
+      const apply = (content: string) =>
+        appendWidget<SubagentPayload>(content, 'subagent', {
+          id: action.executionId,
+          name: action.name ?? '',
+          task: action.task ?? '',
+          status: 'running',
+          toolCalls: [],
+        });
+      const receivedMessage = apply(current ?? state.receivedMessage);
       const messages = upsertAssistant(state, msgId, receivedMessage);
       scroll();
       return {
@@ -476,13 +479,11 @@ function reduceStreamAction(
       const msgId = msgIdFor(state, action);
       const status = action.type === 'subagent_completed' ? 'success' : 'error';
       const apply = (content: string) =>
-        applySubagentStatus(
-          content,
-          action.id,
+        updateWidget<SubagentPayload>(content, 'subagent', action.id, {
           status,
-          action.summary,
-          action.error,
-        );
+          summary: action.summary,
+          error: action.error,
+        });
       const receivedMessage = apply(state.receivedMessage);
       const messages = transformAssistant(state, msgId, apply);
       scroll();
@@ -495,20 +496,53 @@ function reduceStreamAction(
       const executionId = action.subagentId;
       const transform = (content: string): string => {
         if (nested.type === 'response') {
-          return applySubagentResponseToken(
+          return updateWidget<SubagentPayload>(
             content,
+            'subagent',
             executionId,
-            nested.data || '',
+            (current) => ({
+              ...current,
+              responseText: (current.responseText ?? '') + (nested.data || ''),
+            }),
           );
         }
-        if (nested.type.startsWith('tool_call')) {
-          return applySubagentNestedToolCall(
+        if (nested.type === 'tool_call_started') {
+          const { toolCallId, toolType, status, attrs } = nested.data;
+          return updateWidget<SubagentPayload>(
             content,
+            'subagent',
             executionId,
-            nested as unknown as {
-              type?: string;
-              data?: { content?: string; toolCallId?: string; error?: string };
-            },
+            (current) => ({
+              ...current,
+              toolCalls: upsertNestedToolCall(current.toolCalls, {
+                id: toolCallId,
+                type: toolType,
+                status,
+                ...attrs,
+              }),
+            }),
+          );
+        }
+        if (
+          nested.type === 'tool_call_success' ||
+          nested.type === 'tool_call_error'
+        ) {
+          const patch: Partial<ToolCallPayload> =
+            nested.type === 'tool_call_error'
+              ? { status: nested.data.status, error: nested.data.error }
+              : { status: nested.data.status, ...nested.data.extra };
+          return updateWidget<SubagentPayload>(
+            content,
+            'subagent',
+            executionId,
+            (current) => ({
+              ...current,
+              toolCalls: patchNestedToolCall(
+                current.toolCalls,
+                nested.data.toolCallId,
+                patch,
+              ),
+            }),
           );
         }
         return content;
@@ -526,20 +560,20 @@ function reduceStreamAction(
       const idx = action.executorIdx;
       const transform = (content: string): string => {
         if (action.type === 'panel_executor_started') {
-          return applyPanelExecutorStarted(
+          return startPanelColumn(
             content,
             idx,
             action.model ?? `Model ${idx + 1}`,
           );
         }
         if (action.type === 'panel_executor_completed') {
-          return applyPanelExecutorStatus(content, idx, 'success', {
+          return setPanelColumnStatus(content, idx, 'success', {
             sourceCount: action.sourceCount,
             tokens: panelExecutorTokens(action.usage),
             model: action.model,
           });
         }
-        return applyPanelExecutorStatus(content, idx, 'error', {
+        return setPanelColumnStatus(content, idx, 'error', {
           error: action.error,
           model: action.model,
         });
@@ -559,7 +593,7 @@ function reduceStreamAction(
       const idx = action.executorIdx;
       const token = action.token ?? '';
       const apply = (content: string) =>
-        applyPanelExecutorResponseToken(content, idx, token);
+        appendPanelColumnToken(content, idx, token);
       const receivedMessage = apply(state.receivedMessage);
       const messages = transformAssistant(state, msgId, apply);
       scroll();
@@ -754,17 +788,17 @@ function reduceCodeExecutionResult(
   let receivedMessage = state.receivedMessage;
   let messages = state.messages;
   if (tcId) {
-    const extra: Record<string, string> = {};
-    if (d.exitCode !== undefined) extra.exitCode = String(d.exitCode);
+    const extra: Partial<ToolCallPayload> = {};
+    if (d.exitCode !== undefined) extra.exitCode = Number(d.exitCode);
     if (d.stdout) extra.stdout = String(d.stdout).slice(0, 2000);
     if (d.stderr) extra.stderr = String(d.stderr).slice(0, 1000);
-    if (d.timedOut) extra.timedOut = 'true';
-    if (d.oomKilled) extra.oomKilled = 'true';
-    if (d.denied) extra.denied = 'true';
+    if (d.timedOut) extra.timedOut = true;
+    if (d.oomKilled) extra.oomKilled = true;
+    if (d.denied) extra.denied = true;
     if (Array.isArray(d.chartIds) && d.chartIds.length > 0)
       extra.chartIds = (d.chartIds as string[]).join(',');
     const apply = (content: string) =>
-      updateToolCallMarkup(content, tcId, { extra });
+      updateWidget<ToolCallPayload>(content, 'tool_call', tcId, extra);
     receivedMessage = apply(receivedMessage);
     messages = transformAssistant(state, msgId, apply);
   }
@@ -847,15 +881,15 @@ function reduceAskUserAnswered(
   let receivedMessage = state.receivedMessage;
   let messages = state.messages;
   if (tcId) {
-    const extra: Record<string, string> = {};
+    const extra: Partial<ToolCallPayload> = {};
     if (Array.isArray(d.selectedOptions) && d.selectedOptions.length)
       extra.selectedOptions = (d.selectedOptions as string[]).join(', ');
     if (d.freeformText)
       extra.freeformText = String(d.freeformText).slice(0, 500);
-    if (d.timedOut) extra.timedOut = 'true';
-    if (d.skipped) extra.skipped = 'true';
+    if (d.timedOut) extra.timedOut = true;
+    if (d.skipped) extra.skipped = true;
     const apply = (content: string) =>
-      updateToolCallMarkup(content, tcId, { extra });
+      updateWidget<ToolCallPayload>(content, 'tool_call', tcId, extra);
     receivedMessage = apply(receivedMessage);
     messages = transformAssistant(state, msgId, apply);
   }

@@ -564,10 +564,39 @@ test.describe('POST /api/chat (test-tool)', () => {
       body.messages as Array<{ role: string; content: string }>
     ).find((m) => m.role === 'assistant');
     expect(assistantMsg).toBeTruthy();
-    // The agent prepends a <ToolCall> XML marker before the model's answer.
+    // The agent prepends a `yaawc:tool_call` fenced widget before the model's answer.
     expect(assistantMsg!.content).toContain(
       'Based on the document, the answer is deterministic.',
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/chat — widget spoof neutralization (test-spoof)
+// ---------------------------------------------------------------------------
+
+test.describe('POST /api/chat (test-spoof)', () => {
+  test('neutralizes a model-forged yaawc: fence so it cannot spoof a widget', async ({
+    request,
+  }) => {
+    const { chatId } = await postChat(request, {
+      content: 'try to forge a widget',
+      model: 'test-spoof',
+    });
+
+    const body = await (await request.get(`/api/chats/${chatId}`)).json();
+    const assistantMsg = (
+      body.messages as Array<{ role: string; content: string }>
+    ).find((m) => m.role === 'assistant');
+    expect(assistantMsg).toBeTruthy();
+    // The forged info string is stripped down to a bare fence — no legitimate
+    // widget is ever writer-appended for this turn, so any surviving
+    // `yaawc:` fence would be a spoof that got through.
+    expect(assistantMsg!.content).not.toContain('yaawc:tool_call');
+    // The surrounding prose and the (now-bare) fence markers survive intact.
+    expect(assistantMsg!.content).toContain('Before.');
+    expect(assistantMsg!.content).toContain('After.');
+    expect(assistantMsg!.content).toContain('```');
   });
 });
 
@@ -907,7 +936,11 @@ test.describe('GET /api/chat/runs/[messageId]/stream', () => {
       content: 'The capital of France is Paris.',
     });
 
-    const { messageId, events: liveEvents } = await postChat(request, {
+    const {
+      chatId,
+      messageId,
+      events: liveEvents,
+    } = await postChat(request, {
       content: 'What is the capital of France?',
       focusMode: 'localResearch',
       workspaceId: wsId,
@@ -918,17 +951,34 @@ test.describe('GET /api/chat/runs/[messageId]/stream', () => {
       eventsOfType(liveEvents, 'tool_call_started').length,
     ).toBeGreaterThan(0);
 
+    // The persisted assistant content carries a `yaawc:tool_call` fenced
+    // widget with the started event's id/type/status as JSON fields — the
+    // writer-side codec output, not markup.
+    const chatBody = await (await request.get(`/api/chats/${chatId}`)).json();
+    const assistantMsg = (
+      chatBody.messages as Array<{ role: string; content: string }>
+    ).find((m) => m.role === 'assistant');
+    const startedEvent = eventsOfType(liveEvents, 'tool_call_started')[0]
+      .data as { toolCallId: string; toolType: string };
+    expect(assistantMsg!.content).toContain('```yaawc:tool_call');
+    expect(assistantMsg!.content).toContain(
+      `"id":"${startedEvent.toolCallId}"`,
+    );
+    expect(assistantMsg!.content).toContain(
+      `"type":"${startedEvent.toolType}"`,
+    );
+    expect(assistantMsg!.content).toContain('"status":"success"');
+
     const replayEvents = await collectSseEvents(
       await request.get(`/api/chat/runs/${messageId}/stream`),
     );
 
-    // The markup emitted on tool_call_started must be byte-identical across live
-    // and replay (same toolCallId, same widget markup, same order).
-    const markup = (evs: ChatEvent[]) =>
-      eventsOfType(evs, 'tool_call_started').map(
-        (e) => (e.data as { content: string }).content,
-      );
-    expect(markup(replayEvents)).toEqual(markup(liveEvents));
+    // The tool_call_started payload must be identical across live and replay
+    // (same toolCallId, same toolType/attrs, same order) — both feed the exact
+    // same codec (appendWidget) to build the widget.
+    const started = (evs: ChatEvent[]) =>
+      eventsOfType(evs, 'tool_call_started').map((e) => e.data);
+    expect(started(replayEvents)).toEqual(started(liveEvents));
 
     // Tool completions (status transitions) must match too.
     const successes = (evs: ChatEvent[]) =>

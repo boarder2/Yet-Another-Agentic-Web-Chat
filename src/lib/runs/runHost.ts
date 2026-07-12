@@ -1,11 +1,15 @@
-import { updateToolCallMarkup } from '@/lib/utils/toolCallMarkup';
 import {
-  applyPanelExecutorStarted,
-  applyPanelExecutorResponseToken,
-  applyPanelExecutorStatus,
-  panelExecutorTokens,
-} from '@/lib/utils/panelMarkup';
-import { encodeHtmlAttribute } from '@/lib/utils/html';
+  appendWidget,
+  updateWidget,
+  upsertNestedToolCall,
+  patchNestedToolCall,
+  startPanelColumn,
+  appendPanelColumnToken,
+  setPanelColumnStatus,
+  neutralizeSpoofedFences,
+  type ToolCallPayload,
+  type SubagentPayload,
+} from '@/lib/widgets/envelope';
 import {
   insertPartialAssistantRow,
   updateAssistantRow,
@@ -30,6 +34,7 @@ import {
   emitStreamEvent,
   onStreamEvent,
   normalizeStreamEvent,
+  panelExecutorTokens,
   type ModelStats,
   type ToolKind,
   type LangGraphInterrupt,
@@ -67,12 +72,16 @@ setEventPersister((run, seqEvent) => {
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 /**
- * Rewrite any still-"running" tool/subagent widgets in persisted markup to a
+ * Rewrite any still-"running" tool/subagent widgets in persisted content to a
  * terminal state. On cancel the run is over, so nothing should keep spinning;
  * without this a cancelled chat renders frozen spinners for the in-flight tool.
+ * Handles both the current fenced-JSON format and legacy `status="running"`
+ * attribute markup (old messages, no data migration).
  */
 function scrubRunningToolMarkup(content: string): string {
-  return content.replace(/status="running"/g, 'status="error"');
+  return content
+    .replace(/"status":"running"/g, '"status":"error"')
+    .replace(/status="running"/g, 'status="error"');
 }
 
 /** Pop the markup correlation ID for a given tool kind + key. */
@@ -358,12 +367,12 @@ function emitAnsweredAndMarkup(
   if (!markupToolCallId) return;
 
   const res = (response ?? {}) as Record<string, unknown>;
-  const extra: Record<string, string> = {};
+  const extra: Record<string, string | boolean> = {};
   if (Array.isArray(res.selectedOptions) && res.selectedOptions.length)
     extra.selectedOptions = (res.selectedOptions as string[]).join(', ');
   if (typeof res.freeformText === 'string' && res.freeformText)
     extra.freeformText = res.freeformText.slice(0, 500);
-  if (res.skipped) extra.skipped = 'true';
+  if (res.skipped) extra.skipped = true;
   if (res.decision === 'accept' || res.decision === 'accept_always')
     extra.decision = 'accepted';
   if (res.decision === 'reject' || res.decision === 'always_prompt')
@@ -981,12 +990,17 @@ export async function attachRunHost(params: {
     if (terminated) return;
 
     if (event.type === 'response') {
+      // Neutralize before either the wire push or persistence: a model can
+      // never forge a widget, and both the live stream and persisted content
+      // must agree (the client reducer's own neutralization is defense in
+      // depth, not the sole guard).
+      const data = neutralizeSpoofedFences(event.data);
       pushEvent(run, {
         type: 'response',
-        data: event.data,
+        data,
         messageId: aiMessageId,
       });
-      recievedMessage += event.data;
+      recievedMessage += data;
       scheduleFlush(false);
     } else if (event.type === 'sources' || event.type === 'sources_added') {
       if (event.searchQuery) searchQuery = event.searchQuery;
@@ -1004,20 +1018,31 @@ export async function attachRunHost(params: {
       scheduleFlush(true);
     } else if (event.type === 'tool_call_started') {
       pushEvent(run, { ...event, messageId: aiMessageId });
-      if (event.data.content) recievedMessage += event.data.content;
+      recievedMessage = appendWidget<ToolCallPayload>(
+        recievedMessage,
+        'tool_call',
+        {
+          id: event.data.toolCallId,
+          type: event.data.toolType,
+          status: event.data.status,
+          ...event.data.attrs,
+        },
+      );
       scheduleFlush(true);
     } else if (event.type === 'tool_call_success') {
       pushEvent(run, { ...event, messageId: aiMessageId });
-      recievedMessage = updateToolCallMarkup(
+      recievedMessage = updateWidget<ToolCallPayload>(
         recievedMessage,
+        'tool_call',
         event.data.toolCallId,
-        { status: event.data.status, extra: event.data.extra },
+        { status: event.data.status, ...event.data.extra },
       );
       scheduleFlush(true);
     } else if (event.type === 'tool_call_error') {
       pushEvent(run, { ...event, messageId: aiMessageId });
-      recievedMessage = updateToolCallMarkup(
+      recievedMessage = updateWidget<ToolCallPayload>(
         recievedMessage,
+        'tool_call',
         event.data.toolCallId,
         { status: event.data.status, error: event.data.error },
       );
@@ -1031,80 +1056,80 @@ export async function attachRunHost(params: {
       pushEvent(run, { ...event, messageId: aiMessageId } as StreamEvent);
 
       if (event.type === 'subagent_started') {
-        const markup = `<SubagentExecution id="${event.executionId}" name="${encodeHtmlAttribute(event.name ?? '')}" task="${encodeHtmlAttribute(event.task ?? '')}" status="running"></SubagentExecution>\n`;
-        recievedMessage += markup;
+        recievedMessage = appendWidget<SubagentPayload>(
+          recievedMessage,
+          'subagent',
+          {
+            id: event.executionId,
+            name: event.name ?? '',
+            task: event.task ?? '',
+            status: 'running',
+            toolCalls: [],
+          },
+        );
       } else if (event.type === 'subagent_data') {
         const nestedEvent = event.data;
         const executionId = event.subagentId;
-        if (
-          nestedEvent.type === 'tool_call_started' &&
-          nestedEvent.data?.content
-        ) {
-          const content = nestedEvent.data.content;
-          const subagentRegex = new RegExp(
-            `(<SubagentExecution\\s+id="${executionId}"[^>]*>)(.*?)(</SubagentExecution>)`,
-            'gs',
+        if (nestedEvent.type === 'response') {
+          recievedMessage = updateWidget<SubagentPayload>(
+            recievedMessage,
+            'subagent',
+            executionId,
+            (current) => ({
+              ...current,
+              responseText:
+                (current.responseText ?? '') + (nestedEvent.data || ''),
+            }),
           );
-          recievedMessage = recievedMessage.replace(
-            subagentRegex,
-            (_match, openTag, inner, closeTag) =>
-              `${openTag}${inner}${content}\n${closeTag}`,
+        } else if (nestedEvent.type === 'tool_call_started') {
+          const { toolCallId, toolType, status, attrs } = nestedEvent.data;
+          recievedMessage = updateWidget<SubagentPayload>(
+            recievedMessage,
+            'subagent',
+            executionId,
+            (current) => ({
+              ...current,
+              toolCalls: upsertNestedToolCall(current.toolCalls, {
+                id: toolCallId,
+                type: toolType,
+                status,
+                ...attrs,
+              }),
+            }),
           );
         } else if (
-          nestedEvent.type === 'tool_call_success' &&
-          nestedEvent.data?.toolCallId
+          nestedEvent.type === 'tool_call_success' ||
+          nestedEvent.type === 'tool_call_error'
         ) {
-          recievedMessage = updateToolCallMarkup(
+          const patch: Partial<ToolCallPayload> =
+            nestedEvent.type === 'tool_call_error'
+              ? {
+                  status: nestedEvent.data.status,
+                  error: nestedEvent.data.error,
+                }
+              : { status: nestedEvent.data.status, ...nestedEvent.data.extra };
+          recievedMessage = updateWidget<SubagentPayload>(
             recievedMessage,
-            nestedEvent.data.toolCallId,
-            { status: 'success' },
-          );
-        } else if (
-          nestedEvent.type === 'tool_call_error' &&
-          nestedEvent.data?.toolCallId
-        ) {
-          recievedMessage = updateToolCallMarkup(
-            recievedMessage,
-            nestedEvent.data.toolCallId,
-            { status: 'error', error: nestedEvent.data.error },
+            'subagent',
+            executionId,
+            (current) => ({
+              ...current,
+              toolCalls: patchNestedToolCall(
+                current.toolCalls,
+                nestedEvent.data.toolCallId,
+                patch,
+              ),
+            }),
           );
         }
       } else {
         const status =
           event.type === 'subagent_completed' ? 'success' : 'error';
-        const executionId = event.id;
-        const summary = event.summary;
-        const error = event.error;
-        const subagentRegex = new RegExp(
-          `<SubagentExecution\\s+id="${executionId}"([^>]*)>(.*?)<\\/SubagentExecution>`,
-          'gs',
-        );
-        recievedMessage = recievedMessage.replace(
-          subagentRegex,
-          (_match, attrs, innerContent) => {
-            let updatedAttrs = attrs
-              .replace(/status="[^"]*"/, `status="${status}"`)
-              .trim();
-            if (!updatedAttrs.includes('status='))
-              updatedAttrs += ` status="${status}"`;
-            if (summary && status === 'success') {
-              const esc = summary
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;');
-              updatedAttrs += ` summary="${esc}"`;
-            }
-            if (error && status === 'error') {
-              const esc = error
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;');
-              updatedAttrs += ` error="${esc}"`;
-            }
-            return `<SubagentExecution ${updatedAttrs}>${innerContent}</SubagentExecution>`;
-          },
+        recievedMessage = updateWidget<SubagentPayload>(
+          recievedMessage,
+          'subagent',
+          event.id,
+          { status, summary: event.summary, error: event.error },
         );
       }
       scheduleFlush(true);
@@ -1117,19 +1142,19 @@ export async function attachRunHost(params: {
       pushEvent(run, { ...event, messageId: aiMessageId } as StreamEvent);
       const idx = event.executorIdx;
       if (event.type === 'panel_executor_started') {
-        recievedMessage = applyPanelExecutorStarted(
+        recievedMessage = startPanelColumn(
           recievedMessage,
           idx,
           event.model ?? `Model ${idx + 1}`,
         );
       } else if (event.type === 'panel_executor_data') {
-        recievedMessage = applyPanelExecutorResponseToken(
+        recievedMessage = appendPanelColumnToken(
           recievedMessage,
           idx,
           event.token ?? '',
         );
       } else if (event.type === 'panel_executor_completed') {
-        recievedMessage = applyPanelExecutorStatus(
+        recievedMessage = setPanelColumnStatus(
           recievedMessage,
           idx,
           'success',
@@ -1140,15 +1165,10 @@ export async function attachRunHost(params: {
           },
         );
       } else {
-        recievedMessage = applyPanelExecutorStatus(
-          recievedMessage,
-          idx,
-          'error',
-          {
-            error: event.error,
-            model: event.model,
-          },
-        );
+        recievedMessage = setPanelColumnStatus(recievedMessage, idx, 'error', {
+          error: event.error,
+          model: event.model,
+        });
       }
       scheduleFlush(true);
     } else if (event.type === 'chart_spec') {
@@ -1178,18 +1198,21 @@ export async function attachRunHost(params: {
         event.data.toolCallId;
       if (tcId) {
         const d = event.data;
-        const extra: Record<string, string> = {};
-        if (d.exitCode !== undefined) extra.exitCode = String(d.exitCode);
+        const extra: Partial<ToolCallPayload> = {};
+        if (d.exitCode !== undefined) extra.exitCode = d.exitCode;
         if (d.stdout) extra.stdout = d.stdout.slice(0, 2000);
         if (d.stderr) extra.stderr = d.stderr.slice(0, 1000);
-        if (d.timedOut) extra.timedOut = 'true';
-        if (d.oomKilled) extra.oomKilled = 'true';
-        if (d.denied) extra.denied = 'true';
+        if (d.timedOut) extra.timedOut = true;
+        if (d.oomKilled) extra.oomKilled = true;
+        if (d.denied) extra.denied = true;
         if (Array.isArray(d.chartIds) && d.chartIds.length > 0)
           extra.chartIds = d.chartIds.join(',');
-        recievedMessage = updateToolCallMarkup(recievedMessage, tcId, {
+        recievedMessage = updateWidget<ToolCallPayload>(
+          recievedMessage,
+          'tool_call',
+          tcId,
           extra,
-        });
+        );
       }
       scheduleFlush(true);
     } else if (event.type === 'context_grew') {

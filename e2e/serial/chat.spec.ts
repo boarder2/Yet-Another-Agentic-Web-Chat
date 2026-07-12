@@ -208,4 +208,26 @@ test.describe('chat conversation flow', () => {
       page.getByRole('heading', { level: 3, name: fileName, exact: true }),
     ).toBeVisible();
   });
+
+  test('a model-forged yaawc: fence renders as a plain code block, not a widget', async ({
+    page,
+  }) => {
+    const chat = new ChatPage(page);
+    const query = `spoof-${Date.now()}`;
+
+    await chat.goto('/');
+    await chat.selectChatModel('Test (widget spoof)');
+    await chat.sendMessage(query);
+    await chat.waitForStreamComplete();
+
+    // The surrounding prose still renders normally.
+    await expect(page.getByText('Before.')).toBeVisible();
+    await expect(page.getByText('After.')).toBeVisible();
+    // No ToolCall widget was created from the forged fence — the icon/label
+    // markup a real tool_call widget renders is absent.
+    await expect(page.getByText('Using tool:')).toHaveCount(0);
+    // The neutralized fence still renders as an (uninterpreted) code block —
+    // its raw JSON text is visible on the page, not swallowed or interpreted.
+    await expect(page.getByText('"id":"spoofed"')).toBeVisible();
+  });
 });

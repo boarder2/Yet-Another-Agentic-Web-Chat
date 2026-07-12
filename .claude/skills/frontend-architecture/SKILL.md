@@ -207,38 +207,47 @@ Personalization is stored in `localStorage` and accessed via `useLocalStorageBoo
 
 The `messageHandler()` function dispatches by event `type`:
 
-| Event Type                                          | Handler Action                                                              |
-| --------------------------------------------------- | --------------------------------------------------------------------------- |
-| `response`                                          | Buffer tokens; append to assistant message content (bufferThreshold-based)  |
-| `sources` / `sources_added`                         | Set/append to message sources array                                         |
-| `tool_call_started`                                 | Append `<ToolCall>` markup to message content                               |
-| `tool_call_success` / `tool_call_error`             | Regex-rewrite existing `<ToolCall>` tag attributes                          |
-| `subagent_started`                                  | Append `<SubagentExecution>` markup                                         |
-| `subagent_data`                                     | Forward nested tool/response events to subagent context                     |
-| `subagent_completed` / `subagent_error`             | Update SubagentExecution markup with final status                           |
-| `todo_update`                                       | Update `todoItems` state (renders in TodoWidget)                            |
-| `stats`                                             | Update `liveModelStats` for token display                                   |
-| `progress`                                          | Update `analysisProgress` (multi-step analysis progress bar)                |
-| `context_grew`                                      | Update `liveContextGrew` (context window growth notification)               |
-| `chart_spec`                                        | Store ChartSpec in `chartSpecsByMessage` (exposed via ChartSpecContext)     |
-| `code_execution_pending`                            | Add to `pendingExecutions` for CodeExecutionApproval widget                 |
-| `code_execution_answered` / `code_execution_result` | Update/resolve code execution                                               |
-| `user_question_pending` / `user_question_answered`  | Add/resolve agent question prompt                                           |
-| `workspace_edit_approval_pending` (and variants)    | Add/resolve workspace file edit approval                                    |
-| `skill_edit_approval_pending` (and variants)        | Add/resolve skill file edit approval                                        |
-| `messageEnd`                                        | Finalize assistant message, trigger auto-suggestions, clear transient state |
-| `ping`                                              | No-op keep-alive                                                            |
+| Event Type                                          | Handler Action                                                                                                       |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `response`                                          | Buffer tokens (neutralizing any spoofed `yaawc:` fence); append to assistant message content (bufferThreshold-based) |
+| `sources` / `sources_added`                         | Set/append to message sources array                                                                                  |
+| `tool_call_started`                                 | Append a `yaawc:tool_call` widget to message content (`appendWidget`)                                                |
+| `tool_call_success` / `tool_call_error`             | Patch the widget's JSON payload (`updateWidget`)                                                                     |
+| `subagent_started`                                  | Append a `yaawc:subagent` widget                                                                                     |
+| `subagent_data`                                     | Forward nested tool/response events; patched into the widget's `toolCalls` array / `responseText`                    |
+| `subagent_completed` / `subagent_error`             | Patch the widget with final status/summary/error                                                                     |
+| `todo_update`                                       | Update `todoItems` state (renders in TodoWidget)                                                                     |
+| `stats`                                             | Update `liveModelStats` for token display                                                                            |
+| `progress`                                          | Update `analysisProgress` (multi-step analysis progress bar)                                                         |
+| `context_grew`                                      | Update `liveContextGrew` (context window growth notification)                                                        |
+| `chart_spec`                                        | Store ChartSpec in `chartSpecsByMessage` (exposed via ChartSpecContext)                                              |
+| `code_execution_pending`                            | Add to `pendingExecutions` for CodeExecutionApproval widget                                                          |
+| `code_execution_answered` / `code_execution_result` | Update/resolve code execution                                                                                        |
+| `user_question_pending` / `user_question_answered`  | Add/resolve agent question prompt                                                                                    |
+| `workspace_edit_approval_pending` (and variants)    | Add/resolve workspace file edit approval                                                                             |
+| `skill_edit_approval_pending` (and variants)        | Add/resolve skill file edit approval                                                                                 |
+| `messageEnd`                                        | Finalize assistant message, trigger auto-suggestions, clear transient state                                          |
+| `ping`                                              | No-op keep-alive                                                                                                     |
 
 ## Markdown Rendering
 
-`MarkdownRenderer.tsx` uses `markdown-to-jsx` with custom component overrides:
+`MarkdownRenderer.tsx` uses `markdown-to-jsx` with custom component overrides. Widgets (tool calls, subagent executions, agent-panel columns) are fenced code blocks with a reserved `yaawc:<kind>` info string and a compact JSON payload, decoded by `src/lib/widgets/envelope.ts` — see the `streaming-events` skill for the full codec/wire-event contract. Nothing writer-side emits the old tag markup anymore; a frozen, read-only legacy path renders pre-migration messages.
 
-### Custom elements
+### Widget dispatch (`code` override)
 
-- **`<ToolCall>`**: Renders tool execution status widgets (spinner/check/X) with tool-specific icons. Attributes: `type`, `status`, `toolCallId`, `query`, `url`, `error`, etc.
-- **`<SubagentExecution>`**: Collapsible deep research panel. Attributes: `name`, `task`, `status`, `response`, `error`.
-- **`<PanelColumns>`**: Agent-panel executor columns (side-by-side on desktop, tabbed on mobile). Single attribute `data` = base64 JSON of all executors; mutated by `src/lib/utils/panelMarkup.ts` from `panel_executor_*` events.
-- **`<Chart>`**: Renders a `ChartWidget`. Looks up the `ChartSpec` via `useChartSpec()` from `ChartSpecContext`. Attribute: `id`.
+A fenced block whose info string (`language-yaawc:<kind>`) parses via `parseWidgetFence` dispatches to the matching typed component; an unknown/invalid `yaawc:*` fence — including a model-forged one, since `neutralizeSpoofedFences` strips the info string before it ever reaches this point — falls back to the plain `CodeBlock` renderer.
+
+- **`ToolCall`** (`src/components/MessageActions/ToolCall.tsx`): tool execution status widget (spinner/check/X) with tool-specific icons. Props: `type`, `status`, `toolCallId`, `query`, `url`, `error`, etc. — matches the `yaawc:tool_call` JSON payload fields.
+- **`SubagentExecution`**: collapsible deep research panel. Props: `name`, `task`, `status`, `toolCalls` (typed array, rendered as nested `ToolCall`s), `responseText`/`summary`, `error`.
+- **`PanelColumns`**: agent-panel executor columns (side-by-side on desktop, tabbed on mobile). Prop `columns: PanelColumnPayload[]`, patched from `panel_executor_*` events via `src/lib/widgets/envelope.ts`.
+- **`<Chart>`**: still a legacy-style self-closing tag (model-emitted, not a widget envelope — the prompt instructs the LLM to place it in prose). Renders a `ChartWidget`, looking up the `ChartSpec` via `useChartSpec()` from `ChartSpecContext`. Attribute: `id`.
+
+### Legacy tag markup (frozen, read-only)
+
+Pre-migration messages still contain `<ToolCall>`/`<SubagentExecution>`/`<PanelColumns>` tags. The `ToolCall`/`SubagentExecution`/`PanelColumns` overrides also handle these (a `LegacyToolCall` wrapper base64-decodes the long-content attributes old writers encoded, then renders the same components). `ensureBlockElements` placeholder-protects `SubagentExecution`/`PanelColumns` blocks before blank-line-wrapping nested `<ToolCall>` tags, so a nested tool call doesn't get treated as a sibling block by markdown-to-jsx (the historical bug this format replaces).
+
+### Other elements
+
 - **`<a>` links**: Citation links (`[N]`) get special styling via `CitationLink` component.
 - **Security blocks**: `iframe`, `script`, `object`, `style` tags render as `null`.
 
@@ -289,7 +298,9 @@ border-surface-2 — borders
 | `src/components/ChatActions.tsx`                             | Per-chat header actions (pin, private, export, delete)                   |
 | `src/components/MessageBox.tsx`                              | Individual message display (user + assistant + compaction)               |
 | `src/components/MessageInput.tsx`                            | Text input, image paste, file attach, skill autocomplete                 |
-| `src/components/MarkdownRenderer.tsx`                        | Markdown→JSX with ToolCall/SubagentExecution/Chart                       |
+| `src/components/MarkdownRenderer.tsx`                        | Markdown→JSX; dispatches `yaawc:*` widget fences + legacy tag markup     |
+| `src/components/MessageActions/ToolCall.tsx`                 | Tool-call widget component (used by the fenced + legacy dispatch)        |
+| `src/lib/widgets/envelope.ts`                                | Widget envelope codec (append/update/parse/strip fenced widgets)         |
 | `src/components/EmptyChat.tsx`                               | Initial empty state with focus mode                                      |
 | `src/components/TodoWidget.tsx`                              | Research progress bar (transient)                                        |
 | `src/components/ThinkBox.tsx`                                | Collapsible reasoning/thinking block                                     |

@@ -93,21 +93,19 @@ test.describe('agent panel', () => {
       { timeout: 10_000 },
     );
 
-    // Persisted content carries both the panel markup (its executor answers
-    // are base64-encoded inside the tag's `data` attribute) and the
-    // synthesized answer as plain trailing text.
+    // Persisted content carries one `yaawc:panel` fenced widget (its executor
+    // answers as a typed JSON array) followed by the synthesized answer as
+    // plain trailing text.
     const chatId = new URL(page.url()).pathname.split('/').pop()!;
     const body = await (await request.get(`/api/chats/${chatId}`)).json();
     const msgs: Array<{ role: string; content: string }> = body.messages;
     const assistantMsg = msgs.find((m) => m.role === 'assistant');
     const match = assistantMsg?.content.match(
-      /<PanelColumns data="([^"]*)"><\/PanelColumns>\n([\s\S]*)/,
+      /```yaawc:panel\n([^\n]*)\n```\n*([\s\S]*)/,
     );
     expect(match).not.toBeNull();
-    const decoded = JSON.parse(
-      Buffer.from(match![1], 'base64').toString('utf-8'),
-    );
-    expect(decoded.executors).toEqual([
+    const decoded = JSON.parse(match![1]);
+    expect(decoded.columns).toEqual([
       expect.objectContaining({
         model: 'test-tool',
         responseText: TOOL_ANSWER,

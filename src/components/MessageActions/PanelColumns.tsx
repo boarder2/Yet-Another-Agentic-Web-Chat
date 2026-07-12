@@ -8,19 +8,36 @@ import {
 } from 'lucide-react';
 import Markdown, { MarkdownToJSX } from 'markdown-to-jsx';
 import { cn } from '@/lib/utils';
-import {
-  decodePanelColumns,
-  type PanelExecutorView,
-} from '@/lib/utils/panelMarkup';
+import type { PanelColumnPayload } from '@/lib/widgets/envelope';
 import { removeThinkingBlocks } from '@/lib/utils/contentStripping';
 
 /**
- * Renders the agent panel's executor columns. All executors live in a single
- * `<PanelColumns data="base64json">` block; this component decodes that blob and
- * lays the executors out side-by-side on desktop and as tabbed/stacked cards on
- * mobile. The orchestrator's synthesized answer renders as the normal message
- * body below this block.
+ * Renders the agent panel's executor columns side-by-side on desktop and as
+ * tabbed/stacked cards on mobile. The orchestrator's synthesized answer
+ * renders as the normal message body below this block.
+ *
+ * Current messages pass `columns` directly (decoded from the `yaawc:panel`
+ * fenced widget). Legacy messages (no data migration) pass `data`, a
+ * base64-encoded JSON blob from the old `<PanelColumns data="...">` tag.
  */
+
+/** Decode the legacy `<PanelColumns data="base64json">` blob. */
+function decodeLegacyPanelData(data: string): PanelColumnPayload[] {
+  if (!data) return [];
+  try {
+    const decoded = JSON.parse(
+      typeof atob !== 'undefined'
+        ? atob(data)
+        : Buffer.from(data, 'base64').toString('utf-8'),
+    );
+    if (decoded && Array.isArray(decoded.executors)) {
+      return decoded.executors as PanelColumnPayload[];
+    }
+  } catch {
+    // fall through
+  }
+  return [];
+}
 
 const columnMarkdownOptions: MarkdownToJSX.Options = {
   overrides: {
@@ -64,7 +81,7 @@ const StatusIcon: React.FC<{ status: string }> = ({ status }) => {
   );
 };
 
-const Column: React.FC<{ ex: PanelExecutorView }> = ({ ex }) => {
+const Column: React.FC<{ ex: PanelColumnPayload }> = ({ ex }) => {
   const text = removeThinkingBlocks(ex.responseText || '');
   return (
     <div className="flex flex-col min-w-0 border border-surface-2 rounded-surface bg-surface overflow-hidden">
@@ -114,11 +131,15 @@ const Column: React.FC<{ ex: PanelExecutorView }> = ({ ex }) => {
 };
 
 interface PanelColumnsProps {
-  data?: string;
+  columns?: PanelColumnPayload[];
+  data?: string; // legacy `<PanelColumns data="base64json">` markup
 }
 
-export const PanelColumns: React.FC<PanelColumnsProps> = ({ data }) => {
-  const { executors } = decodePanelColumns(data ?? '');
+export const PanelColumns: React.FC<PanelColumnsProps> = ({
+  columns,
+  data,
+}) => {
+  const executors = columns ?? decodeLegacyPanelData(data ?? '');
   const [activeIdx, setActiveIdx] = useState(0);
   const [expanded, setExpanded] = useState(false);
 

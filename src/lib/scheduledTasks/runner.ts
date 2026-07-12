@@ -23,7 +23,12 @@ import {
   getPersonaInstructionsOnly,
   getMethodologyInstructions,
 } from '@/lib/utils/prompts';
-import { updateToolCallMarkup } from '@/lib/utils/toolCallMarkup';
+import {
+  appendWidget,
+  updateWidget,
+  neutralizeSpoofedFences,
+  type ToolCallPayload,
+} from '@/lib/widgets/envelope';
 import { SimplifiedAgent } from '@/lib/search/simplifiedAgent';
 import { createTurnTracker } from '@/lib/tokens/tracker';
 import { onStreamEvent } from '@/lib/streaming/events';
@@ -138,22 +143,33 @@ export async function runScheduledTask(
     await new Promise<void>((resolve, reject) => {
       onStreamEvent(emitter, (event) => {
         if (event.type === 'response') {
-          receivedMessage += event.data;
+          receivedMessage += neutralizeSpoofedFences(event.data);
         } else if (event.type === 'sources' || event.type === 'sources_added') {
           sources = event.data as unknown as Array<Record<string, unknown>>;
           if (event.searchQuery) searchQuery = event.searchQuery;
           if (event.searchUrl) searchUrl = event.searchUrl;
         } else if (event.type === 'tool_call_started') {
-          if (event.data.content) receivedMessage += event.data.content;
-        } else if (event.type === 'tool_call_success') {
-          receivedMessage = updateToolCallMarkup(
+          receivedMessage = appendWidget<ToolCallPayload>(
             receivedMessage,
+            'tool_call',
+            {
+              id: event.data.toolCallId,
+              type: event.data.toolType,
+              status: event.data.status,
+              ...event.data.attrs,
+            },
+          );
+        } else if (event.type === 'tool_call_success') {
+          receivedMessage = updateWidget<ToolCallPayload>(
+            receivedMessage,
+            'tool_call',
             event.data.toolCallId,
-            { status: event.data.status, extra: event.data.extra },
+            { status: event.data.status, ...event.data.extra },
           );
         } else if (event.type === 'tool_call_error') {
-          receivedMessage = updateToolCallMarkup(
+          receivedMessage = updateWidget<ToolCallPayload>(
             receivedMessage,
+            'tool_call',
             event.data.toolCallId,
             { status: event.data.status, error: event.data.error },
           );

@@ -3,6 +3,7 @@
  * content. Kept separate from contentUtils.ts so client bundles can import them
  * without pulling in LangChain.
  */
+import { stripWidgets } from '@/lib/widgets/envelope';
 
 /**
  * Removes all content within <think>...</think> blocks, including content
@@ -26,15 +27,15 @@ export const removeThinkingBlocks = (text: string): string => {
 };
 
 /**
- * Removes <ToolCall ...></ToolCall> UI markup tags (both paired and self-closing),
- * including nested <SubagentExecution> trees and <PanelColumns> blocks. These are
- * UI-only artifacts that would otherwise bloat the context when fed back as
- * history (the panel blob in particular embeds every executor's full answer).
+ * Removes widget markup: fenced `yaawc:*` envelopes (current format) and
+ * legacy `<ToolCall>`/`<SubagentExecution>`/`<PanelColumns>` tags (old
+ * messages, no data migration). UI-only artifacts that would otherwise bloat
+ * the context when fed back as history.
  */
 export const removeToolCallMarkup = (text: string): string => {
   // Strip SubagentExecution blocks first so a single pass handles the whole
   // nested tree (each SubagentExecution may contain nested ToolCall markup).
-  return text
+  return stripWidgets(text)
     .replace(/<SubagentExecution\b[^>]*\/>/g, '')
     .replace(/<SubagentExecution\b[^>]*>[\s\S]*?<\/SubagentExecution>/g, '')
     .replace(/<PanelColumns\b[^>]*\/>/g, '')

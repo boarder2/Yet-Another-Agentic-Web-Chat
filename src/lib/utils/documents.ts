@@ -99,60 +99,161 @@ export const retrievePdfDoc = async (url: string): Promise<Document | null> => {
   return null;
 };
 
-// export const retrieveYoutubeTranscript = async (
-//   url: string,
-// ): Promise<Document | null> => {
-//   try {
-//     console.log(
-//       '[retrieveYoutubeTranscript] Retrieving YouTube transcript for URL:',
-//       url,
-//     );
-//     const cached = await loadCachedRecord(url + '_youtube');
-//     if (cached) {
-//       console.log(
-//         '[retrieveYoutubeTranscript] Typed content found in cache for URL:',
-//         url,
-//       );
-//       return new Document({
-//         pageContent: cached.pageContent || '',
-//         metadata: {
-//           title: cached.title || '',
-//           url: cached.url,
-//           ...cached.metadata,
-//         },
-//       });
-//     }
+/** Extract the 11-char video ID from a watch/youtu.be/shorts/embed URL. */
+const extractYoutubeVideoId = (url: string): string | null => {
+  const m = url.match(
+    /(?:youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|embed\/)|youtu\.be\/)([\w-]{11})/,
+  );
+  return m ? m[1] : null;
+};
 
-//     const transcriptLoader = YoutubeLoader.createFromUrl(url, {
-//       language: getSearchLocale().language,
-//       addVideoInfo: true,
-//     });
-//     const transcript = await transcriptLoader.load();
-//     console.log(
-//       '[retrieveYoutubeTranscript] YouTube transcript retrieved successfully:',
-//       transcript,
-//     );
-//     if (transcript.length > 0) {
-//       transcript[0].metadata.url = url;
-//       transcript[0].metadata.title =
-//         transcript[0].metadata.title || 'YouTube Video Transcript';
-//       transcript[0].metadata.source =
-//         transcript[0].metadata.source || undefined;
-//       // Write to cache
-//       await writeCachedRecord(url + '_youtube', transcript[0]);
-//       return transcript[0];
-//     }
-//   } catch (error) {
-//     console.error('Error retrieving YouTube transcript:', error);
-//   }
-//   return null;
-// };
+/**
+ * Retrieves a YouTube video's transcript by driving a real browser.
+ *
+ * YouTube no longer serves caption text to plain HTTP clients: the `baseUrl`
+ * scraped from the watch page returns an empty body, and the InnerTube
+ * `get_transcript` endpoint fails a server-side attestation (`pot`/BotGuard)
+ * check. A real browser satisfies that check natively, so we open the watch
+ * page, expand the description, click "Show transcript", and scrape the
+ * rendered transcript panel. Returns null when the video has no transcript.
+ */
+export const retrieveYoutubeTranscript = async (
+  url: string,
+  signal?: AbortSignal,
+): Promise<Document | null> => {
+  const cached = await loadCachedRecord(url + '_youtube');
+  if (cached) {
+    console.log('[retrieveYoutubeTranscript] Cache hit for URL:', url);
+    return new Document({
+      pageContent: cached.pageContent || '',
+      metadata: {
+        title: cached.title || '',
+        url: cached.url,
+        ...cached.metadata,
+      },
+    });
+  }
+
+  if (signal?.aborted) return null;
+  console.log(
+    '[retrieveYoutubeTranscript] Retrieving transcript for URL:',
+    url,
+  );
+
+  let browser: Browser | null = null;
+  try {
+    browser = await chromium.launch({
+      headless: true,
+      chromiumSandbox: true,
+      handleSIGHUP: false,
+      handleSIGINT: false,
+      handleSIGTERM: false,
+    });
+    const context = await browser.newContext({
+      userAgent:
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
+      locale: 'en-US',
+    });
+    // Pre-accept the consent interstitial so we land straight on the watch page.
+    await context.addCookies([
+      { name: 'CONSENT', value: 'YES+', domain: '.youtube.com', path: '/' },
+    ]);
+    // The transcript panel needs no video/media/fonts/images — skip them.
+    await context.route('**/*', (route) => {
+      const type = route.request().resourceType();
+      if (type === 'media' || type === 'font' || type === 'image') {
+        return route.abort();
+      }
+      return route.continue();
+    });
+
+    const page = await context.newPage();
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForTimeout(2500);
+    if (signal?.aborted) return null;
+
+    // Expand the description (the transcript button lives inside it), then open
+    // the transcript panel. Both clicks are best-effort across layout variants.
+    try {
+      await page.click('#expand', { timeout: 3000 });
+    } catch {}
+    for (const sel of [
+      'button[aria-label="Show transcript"]',
+      'ytd-video-description-transcript-section-renderer button',
+    ]) {
+      try {
+        await page.click(sel, { timeout: 3000 });
+        break;
+      } catch {}
+    }
+
+    const hasPanel = await page
+      .waitForSelector('transcript-segment-view-model', { timeout: 8000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!hasPanel) {
+      console.log('[retrieveYoutubeTranscript] No transcript available:', url);
+      return null;
+    }
+
+    const segments = await page.$$eval('transcript-segment-view-model', (els) =>
+      els
+        .map((el) => ({
+          ts:
+            el
+              .querySelector('.ytwTranscriptSegmentViewModelTimestamp')
+              ?.textContent?.trim() || '',
+          text:
+            el
+              .querySelector('[role="text"]')
+              ?.textContent?.replace(/\s+/g, ' ')
+              .trim() || '',
+        }))
+        .filter((s) => s.text),
+    );
+    if (segments.length === 0) return null;
+
+    const title = (await page.title()).replace(/ - YouTube$/, '').trim();
+    const pageContent = segments
+      .map((s) => (s.ts ? `[${s.ts}] ${s.text}` : s.text))
+      .join('\n');
+    // `source` holds the bare video ID — the ToolCall UI embeds it as a player.
+    const source = extractYoutubeVideoId(url) ?? url;
+
+    await writeCachedRecord(url + '_youtube', {
+      pageContent,
+      title,
+      metadata: { source },
+    });
+
+    return new Document({
+      pageContent,
+      metadata: {
+        title: title || 'YouTube Video Transcript',
+        url,
+        source,
+      },
+    });
+  } catch (error) {
+    console.error('[retrieveYoutubeTranscript] Error:', error);
+    return null;
+  } finally {
+    try {
+      if (browser) await browser.close();
+    } catch (closeError) {
+      console.error(
+        '[retrieveYoutubeTranscript] Error closing browser:',
+        closeError,
+      );
+    }
+  }
+};
 
 export const retrieveTypedContentFunc = async (
   url: string,
 ): Promise<Document | null> => {
   if (url.includes('youtube.com/watch') || url.includes('youtu.be/')) {
-    // return await retrieveYoutubeTranscript(url);
+    return await retrieveYoutubeTranscript(url);
   } else if (url.endsWith('.pdf')) {
     return await retrievePdfDoc(url);
   }

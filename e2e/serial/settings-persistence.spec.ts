@@ -4,7 +4,7 @@ import { test, expect } from '../fixtures';
  * Verify that DB-backed non-secret settings round-trip correctly:
  * UI toggle → localStorage → DB → survives page reload.
  *
- * We use `autoSuggestions` (Automatic Search section toggle) because it's
+ * We use `autoSuggestions` (Automation section toggle) because it's
  * a simple boolean, listed in MIGRATED_SETTING_KEYS, and no other test
  * depends on its specific value.
  */
@@ -16,7 +16,7 @@ test.describe('settings persistence', () => {
   test('autoSuggestions toggle persists through localStorage and page reload', async ({
     page,
   }) => {
-    // 1. Open the Settings modal and navigate to "Automatic Search".
+    // 1. Open the Settings modal and navigate to "Automation".
     await page.goto('/');
     await page.waitForLoadState('networkidle');
 
@@ -25,14 +25,14 @@ test.describe('settings persistence', () => {
 
     await page
       .locator('nav.hidden.lg\\:block button')
-      .filter({ hasText: 'Automatic Search' })
+      .filter({ hasText: 'Automation' })
       .first()
       .click();
 
     // Wait for the section to render.
     await page
       .locator('h2.font-medium')
-      .filter({ hasText: 'Automatic Search' })
+      .filter({ hasText: 'Automation' })
       .first()
       .waitFor({ state: 'visible' });
 
@@ -78,13 +78,13 @@ test.describe('settings persistence', () => {
 
     await page
       .locator('nav.hidden.lg\\:block button')
-      .filter({ hasText: 'Automatic Search' })
+      .filter({ hasText: 'Automation' })
       .first()
       .click();
 
     await page
       .locator('h2.font-medium')
-      .filter({ hasText: 'Automatic Search' })
+      .filter({ hasText: 'Automation' })
       .first()
       .waitFor({ state: 'visible' });
 

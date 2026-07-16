@@ -12,12 +12,14 @@ import {
   LoaderCircle,
   MessageSquare,
   OctagonX,
+  Pencil,
   Pin,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { useCancelRun, useMarkChatSeen } from '@/lib/hooks/api/useActiveRuns';
+import { useInlineRename } from '@/lib/hooks/useInlineRename';
 
 export interface Chat {
   id: string;
@@ -133,6 +135,14 @@ const ChatRow = ({
   const cancelRun = useCancelRun();
   const markSeen = useMarkChatSeen();
   const stopClickedRef = useRef(false);
+  const {
+    isEditing,
+    draftTitle,
+    setDraftTitle,
+    beginEdit,
+    cancel,
+    save: saveTitle,
+  } = useInlineRename(chat.id, chat.title);
 
   const isAwaitingUser = chat.activeRunStatus === 'awaiting_user';
   const isInProgress = !!chat.activeRunMessageId && !isAwaitingUser;
@@ -173,9 +183,28 @@ const ChatRow = ({
         {isUnviewed && (
           <span className="shrink-0 w-2.5 h-2.5 rounded-pill bg-accent" />
         )}
-        <span className="lg:text-xl font-medium truncate transition duration-200 group-hover:text-accent">
-          {chat.title}
-        </span>
+        {isEditing ? (
+          <input
+            type="text"
+            aria-label="Chat title"
+            maxLength={200}
+            value={draftTitle}
+            autoFocus
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => setDraftTitle(e.target.value)}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === 'Enter') saveTitle();
+              if (e.key === 'Escape') cancel();
+            }}
+            onBlur={cancel}
+            className="lg:text-xl font-medium bg-surface-2 rounded-surface px-2 py-0.5 outline-none focus:ring-1 focus:ring-accent text-fg min-w-0 flex-1"
+          />
+        ) : (
+          <span className="lg:text-xl font-medium truncate transition duration-200 group-hover:text-accent">
+            {chat.title}
+          </span>
+        )}
         {chat.pinned === 1 && (
           <Pin size={12} className="fill-current text-fg/50 shrink-0" />
         )}
@@ -297,6 +326,17 @@ const ChatRow = ({
               Stop
             </button>
           )}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              beginEdit();
+            }}
+            aria-label="Rename chat"
+            className="p-1.5 rounded-control text-fg/60 hover:text-fg hover:bg-surface-2 transition-colors"
+          >
+            <Pencil size={15} />
+          </button>
           <DeleteChat
             chatId={chat.id}
             chats={[chat] as Chat[]}

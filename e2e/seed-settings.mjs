@@ -38,6 +38,10 @@ try {
     ['memoryModel', 'test-direct'],
     ['embeddingModelProvider', 'test'],
     ['embeddingModel', 'test-embed'],
+    // Auto-title defaults ON in production, but the suite baseline keeps it OFF
+    // so seeded chats retain their first message as title (many specs assume
+    // this). The auto-title feature is exercised explicitly in e2e/serial/.
+    ['autoTitleEnabled', 'false'],
   ];
 
   const insertMany = db.transaction(() => {

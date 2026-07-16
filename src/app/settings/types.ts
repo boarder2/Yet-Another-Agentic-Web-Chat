@@ -33,7 +33,7 @@ export interface SettingsType {
 }
 
 export type SectionKey =
-  | 'automatic-search'
+  | 'automation'
   | 'personalization'
   | 'voice'
   | 'memory'
@@ -59,7 +59,7 @@ export const SETTINGS_SECTIONS: {
   label: string;
   group: string;
 }[] = [
-  { key: 'automatic-search', label: 'Automatic Search', group: 'General' },
+  { key: 'automation', label: 'Automation', group: 'General' },
   { key: 'mcp-servers', label: 'MCP Servers', group: 'General' },
   { key: 'memory', label: 'Memory', group: 'General' },
   { key: 'persona-prompts', label: 'Persona Prompts', group: 'General' },

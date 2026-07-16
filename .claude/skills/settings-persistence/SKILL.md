@@ -42,7 +42,7 @@ Sections live in `src/app/settings/sections/*`; section components in `src/app/s
 `ModelPicker` (`src/components/models/`) drives chat/system/embedding/memory model choice. Note:
 
 - **Per-request composer choices** (chat/system model, selected prompts, vision) are NOT read server-side from `app_settings` — they remain **request parameters** so a live change takes effect immediately without a debounce-staleness race.
-- **Ambient settings** (memory flags, personalization) ARE read server-side and are no longer sent in request bodies.
+- **Ambient settings** (memory flags, personalization, `autoTitleEnabled`) ARE read server-side and are no longer sent in request bodies. `autoTitleEnabled` (instance-wide, **default `true`**) gates auto-generated chat titles; the chat route reads it via `getBooleanSetting(..., true)`.
 - The **memory-processing model** and the **embedding model** have their OWN keys (`memoryModel*`, `embeddingModel*`), independent of the chat picker's `systemModel`.
 
 Related: `api-endpoints` (the `/api/settings` route), `agent-panel` (`panelPresets`/`panelSelection` keys), `dashboard-widgets` (`yaawc_dashboard_*` keys), `db-migrations` (the `app_settings` schema).

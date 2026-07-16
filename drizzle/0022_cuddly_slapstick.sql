@@ -1,0 +1,1 @@
+ALTER TABLE `chats` ADD `title_locked` integer DEFAULT 0 NOT NULL;

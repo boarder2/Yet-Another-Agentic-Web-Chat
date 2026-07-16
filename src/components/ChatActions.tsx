@@ -1,6 +1,13 @@
 'use client';
 
-import { EyeOff, Pin, MoreHorizontal, FileText, FileDown } from 'lucide-react';
+import {
+  EyeOff,
+  Pin,
+  MoreHorizontal,
+  FileText,
+  FileDown,
+  Pencil,
+} from 'lucide-react';
 import { Message } from './ChatWindow';
 import { useEffect, useState, Fragment, useMemo } from 'react';
 import { formatTimeDifference } from '@/lib/utils';
@@ -13,6 +20,7 @@ import {
 } from '@headlessui/react';
 import { exportAsMarkdown, exportAsPDF } from '@/lib/chatExport';
 import { useLocalStorageString } from '@/lib/hooks/useLocalStorage';
+import { useInlineRename } from '@/lib/hooks/useInlineRename';
 import { useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api/client';
 import { qk } from '@/lib/api/keys';
@@ -20,6 +28,8 @@ import { qk } from '@/lib/api/keys';
 const ChatActions = ({
   chatId,
   messages,
+  title,
+  onTitleChange,
   isPrivateSession = false,
   pinned = false,
   setPinned,
@@ -27,6 +37,8 @@ const ChatActions = ({
 }: {
   messages: Message[];
   chatId: string;
+  title: string;
+  onTitleChange?: (title: string) => void;
   isPrivateSession?: boolean;
   pinned?: boolean;
   setPinned?: (pinned: boolean) => void;
@@ -40,7 +52,21 @@ const ChatActions = ({
   const [expiresIn, setExpiresIn] = useState<string>('');
   const [, setTick] = useState(0);
 
-  const title = messages.length > 0 ? messages[0].content : '';
+  const displayTitle =
+    title || (messages.length > 0 ? messages[0].content : '');
+
+  const {
+    isEditing,
+    draftTitle,
+    setDraftTitle,
+    beginEdit,
+    cancel,
+    save: saveTitle,
+  } = useInlineRename(chatId, displayTitle, (next) => {
+    onTitleChange?.(next);
+    document.title = next;
+  });
+
   const timeAgo =
     messages.length > 0
       ? formatTimeDifference(new Date(), messages[0].createdAt)
@@ -126,9 +152,26 @@ const ChatActions = ({
           <PopoverPanel className="absolute right-0 mt-2 w-80 rounded-floating shadow-floating bg-surface border border-surface-2 z-50">
             <div className="flex flex-col py-3 px-3 gap-3">
               <div className="px-3 py-2 flex flex-col gap-1">
-                <div className="text-sm font-medium truncate text-fg">
-                  {title}
-                </div>
+                {isEditing ? (
+                  <input
+                    type="text"
+                    aria-label="Chat title"
+                    maxLength={200}
+                    value={draftTitle}
+                    autoFocus
+                    onChange={(e) => setDraftTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') saveTitle();
+                      if (e.key === 'Escape') cancel();
+                    }}
+                    onBlur={cancel}
+                    className="text-sm font-medium bg-surface-2 rounded-surface px-2 py-1 outline-none focus:ring-1 focus:ring-accent text-fg"
+                  />
+                ) : (
+                  <div className="text-sm font-medium truncate text-fg">
+                    {displayTitle}
+                  </div>
+                )}
                 <div className="flex items-center gap-2">
                   {timeAgo && (
                     <span className="text-xs text-fg/50">{timeAgo} ago</span>
@@ -145,7 +188,15 @@ const ChatActions = ({
                 <button
                   type="button"
                   className="flex items-center gap-2 px-4 py-2 text-left hover:bg-surface-2 transition-colors rounded-surface font-medium text-sm"
-                  onClick={() => exportAsMarkdown(messages, title || '')}
+                  onClick={beginEdit}
+                >
+                  <Pencil size={17} className="text-accent shrink-0" />
+                  Rename chat
+                </button>
+                <button
+                  type="button"
+                  className="flex items-center gap-2 px-4 py-2 text-left hover:bg-surface-2 transition-colors rounded-surface font-medium text-sm"
+                  onClick={() => exportAsMarkdown(messages, displayTitle || '')}
                 >
                   <FileText size={17} className="text-accent shrink-0" />
                   Export as Markdown
@@ -153,7 +204,7 @@ const ChatActions = ({
                 <button
                   type="button"
                   className="flex items-center gap-2 px-4 py-2 text-left hover:bg-surface-2 transition-colors rounded-surface font-medium text-sm"
-                  onClick={() => exportAsPDF(messages, title || '')}
+                  onClick={() => exportAsPDF(messages, displayTitle || '')}
                 >
                   <FileDown size={17} className="text-accent shrink-0" />
                   Export as PDF

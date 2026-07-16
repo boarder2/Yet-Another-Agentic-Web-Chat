@@ -316,6 +316,7 @@ export type StreamEvent =
       memoriesUsed?: Array<{ id: string; content: string }>;
       projectedNextInputTokens?: number;
     } & WithMessageId)
+  | ({ type: 'chatTitle'; chatId: string; title: string } & WithMessageId)
   | { type: 'error'; data: string }
   | {
       type: 'memory_updated';

@@ -10,4 +10,5 @@ export type StreamEffect =
   | { kind: 'invalidateActiveRuns' }
   | { kind: 'invalidateWorkspace'; workspaceId: string }
   | { kind: 'fetchSuggestions'; messageId: string }
-  | { kind: 'refreshSkills' };
+  | { kind: 'refreshSkills' }
+  | { kind: 'setChatTitle'; chatId: string; title: string };

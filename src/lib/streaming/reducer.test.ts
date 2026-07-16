@@ -507,3 +507,30 @@ describe('local actions', () => {
     expect(after.pendingQuestions[AI]).toHaveLength(1);
   });
 });
+
+describe('chatTitle', () => {
+  it('emits a setChatTitle effect and leaves messages untouched', () => {
+    const start = liveStart();
+    const seeded = reduceStreamEvent(
+      start,
+      ev({ type: 'response', data: 'Hello there' }),
+    ).state;
+    const before = seeded.messages;
+    const { state, effects } = reduceStreamEvent(
+      seeded,
+      ev({
+        type: 'chatTitle',
+        chatId: 'c1',
+        title: 'A Concise Title',
+        messageId: AI,
+      }),
+    );
+    expect(effects).toContainEqual({
+      kind: 'setChatTitle',
+      chatId: 'c1',
+      title: 'A Concise Title',
+    });
+    // No message-state mutation: same row contents, same length.
+    expect(state.messages).toEqual(before);
+  });
+});

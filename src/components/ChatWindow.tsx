@@ -198,6 +198,7 @@ const loadMessages = async (
   setPinned?: (pinned: boolean) => void,
   setSelectedWorkspaceId?: (id: string | null) => void,
   setLoading?: (loading: boolean) => void,
+  setTitle?: (title: string) => void,
 ): Promise<{
   activeRunMessageId?: string;
   activeRunStatus?: string | null;
@@ -291,7 +292,11 @@ const loadMessages = async (
 
   console.debug(new Date(), 'app:messages_loaded');
 
-  document.title = messages[0].content;
+  // The DB title is authoritative (auto-generated or renamed); fall back to the
+  // first message only for a title-less legacy row.
+  const chatTitle = data.chat.title || messages[0]?.content || '';
+  if (setTitle) setTitle(chatTitle);
+  document.title = chatTitle;
 
   const files = data.chat.files.map((file: Record<string, string>) => {
     return {
@@ -391,6 +396,10 @@ const ChatWindow = ({
 
   const [chatId, setChatId] = useState<string | undefined>(id);
   const [newChatCreated, setNewChatCreated] = useState(false);
+  // Single source of truth for the chat title (DB `chats.title`). Drives the tab
+  // title, the in-chat header, and export filenames; updated live by the
+  // auto-title `setChatTitle` effect and by manual rename.
+  const [title, setTitle] = useState('');
 
   const [chatModelProvider, setChatModelProvider] = useState<ChatModelProvider>(
     {
@@ -739,6 +748,15 @@ const ChatWindow = ({
       case 'fetchSuggestions':
         void fetchSuggestions(effect.messageId);
         break;
+      case 'setChatTitle':
+        // Only the open chat's live title updates in place; the sidebar row is
+        // refreshed via the invalidation below regardless.
+        if (effect.chatId === chatId) {
+          setTitle(effect.title);
+          document.title = effect.title;
+        }
+        queryClient.invalidateQueries({ queryKey: qk.chatsInfiniteRoot });
+        break;
     }
   };
 
@@ -869,6 +887,7 @@ const ChatWindow = ({
         setPinned,
         setSelectedWorkspaceId,
         setLoading,
+        setTitle,
       )
         .then(({ activeRunMessageId, loadedMessages } = {}) => {
           if (activeRunMessageId) {
@@ -934,6 +953,7 @@ const ChatWindow = ({
         setPinned,
         setSelectedWorkspaceId,
         setLoading,
+        setTitle,
       ).then(
         ({
           activeRunMessageId,
@@ -1284,7 +1304,10 @@ const ChatWindow = ({
       const newUrl = wsId ? `/workspaces/${wsId}/c/${chatId}` : `/c/${chatId}`;
       window.history.replaceState(null, '', newUrl);
       // loadMessages normally sets the tab title on mount; since we no longer
-      // remount, set it here for the freshly-titled chat.
+      // remount, set it here for the freshly-titled chat. This is the interim
+      // title (matches what chat creation writes to the DB) until the auto-title
+      // `setChatTitle` effect replaces it when the first answer completes.
+      setTitle(message);
       document.title = message;
       // The chat row is created server-side on this first message; invalidate
       // the cached chat lists so history/sidebar show it instead of waiting out
@@ -1707,6 +1730,8 @@ const ChatWindow = ({
                 <ChatActions
                   chatId={chatId!}
                   messages={messages}
+                  title={title}
+                  onTitleChange={setTitle}
                   isPrivateSession={isPrivateSession}
                   pinned={pinned}
                   setPinned={setPinned}

@@ -35,7 +35,7 @@ import {
   MobileSettingsNav,
   DesktopSettingsNav,
 } from './components/SettingsNav';
-import AutomaticSearchSection from './sections/AutomaticSearchSection';
+import AutomationSection from './sections/AutomationSection';
 import PersonalizationSection from './sections/PersonalizationSection';
 import VoiceSection from './sections/VoiceSection';
 import MemorySection from './sections/MemorySection';
@@ -97,6 +97,7 @@ export default function SettingsPanel({
   >(null);
   const [isLoading, setIsLoading] = useState(true);
   const [automaticSuggestions, setAutomaticSuggestions] = useState(true);
+  const [autoTitleEnabled, setAutoTitleEnabled] = useState(true);
   const [personalizationLocation, setPersonalizationLocation] = useState('');
   const [personalizationAbout, setPersonalizationAbout] = useState('');
   const [memoryEnabled, setMemoryEnabled] = useState(false);
@@ -238,6 +239,7 @@ export default function SettingsPanel({
       setAutomaticSuggestions(
         localStorage.getItem('autoSuggestions') !== 'false',
       );
+      setAutoTitleEnabled(localStorage.getItem('autoTitleEnabled') !== 'false');
       const storedContextWindow = parseInt(
         localStorage.getItem('contextWindowSize') ??
           String(DEFAULT_CONTEXT_WINDOW),
@@ -757,12 +759,19 @@ export default function SettingsPanel({
               <div className="flex-1 min-w-0">
                 {activeSection === 'voice' && <VoiceSection />}
 
-                {activeSection === 'automatic-search' && (
-                  <AutomaticSearchSection
+                {activeSection === 'automation' && (
+                  <AutomationSection
                     automaticSuggestions={automaticSuggestions}
                     onToggle={(checked) => {
                       setAutomaticSuggestions(checked);
                       saveConfig('automaticSuggestions', checked);
+                    }}
+                    autoTitleEnabled={autoTitleEnabled}
+                    onToggleAutoTitle={(checked) => {
+                      setAutoTitleEnabled(checked);
+                      // Migrated key: the localStorage write syncs to the DB,
+                      // where the chat route reads it server-side.
+                      localStorage.setItem('autoTitleEnabled', String(checked));
                     }}
                   />
                 )}

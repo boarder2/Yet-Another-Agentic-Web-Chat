@@ -91,6 +91,11 @@ export const systemPrompts = sqliteTable('system_prompts', {
 export const chats = sqliteTable('chats', {
   id: text('id').primaryKey(),
   title: text('title').notNull(),
+  // Set when the title is a deliberate manual rename, so auto-title
+  // regeneration on first-turn completion never clobbers it.
+  titleLocked: integer('title_locked')
+    .notNull()
+    .default(sql`0`),
   createdAt: integer('createdAt').notNull(),
   focusMode: text('focusMode').notNull(),
   files: text('files', { mode: 'json' })

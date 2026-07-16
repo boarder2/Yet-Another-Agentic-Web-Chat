@@ -1,6 +1,11 @@
 'use client';
 
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api/client';
 import { qk } from '@/lib/api/keys';
 
@@ -94,6 +99,24 @@ export interface LlmSearchResult {
   terms: string[];
   total: number;
   totalMessages: number;
+}
+
+/** Rename a chat. The server locks the title against auto-regeneration. */
+export function useRenameChat() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, title }: { id: string; title: string }) =>
+      apiFetch(`/api/chats/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.chatsInfiniteRoot });
+      // Text + LLM chat search share the 'chats','search' prefix (useChats.ts).
+      qc.invalidateQueries({ queryKey: qk.chatSearchRoot });
+    },
+  });
 }
 
 export function useChatLlmSearch(

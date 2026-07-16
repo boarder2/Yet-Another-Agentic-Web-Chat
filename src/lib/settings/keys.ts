@@ -48,6 +48,7 @@ export const MIGRATED_SETTING_KEYS = [
   'personalization.sendProfileEnabled',
   // Behavior / composer
   'autoSuggestions',
+  'autoTitleEnabled',
   'selectedSystemPromptIds',
   'selectedMethodologyId',
   // Chat & scheduled-run retention policies (instance-wide). Seeded once from

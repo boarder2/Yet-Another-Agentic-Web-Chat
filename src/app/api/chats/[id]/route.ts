@@ -10,19 +10,44 @@ export const PATCH = async (
   try {
     const { id } = await params;
     const body = await req.json();
-    if (typeof body.pinned !== 'boolean') {
-      return Response.json(
-        { message: 'pinned must be boolean' },
-        { status: 400 },
-      );
+
+    // A rename is a deliberate title choice, so lock it against future
+    // auto-title regeneration.
+    if (typeof body.title === 'string') {
+      const title = body.title.trim();
+      if (!title) {
+        return Response.json(
+          { message: 'title must not be empty' },
+          { status: 400 },
+        );
+      }
+      if (title.length > 200) {
+        return Response.json(
+          { message: 'title must be 200 characters or fewer' },
+          { status: 400 },
+        );
+      }
+      await db
+        .update(chats)
+        .set({ title, titleLocked: 1 })
+        .where(eq(chats.id, id));
+      return Response.json({ ok: true });
     }
-    await db
-      .update(chats)
-      .set({ pinned: body.pinned ? 1 : 0 })
-      .where(eq(chats.id, id));
-    return Response.json({ ok: true });
+
+    if (typeof body.pinned === 'boolean') {
+      await db
+        .update(chats)
+        .set({ pinned: body.pinned ? 1 : 0 })
+        .where(eq(chats.id, id));
+      return Response.json({ ok: true });
+    }
+
+    return Response.json(
+      { message: 'expected a title (string) or pinned (boolean)' },
+      { status: 400 },
+    );
   } catch (err) {
-    console.error('Error updating chat pin:', err);
+    console.error('Error updating chat:', err);
     return Response.json({ message: 'error' }, { status: 500 });
   }
 };

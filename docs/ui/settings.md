@@ -36,9 +36,9 @@ While configuration loads from `/api/config`, a full-page spinner is displayed.
 
 ## General
 
-### Automatic Search
+### Automation
 
-A single toggle switch.
+Toggles for automatic suggestions after responses and auto-generating chat titles.
 
 - **On**: The AI automatically generates follow-up suggestion queries after each response.
 - **Off**: Users must manually click "Load suggestions" to see related queries.

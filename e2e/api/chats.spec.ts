@@ -304,15 +304,59 @@ test.describe('PATCH /api/chats/[id]', () => {
     });
     expect(res.status()).toBe(400);
     const body = await res.json();
-    expect(body).toEqual({ message: 'pinned must be boolean' });
+    expect(body).toEqual({
+      message: 'expected a title (string) or pinned (boolean)',
+    });
   });
 
-  test('rejects missing pinned field with 400', async ({ request }) => {
+  test('rejects a PATCH with neither title nor pinned with 400', async ({
+    request,
+  }) => {
     const chatId = await seedChat(request, { content: 'no-pin-test' });
     const res = await request.patch(`/api/chats/${chatId}`, { data: {} });
     expect(res.status()).toBe(400);
     const body = await res.json();
-    expect(body).toEqual({ message: 'pinned must be boolean' });
+    expect(body).toEqual({
+      message: 'expected a title (string) or pinned (boolean)',
+    });
+  });
+
+  test('renames a chat and locks the title', async ({ request }) => {
+    const chatId = await seedChat(request, { content: 'rename-api-test' });
+    const res = await request.patch(`/api/chats/${chatId}`, {
+      data: { title: '  Renamed via API  ' },
+    });
+    expect(res.status()).toBe(200);
+
+    const getRes = await request.get(`/api/chats/${chatId}`);
+    const { chat } = await getRes.json();
+    // Whitespace is trimmed; the rename locks the title.
+    expect(chat.title).toBe('Renamed via API');
+    expect(chat.titleLocked).toBe(1);
+  });
+
+  test('rejects an empty title with 400', async ({ request }) => {
+    const chatId = await seedChat(request, { content: 'empty-title-test' });
+    const res = await request.patch(`/api/chats/${chatId}`, {
+      data: { title: '   ' },
+    });
+    expect(res.status()).toBe(400);
+    const body = await res.json();
+    expect(body).toEqual({ message: 'title must not be empty' });
+  });
+
+  test('rejects a title longer than 200 characters with 400', async ({
+    request,
+  }) => {
+    const chatId = await seedChat(request, { content: 'long-title-test' });
+    const res = await request.patch(`/api/chats/${chatId}`, {
+      data: { title: 'x'.repeat(201) },
+    });
+    expect(res.status()).toBe(400);
+    const body = await res.json();
+    expect(body).toEqual({
+      message: 'title must be 200 characters or fewer',
+    });
   });
 });
 

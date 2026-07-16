@@ -54,8 +54,11 @@ import {
   runEvents,
   messages as messagesSchema,
 } from '@/lib/db/schema';
-import { eq, sql, and, isNull } from 'drizzle-orm';
+import { eq, sql, and, isNull, ne, asc } from 'drizzle-orm';
 import { createHash } from 'crypto';
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import type { Recorder, TokenTracker } from '@/lib/tokens/tracker';
+import { generateChatTitle } from '@/lib/utils/chatTitle';
 import { popCallbackRunId } from '@/lib/sandbox/codeExecutionCorrelation';
 import { popCallbackRunId as popQuestionCallbackRunId } from '@/lib/userQuestion/questionCorrelation';
 
@@ -139,6 +142,91 @@ export async function getPendingApprovalsForMessage(
         isNull(approvalRequests.resolvedAt),
       ),
     );
+}
+
+// ── auto-title ────────────────────────────────────────────────────────────────
+
+/** Title generation is only attempted when a run carries this context. */
+export type TitleGenContext = {
+  systemLlm: BaseChatModel;
+  systemRecorder: Recorder;
+  tracker: TokenTracker;
+  autoTitleEnabled: boolean;
+};
+
+/** Wall-clock budget for the title call before we give up and keep the raw title. */
+const TITLE_GEN_TIMEOUT_MS = 10_000;
+
+/**
+ * Summarize the first turn into a chat title and persist it, if eligible.
+ * Eligible ⇔ auto-title is on, the chat isn't a scheduled-task chat, its title
+ * isn't manually locked, and this is the chat's first assistant message. On
+ * success the DB title is updated (lock stays off) and a `chatTitle` wire event
+ * is pushed so an in-view chat updates live. Best-effort: any failure/timeout/
+ * empty result keeps the raw first-message title. Returns whether it changed.
+ */
+async function maybeGenerateTitle(params: {
+  run: Run;
+  chatId: string;
+  aiMessageId: string;
+  answer: string;
+  ctx: TitleGenContext;
+}): Promise<boolean> {
+  const { run, chatId, aiMessageId, answer, ctx } = params;
+  try {
+    const chat = await db.query.chats.findFirst({
+      where: eq(chats.id, chatId),
+    });
+    if (!chat || chat.scheduledTaskId || chat.titleLocked) return false;
+
+    // First-turn gate: skip if any earlier assistant message already exists.
+    const priorAssistant = await db.query.messages.findFirst({
+      where: and(
+        eq(messagesSchema.chatId, chatId),
+        eq(messagesSchema.role, 'assistant'),
+        ne(messagesSchema.messageId, aiMessageId),
+      ),
+    });
+    if (priorAssistant) return false;
+
+    const firstUser = await db.query.messages.findFirst({
+      where: and(
+        eq(messagesSchema.chatId, chatId),
+        eq(messagesSchema.role, 'user'),
+      ),
+      orderBy: asc(messagesSchema.id),
+    });
+    if (!firstUser?.content) return false;
+
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), TITLE_GEN_TIMEOUT_MS);
+    let title: string | null;
+    try {
+      title = await generateChatTitle(
+        ctx.systemLlm,
+        ctx.systemRecorder,
+        firstUser.content,
+        answer,
+        ac.signal,
+      );
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!title) return false;
+
+    await db.update(chats).set({ title }).where(eq(chats.id, chatId)).execute();
+
+    pushEvent(run, {
+      type: 'chatTitle',
+      chatId,
+      title,
+      messageId: aiMessageId,
+    });
+    return true;
+  } catch (err) {
+    console.warn('[runHost] auto-title generation failed:', err);
+    return false;
+  }
 }
 
 // ── handleInterrupts ────────────────────────────────────────────────────────
@@ -770,6 +858,8 @@ export async function attachRunHost(params: {
   memoriesUsed: Array<{ id: string; content: string }>;
   configSnapshot?: Record<string, unknown> | null;
   isResume?: boolean;
+  /** When present, the first assistant turn's completion generates a chat title. */
+  titleGen?: TitleGenContext;
 }): Promise<void> {
   const {
     run,
@@ -780,6 +870,7 @@ export async function attachRunHost(params: {
     memoriesUsed,
     configSnapshot,
     isResume = false,
+    titleGen,
   } = params;
   const { emitter, aiMessageId, chatId } = run;
 
@@ -852,6 +943,11 @@ export async function attachRunHost(params: {
   let searchUrl: string | undefined;
   let modelStats: ModelStats = { version: 2, perModel: [] };
   let terminated = false;
+  // Set once `messageEnd` is on the wire. After that, late recorder activity
+  // (the auto-title system call) must not push another `stats` event — the
+  // corrected totals ride to the DB via terminate, and a post-end `stats` would
+  // wrongly re-show the live stats bar / context chip.
+  let messageEnded = false;
 
   let flushTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -1230,16 +1326,20 @@ export async function attachRunHost(params: {
         messageId: aiMessageId,
       });
     } else if (event.type === 'model_stats') {
+      // After messageEnd, still fold late usage (auto-title) into modelStats so
+      // terminate persists the true total — but don't push another wire `stats`.
       modelStats = {
         ...event.data,
         usedLocation,
         usedPersonalization,
       };
-      pushEvent(run, {
-        type: 'stats',
-        data: modelStats,
-        messageId: aiMessageId,
-      });
+      if (!messageEnded) {
+        pushEvent(run, {
+          type: 'stats',
+          data: modelStats,
+          messageId: aiMessageId,
+        });
+      }
     } else if (event.type === 'interrupt') {
       try {
         await handleInterrupts(run, event.interrupts);
@@ -1295,6 +1395,34 @@ export async function attachRunHost(params: {
         memoriesUsed: memoriesUsed.length > 0 ? memoriesUsed : undefined,
         projectedNextInputTokens,
       });
+      // The composer has now unblocked (client reducer flips loading off at
+      // messageEnd), so the brief auto-title call below is invisible to input.
+      messageEnded = true;
+
+      // Auto-title: after the first assistant turn, summarize it into a chat
+      // title. Runs before terminate — the only window that still reaches
+      // subscribers — so an in-view chat updates live. Its system-model tokens
+      // are recorded on the turn tracker; recompute modelStats so the persisted
+      // DB row is complete (the already-sent messageEnd undercounts, ephemeral).
+      if (titleGen?.autoTitleEnabled) {
+        await maybeGenerateTitle({
+          run,
+          chatId,
+          aiMessageId,
+          answer: recievedMessage,
+          ctx: titleGen,
+        });
+        // The title call may have recorded system-model tokens, which the
+        // model_stats handler folds into `modelStats` (dropping responseTime,
+        // and without pushing a post-end `stats`). Recompute from the tracker so
+        // the persisted row carries the true totals + responseTime.
+        modelStats = {
+          ...titleGen.tracker.statsV2(),
+          responseTime: endTime - startTime,
+          usedLocation,
+          usedPersonalization,
+        };
+      }
 
       // Delete LangGraph checkpoint on clean completion (no further resumes needed)
       deleteCheckpoint(run.threadId).catch((e: unknown) =>

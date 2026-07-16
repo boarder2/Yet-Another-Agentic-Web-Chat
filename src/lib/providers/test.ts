@@ -251,7 +251,15 @@ class FakeChatModel extends BaseChatModel {
     }
 
     let answer: string;
-    if (this.modelName.includes('chart')) {
+    // Auto-title system call: recognize the title prompt (see chatTitlePrompt)
+    // and answer with a deterministic title so specs can assert on it. The
+    // `notitle` variant returns nothing, exercising the empty/failure path
+    // (raw first-message title retained, no chatTitle event).
+    if (lastHumanText(messages).includes('short, concise title')) {
+      answer = this.modelName.includes('notitle')
+        ? ''
+        : 'Deterministic Test Title';
+    } else if (this.modelName.includes('chart')) {
       answer = `${CHART_ANSWER_PREFIX} [1].\n\n<Chart id="${lastChartId(messages)}"/>\n\nDone.`;
     } else if (this.modelName.includes('ask-user')) {
       answer = 'Thanks for your answer — resuming now.';
@@ -440,6 +448,12 @@ export async function loadTestChatModels(): Promise<Record<string, ChatModel>> {
       displayName: 'Test (workspace edit)',
       model: new FakeChatModel({
         modelName: 'test-workspace-edit',
+      }) as unknown as BaseChatModel,
+    },
+    'test-notitle': {
+      displayName: 'Test (empty auto-title)',
+      model: new FakeChatModel({
+        modelName: 'test-notitle',
       }) as unknown as BaseChatModel,
     },
   };

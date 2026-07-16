@@ -322,6 +322,9 @@ export const POST = async (req: Request) => {
     // Settings and applied passively, so the server owns them; private sessions
     // strip them entirely. Per-request composer choices (models, prompts, vision)
     // stay in the body. ---
+    // Instance-wide auto-title toggle (default on). Read server-side like the
+    // memory flags below; applies to every focus mode, panel, and private chat.
+    let autoTitleEnabled = true;
     {
       const settings = getSettings([
         'memoryEnabled',
@@ -331,7 +334,9 @@ export const POST = async (req: Request) => {
         'personalization.sendProfileEnabled',
         'personalization.location',
         'personalization.about',
+        'autoTitleEnabled',
       ]);
+      autoTitleEnabled = getBooleanSetting(settings, 'autoTitleEnabled', true);
       const priv = !!body.isPrivate;
       // Defaults are OFF to match the Settings UI (which treats an absent key as
       // unchecked). Memory only runs after the user explicitly opts in.
@@ -607,6 +612,12 @@ export const POST = async (req: Request) => {
             : false,
           memoriesUsed,
           configSnapshot,
+          titleGen: {
+            systemLlm: systemLlm!,
+            systemRecorder,
+            tracker,
+            autoTitleEnabled,
+          },
         });
       } catch (err) {
         // Clean up the dangling run entry before rethrowing

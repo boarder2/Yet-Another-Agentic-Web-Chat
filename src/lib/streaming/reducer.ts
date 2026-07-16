@@ -387,6 +387,16 @@ function reduceStreamAction(
     case 'widget_proposal':
       return { state, effects };
 
+    case 'chatTitle':
+      // Pure notification: no message-state mutation. ChatWindow updates the
+      // open chat's title + tab title and refreshes the sidebar.
+      effects.push({
+        kind: 'setChatTitle',
+        chatId: action.chatId,
+        title: action.title,
+      });
+      return { state, effects };
+
     case 'replay_complete': {
       const next = { ...state, inReplay: false };
       if (

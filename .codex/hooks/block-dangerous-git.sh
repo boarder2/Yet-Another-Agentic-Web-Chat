@@ -1,0 +1,1 @@
+../../.claude/hooks/block-dangerous-git.sh

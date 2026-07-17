@@ -1,5 +1,6 @@
 import db from '@/lib/db';
 import { messages as messagesSchema } from '@/lib/db/schema';
+import { computeSanitizedContent } from '@/lib/db/sanitizedContent';
 import crypto from 'crypto';
 import { getRunContext } from '@/lib/skills/runStore';
 import { emitStreamEvent } from '@/lib/streaming/events';
@@ -76,6 +77,7 @@ export async function persistToolContextRow(
     .insert(messagesSchema)
     .values({
       content: capped,
+      sanitizedContent: computeSanitizedContent(capped),
       chatId,
       messageId,
       role: 'system',

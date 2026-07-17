@@ -18,6 +18,7 @@ import {
   scheduledTasks,
 } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
+import { computeSanitizedContent } from '@/lib/db/sanitizedContent';
 import { resolveChatAndEmbedding } from '@/lib/providers/resolveModels';
 import {
   getPersonaInstructionsOnly,
@@ -98,6 +99,7 @@ export async function runScheduledTask(
       .insert(messagesSchema)
       .values({
         content: composedQuery,
+        sanitizedContent: computeSanitizedContent(composedQuery),
         chatId,
         messageId: userMessageId,
         role: 'user',
@@ -203,6 +205,7 @@ export async function runScheduledTask(
       .insert(messagesSchema)
       .values({
         content: receivedMessage,
+        sanitizedContent: computeSanitizedContent(receivedMessage),
         chatId,
         messageId: aiMessageId,
         role: 'assistant',
@@ -248,6 +251,9 @@ export async function runScheduledTask(
         .insert(messagesSchema)
         .values({
           content: `**Scheduled task failed:** ${errorMsg}`,
+          sanitizedContent: computeSanitizedContent(
+            `**Scheduled task failed:** ${errorMsg}`,
+          ),
           chatId,
           messageId: aiMessageId,
           role: 'assistant',

@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures';
-import { seedChat } from '../utils/seed';
+import { seedChat, seedToolChat } from '../utils/seed';
 import { HistoryPage } from '../pages/HistoryPage';
 
 test.describe('history: library', () => {
@@ -100,5 +100,59 @@ test.describe('history: library', () => {
     // No chat rows are rendered.
     const titles = await historyPage.chatTitles();
     expect(titles.length).toBe(0);
+  });
+
+  test('search excludes execution markup and matches only visible conversation prose', async ({
+    page,
+    request,
+  }) => {
+    const promptMarker = `toolchat-${Date.now()}`;
+    const docMarker = `docmarker-${Date.now()}`;
+    await seedToolChat(request, {
+      promptContent: `${promptMarker} tell me about the document`,
+      fileContent: `The secret document marker is ${docMarker}.`,
+    });
+
+    const historyPage = new HistoryPage(page);
+    await historyPage.goto();
+    await historyPage.waitForChats();
+
+    const searchInput = page.locator('input[aria-label="Search chats"]');
+
+    // The tool name lives only inside the widget envelope, never in visible prose.
+    await searchInput.fill('file_search');
+    await page.waitForTimeout(1000);
+    expect(
+      (await historyPage.chatTitles()).some((t) => t.includes(promptMarker)),
+    ).toBe(false);
+
+    // The file_search result content is persisted only in a system-role row.
+    await searchInput.fill(docMarker);
+    await page.waitForTimeout(1000);
+    expect(
+      (await historyPage.chatTitles()).some((t) => t.includes(promptMarker)),
+    ).toBe(false);
+
+    // Serialized widget-fence syntax must not match either.
+    await searchInput.fill('yaawc:tool_call');
+    await page.waitForTimeout(1000);
+    expect(
+      (await historyPage.chatTitles()).some((t) => t.includes(promptMarker)),
+    ).toBe(false);
+
+    // A phrase from the visible assistant answer matches, with a leak-free preview.
+    await searchInput.fill('the answer is deterministic');
+    await page.waitForTimeout(1000);
+    expect(
+      (await historyPage.chatTitles()).some((t) => t.includes(promptMarker)),
+    ).toBe(true);
+
+    const excerpt = await historyPage
+      .chatRowWithTitle(promptMarker)
+      .locator('p.line-clamp-2')
+      .textContent();
+    expect(excerpt).toContain('the answer is deterministic');
+    expect(excerpt).not.toContain('yaawc:');
+    expect(excerpt).not.toContain(docMarker);
   });
 });

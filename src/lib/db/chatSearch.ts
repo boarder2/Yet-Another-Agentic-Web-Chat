@@ -7,13 +7,15 @@ import {
   gte,
   inArray,
   isNull,
-  like,
   lte,
   ne,
   or,
   sql,
   type SQL,
 } from 'drizzle-orm';
+
+/** History search only ever considers user-visible conversation turns. */
+const SEARCHABLE_ROLES = ['user', 'assistant'] as const;
 
 const ONE_DAY_MS = 86_400_000;
 const CONTENT_HIT_WEIGHT = 1;
@@ -99,7 +101,6 @@ export interface ChatSearchOptions extends WorkspaceFilter {
   keywords: string[];
   excludeChatId?: string;
   includePrivate?: boolean;
-  includeCompaction?: boolean;
   after?: string | number;
   before?: string | number;
   limit?: number;
@@ -142,13 +143,17 @@ export async function searchChatsByKeywords(
   const limit = opts.limit ?? 20;
   const patterns = keywords.map((kw) => escapeLikePattern(kw.toLowerCase()));
 
+  // escapeLikePattern backslash-escapes `%`/`_` in the pattern, so every LIKE
+  // using it must declare that escape character — SQLite's LIKE has none by
+  // default, which would otherwise silently fail to match any keyword
+  // containing a literal `_` (e.g. every underscored tool name).
   const contentScoreParts = patterns.map(
     (p) =>
-      sql`(CASE WHEN lower(coalesce(${messages.content}, '')) LIKE ${p} THEN ${CONTENT_HIT_WEIGHT} ELSE 0 END)`,
+      sql`(CASE WHEN lower(coalesce(${messages.sanitizedContent}, '')) LIKE ${p} ESCAPE '\\' THEN ${CONTENT_HIT_WEIGHT} ELSE 0 END)`,
   );
   const titleScoreParts = patterns.map(
     (p) =>
-      sql`(CASE WHEN lower(${chats.title}) LIKE ${p} THEN ${TITLE_HIT_WEIGHT} ELSE 0 END)`,
+      sql`(CASE WHEN lower(${chats.title}) LIKE ${p} ESCAPE '\\' THEN ${TITLE_HIT_WEIGHT} ELSE 0 END)`,
   );
   const rowScoreExpr = sql.join(
     [...contentScoreParts, ...titleScoreParts],
@@ -156,8 +161,8 @@ export async function searchChatsByKeywords(
   );
 
   const anyMatchParts = patterns.flatMap((p) => [
-    like(sql`lower(coalesce(${messages.content}, ''))`, p),
-    like(sql`lower(${chats.title})`, p),
+    sql`lower(coalesce(${messages.sanitizedContent}, '')) LIKE ${p} ESCAPE '\\'`,
+    sql`lower(${chats.title}) LIKE ${p} ESCAPE '\\'`,
   ]);
 
   const conditions: SQL[] = [];
@@ -168,13 +173,15 @@ export async function searchChatsByKeywords(
     const privateCond = or(isNull(chats.isPrivate), eq(chats.isPrivate, 0));
     if (privateCond) conditions.push(privateCond);
   }
-  if (!opts.includeCompaction) {
-    const compactionCond = or(
-      isNull(messages.role),
-      and(ne(messages.role, 'compaction'), ne(messages.role, 'system')),
-    );
-    if (compactionCond) conditions.push(compactionCond);
-  }
+  // Message-content search never considers system/compaction rows — only
+  // user-visible conversation turns are eligible, regardless of caller. A
+  // null role (chat with no messages at all, via the LEFT JOIN) stays
+  // includable so title-only matches keep working.
+  const roleCond = or(
+    isNull(messages.role),
+    inArray(messages.role, SEARCHABLE_ROLES),
+  );
+  if (roleCond) conditions.push(roleCond);
   const anyMatch = or(...anyMatchParts);
   if (anyMatch) conditions.push(anyMatch);
 
@@ -192,7 +199,7 @@ export async function searchChatsByKeywords(
       workspaceId: chats.workspaceId,
       messageId: messages.id,
       messageRole: messages.role,
-      messageContent: messages.content,
+      messageContent: messages.sanitizedContent,
       messageCreatedAt: sql<
         string | null
       >`json_extract(${messages.metadata}, '$.createdAt')`,

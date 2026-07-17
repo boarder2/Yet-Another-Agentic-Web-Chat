@@ -1,6 +1,7 @@
 import db from '@/lib/db';
 import { chats, messages as messagesSchema } from '@/lib/db/schema';
 import { getChatMessages, getCompactionRows } from '@/lib/db/queries';
+import { computeSanitizedContent } from '@/lib/db/sanitizedContent';
 import { resolveChatAndEmbedding } from '@/lib/providers/resolveModels';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { eq } from 'drizzle-orm';
@@ -225,6 +226,7 @@ ${existingSummary}
       .insert(messagesSchema)
       .values({
         content: summary,
+        sanitizedContent: computeSanitizedContent(summary),
         chatId,
         messageId: `compaction-${crypto.randomBytes(7).toString('hex')}`,
         role: 'compaction',

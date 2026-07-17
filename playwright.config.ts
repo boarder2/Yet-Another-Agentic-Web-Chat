@@ -34,7 +34,7 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: `rm -rf ${TEST_DATA_DIR} && mkdir -p ${TEST_DATA_DIR} && npx drizzle-kit push && node e2e/seed-settings.mjs && node .next/standalone/server.js`,
+      command: `rm -rf ${TEST_DATA_DIR} && mkdir -p ${TEST_DATA_DIR} && npx drizzle-kit push && node e2e/seed-settings.mjs && node e2e/seed-legacy-message.mjs && node .next/standalone/server.js`,
       env: {
         DATA_DIR: TEST_DATA_DIR,
         YAAWC_TEST_MODE: 'true',

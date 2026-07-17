@@ -44,7 +44,6 @@ export const GET = async (req: Request) => {
         workspaceId: workspaceIdParam ?? undefined,
         workspaceIds,
         includePrivate: true,
-        includeCompaction: true,
         limit: SEARCH_CAP,
       });
 

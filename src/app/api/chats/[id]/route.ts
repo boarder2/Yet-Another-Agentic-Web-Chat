@@ -69,6 +69,9 @@ export const GET = async (
 
     const chatMessages = await db.query.messages.findMany({
       where: and(eq(messages.chatId, id), ne(messages.role, 'system')),
+      // sanitizedContent is an internal derived column for history search —
+      // never returned by chat/History APIs.
+      columns: { sanitizedContent: false },
     });
 
     return Response.json(

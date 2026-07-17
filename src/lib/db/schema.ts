@@ -12,6 +12,11 @@ import type { WorkspaceModelOverride } from '@/lib/workspaces/types';
 export const messages = sqliteTable('messages', {
   id: integer('id').primaryKey(),
   content: text('content').notNull(),
+  // Derived from `content` by removeToolCallMarkup (see src/lib/db/sanitizedContent.ts):
+  // execution UI markup (widget envelopes, legacy tool tags) stripped, ordinary
+  // prose kept. Null means a pre-migration row not yet backfilled. The sole
+  // message-text source for history search; never returned by chat/History APIs.
+  sanitizedContent: text('sanitized_content'),
   chatId: text('chatId').notNull(),
   messageId: text('messageId').notNull(),
   role: text('type', {

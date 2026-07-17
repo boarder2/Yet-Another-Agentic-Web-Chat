@@ -1,5 +1,16 @@
 import { test, expect } from '../fixtures/api';
-import { seedChat, seedScheduledChat, seedWorkspace } from '../utils/seed';
+import {
+  seedChat,
+  seedScheduledChat,
+  seedToolChat,
+  seedWorkspace,
+} from '../utils/seed';
+import { uniq } from '../utils/helpers';
+import {
+  LEGACY_CHAT_ID,
+  LEGACY_PROSE_MARKER,
+  LEGACY_TOOL_MARKER,
+} from '../legacy-fixture-constants.mjs';
 
 test.describe('GET /api/chats', () => {
   test('returns a chats array', async ({ request }) => {
@@ -238,6 +249,129 @@ test.describe('GET /api/chats', () => {
   });
 });
 
+test.describe('GET /api/chats — sanitized-content search', () => {
+  test('does not match the tool name embedded in a widget envelope', async ({
+    request,
+  }) => {
+    const { chatId } = await seedToolChat(request, {
+      promptContent: `search this ${uniq('prompt')}`,
+    });
+
+    const res = await request.get(
+      `/api/chats?q=${encodeURIComponent('file_search')}`,
+    );
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    const ids: string[] = body.chats.map((c: { id: string }) => c.id);
+    expect(ids).not.toContain(chatId);
+  });
+
+  test('does not match tool-result content persisted only in a system row', async ({
+    request,
+  }) => {
+    const marker = uniq('doc-marker');
+    const { chatId } = await seedToolChat(request, {
+      fileContent: `The secret document marker is ${marker}.`,
+    });
+
+    const res = await request.get(`/api/chats?q=${encodeURIComponent(marker)}`);
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    const ids: string[] = body.chats.map((c: { id: string }) => c.id);
+    expect(ids).not.toContain(chatId);
+  });
+
+  test('does not match serialized widget fence syntax', async ({ request }) => {
+    const { chatId } = await seedToolChat(request);
+
+    const res = await request.get(
+      `/api/chats?q=${encodeURIComponent('yaawc:tool_call')}`,
+    );
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    const ids: string[] = body.chats.map((c: { id: string }) => c.id);
+    expect(ids).not.toContain(chatId);
+  });
+
+  test('matches visible assistant prose and returns a leak-free excerpt', async ({
+    request,
+  }) => {
+    const marker = uniq('doc-marker');
+    const { chatId } = await seedToolChat(request, {
+      fileContent: `The secret document marker is ${marker}.`,
+    });
+
+    const res = await request.get(
+      `/api/chats?q=${encodeURIComponent('the answer is deterministic')}`,
+    );
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    const ids: string[] = body.chats.map((c: { id: string }) => c.id);
+    expect(ids).toContain(chatId);
+    const chat = body.chats.find((c: { id: string }) => c.id === chatId);
+    expect(chat.matchExcerpt).toContain('the answer is deterministic');
+    expect(chat.matchExcerpt).not.toContain('yaawc:');
+    expect(chat.matchExcerpt).not.toContain('file_search');
+    expect(chat.matchExcerpt).not.toContain(marker);
+  });
+
+  test('matches an ordinary human mention of a tool name in prose', async ({
+    request,
+  }) => {
+    const chatId = await seedChat(request, {
+      content: `Can you explain how file_search works, ${uniq('mention')}?`,
+    });
+
+    const res = await request.get(
+      `/api/chats?q=${encodeURIComponent('file_search')}`,
+    );
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    const ids: string[] = body.chats.map((c: { id: string }) => c.id);
+    expect(ids).toContain(chatId);
+  });
+});
+
+test.describe('GET /api/chats — sanitizedContent backfill', () => {
+  test('a pre-migration legacy row becomes searchable once backfilled, but never on its tool-only markup', async ({
+    request,
+  }) => {
+    // e2e/seed-legacy-message.mjs inserts this fixture directly via SQL before
+    // the server boots, with `sanitized_content` left NULL — simulating a row
+    // written before this column existed. The boot-time backfill
+    // (src/lib/db/backfillSanitizedContent.ts) runs as background work, so
+    // poll rather than assume it has completed by the time this spec runs.
+    await expect
+      .poll(
+        async () => {
+          const res = await request.get(
+            `/api/chats?q=${encodeURIComponent(LEGACY_PROSE_MARKER)}`,
+          );
+          const body = await res.json();
+          return body.chats.map((c: { id: string }) => c.id);
+        },
+        { timeout: 15_000 },
+      )
+      .toContain(LEGACY_CHAT_ID);
+
+    // The backfilled sanitizedContent must strip the widget's execution-only
+    // payload, not mirror the raw legacy content verbatim.
+    const res = await request.get(
+      `/api/chats?q=${encodeURIComponent(LEGACY_TOOL_MARKER)}`,
+    );
+    const body = await res.json();
+    const ids: string[] = body.chats.map((c: { id: string }) => c.id);
+    expect(ids).not.toContain(LEGACY_CHAT_ID);
+
+    const fenceRes = await request.get(
+      `/api/chats?q=${encodeURIComponent('yaawc:tool_call')}`,
+    );
+    const fenceBody = await fenceRes.json();
+    const fenceIds: string[] = fenceBody.chats.map((c: { id: string }) => c.id);
+    expect(fenceIds).not.toContain(LEGACY_CHAT_ID);
+  });
+});
+
 test.describe('GET /api/chats/[id]', () => {
   test('returns chat and messages for a valid id', async ({ request }) => {
     const chatId = await seedChat(request, { content: 'get-by-id-test' });
@@ -256,6 +390,9 @@ test.describe('GET /api/chats/[id]', () => {
     expect(userMsg.chatId).toBe(chatId);
     expect(typeof userMsg.messageId).toBe('string');
     expect(typeof userMsg.id).toBe('number');
+    for (const m of body.messages) {
+      expect(m).not.toHaveProperty('sanitizedContent');
+    }
   });
 
   test('returns 404 for nonexistent id', async ({ request }) => {

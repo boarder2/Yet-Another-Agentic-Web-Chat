@@ -38,6 +38,7 @@ import { workspaceCreateFileTool } from '@/lib/tools/workspace/create';
 import { resolveSkillsForChat, getByName } from '@/lib/skills/resolve';
 import { SKILL_TOKEN_SCAN_REGEX } from '@/lib/skills/validation';
 import { persistToolContextRow } from '@/lib/utils/persistToolContext';
+import { computeSanitizedContent } from '@/lib/db/sanitizedContent';
 import {
   startRun,
   getRun,
@@ -155,6 +156,7 @@ const handleHistorySave = async (
     .insert(messagesSchema)
     .values({
       content: message.content,
+      sanitizedContent: computeSanitizedContent(message.content),
       chatId: message.chatId,
       messageId: humanMessageId,
       role: 'user',

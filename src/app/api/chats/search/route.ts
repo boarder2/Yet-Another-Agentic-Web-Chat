@@ -99,7 +99,6 @@ export const POST = async (req: Request) => {
       workspaceId,
       workspaceIds,
       includePrivate: true,
-      includeCompaction: true,
       limit: 200,
     });
 

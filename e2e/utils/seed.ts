@@ -81,6 +81,59 @@ export async function seedChat(
   return chatId;
 }
 
+/**
+ * Seed a workspace + file, then run a `test-tool` chat (`localResearch`) that
+ * triggers a real `file_search` tool call against that file. Produces a chat
+ * whose assistant message carries a `yaawc:tool_call` widget envelope and
+ * whose file_search results land only in a `system`-role persisted-tool-context
+ * row — deterministic execution-only content for sanitization/history-search specs.
+ */
+export async function seedToolChat(
+  request: APIRequestContext,
+  overrides?: Partial<{
+    chatId: string;
+    promptContent: string;
+    fileContent: string;
+    workspaceId: string;
+  }>,
+): Promise<{ chatId: string; workspaceId: string }> {
+  const workspaceId =
+    overrides?.workspaceId ??
+    (await seedWorkspace(request, { name: uniq('tool-chat-ws') }));
+  await seedWorkspaceFile(request, workspaceId, {
+    name: `${uniq('doc')}.txt`,
+    content: overrides?.fileContent ?? 'default deterministic document content',
+  });
+
+  const chatId = overrides?.chatId ?? uid();
+  const messageId = uid();
+  const res = await request.post('/api/chat', {
+    data: {
+      message: {
+        messageId,
+        chatId,
+        content: overrides?.promptContent ?? 'Tell me about the document',
+      },
+      focusMode: 'localResearch',
+      files: [],
+      chatModel: { provider: 'test', name: 'test-tool' },
+      systemModel: { provider: 'test', name: 'test-tool' },
+      selectedSystemPromptIds: [],
+      workspaceId,
+    },
+  });
+  if (!res.ok()) {
+    const text = await res.text();
+    throw new Error(
+      `POST /api/chat returned ${res.status()}: ${text.slice(0, 500)}`,
+    );
+  }
+  // Chat is created as a side-effect; the response is an SSE stream.
+  // Consume it so the connection is released.
+  await res.body();
+  return { chatId, workspaceId };
+}
+
 export async function seedMemory(
   request: APIRequestContext,
   overrides?: Partial<{ content: string; workspaceId: string }>,

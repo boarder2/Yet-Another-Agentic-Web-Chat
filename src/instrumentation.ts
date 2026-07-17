@@ -24,6 +24,23 @@ export async function register() {
       console.error('[workspaces] Failed to migrate file blobs:', err);
     }
 
+    // Backfill sanitizedContent for pre-migration message rows. Fire-and-forget:
+    // batched and restart-safe (src/lib/db/backfillSanitizedContent.ts), so it
+    // must never block boot — a failure just leaves nulls for the next boot to
+    // retry, and history search excludes null rows in the meantime.
+    try {
+      const { backfillSanitizedContent } =
+        await import('./lib/db/backfillSanitizedContent');
+      backfillSanitizedContent().catch((err) => {
+        console.error('[history] Failed to backfill sanitizedContent:', err);
+      });
+    } catch (err) {
+      console.error(
+        '[history] Failed to start sanitizedContent backfill:',
+        err,
+      );
+    }
+
     // Encryption-at-rest boot sequence. The passphrase is required and never
     // auto-generated — if it's unset, skip the migrations (nothing to encrypt
     // into) and log a single actionable warning; the app itself blocks usage

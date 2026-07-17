@@ -1,6 +1,7 @@
 import db from './index';
 import { messages as messagesSchema } from './schema';
 import { eq, asc, and, ne, notInArray, sql } from 'drizzle-orm';
+import { computeSanitizedContent } from './sanitizedContent';
 
 export async function getChatMessages(
   chatId: string,
@@ -66,6 +67,7 @@ export async function insertPartialAssistantRow(
     .insert(messagesSchema)
     .values({
       content: '',
+      sanitizedContent: computeSanitizedContent(''),
       chatId,
       messageId,
       role: 'assistant',
@@ -82,8 +84,15 @@ export async function updateAssistantRow(
     metadata,
   }: { content?: string; metadata?: Record<string, unknown> },
 ): Promise<void> {
-  const updates: Partial<{ content: string; metadata: string }> = {};
-  if (content !== undefined) updates.content = content;
+  const updates: Partial<{
+    content: string;
+    sanitizedContent: string;
+    metadata: string;
+  }> = {};
+  if (content !== undefined) {
+    updates.content = content;
+    updates.sanitizedContent = computeSanitizedContent(content);
+  }
   if (metadata !== undefined) updates.metadata = JSON.stringify(metadata);
   if (Object.keys(updates).length === 0) return;
 

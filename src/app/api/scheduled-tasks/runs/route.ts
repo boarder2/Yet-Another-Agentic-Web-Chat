@@ -6,7 +6,7 @@ import {
   messages as messagesSchema,
 } from '@/lib/db/schema';
 import { and, desc, eq, isNotNull, inArray, sql } from 'drizzle-orm';
-import { removeToolCallMarkup } from '@/lib/utils/contentStripping';
+import { computeSanitizedContent } from '@/lib/db/sanitizedContent';
 
 export const runtime = 'nodejs';
 
@@ -49,6 +49,7 @@ export async function GET(req: NextRequest) {
       .select({
         chatId: messagesSchema.chatId,
         content: messagesSchema.content,
+        sanitizedContent: messagesSchema.sanitizedContent,
         metadata: messagesSchema.metadata,
       })
       .from(messagesSchema)
@@ -65,9 +66,11 @@ export async function GET(req: NextRequest) {
     >();
     for (const msg of assistantMsgs) {
       if (!previewMap.has(msg.chatId)) {
-        const content = msg.content || '';
-        // Strip widget markup (both fenced envelopes and legacy tags) for preview.
-        const cleaned = removeToolCallMarkup(content).trim();
+        // Reuse the persisted sanitized value (widget markup already stripped);
+        // fall back to deriving it for rows not yet backfilled.
+        const cleaned = (
+          msg.sanitizedContent ?? computeSanitizedContent(msg.content || '')
+        ).trim();
         const meta = msg.metadata as Record<string, unknown> | null;
         const sources = (meta?.sources as unknown[] | undefined) || [];
         previewMap.set(msg.chatId, {

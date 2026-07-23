@@ -225,6 +225,7 @@ export default function FileViewer({
           onChange={setDraft}
           filename={meta.name}
           height="60vh"
+          ariaLabel="File content"
         />
       ) : isMarkdownFile(meta.name) ? (
         <div className="prose-sm bg-surface rounded-floating border border-surface-2 p-6">

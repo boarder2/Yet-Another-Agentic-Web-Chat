@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import CodeMirror, { type Extension } from '@uiw/react-codemirror';
+import CodeMirror, { EditorView, type Extension } from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { languages } from '@codemirror/language-data';
 
@@ -14,6 +14,9 @@ interface CodeEditorProps {
   // demand). When omitted the editor defaults to JavaScript — the dashboard
   // code widget, which is always JS.
   filename?: string;
+  // Accessible name for the editable surface (CodeMirror renders no label of
+  // its own).
+  ariaLabel?: string;
 }
 
 // CodeMirror 6 touches window/document at module load, so this component is
@@ -24,6 +27,7 @@ const CodeEditor = ({
   height = '320px',
   readOnly = false,
   filename,
+  ariaLabel,
 }: CodeEditorProps) => {
   const [language, setLanguage] = useState<Extension>(() =>
     filename === undefined ? javascript() : [],
@@ -52,7 +56,14 @@ const CodeEditor = ({
       height={height}
       theme="dark"
       readOnly={readOnly}
-      extensions={[language]}
+      extensions={
+        ariaLabel
+          ? [
+              language,
+              EditorView.contentAttributes.of({ 'aria-label': ariaLabel }),
+            ]
+          : [language]
+      }
       onChange={onChange}
       basicSetup={{ lineNumbers: true, foldGutter: false }}
       className="text-sm border border-surface-2 rounded-control overflow-hidden"

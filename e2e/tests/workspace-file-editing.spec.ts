@@ -48,7 +48,7 @@ test.describe('workspace file editing', () => {
     await expect(
       modal.getByText(/changed since you started editing/i),
     ).toBeVisible();
-    await expect(draft).toHaveValue('MY UNSAVED DRAFT');
+    await expect(draft).toContainText('MY UNSAVED DRAFT');
 
     // Discarding adopts the agent's version.
     await modal.getByRole('button', { name: 'Discard mine' }).click();

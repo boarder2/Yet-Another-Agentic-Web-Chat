@@ -81,6 +81,20 @@ export async function register() {
       console.error('[encryption] Failed to check encryption config:', err);
     }
 
+    // Split legacy scheduled_tasks rows into workflows + schedules. Fault-
+    // isolated: a failure leaves the legacy table intact for the next boot to
+    // retry rather than half-migrating, and must not block the scheduler.
+    try {
+      const { migrateScheduledTasks } =
+        await import('./lib/scheduledTasks/migrateScheduledTasks');
+      migrateScheduledTasks();
+    } catch (err) {
+      console.error(
+        '[scheduledTasks] Failed to migrate legacy tasks to workflows:',
+        err,
+      );
+    }
+
     const { initScheduler } = await import('./lib/scheduledTasks/scheduler');
     await initScheduler();
   }

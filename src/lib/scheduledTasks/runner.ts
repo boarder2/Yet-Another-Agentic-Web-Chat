@@ -1,12 +1,16 @@
 /**
- * Headless runner for scheduled tasks.
+ * Headless runner for a schedule (one-shot report in run history).
  *
  * Known v1 limitations:
  * - Subagent events (subagent_started, subagent_data, etc.) are not collected.
- *   If a scheduled task triggers deep_research, the persisted message may have
+ *   If a schedule triggers deep_research, the persisted message may have
  *   incomplete subagent markup.
  * - Code-execution and user-question events are ignored (headless, no human).
- * - Memory extraction is NOT run for scheduled tasks to keep runs deterministic.
+ * - Memory extraction is NOT run for scheduled runs to keep them deterministic.
+ *
+ * Config + prompt substitution are shared with the manual run path via
+ * resolveWorkflowRun (§7.3); only this execution surface (headless persist vs
+ * interactive stream) differs.
  */
 
 import crypto from 'crypto';
@@ -15,7 +19,8 @@ import db from '@/lib/db';
 import {
   chats,
   messages as messagesSchema,
-  scheduledTasks,
+  schedules,
+  workflows,
 } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { computeSanitizedContent } from '@/lib/db/sanitizedContent';
@@ -33,17 +38,28 @@ import {
 import { SimplifiedAgent } from '@/lib/search/simplifiedAgent';
 import { createTurnTracker } from '@/lib/tokens/tracker';
 import { onStreamEvent } from '@/lib/streaming/events';
+import { resolveWorkflowRun } from '@/lib/workflows/resolveWorkflowRun';
 
-export async function runScheduledTask(
-  taskId: string,
+export async function runSchedule(
+  scheduleId: string,
 ): Promise<{ chatId: string; status: 'success' | 'error'; error?: string }> {
-  // 1. Load task
-  const task = await db.query.scheduledTasks.findFirst({
-    where: eq(scheduledTasks.id, taskId),
+  const schedule = await db.query.schedules.findFirst({
+    where: eq(schedules.id, scheduleId),
   });
 
-  if (!task || !task.enabled) {
-    return { chatId: '', status: 'error', error: 'Task not found or disabled' };
+  if (!schedule || !schedule.enabled) {
+    return {
+      chatId: '',
+      status: 'error',
+      error: 'Schedule not found or disabled',
+    };
+  }
+
+  const workflow = await db.query.workflows.findFirst({
+    where: eq(workflows.id, schedule.workflowId),
+  });
+  if (!workflow) {
+    return { chatId: '', status: 'error', error: 'Workflow not found' };
   }
 
   const chatId = crypto.randomUUID();
@@ -51,50 +67,45 @@ export async function runScheduledTask(
   const aiMessageId = crypto.randomBytes(7).toString('hex');
 
   try {
-    // 2. Resolve models
+    const run = resolveWorkflowRun(
+      workflow,
+      schedule.inputValues ?? {},
+      new Date(),
+    );
+
     const { chatLlm, systemLlm, embedding } = await resolveChatAndEmbedding({
-      chatModel: task.chatModel,
-      systemModel: task.systemModel,
+      chatModel: run.chatModel,
+      systemModel: run.systemModel,
     });
 
-    // 3. Resolve persona + methodology
     const personaInstructionsContent = await getPersonaInstructionsOnly(
-      task.selectedSystemPromptIds ?? [],
+      run.selectedSystemPromptIds,
     );
     const methodologyInstructions = await getMethodologyInstructions(
-      task.selectedMethodologyId ?? null,
+      run.selectedMethodologyId,
     );
 
-    // 5. Compose query
-    let composedQuery = task.prompt;
-    const sourceUrls = task.sourceUrls ?? [];
-    if (sourceUrls.length > 0) {
-      composedQuery +=
-        '\n\nPrioritize these sources:\n' +
-        sourceUrls.map((u: string) => `- ${u}`).join('\n');
-    }
+    const composedQuery = run.composedQuery;
 
-    // 6. Insert chat row. Mark it in-progress with the same activeRunMessageId/
-    // activeRunStartedAt markers interactive runs use so the scheduled-tasks
-    // list can show "running" and the unread badge stays suppressed until the
-    // run finishes (badge queries require activeRunMessageId IS NULL).
+    // Insert chat row. Mark it in-progress with the same activeRunMessageId/
+    // activeRunStartedAt markers interactive runs use so the list can show
+    // "running" and the unread badge stays suppressed until the run finishes.
     await db
       .insert(chats)
       .values({
         id: chatId,
-        title: `${task.name} — ${new Date().toISOString().slice(0, 16).replace('T', ' ')}`,
+        title: `${schedule.label} — ${new Date().toISOString().slice(0, 16).replace('T', ' ')}`,
         createdAt: Date.now(),
-        focusMode: task.focusMode,
+        focusMode: run.focusMode,
         files: [],
         isPrivate: 0,
-        scheduledTaskId: task.id,
+        scheduleId: schedule.id,
         scheduledRunViewed: 0,
         activeRunMessageId: userMessageId,
         activeRunStartedAt: Date.now(),
       })
       .execute();
 
-    // 7. Insert user message
     await db
       .insert(messagesSchema)
       .values({
@@ -107,13 +118,12 @@ export async function runScheduledTask(
       })
       .execute();
 
-    // 8. Create agent
     const abortController = new AbortController();
     const emitter = new EventEmitter();
     const { tracker, chatRecorder, systemRecorder } = createTurnTracker(
       emitter,
-      task.chatModel,
-      task.systemModel,
+      run.chatModel,
+      run.systemModel,
     );
     const agent = new SimplifiedAgent(
       chatLlm,
@@ -134,7 +144,6 @@ export async function runScheduledTask(
       methodologyInstructions,
     );
 
-    // 9. Collect events
     let receivedMessage = '';
     let sources: Array<Record<string, unknown>> = [];
     let searchQuery = '';
@@ -184,12 +193,11 @@ export async function runScheduledTask(
         }
       });
 
-      // 10. Start agent (do NOT await — lifecycle managed by emitter)
       agent.searchAndAnswer(
         composedQuery,
         [],
         [],
-        task.focusMode,
+        run.focusMode,
         undefined,
         undefined,
         undefined,
@@ -200,7 +208,6 @@ export async function runScheduledTask(
       modelStats = { ...modelStats, responseTime: Date.now() - startTime };
     }
 
-    // 11. Insert assistant message
     await db
       .insert(messagesSchema)
       .values({
@@ -219,17 +226,14 @@ export async function runScheduledTask(
       })
       .execute();
 
-    // 12. Clear in-progress markers — the run is complete, so the chat is now
-    // an unread finished run (scheduledRunViewed stays 0 until viewed).
     await db
       .update(chats)
       .set({ activeRunMessageId: null, activeRunStartedAt: null })
       .where(eq(chats.id, chatId))
       .execute();
 
-    // 13. Update task
     await db
-      .update(scheduledTasks)
+      .update(schedules)
       .set({
         lastRunAt: new Date(),
         lastRunStatus: 'success',
@@ -237,22 +241,21 @@ export async function runScheduledTask(
         lastRunChatId: chatId,
         updatedAt: new Date(),
       })
-      .where(eq(scheduledTasks.id, taskId))
+      .where(eq(schedules.id, scheduleId))
       .execute();
 
     return { chatId, status: 'success' };
   } catch (err) {
     const errorMsg =
-      err instanceof Error ? err.message : 'Unknown error during task run';
+      err instanceof Error ? err.message : 'Unknown error during scheduled run';
 
-    // Insert synthetic error message
     try {
       await db
         .insert(messagesSchema)
         .values({
-          content: `**Scheduled task failed:** ${errorMsg}`,
+          content: `**Scheduled run failed:** ${errorMsg}`,
           sanitizedContent: computeSanitizedContent(
-            `**Scheduled task failed:** ${errorMsg}`,
+            `**Scheduled run failed:** ${errorMsg}`,
           ),
           chatId,
           messageId: aiMessageId,
@@ -264,9 +267,6 @@ export async function runScheduledTask(
       // Best-effort
     }
 
-    // Clear in-progress markers so the run no longer shows as running and the
-    // failed run can surface as unread. No-ops if the chat row was never
-    // inserted (e.g. model resolution failed before step 6).
     try {
       await db
         .update(chats)
@@ -277,10 +277,9 @@ export async function runScheduledTask(
       // Best-effort
     }
 
-    // Update task with error
     try {
       await db
-        .update(scheduledTasks)
+        .update(schedules)
         .set({
           lastRunAt: new Date(),
           lastRunStatus: 'error',
@@ -288,7 +287,7 @@ export async function runScheduledTask(
           lastRunChatId: chatId,
           updatedAt: new Date(),
         })
-        .where(eq(scheduledTasks.id, taskId))
+        .where(eq(schedules.id, scheduleId))
         .execute();
     } catch {
       // Best-effort

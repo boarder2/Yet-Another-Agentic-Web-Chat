@@ -66,7 +66,7 @@ export function useMarkChatSeen() {
       qc.invalidateQueries({ queryKey: qk.activeRuns });
       qc.invalidateQueries({ queryKey: qk.chatsInfiniteRoot });
       // Refresh the scheduled-runs list so a viewed run loses its unread dot.
-      qc.invalidateQueries({ queryKey: qk.scheduledRuns });
+      qc.invalidateQueries({ queryKey: qk.scheduleRuns });
       window.dispatchEvent(
         new CustomEvent('history-runs-unread-changed', {
           detail: { count: data.historyCount },

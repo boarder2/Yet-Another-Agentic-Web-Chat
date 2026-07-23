@@ -56,7 +56,7 @@ async function getChat(request: APIRequestContext, chatId: string) {
   return body.chat as {
     title: string;
     titleLocked: number;
-    scheduledTaskId: string | null;
+    scheduleId: string | null;
   };
 }
 
@@ -188,7 +188,7 @@ test.describe('auto-generated chat titles', () => {
     expect(chat.title).toBe(content);
   });
 
-  test('scheduled-task chats are never auto-titled', async ({ request }) => {
+  test('scheduled-run chats are never auto-titled', async ({ request }) => {
     await setAutoTitle(request, true);
     const chatId = await seedScheduledChat(request, {
       taskName: 'Nightly digest',
@@ -196,7 +196,7 @@ test.describe('auto-generated chat titles', () => {
     });
 
     const chat = await getChat(request, chatId);
-    expect(chat.scheduledTaskId).toBeTruthy();
+    expect(chat.scheduleId).toBeTruthy();
     // The scheduled runner sets its own purposeful title and never auto-titles.
     expect(chat.title).not.toBe('Deterministic Test Title');
     expect(chat.title).toContain('Nightly digest');

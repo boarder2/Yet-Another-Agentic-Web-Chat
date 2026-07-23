@@ -30,6 +30,8 @@ export const CURATED_WORKSPACE_ICONS = [
   'Star',
 ] as const;
 
+type IconComponent = React.ComponentType<{ size?: number; className?: string }>;
+
 interface Props {
   name: string | null | undefined;
   color?: string | null;
@@ -37,12 +39,11 @@ interface Props {
   className?: string;
   /** When true, applies the color's stroke class; otherwise inherits text color. */
   applyColor?: boolean;
+  /** Icon shown when `name` doesn't resolve. Defaults to FolderOpen. */
+  fallback?: IconComponent;
 }
 
-const iconRegistry = Icons as unknown as Record<
-  string,
-  React.ComponentType<{ size?: number; className?: string }>
->;
+const iconRegistry = Icons as unknown as Record<string, IconComponent>;
 
 // Lowercase → PascalCase lookup and kebab-case list — built in a single pass
 const iconNameMap: Record<string, string> = {};
@@ -66,7 +67,7 @@ function toPascal(raw: string): string {
 
 function lookupComponent(
   name: string | null | undefined,
-): React.ComponentType<{ size?: number; className?: string }> | null {
+): IconComponent | null {
   const raw = (name ?? '').trim();
   if (!raw) return null;
   const pascal = toPascal(raw);
@@ -102,8 +103,8 @@ export function getIconSuggestions(query: string, limit = 20): string[] {
     .slice(0, limit);
 }
 
-function resolveIcon(name: string | null | undefined) {
-  return lookupComponent(name) ?? FolderOpen;
+function resolveIcon(name: string | null | undefined, fallback: IconComponent) {
+  return lookupComponent(name) ?? fallback;
 }
 
 const WorkspaceIcon = ({
@@ -112,13 +113,14 @@ const WorkspaceIcon = ({
   size = 16,
   className,
   applyColor = true,
+  fallback = FolderOpen,
 }: Props) => {
-  const Component = resolveIcon(name);
+  const Component = resolveIcon(name, fallback);
   const colorClass = applyColor ? workspaceColorClasses(color).stroke : '';
-  return React.createElement(
-    Component as React.ComponentType<{ size?: number; className?: string }>,
-    { size, className: cn(colorClass, className) },
-  );
+  return React.createElement(Component, {
+    size,
+    className: cn(colorClass, className),
+  });
 };
 
 export default WorkspaceIcon;

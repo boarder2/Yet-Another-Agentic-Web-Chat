@@ -109,6 +109,14 @@ export const chats = sqliteTable('chats', {
   isPrivate: integer('is_private')
     .notNull()
     .default(sql`0`),
+  // Provenance for runs seeded from a workflow. `scheduleId` is set on headless
+  // scheduled runs (run-history FK); `workflowId` is stamped on manual seeded
+  // chats. Both null out on delete so chats survive (Decision 19).
+  scheduleId: text('schedule_id'),
+  workflowId: text('workflow_id'),
+  // Legacy: pre-workflows scheduled-run provenance. Retained only so the boot
+  // migration (migrateScheduledTasks) can remap it into `scheduleId`; no live
+  // code reads it. Not dropped because that would be a destructive schema diff.
   scheduledTaskId: text('scheduled_task_id'),
   scheduledRunViewed: integer('scheduled_run_viewed'),
   pinned: integer('pinned')
@@ -152,6 +160,10 @@ export const memories = sqliteTable('memories', {
   workspaceId: text('workspace_id'),
 });
 
+// Legacy pre-workflows table. Superseded by `workflows` + `schedules`; retained
+// (not dropped) only so the boot migration `migrateScheduledTasks` can copy its
+// rows into the new pair. No live code reads it — dropping it would be a
+// destructive schema diff, so it stays defined but empty after migration.
 export const scheduledTasks = sqliteTable('scheduled_tasks', {
   id: text('id')
     .primaryKey()
@@ -179,6 +191,77 @@ export const scheduledTasks = sqliteTable('scheduled_tasks', {
   enabled: integer('enabled')
     .notNull()
     .default(sql`1`),
+  lastRunAt: integer('last_run_at', { mode: 'timestamp' }),
+  lastRunStatus: text('last_run_status', {
+    enum: ['success', 'error'],
+  }),
+  lastRunError: text('last_run_error'),
+  lastRunChatId: text('last_run_chat_id'),
+  retentionMode: text('retention_mode', {
+    enum: ['days', 'count', 'disabled'],
+  }),
+  retentionValue: integer('retention_value'),
+  createdAt: integer('created_at', { mode: 'timestamp' })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer('updated_at', { mode: 'timestamp' })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+// A reusable, parameterized prompt. Inputs are parsed from `prompt`'s inline
+// {{placeholder}} grammar (src/lib/workflows/template.ts) — never stored as a
+// column. No cron/run-state here: those live on child `schedules`.
+export const workflows = sqliteTable('workflows', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  name: text('name').notNull(),
+  description: text('description'),
+  icon: text('icon'), // lucide icon name for the card
+  prompt: text('prompt').notNull(),
+  focusMode: text('focus_mode').notNull(),
+  chatModel: text('chat_model', { mode: 'json' })
+    .$type<{ provider: string; name: string; contextWindowSize?: number }>()
+    .notNull(),
+  systemModel: text('system_model', { mode: 'json' }).$type<{
+    provider: string;
+    name: string;
+    contextWindowSize?: number;
+  } | null>(),
+  selectedSystemPromptIds: text('selected_system_prompt_ids', { mode: 'json' })
+    .$type<string[]>()
+    .default(sql`'[]'`),
+  selectedMethodologyId: text('selected_methodology_id'),
+  createdAt: integer('created_at', { mode: 'timestamp' })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer('updated_at', { mode: 'timestamp' })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+// A cron-fired child of a workflow carrying a saved input fill-set. A workflow
+// may have many schedules; each inherits the workflow's focus/models and
+// overrides only its fill-set + cron + retention.
+export const schedules = sqliteTable('schedules', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  workflowId: text('workflow_id')
+    .notNull()
+    .references(() => workflows.id, { onDelete: 'cascade' }),
+  label: text('label').notNull(),
+  inputValues: text('input_values', { mode: 'json' })
+    .$type<Record<string, string | string[]>>()
+    .default(sql`'{}'`),
+  cronExpression: text('cron_expression').notNull(),
+  timezone: text('timezone'),
+  enabled: integer('enabled')
+    .notNull()
+    .default(sql`1`),
+  // Set when auto-disabled because a workflow edit invalidated this fill-set.
+  disabledReason: text('disabled_reason'),
   lastRunAt: integer('last_run_at', { mode: 'timestamp' }),
   lastRunStatus: text('last_run_status', {
     enum: ['success', 'error'],

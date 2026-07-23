@@ -19,7 +19,7 @@ const DESTINATIONS = [
     POM: WorkspacesPage,
     heading: 'Workspaces',
   },
-  { label: 'Scheduled', url: '/scheduled-tasks', heading: 'Scheduled Tasks' },
+  { label: 'Automations', url: '/automations', heading: 'Workflows' },
   { label: 'History', url: '/history', POM: HistoryPage, heading: 'History' },
 ] as const;
 

@@ -1,10 +1,16 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import { Edit3, Save, X, LoaderCircle, TriangleAlert } from 'lucide-react';
 import MarkdownRenderer from '@/components/MarkdownRenderer';
+
+// CodeMirror touches window/document at module load, so load it client-only.
+const CodeEditor = dynamic(() => import('@/components/dashboard/CodeEditor'), {
+  ssr: false,
+});
 import { ApiError } from '@/lib/api/client';
 import {
   useWorkspaceFileContent,
@@ -214,11 +220,11 @@ export default function FileViewer({
           </p>
         )
       ) : editing ? (
-        <textarea
-          aria-label="File content"
+        <CodeEditor
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          className="w-full min-h-[60vh] font-mono text-sm border border-surface-2 rounded-floating p-4 bg-surface focus:outline-none focus:border-accent resize-y"
+          onChange={setDraft}
+          filename={meta.name}
+          height="60vh"
         />
       ) : isMarkdownFile(meta.name) ? (
         <div className="prose-sm bg-surface rounded-floating border border-surface-2 p-6">

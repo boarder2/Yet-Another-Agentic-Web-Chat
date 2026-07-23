@@ -32,9 +32,13 @@ export const qk = {
   mcpServerTools: (id: string) => ['mcp-servers', id, 'tools'] as const,
   mcpServerWorkspaces: (id: string) =>
     ['mcp-servers', id, 'workspaces'] as const,
-  scheduledTasks: ['scheduled-tasks'] as const,
-  scheduledRuns: ['scheduled-task-runs'] as const,
-  scheduledRunsUnread: ['scheduled-task-runs', 'unread'] as const,
+  workflows: ['workflows'] as const,
+  workflow: (id: string) => ['workflows', id] as const,
+  workflowSchedules: (id: string) => ['workflows', id, 'schedules'] as const,
+  schedules: ['schedules'] as const,
+  schedule: (id: string) => ['schedules', id] as const,
+  scheduleRuns: ['schedule-runs'] as const,
+  scheduleRunsUnread: ['schedule-runs', 'unread'] as const,
   chatsRoot: ['chats'] as const,
   chatsInfiniteRoot: ['chats', 'infinite'] as const,
   chatsInfinite: (filter: ChatsFilter) =>

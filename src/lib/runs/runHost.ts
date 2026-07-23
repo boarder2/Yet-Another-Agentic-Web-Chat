@@ -177,7 +177,7 @@ async function maybeGenerateTitle(params: {
     const chat = await db.query.chats.findFirst({
       where: eq(chats.id, chatId),
     });
-    if (!chat || chat.scheduledTaskId || chat.titleLocked) return false;
+    if (!chat || chat.scheduleId || chat.titleLocked) return false;
 
     // First-turn gate: skip if any earlier assistant message already exists.
     const priorAssistant = await db.query.messages.findFirst({

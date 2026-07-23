@@ -1,12 +1,8 @@
 import { CronJob, validateCronExpression } from 'cron';
 import db from '@/lib/db';
-import {
-  chats,
-  messages as messagesSchema,
-  scheduledTasks,
-} from '@/lib/db/schema';
+import { chats, messages as messagesSchema, schedules } from '@/lib/db/schema';
 import { eq, isNotNull } from 'drizzle-orm';
-import { runScheduledTask } from './runner';
+import { runSchedule } from './runner';
 import { runRetentionCleanup } from '@/lib/retention/cleanup';
 import { gcRuns } from '@/lib/runs/runHub';
 import {
@@ -49,10 +45,10 @@ export async function initScheduler() {
 
   const rows = await db
     .select()
-    .from(scheduledTasks)
-    .where(eq(scheduledTasks.enabled, 1));
-  for (const task of rows) registerTask(task);
-  console.log(`[scheduledTasks] registered ${rows.length} tasks`);
+    .from(schedules)
+    .where(eq(schedules.enabled, 1));
+  for (const schedule of rows) registerSchedule(schedule);
+  console.log(`[scheduledTasks] registered ${rows.length} schedules`);
 
   reg.privateCleanupJob = CronJob.from({
     cronTime: '*/5 * * * *',
@@ -154,40 +150,40 @@ async function bootSweep(): Promise<void> {
   }
 }
 
-export function registerTask(task: typeof scheduledTasks.$inferSelect) {
+export function registerSchedule(schedule: typeof schedules.$inferSelect) {
   const reg = getRegistry();
-  if (!validateCronExpression(task.cronExpression).valid) {
+  if (!validateCronExpression(schedule.cronExpression).valid) {
     console.error(
-      `[scheduledTasks] invalid cron for ${task.id}: ${task.cronExpression}`,
+      `[scheduledTasks] invalid cron for ${schedule.id}: ${schedule.cronExpression}`,
     );
     return;
   }
   // Replace existing job for this id.
-  reg.jobs.get(task.id)?.stop();
+  reg.jobs.get(schedule.id)?.stop();
 
   const job = CronJob.from({
-    cronTime: task.cronExpression,
+    cronTime: schedule.cronExpression,
     onTick: async () => {
       try {
-        await runScheduledTask(task.id);
+        await runSchedule(schedule.id);
       } catch (err) {
-        console.error(`[scheduledTasks] run failed for ${task.id}:`, err);
+        console.error(`[scheduledTasks] run failed for ${schedule.id}:`, err);
       }
     },
     start: true,
-    timeZone: task.timezone ?? undefined,
+    timeZone: schedule.timezone ?? undefined,
     waitForCompletion: true,
   });
-  reg.jobs.set(task.id, job);
+  reg.jobs.set(schedule.id, job);
 }
 
-export function unregisterTask(id: string) {
+export function unregisterSchedule(id: string) {
   const reg = getRegistry();
   reg.jobs.get(id)?.stop();
   reg.jobs.delete(id);
 }
 
-export function rescheduleTask(task: typeof scheduledTasks.$inferSelect) {
-  unregisterTask(task.id);
-  if (task.enabled) registerTask(task);
+export function rescheduleSchedule(schedule: typeof schedules.$inferSelect) {
+  unregisterSchedule(schedule.id);
+  if (schedule.enabled) registerSchedule(schedule);
 }

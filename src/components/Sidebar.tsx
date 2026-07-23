@@ -17,7 +17,7 @@ import { usePathname, useSelectedLayoutSegments } from 'next/navigation';
 import React, { useEffect, useRef, type ReactNode } from 'react';
 import Layout, { setWideWidth, useWideWidth } from './Layout';
 import { useActiveRuns } from '@/lib/hooks/api/useActiveRuns';
-import { useScheduledRunsUnread } from '@/lib/hooks/api/useScheduledTasks';
+import { useScheduleRunsUnread } from '@/lib/hooks/api/useSchedules';
 import { qk } from '@/lib/api/keys';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSettingsModal } from '@/components/settings/SettingsModalProvider';
@@ -100,7 +100,7 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
   const qc = useQueryClient();
 
   // Scheduled badge: shared TanStack query (polls + refetches on focus/mount).
-  const { data: scheduledUnread = 0 } = useScheduledRunsUnread();
+  const { data: scheduledUnread = 0 } = useScheduleRunsUnread();
 
   // Mark-seen flows dispatch this with an authoritative count; write it
   // straight into the cache so the badge updates without a round-trip,
@@ -109,8 +109,8 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
     const onScheduled = (e: Event) => {
       const c = (e as CustomEvent).detail?.count;
       if (typeof c === 'number')
-        qc.setQueryData(qk.scheduledRunsUnread, { count: c });
-      else qc.invalidateQueries({ queryKey: qk.scheduledRunsUnread });
+        qc.setQueryData(qk.scheduleRunsUnread, { count: c });
+      else qc.invalidateQueries({ queryKey: qk.scheduleRunsUnread });
     };
     window.addEventListener('scheduled-runs-unread-changed', onScheduled);
     return () =>
@@ -208,9 +208,9 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
     },
     {
       icon: CalendarClock,
-      href: '/scheduled-tasks',
-      active: segments.includes('scheduled-tasks'),
-      label: 'Scheduled',
+      href: '/automations',
+      active: segments.includes('automations'),
+      label: 'Automations',
       badgeCount: scheduledUnread,
     },
     {

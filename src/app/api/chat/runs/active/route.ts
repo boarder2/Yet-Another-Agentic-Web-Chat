@@ -7,7 +7,7 @@ export const GET = async () => {
   try {
     // Scheduled runs set the same activeRunMessageId marker but run headless
     // (no hub Run), so they'd always fall into `stale` here. Exclude them — the
-    // scheduled-tasks list tracks their in-progress state separately.
+    // schedules list tracks their in-progress state separately.
     const activeRows = await db
       .select({
         id: chats.id,
@@ -18,7 +18,7 @@ export const GET = async () => {
       })
       .from(chats)
       .where(
-        and(isNotNull(chats.activeRunMessageId), isNull(chats.scheduledTaskId)),
+        and(isNotNull(chats.activeRunMessageId), isNull(chats.scheduleId)),
       );
 
     const active: {
@@ -70,7 +70,7 @@ export const GET = async () => {
       .where(
         and(
           eq(chats.lastRunViewed, 0),
-          isNull(chats.scheduledTaskId),
+          isNull(chats.scheduleId),
           isNull(chats.activeRunMessageId),
           isNotNull(chats.lastRunStatus),
         ),

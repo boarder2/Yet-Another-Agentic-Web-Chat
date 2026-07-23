@@ -1,5 +1,5 @@
 import db, { sqlite } from '@/lib/db';
-import { chats, scheduledTasks } from '@/lib/db/schema';
+import { chats, schedules } from '@/lib/db/schema';
 import { deleteCheckpoint } from '@/lib/runs/checkpointer';
 import { and, eq, isNull, isNotNull, desc, sql, inArray } from 'drizzle-orm';
 import type { RetentionPolicy } from '@/lib/config';
@@ -21,10 +21,10 @@ export type RetentionSummary = {
 const MS_PER_DAY = 86_400_000;
 
 async function idsOlderThan(params: {
-  taskIdFilter?: string | null; // null = no scheduledTaskId, string = specific id, undefined = any
+  scheduleIdFilter?: string | null; // null = no scheduleId, string = specific id, undefined = any
   cutoffMs: number;
 }): Promise<string[]> {
-  const { taskIdFilter, cutoffMs } = params;
+  const { scheduleIdFilter, cutoffMs } = params;
   const rows = await db
     .select({ id: chats.id })
     .from(chats)
@@ -32,30 +32,30 @@ async function idsOlderThan(params: {
       and(
         eq(chats.pinned, 0),
         sql`${chats.createdAt} < ${cutoffMs}`,
-        taskIdFilter === undefined
+        scheduleIdFilter === undefined
           ? undefined
-          : taskIdFilter === null
-            ? isNull(chats.scheduledTaskId)
-            : eq(chats.scheduledTaskId, taskIdFilter),
+          : scheduleIdFilter === null
+            ? isNull(chats.scheduleId)
+            : eq(chats.scheduleId, scheduleIdFilter),
       ),
     );
   return rows.map((r) => r.id);
 }
 
 async function idsBeyondCount(params: {
-  taskIdFilter: string | null;
+  scheduleIdFilter: string | null;
   keepN: number;
 }): Promise<string[]> {
-  const { taskIdFilter, keepN } = params;
+  const { scheduleIdFilter, keepN } = params;
   const rows = await db
     .select({ id: chats.id })
     .from(chats)
     .where(
       and(
         eq(chats.pinned, 0),
-        taskIdFilter === null
-          ? isNull(chats.scheduledTaskId)
-          : eq(chats.scheduledTaskId, taskIdFilter),
+        scheduleIdFilter === null
+          ? isNull(chats.scheduleId)
+          : eq(chats.scheduleId, scheduleIdFilter),
       ),
     )
     .orderBy(desc(chats.createdAt));
@@ -64,18 +64,18 @@ async function idsBeyondCount(params: {
 
 async function purgeByPolicy(
   policy: RetentionPolicy,
-  taskIdFilter: string | null,
+  scheduleIdFilter: string | null,
 ): Promise<{ deleted: number }> {
   if (policy.mode === 'disabled') return { deleted: 0 };
 
   let ids: string[] = [];
   if (policy.mode === 'days') {
     ids = await idsOlderThan({
-      taskIdFilter,
+      scheduleIdFilter,
       cutoffMs: Date.now() - policy.value * MS_PER_DAY,
     });
   } else if (policy.mode === 'count') {
-    ids = await idsBeyondCount({ taskIdFilter, keepN: policy.value });
+    ids = await idsBeyondCount({ scheduleIdFilter, keepN: policy.value });
   }
 
   for (const id of ids) {
@@ -100,25 +100,25 @@ export async function runRetentionCleanup(): Promise<RetentionSummary> {
     console.error('[retention] private-sessions phase failed:', err);
   }
 
-  // Phase 2: scheduled-run retention per task
-  const tasks = await db.select().from(scheduledTasks);
-  for (const task of tasks) {
-    const policy = resolveTaskRetentionPolicy(task);
-    const { deleted } = await purgeByPolicy(policy, task.id);
+  // Phase 2: scheduled-run retention per schedule
+  const scheduleRows = await db.select().from(schedules);
+  for (const schedule of scheduleRows) {
+    const policy = resolveTaskRetentionPolicy(schedule);
+    const { deleted } = await purgeByPolicy(policy, schedule.id);
     summary.scheduledRunsDeleted += deleted;
   }
   console.log(
-    `[retention] scheduled-runs: deleted ${summary.scheduledRunsDeleted} across ${tasks.length} tasks`,
+    `[retention] scheduled-runs: deleted ${summary.scheduledRunsDeleted} across ${scheduleRows.length} schedules`,
   );
 
-  // Phase 2b: orphan scheduled-run chats (task no longer exists) → global scheduled-run policy
-  const existingTaskIds = new Set(tasks.map((t) => t.id));
+  // Phase 2b: orphan scheduled-run chats (schedule no longer exists) → global scheduled-run policy
+  const existingScheduleIds = new Set(scheduleRows.map((s) => s.id));
   const orphanCandidates = await db
-    .select({ id: chats.id, scheduledTaskId: chats.scheduledTaskId })
+    .select({ id: chats.id, scheduleId: chats.scheduleId })
     .from(chats)
-    .where(isNotNull(chats.scheduledTaskId));
+    .where(isNotNull(chats.scheduleId));
   const orphanIds = orphanCandidates
-    .filter((c) => c.scheduledTaskId && !existingTaskIds.has(c.scheduledTaskId))
+    .filter((c) => c.scheduleId && !existingScheduleIds.has(c.scheduleId))
     .map((c) => c.id);
 
   if (orphanIds.length > 0) {

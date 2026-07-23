@@ -190,22 +190,52 @@ export async function seedSystemPrompt(
   return (body as { id: string }).id;
 }
 
-export async function seedScheduledTask(
+export async function seedWorkflow(
   request: APIRequestContext,
   overrides?: Partial<{
     name: string;
     prompt: string;
-    cronExpression: string;
+    description: string;
+    icon: string;
+    focusMode: string;
   }>,
 ): Promise<string> {
   const body = await postJson(
     request,
-    '/api/scheduled-tasks',
+    '/api/workflows',
     {
-      name: overrides?.name ?? uniq('task'),
+      name: overrides?.name ?? uniq('workflow'),
       prompt: overrides?.prompt ?? 'Say hello',
-      cronExpression: overrides?.cronExpression ?? '0 0 1 1 *',
+      ...(overrides?.description !== undefined
+        ? { description: overrides.description }
+        : {}),
+      ...(overrides?.icon !== undefined ? { icon: overrides.icon } : {}),
+      ...(overrides?.focusMode !== undefined
+        ? { focusMode: overrides.focusMode }
+        : {}),
       chatModel: { provider: 'test', name: 'test-direct' },
+    },
+    201,
+  );
+  return (body as { id: string }).id;
+}
+
+export async function seedSchedule(
+  request: APIRequestContext,
+  workflowId: string,
+  overrides?: Partial<{
+    label: string;
+    cronExpression: string;
+    inputValues: Record<string, string | string[]>;
+  }>,
+): Promise<string> {
+  const body = await postJson(
+    request,
+    `/api/workflows/${workflowId}/schedules`,
+    {
+      label: overrides?.label ?? uniq('schedule'),
+      cronExpression: overrides?.cronExpression ?? '0 0 1 1 *',
+      inputValues: overrides?.inputValues ?? {},
     },
     201,
   );
@@ -368,7 +398,10 @@ export async function cancelAwaitingRun(
     .toBe('cancelled');
 }
 
-/** Seed a scheduled task, run it, and return the resulting chat ID. */
+/**
+ * Seed a workflow + one schedule, fire the schedule immediately, and return the
+ * resulting scheduled-run chat ID (carries `scheduleId`).
+ */
 export async function seedScheduledChat(
   request: APIRequestContext,
   overrides?: Partial<{
@@ -377,14 +410,14 @@ export async function seedScheduledChat(
     focusMode: string;
   }>,
 ): Promise<string> {
-  const taskId = await seedScheduledTask(request, {
+  const workflowId = await seedWorkflow(request, {
     name: overrides?.taskName,
     prompt: overrides?.prompt,
+    focusMode: overrides?.focusMode,
   });
-  const body = await postJson(
-    request,
-    `/api/scheduled-tasks/${taskId}/run`,
-    {},
-  );
+  const scheduleId = await seedSchedule(request, workflowId, {
+    label: overrides?.taskName,
+  });
+  const body = await postJson(request, `/api/schedules/${scheduleId}/run`, {});
   return (body as { chatId: string }).chatId;
 }

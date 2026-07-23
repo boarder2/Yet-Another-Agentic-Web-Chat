@@ -1,5 +1,5 @@
 import db, { sqlite } from '@/lib/db';
-import { chats, messages, memories, scheduledTasks } from '@/lib/db/schema';
+import { chats, messages, memories, schedules } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { evictByChatId, getRunByChatId } from '@/lib/runs/runHub';
 import { deleteCheckpoint } from '@/lib/runs/checkpointer';
@@ -8,7 +8,7 @@ import { deleteCheckpoint } from '@/lib/runs/checkpointer';
  * Delete a chat and clean up references atomically.
  * - Deletes all messages for the chat.
  * - NULLs memories.sourceChatId pointing at it.
- * - NULLs scheduledTasks.lastRunChatId pointing at it.
+ * - NULLs schedules.lastRunChatId pointing at it.
  * - Deletes the chat row.
  */
 export function deleteChatWithOrphanCleanup(chatId: string): void {
@@ -37,9 +37,9 @@ export function deleteChatWithOrphanCleanup(chatId: string): void {
       .set({ sourceChatId: null })
       .where(eq(memories.sourceChatId, chatId))
       .run();
-    tx.update(scheduledTasks)
+    tx.update(schedules)
       .set({ lastRunChatId: null })
-      .where(eq(scheduledTasks.lastRunChatId, chatId))
+      .where(eq(schedules.lastRunChatId, chatId))
       .run();
     // approval_requests + run_events cascade via ON DELETE CASCADE.
     tx.delete(chats).where(eq(chats.id, chatId)).run();

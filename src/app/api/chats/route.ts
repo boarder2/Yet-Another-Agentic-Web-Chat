@@ -76,9 +76,9 @@ export const GET = async (req: Request) => {
     const conditions = [];
     if (pinnedParam === '1') conditions.push(eq(chatsTable.pinned, 1));
     if (scheduledParam === '1')
-      conditions.push(isNotNull(chatsTable.scheduledTaskId));
+      conditions.push(isNotNull(chatsTable.scheduleId));
     else if (scheduledParam === '0')
-      conditions.push(isNull(chatsTable.scheduledTaskId));
+      conditions.push(isNull(chatsTable.scheduleId));
     const workspaceIds = workspaceIdsParam
       ? workspaceIdsParam
           .split(',')

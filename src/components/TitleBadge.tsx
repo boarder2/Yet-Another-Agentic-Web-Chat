@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useScheduledRunsUnread } from '@/lib/hooks/api/useScheduledTasks';
+import { useScheduleRunsUnread } from '@/lib/hooks/api/useSchedules';
 import { useActiveRuns } from '@/lib/hooks/api/useActiveRuns';
 
 // Leading "(N) " badge we prepend to the tab title. Stripped before every
@@ -28,7 +28,7 @@ const stripBadge = (title: string) => title.replace(BADGE_RE, '');
  * to avoid a feedback loop. Renders nothing.
  */
 export default function TitleBadge() {
-  const { data: scheduledUnread = 0 } = useScheduledRunsUnread();
+  const { data: scheduledUnread = 0 } = useScheduleRunsUnread();
   const { data: activeRuns } = useActiveRuns();
 
   const total =

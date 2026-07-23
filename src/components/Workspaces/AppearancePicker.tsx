@@ -9,10 +9,9 @@ import {
 import WorkspaceIcon, {
   CURATED_WORKSPACE_ICONS,
   isValidIcon,
-  getIconSuggestions,
 } from './WorkspaceIcon';
+import IconAutocomplete from '../IconAutocomplete';
 import { useEffect, useRef, useState } from 'react';
-import { AlertCircle } from 'lucide-react';
 
 interface Props {
   color: string | null;
@@ -26,15 +25,9 @@ const AppearancePicker = ({ color, icon, onChange }: Props) => {
     : false;
 
   const [inputValue, setInputValue] = useState(!isCurated && icon ? icon : '');
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [activeIndex, setActiveIndex] = useState(-1);
-  const [blurred, setBlurred] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
   const onChangeRef = useRef(onChange);
   const colorRef = useRef(color);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const pendingIconRef = useRef<string | null>(null);
 
   useEffect(() => {
     onChangeRef.current = onChange;
@@ -49,91 +42,26 @@ const AppearancePicker = ({ color, icon, onChange }: Props) => {
     setPrevIcon(icon);
     if (isCurated || !icon) {
       setInputValue('');
-      setSuggestions([]);
-      setDropdownOpen(false);
     } else if (inputValue.trim() !== icon) {
       setInputValue(icon);
     }
   }
-
-  // Close on outside click
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(e.target as Node)
-      ) {
-        setDropdownOpen(false);
-        setActiveIndex(-1);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
 
   // Cleanup debounce timeout on unmount
   useEffect(() => {
     return () => clearTimeout(debounceRef.current);
   }, []);
 
-  const trimmed = inputValue.trim();
-  const hasInput = trimmed.length > 0;
-  const isValid = !hasInput || isValidIcon(trimmed);
-  const showError = blurred && hasInput && !isValid;
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = e.target.value;
+  // Debounce pushing typed icon names up; skip invalid names.
+  const handleIconChange = (v: string) => {
     setInputValue(v);
-    const t = v.trim();
-    const next = t ? getIconSuggestions(t) : [];
-    setSuggestions(next);
-    setDropdownOpen(next.length > 0);
-    setActiveIndex(-1);
-
-    pendingIconRef.current = t || null;
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       debounceRef.current = undefined;
-      const next = pendingIconRef.current;
+      const next = v.trim() || null;
       if (next && !isValidIcon(next)) return;
       onChangeRef.current({ color: colorRef.current, icon: next });
     }, 300);
-  };
-
-  const handleBlur = () => {
-    setBlurred(true);
-    if (debounceRef.current !== undefined) {
-      clearTimeout(debounceRef.current);
-      debounceRef.current = undefined;
-      const next = pendingIconRef.current;
-      if (next && !isValidIcon(next)) return;
-      onChangeRef.current({ color: colorRef.current, icon: next });
-    }
-  };
-
-  const selectSuggestion = (name: string) => {
-    setInputValue(name);
-    setSuggestions([]);
-    setDropdownOpen(false);
-    setActiveIndex(-1);
-    onChange({ color, icon: name });
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (!dropdownOpen) return;
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setActiveIndex((i) => Math.min(i + 1, suggestions.length - 1));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setActiveIndex((i) => Math.max(i - 1, -1));
-    } else if (e.key === 'Enter' && activeIndex >= 0) {
-      e.preventDefault();
-      selectSuggestion(suggestions[activeIndex]);
-    } else if (e.key === 'Escape') {
-      setDropdownOpen(false);
-      setActiveIndex(-1);
-    }
   };
 
   return (
@@ -191,80 +119,16 @@ const AppearancePicker = ({ color, icon, onChange }: Props) => {
         </div>
 
         {/* Custom icon input with preview and autocomplete */}
-        <div ref={containerRef} className="relative mt-1">
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              role="combobox"
-              value={inputValue}
-              onChange={handleInputChange}
-              onKeyDown={handleKeyDown}
-              onFocus={() => {
-                setBlurred(false);
-                if (suggestions.length > 0) setDropdownOpen(true);
-              }}
-              onBlur={handleBlur}
-              placeholder="Or enter a Lucide icon name…"
-              aria-label="Custom icon name"
-              aria-autocomplete="list"
-              aria-expanded={dropdownOpen}
-              aria-controls="appearance-picker-icon-listbox"
-              className={cn(
-                'flex-1 px-2.5 py-1.5 text-xs bg-bg rounded-control border focus:outline-none transition-colors duration-150',
-                showError
-                  ? 'border-danger focus:border-danger'
-                  : 'border-surface-2 focus:border-accent',
-              )}
-            />
-            <div
-              className={cn(
-                'flex items-center justify-center w-8 h-8 rounded-control border shrink-0 transition-colors duration-150',
-                showError
-                  ? 'border-danger/40 bg-danger-soft'
-                  : 'border-surface-2 bg-surface',
-              )}
-            >
-              {hasInput &&
-                (isValid ? (
-                  <WorkspaceIcon name={trimmed} color={color} size={18} />
-                ) : (
-                  <AlertCircle size={16} className="text-danger" />
-                ))}
-            </div>
-          </div>
-
-          {showError && (
-            <p className="mt-1 text-xs text-danger">
-              Icon &quot;{trimmed}&quot; not found
-            </p>
-          )}
-
-          {dropdownOpen && suggestions.length > 0 && (
-            <ul
-              id="appearance-picker-icon-listbox"
-              role="listbox"
-              className="absolute z-50 left-0 right-9 mt-1 bg-surface border border-surface-2 rounded-surface shadow-floating max-h-52 overflow-y-auto"
-            >
-              {suggestions.map((name, i) => (
-                <li key={name} role="option" aria-selected={i === activeIndex}>
-                  <button
-                    type="button"
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      selectSuggestion(name);
-                    }}
-                    className={cn(
-                      'w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-left transition-colors duration-100',
-                      i === activeIndex ? 'bg-surface-2' : 'hover:bg-surface-2',
-                    )}
-                  >
-                    <WorkspaceIcon name={name} color={color} size={16} />
-                    <span className="font-mono text-fg/80">{name}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+        <div className="mt-1">
+          <IconAutocomplete
+            value={inputValue}
+            onChange={handleIconChange}
+            color={color}
+            applyColor
+            id="appearance-picker-icon"
+            ariaLabel="Custom icon name"
+            placeholder="Or enter a Lucide icon name…"
+          />
         </div>
       </div>
     </div>

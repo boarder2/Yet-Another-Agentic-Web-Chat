@@ -34,6 +34,7 @@
   },
   "dependencies": {
     "@codemirror/lang-javascript": "^6.2.5",
+    "@codemirror/language-data": "^6.5.2",
     "@headlessui/react": "^2.2.9",
     "@huggingface/transformers": "^4.2.0",
     "@iarna/toml": "^2.2.5",

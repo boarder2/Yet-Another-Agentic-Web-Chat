@@ -36,6 +36,10 @@ Optional composer mode (research modes only) that fans one prompt across **2–4
 
 Remote MCP servers (Settings → MCP Servers) whose tools are injected into every tool-running focus mode, with per-tool enable/auto-run config. Connection layer + auth in `src/lib/mcp/`; API under `/api/mcp/*`.
 
+## Workflows & Schedules
+
+Reusable, parameterized prompts. A **workflow** (`workflows` table) is a prompt with inline `{{placeholder}}` inputs (grammar + isomorphic parser/substitution in `src/lib/workflows/template.ts`, unit-tested) plus stored run config. A **schedule** (`schedules` table, child of a workflow) is a saved input fill-set + cron that fires the workflow headlessly. Manual run (`runManual.ts`) seeds a normal continuable chat stamped `chats.workflow_id`; scheduled run (`scheduledTasks/runner.ts`, `scheduler.ts`) persists a one-shot report stamped `chats.schedule_id` for run history. Both share config/substitution via `resolveWorkflowRun.ts`. API under `/api/workflows/*` + `/api/schedules/*`; UI under `src/app/automations/` (Workflows + Scheduled Tasks tabs), components in `src/components/workflows/`. Legacy `scheduled_tasks` rows migrate to workflow+schedule pairs on boot (`migrateScheduledTasks.ts`).
+
 ## Dashboard Widgets
 
 Two widget kinds (`src/lib/types/widget.ts`): LLM-transformed and user-JS (Docker sandbox). Processed via `/api/dashboard/*`, rendered on `/dashboard` and the home page (shared `useWidgetBoard`, board UI in `src/components/dashboard/`).

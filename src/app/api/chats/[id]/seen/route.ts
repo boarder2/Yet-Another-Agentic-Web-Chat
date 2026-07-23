@@ -36,20 +36,23 @@ export const POST = async (
       .where(
         and(
           eq(chats.lastRunViewed, 0),
-          isNull(chats.scheduledTaskId),
+          isNull(chats.scheduleId),
           isNull(chats.activeRunMessageId),
           isNotNull(chats.lastRunStatus),
         ),
       );
 
     // scheduledCount: remaining global unread scheduled runs — the Sidebar
-    // scheduled badge handler sets its state directly to this number, matching
-    // the original /api/scheduled-tasks/runs/[chatId]/view semantics.
+    // scheduled badge handler sets its state directly to this number.
     const [{ scheduledCount }] = await db
       .select({ scheduledCount: sql<number>`COUNT(*)` })
       .from(chats)
       .where(
-        and(eq(chats.scheduledRunViewed, 0), isNull(chats.activeRunMessageId)),
+        and(
+          isNotNull(chats.scheduleId),
+          eq(chats.scheduledRunViewed, 0),
+          isNull(chats.activeRunMessageId),
+        ),
       );
 
     return Response.json({ historyCount, scheduledCount });

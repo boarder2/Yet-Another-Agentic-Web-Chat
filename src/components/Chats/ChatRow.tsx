@@ -28,7 +28,8 @@ export interface Chat {
   focusMode: string;
   isPrivate?: number;
   pinned?: number;
-  scheduledTaskId?: string | null;
+  scheduleId?: string | null;
+  workflowId?: string | null;
   workspaceId?: string | null;
   matchExcerpt?: string | null;
   messageCount?: number;
@@ -282,9 +283,9 @@ const ChatRow = ({
               )}
             </div>
           )}
-          {chat.scheduledTaskId && (
+          {chat.scheduleId && (
             <Link
-              href={`/scheduled-tasks/manage/${chat.scheduledTaskId}/edit`}
+              href={`/automations/schedules/${chat.scheduleId}`}
               className="flex items-center gap-1 px-2 py-0.5 rounded-pill bg-info-soft border border-info text-info dark:text-info text-xs font-medium whitespace-nowrap hover:opacity-80 transition-opacity"
               onClick={(e) => e.stopPropagation()}
             >

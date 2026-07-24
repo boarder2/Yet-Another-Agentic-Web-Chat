@@ -5,7 +5,7 @@ import { uniq } from '../utils/helpers';
 test.describe('POST /api/workflows/[id]/schedules', () => {
   test('creates a schedule with a complete fill-set', async ({ request }) => {
     const workflowId = await seedWorkflow(request, {
-      prompt: 'Research {{company}}',
+      prompt: '---\ncompany:\n---\nResearch {{company}}',
     });
     const label = uniq('sched');
     const res = await request.post(`/api/workflows/${workflowId}/schedules`, {
@@ -28,7 +28,7 @@ test.describe('POST /api/workflows/[id]/schedules', () => {
     request,
   }) => {
     const workflowId = await seedWorkflow(request, {
-      prompt: 'Research {{company}}',
+      prompt: '---\ncompany:\n---\nResearch {{company}}',
     });
     const res = await request.post(`/api/workflows/${workflowId}/schedules`, {
       data: {
@@ -47,7 +47,7 @@ test.describe('POST /api/workflows/[id]/schedules', () => {
     request,
   }) => {
     const workflowId = await seedWorkflow(request, {
-      prompt: 'Tone: {{tone:select: Formal | Casual}}',
+      prompt: '---\ntone: select | options=Formal, Casual\n---\nTone: {{tone}}',
     });
     const res = await request.post(`/api/workflows/${workflowId}/schedules`, {
       data: {
@@ -105,7 +105,7 @@ test.describe('GET /api/schedules', () => {
 test.describe('GET/PATCH/DELETE /api/schedules/[id]', () => {
   test('PATCH re-validates an incomplete fill-set', async ({ request }) => {
     const workflowId = await seedWorkflow(request, {
-      prompt: 'Research {{company}}',
+      prompt: '---\ncompany:\n---\nResearch {{company}}',
     });
     const scheduleId = await seedSchedule(request, workflowId, {
       inputValues: { company: 'Acme' },
@@ -124,7 +124,7 @@ test.describe('GET/PATCH/DELETE /api/schedules/[id]', () => {
     const scheduleId = await seedSchedule(request, workflowId);
     // Invalidate via a workflow edit to auto-disable + set a reason.
     await request.patch(`/api/workflows/${workflowId}`, {
-      data: { prompt: 'Report on {{company}}' },
+      data: { prompt: '---\ncompany:\n---\nReport on {{company}}' },
     });
     let schedule = await (
       await request.get(`/api/schedules/${scheduleId}`)

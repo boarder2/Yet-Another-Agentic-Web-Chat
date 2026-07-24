@@ -105,7 +105,7 @@ export default function WorkflowBuilder({ workflow }: { workflow?: Workflow }) {
   };
 
   return (
-    <div className="flex flex-col pt-4 max-w-5xl">
+    <div className="flex flex-col pt-4 max-w-7xl">
       <div className="flex items-center gap-3 px-1 mb-6">
         <Link
           href="/automations"
@@ -120,12 +120,6 @@ export default function WorkflowBuilder({ workflow }: { workflow?: Workflow }) {
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-        {error && (
-          <div className="px-4 py-2 rounded-surface bg-danger-soft border border-danger text-danger text-sm">
-            {error}
-          </div>
-        )}
-
         <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-4">
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-fg/70">Name</label>
@@ -165,142 +159,168 @@ export default function WorkflowBuilder({ workflow }: { workflow?: Workflow }) {
           />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-fg/70">
-              Prompt
-              <span className="ml-2 text-xs font-normal text-fg/40">
-                Use {'{{input}}'} placeholders for fillable inputs
-              </span>
-            </label>
-            <PromptEditor value={prompt} onChange={setPrompt} />
-            <PromptSyntaxHelp />
-            {hasErrors && (
-              <ul className="flex flex-col gap-1 mt-1">
-                {parse.errors.map((err, i) => (
-                  <li key={i} className="text-xs text-danger">
-                    {err.message}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-fg/70">
-              Fill-form preview
-            </label>
-            <div className="rounded-surface border border-surface-2 bg-surface/50 p-4">
-              {hasErrors ? (
-                <p className="text-sm text-fg/50">
-                  Resolve the prompt errors to preview the inputs.
-                </p>
-              ) : (
-                <FillForm
-                  key={prompt}
-                  prompt={prompt}
-                  submitLabel="Preview only"
-                  onSubmit={() => {}}
-                />
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-5 lg:items-start">
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-fg/70">
+                Prompt
+                <span className="ml-2 text-xs font-normal text-fg/40">
+                  Define inputs in frontmatter, reference with {'{{name}}'}
+                </span>
+              </label>
+              <PromptEditor
+                value={prompt}
+                onChange={setPrompt}
+                minHeight="60vh"
+              />
+              <PromptSyntaxHelp />
+              {(hasErrors || parse.warnings.length > 0) && (
+                <ul className="flex flex-col gap-1 mt-1">
+                  {parse.errors.map((err, i) => (
+                    <li key={`e${i}`} className="text-xs text-danger">
+                      {err.message}
+                    </li>
+                  ))}
+                  {parse.warnings.map((warn, i) => (
+                    <li key={`w${i}`} className="text-xs text-fg/50">
+                      {warn.message}
+                    </li>
+                  ))}
+                </ul>
               )}
             </div>
-          </div>
-        </div>
 
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-fg/70">Focus Mode</label>
-          <select
-            value={focusMode}
-            onChange={(e) => setFocusMode(e.target.value)}
-            className={inputCls}
-          >
-            {focusModes.map((mode) => (
-              <option key={mode.key} value={mode.key}>
-                {mode.title} — {mode.description}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-fg/70">Models</label>
-          <ModelPicker
-            value={modelValue}
-            onChange={handleModelChange}
-            fields={{ system: true }}
-            presets="apply-save"
-          />
-        </div>
-
-        {personas.length > 0 && (
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-fg/70">
-              Personas (optional)
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {personas.map((p) => {
-                const on = selectedSystemPromptIds.includes(p.id);
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() =>
-                      setSelectedSystemPromptIds((ids) =>
-                        on ? ids.filter((id) => id !== p.id) : [...ids, p.id],
-                      )
-                    }
-                    className={`px-3 py-1 rounded-pill text-xs font-medium transition-colors duration-150 border ${
-                      on
-                        ? 'bg-accent/10 border-accent text-accent'
-                        : 'bg-surface border-surface-2 text-fg/60'
-                    }`}
-                  >
-                    {p.name}
-                  </button>
-                );
-              })}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-fg/70">
+                Fill-form preview
+              </label>
+              <div className="rounded-surface border border-surface-2 bg-surface/50 p-4">
+                {hasErrors ? (
+                  <p className="text-sm text-fg/50">
+                    Resolve the prompt errors to preview the inputs.
+                  </p>
+                ) : (
+                  <FillForm
+                    key={prompt}
+                    prompt={prompt}
+                    hideSubmit
+                    onSubmit={() => {}}
+                  />
+                )}
+              </div>
             </div>
           </div>
-        )}
 
-        {methodologies.length > 0 && (
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-fg/70">
-              Methodology (optional)
-            </label>
-            <select
-              value={selectedMethodologyId || ''}
-              onChange={(e) => setSelectedMethodologyId(e.target.value || null)}
-              className={inputCls}
-            >
-              <option value="">None</option>
-              {methodologies.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
+          <div className="flex flex-col gap-5 lg:sticky lg:top-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-fg/70">
+                Focus Mode
+              </label>
+              <select
+                value={focusMode}
+                onChange={(e) => setFocusMode(e.target.value)}
+                className={inputCls}
+              >
+                {focusModes.map((mode) => (
+                  <option key={mode.key} value={mode.key}>
+                    {mode.title} — {mode.description}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-fg/70">Models</label>
+              <ModelPicker
+                value={modelValue}
+                onChange={handleModelChange}
+                fields={{ system: true }}
+                presets="apply-save"
+              />
+            </div>
+
+            {personas.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-fg/70">
+                  Personas (optional)
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {personas.map((p) => {
+                    const on = selectedSystemPromptIds.includes(p.id);
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() =>
+                          setSelectedSystemPromptIds((ids) =>
+                            on
+                              ? ids.filter((id) => id !== p.id)
+                              : [...ids, p.id],
+                          )
+                        }
+                        className={`px-3 py-1 rounded-pill text-xs font-medium transition-colors duration-150 border ${
+                          on
+                            ? 'bg-accent/10 border-accent text-accent'
+                            : 'bg-surface border-surface-2 text-fg/60'
+                        }`}
+                      >
+                        {p.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {methodologies.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-fg/70">
+                  Methodology (optional)
+                </label>
+                <select
+                  value={selectedMethodologyId || ''}
+                  onChange={(e) =>
+                    setSelectedMethodologyId(e.target.value || null)
+                  }
+                  className={inputCls}
+                >
+                  <option value="">None</option>
+                  {methodologies.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
-        )}
+        </div>
 
-        <div className="flex items-center gap-3 pt-2">
-          <button
-            type="submit"
-            disabled={saving || hasErrors}
-            className="px-6 py-2 rounded-control bg-accent text-accent-fg font-medium transition-colors duration-150 hover:bg-accent-700 disabled:opacity-50"
-          >
-            {saving
-              ? 'Saving…'
-              : workflow
-                ? 'Update Workflow'
-                : 'Create Workflow'}
-          </button>
-          <Link
-            href="/automations"
-            className="px-4 py-2 rounded-control text-fg/60 hover:text-fg transition-colors duration-150"
-          >
-            Cancel
-          </Link>
+        <div className="sticky bottom-0 flex flex-col gap-3 bg-bg border-t border-surface-2 py-4">
+          {error && (
+            <div className="px-4 py-2 rounded-surface bg-danger-soft border border-danger text-danger text-sm">
+              {error}
+            </div>
+          )}
+          <div className="flex items-center gap-3">
+            <button
+              type="submit"
+              disabled={saving || hasErrors}
+              className="px-6 py-2 rounded-control bg-accent text-accent-fg font-medium transition-colors duration-150 hover:bg-accent-700 disabled:opacity-50"
+            >
+              {saving
+                ? 'Saving…'
+                : workflow
+                  ? 'Update Workflow'
+                  : 'Create Workflow'}
+            </button>
+            <Link
+              href="/automations"
+              className="px-4 py-2 rounded-control text-fg/60 hover:text-fg transition-colors duration-150"
+            >
+              Cancel
+            </Link>
+          </div>
         </div>
       </form>
     </div>

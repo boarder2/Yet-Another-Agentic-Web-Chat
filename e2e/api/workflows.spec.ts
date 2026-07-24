@@ -8,7 +8,7 @@ test.describe('POST /api/workflows', () => {
     const res = await request.post('/api/workflows', {
       data: {
         name,
-        prompt: 'Research {{company}}',
+        prompt: '---\ncompany:\n---\nResearch {{company}}',
         chatModel: { provider: 'test', name: 'test-direct' },
       },
     });
@@ -17,7 +17,7 @@ test.describe('POST /api/workflows', () => {
     expect(typeof body.id).toBe('string');
     expect(body.id.length).toBeGreaterThan(0);
     expect(body.name).toBe(name);
-    expect(body.prompt).toBe('Research {{company}}');
+    expect(body.prompt).toBe('---\ncompany:\n---\nResearch {{company}}');
     expect(body.focusMode).toBe('webSearch');
     expect(body.selectedSystemPromptIds).toEqual([]);
   });
@@ -48,11 +48,31 @@ test.describe('POST /api/workflows', () => {
     expect(body.parseErrors.length).toBeGreaterThan(0);
   });
 
+  test('rejects a body ref with no frontmatter definition', async ({
+    request,
+  }) => {
+    const res = await request.post('/api/workflows', {
+      data: {
+        name: uniq('undef-ref'),
+        prompt: 'Research {{company}}',
+        chatModel: { provider: 'test', name: 'test-direct' },
+      },
+    });
+    expect(res.status()).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('Invalid prompt template');
+    expect(
+      body.parseErrors.some((e: { message: string }) =>
+        /undefined/i.test(e.message),
+      ),
+    ).toBe(true);
+  });
+
   test('persists optional fields', async ({ request }) => {
     const res = await request.post('/api/workflows', {
       data: {
         name: uniq('opt-fields'),
-        prompt: 'Do {{task}}',
+        prompt: '---\ntask:\n---\nDo {{task}}',
         description: 'A test workflow',
         icon: 'Sparkles',
         focusMode: 'localResearch',
@@ -107,12 +127,12 @@ test.describe('GET/PATCH/DELETE /api/workflows/[id]', () => {
   test('PATCH updates name and prompt', async ({ request }) => {
     const id = await seedWorkflow(request, { name: 'orig' });
     const res = await request.patch(`/api/workflows/${id}`, {
-      data: { name: 'renamed', prompt: 'New {{topic}}' },
+      data: { name: 'renamed', prompt: '---\ntopic:\n---\nNew {{topic}}' },
     });
     expect(res.status()).toBe(200);
     const body = await res.json();
     expect(body.name).toBe('renamed');
-    expect(body.prompt).toBe('New {{topic}}');
+    expect(body.prompt).toBe('---\ntopic:\n---\nNew {{topic}}');
   });
 
   test('PATCH rejects a prompt with bad grammar', async ({ request }) => {
@@ -137,7 +157,7 @@ test.describe('GET/PATCH/DELETE /api/workflows/[id]', () => {
 
     // Edit adds a required input the schedule's fill-set doesn't provide.
     const patch = await request.patch(`/api/workflows/${id}`, {
-      data: { prompt: 'Report on {{company}}' },
+      data: { prompt: '---\ncompany:\n---\nReport on {{company}}' },
     });
     expect(patch.status()).toBe(200);
 
@@ -208,7 +228,7 @@ test.describe('POST /api/workflows/[id]/run', () => {
   }) => {
     const id = await seedWorkflow(request, {
       name: 'sub-test',
-      prompt: 'Research {{company}}',
+      prompt: '---\ncompany:\n---\nResearch {{company}}',
     });
     const res = await request.post(`/api/workflows/${id}/run`, {
       data: { values: { company: 'Acme' } },
@@ -228,7 +248,7 @@ test.describe('POST /api/workflows/[id]/run', () => {
   }) => {
     const id = await seedWorkflow(request, {
       name: 'required-block',
-      prompt: 'Research {{company}}',
+      prompt: '---\ncompany:\n---\nResearch {{company}}',
     });
     const res = await request.post(`/api/workflows/${id}/run`, {
       data: { values: {} },

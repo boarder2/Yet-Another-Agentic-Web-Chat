@@ -14,21 +14,23 @@ export type FieldType = 'text' | 'longtext' | 'select' | 'multi';
 
 export interface FieldDef {
   name: string;
-  label: string; // derived by humanizing `name`
+  label: string; // custom `label=` or humanized `name`
   type: FieldType;
   required: boolean;
+  description?: string; // custom `desc=`, rendered as helper text
   options?: string[]; // select | multi
   default?: string | string[];
 }
 
 export interface ParseError {
   message: string;
-  index: number; // index into prompt where the offending token starts
+  index: number; // index into prompt where the offending token/line starts
 }
 
 export interface ParseResult {
   fields: FieldDef[];
   errors: ParseError[];
+  warnings: ParseError[];
 }
 
 const FIELD_TYPES: readonly FieldType[] = [
@@ -101,16 +103,6 @@ function splitTopLevel(s: string, sep: string): string[] {
   return out;
 }
 
-/** Index of the first top-level (unquoted) occurrence of `ch`, or -1. */
-function indexOfTopLevel(s: string, ch: string): number {
-  let inQuote = false;
-  for (let i = 0; i < s.length; i++) {
-    if (s[i] === '"') inQuote = !inQuote;
-    else if (s[i] === ch && !inQuote) return i;
-  }
-  return -1;
-}
-
 function unquote(v: string): string {
   const t = v.trim();
   if (t.length >= 2 && t.startsWith('"') && t.endsWith('"')) {
@@ -175,64 +167,103 @@ function parseBuiltin(raw: string): BuiltinSpec | { error: string } {
   return spec;
 }
 
-/** Parse a single non-builtin token's inner content into a FieldDef. */
-function parseField(
-  raw: string,
+/**
+ * Split an optional leading YAML-style frontmatter block off the prompt. Only a
+ * fence whose very first line is `---` counts; `---` elsewhere stays a markdown
+ * rule. Returns `bodyOffset` so body token indices map back to absolute prompt
+ * positions for editor highlighting.
+ */
+export function splitFrontmatter(prompt: string): {
+  frontmatter: string | null;
+  frontmatterOffset: number;
+  body: string;
+  bodyOffset: number;
+} {
+  const none = {
+    frontmatter: null,
+    frontmatterOffset: 0,
+    body: prompt,
+    bodyOffset: 0,
+  };
+  const open = /^---[ \t]*\r?\n/.exec(prompt);
+  if (!open) return none;
+  const rest = prompt.slice(open[0].length);
+  const close = /^---[ \t]*(\r?\n|$)/m.exec(rest);
+  if (!close) return none;
+  const frontmatter = rest.slice(0, close.index);
+  const bodyOffset = open[0].length + close.index + close[0].length;
+  return {
+    frontmatter,
+    frontmatterOffset: open[0].length,
+    body: prompt.slice(bodyOffset),
+    bodyOffset,
+  };
+}
+
+/** Parse a single frontmatter line (`name: <type?> | attr | attr…`). */
+function parseFieldLine(
+  line: string,
   index: number,
 ): { field?: FieldDef; error?: ParseError } {
   const err = (message: string) => ({ error: { message, index } });
 
-  // name (+ optional `?` optional marker)
-  const nameMatch = /^([^\s:=?]+)\s*(\??)/.exec(raw);
-  if (!nameMatch) return err(`Malformed placeholder: {{${raw}}}`);
-  const name = nameMatch[1];
-  const required = nameMatch[2] !== '?';
+  const colon = line.indexOf(':');
+  if (colon === -1) return err(`Field line needs a name and colon: "${line}"`);
+  const name = line.slice(0, colon).trim();
+  if (!NAME_RE.test(name)) return err(`Invalid field name: "${name}"`);
+  if (RESERVED_NAME_RE.test(name)) return err(`Reserved field name: "${name}"`);
 
-  if (!NAME_RE.test(name)) return err(`Invalid placeholder name: "${name}"`);
-  if (RESERVED_NAME_RE.test(name)) {
-    return err(`Reserved placeholder name: "${name}"`);
-  }
-
-  let rest = raw.slice(nameMatch[0].length).trim();
-
-  // Optional default: everything after the first top-level `=`.
-  let defaultRaw: string | null = null;
-  const eq = indexOfTopLevel(rest, '=');
-  if (eq !== -1) {
-    defaultRaw = rest.slice(eq + 1).trim();
-    rest = rest.slice(0, eq).trim();
-  }
-
+  const segs = splitTopLevel(line.slice(colon + 1), '|').map((s) => s.trim());
+  const typeStr = segs[0];
   let type: FieldType = 'text';
-  let options: string[] | undefined;
-
-  if (rest.length > 0) {
-    // rest must start with `:type` (optionally followed by `:options`).
-    if (!rest.startsWith(':')) {
-      return err(`Malformed placeholder: {{${raw}}}`);
-    }
-    const segs = splitTopLevel(rest.slice(1), ':').map((s) => s.trim());
-    const typeStr = segs[0];
+  if (typeStr.length > 0) {
     if (!FIELD_TYPES.includes(typeStr as FieldType)) {
       return err(`Unknown field type: "${typeStr}"`);
     }
     type = typeStr as FieldType;
+  }
 
-    if (segs.length > 2) return err(`Malformed placeholder: {{${raw}}}`);
-    if (segs.length === 2) {
-      if (type !== 'select' && type !== 'multi') {
-        return err(`Options are only valid for select/multi: "${name}"`);
-      }
-      options = splitTopLevel(segs[1], '|')
-        .map((o) => unquote(o))
-        .filter((o) => o.length > 0);
+  let required = true;
+  let label: string | undefined;
+  let description: string | undefined;
+  let options: string[] | undefined;
+  let defaultRaw: string | null = null;
+
+  for (const seg of segs.slice(1)) {
+    if (seg.length === 0) continue;
+    if (seg === 'optional') {
+      required = false;
+      continue;
+    }
+    const eq = seg.indexOf('=');
+    if (eq === -1) return err(`Unknown attribute: "${seg}"`);
+    const key = seg.slice(0, eq).trim();
+    const value = seg.slice(eq + 1).trim();
+    switch (key) {
+      case 'label':
+        label = unquote(value);
+        break;
+      case 'desc':
+        description = unquote(value);
+        break;
+      case 'options':
+        options = splitTopLevel(value, ',')
+          .map((o) => unquote(o))
+          .filter((o) => o.length > 0);
+        break;
+      case 'default':
+        defaultRaw = value;
+        break;
+      default:
+        return err(`Unknown attribute: "${key}"`);
     }
   }
 
-  if (type === 'select' || type === 'multi') {
-    if (!options || options.length === 0) {
-      return err(`${type} "${name}" needs at least one option`);
-    }
+  if (type !== 'select' && type !== 'multi') {
+    if (options)
+      return err(`Options are only valid for select/multi: "${name}"`);
+  } else if (!options || options.length === 0) {
+    return err(`${type} "${name}" needs at least one option`);
   }
 
   let def: string | string[] | undefined;
@@ -259,47 +290,99 @@ function parseField(
   return {
     field: {
       name,
-      label: humanize(name),
+      label: label ?? humanize(name),
       type,
       required,
+      ...(description && { description }),
       ...(options && { options }),
       ...(def !== undefined && { default: def }),
     },
   };
 }
 
-export function parseWorkflowTemplate(prompt: string): ParseResult {
-  const { tokens, unclosed } = scanTokens(prompt);
-  const errors: ParseError[] = [];
+/** Parse the frontmatter block into field defs, tracking absolute line offsets. */
+function parseFrontmatter(
+  frontmatter: string,
+  baseOffset: number,
+): { fields: FieldDef[]; errors: ParseError[] } {
   const fields: FieldDef[] = [];
+  const errors: ParseError[] = [];
   const seen = new Set<string>();
-
-  for (const tok of tokens) {
-    if (isBuiltinToken(tok.raw)) {
-      const b = parseBuiltin(tok.raw);
-      if ('error' in b) errors.push({ message: b.error, index: tok.start });
+  let offset = baseOffset;
+  for (const rawLine of frontmatter.split('\n')) {
+    const line = rawLine.trim();
+    if (line.length === 0) {
+      offset += rawLine.length + 1;
       continue;
     }
-    const { field, error } = parseField(tok.raw, tok.start);
-    if (error) {
-      errors.push(error);
-      continue;
-    }
-    if (field) {
+    const { field, error } = parseFieldLine(line, offset);
+    if (error) errors.push(error);
+    else if (field) {
       if (seen.has(field.name)) {
         errors.push({
-          message: `Duplicate placeholder name: "${field.name}"`,
-          index: tok.start,
+          message: `Duplicate field name: "${field.name}"`,
+          index: offset,
         });
-        continue;
+      } else {
+        seen.add(field.name);
+        fields.push(field);
       }
-      seen.add(field.name);
-      fields.push(field);
+    }
+    offset += rawLine.length + 1;
+  }
+  return { fields, errors };
+}
+
+export function parseWorkflowTemplate(prompt: string): ParseResult {
+  const { frontmatter, frontmatterOffset, body, bodyOffset } =
+    splitFrontmatter(prompt);
+  const { fields, errors } =
+    frontmatter !== null
+      ? parseFrontmatter(frontmatter, frontmatterOffset)
+      : { fields: [] as FieldDef[], errors: [] as ParseError[] };
+  const warnings: ParseError[] = [];
+  const byName = new Map(fields.map((f) => [f.name, f]));
+  const referenced = new Set<string>();
+
+  const { tokens, unclosed } = scanTokens(body);
+  for (const tok of tokens) {
+    const at = tok.start + bodyOffset;
+    if (isBuiltinToken(tok.raw)) {
+      const b = parseBuiltin(tok.raw);
+      if ('error' in b) errors.push({ message: b.error, index: at });
+      continue;
+    }
+    if (!NAME_RE.test(tok.raw)) {
+      errors.push({
+        message: `Invalid placeholder: {{${tok.raw}}}`,
+        index: at,
+      });
+      continue;
+    }
+    if (!byName.has(tok.raw)) {
+      errors.push({ message: `Undefined input: {{${tok.raw}}}`, index: at });
+      continue;
+    }
+    referenced.add(tok.raw);
+  }
+
+  if (unclosed) {
+    errors.push({
+      message: unclosed.message,
+      index: unclosed.index + bodyOffset,
+    });
+  }
+
+  for (const f of fields) {
+    if (!referenced.has(f.name)) {
+      warnings.push({
+        message: `Field "${f.name}" is defined but never referenced`,
+        index: 0,
+      });
     }
   }
 
-  if (unclosed) errors.push(unclosed);
-  return { fields, errors };
+  return { fields, errors, warnings };
 }
 
 /** Field names that are required but have no usable value in `values`. */
@@ -445,41 +528,41 @@ export function substitute(
   now: Date,
 ): string {
   const byName = new Map(fields.map((f) => [f.name, f]));
+  // Frontmatter is field definitions, not output — substitute only the body.
+  const { body } = splitFrontmatter(prompt);
   let out = '';
   let i = 0;
-  while (i < prompt.length) {
-    if (prompt[i] === '\\' && prompt.startsWith('{{', i + 1)) {
+  while (i < body.length) {
+    if (body[i] === '\\' && body.startsWith('{{', i + 1)) {
       out += '{{';
       i += 3;
       continue;
     }
-    if (prompt[i] === '\\' && prompt.startsWith('}}', i + 1)) {
+    if (body[i] === '\\' && body.startsWith('}}', i + 1)) {
       out += '}}';
       i += 3;
       continue;
     }
-    if (prompt.startsWith('{{', i)) {
-      const close = prompt.indexOf('}}', i + 2);
+    if (body.startsWith('{{', i)) {
+      const close = body.indexOf('}}', i + 2);
       if (close === -1) {
-        out += prompt.slice(i);
+        out += body.slice(i);
         break;
       }
-      const raw = prompt.slice(i + 2, close).trim();
+      const raw = body.slice(i + 2, close).trim();
       if (isBuiltinToken(raw)) {
         const b = parseBuiltin(raw);
         out += 'error' in b ? '' : formatBuiltin(b, now);
       } else {
-        const nameMatch = /^([^\s:=?]+)/.exec(raw);
-        const f = nameMatch ? byName.get(nameMatch[1]) : undefined;
-        if (f) {
-          out += fieldValueToString(f, resolveValue(f, values));
-        }
-        // Unknown field token: drop it (parse-time already flags such prompts).
+        // Body refs are bare `{{name}}`; unknown tokens are dropped (parse-time
+        // already blocks such prompts).
+        const f = byName.get(raw);
+        if (f) out += fieldValueToString(f, resolveValue(f, values));
       }
       i = close + 2;
       continue;
     }
-    out += prompt[i];
+    out += body[i];
     i += 1;
   }
   return out;

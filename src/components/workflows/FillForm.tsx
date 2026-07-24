@@ -100,6 +100,9 @@ export default function FillForm({
               {f.label}
               {f.required && <span className="text-danger"> *</span>}
             </label>
+            {f.description && (
+              <p className="text-xs text-fg/50">{f.description}</p>
+            )}
 
             {f.type === 'text' && (
               <input

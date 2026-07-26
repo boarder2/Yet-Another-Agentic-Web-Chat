@@ -12,7 +12,7 @@ import {
 /**
  * Minimal row factory. Header values are left as plaintext —
  * `decryptTolerant` passes non-encrypted values straight through, so these
- * tests exercise the parsing/merging logic without a passphrase.
+ * tests exercise the parsing/merging logic without encrypting anything.
  */
 const row = (overrides: Partial<McpServerRow> = {}): McpServerRow =>
   ({

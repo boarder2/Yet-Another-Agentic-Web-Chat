@@ -16,6 +16,8 @@ export interface McpServer {
   visibleInGeneralChat: boolean;
   headerName: string | null;
   hasToken: boolean;
+  // Names only — extra-header values never leave the server.
+  extraHeaderNames: string[];
   oauthClientId: string | null;
   hasSecret: boolean;
   oauthScope: string | null;
@@ -82,6 +84,7 @@ export function useCreateMcpServer() {
       oauthClientId?: string;
       oauthClientSecret?: string;
       oauthScope?: string;
+      extraHeaders?: Record<string, string>;
     }) =>
       apiFetch<{ server: McpServer }>('/api/mcp/servers', {
         method: 'POST',

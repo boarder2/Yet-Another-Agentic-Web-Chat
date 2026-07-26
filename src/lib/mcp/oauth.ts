@@ -21,7 +21,11 @@ import { getBaseUrl } from '@/lib/config';
 import { encrypt, decryptTolerant } from '@/lib/encryption';
 import { version } from '@/../package.json';
 import type { McpServerRow } from './types';
-import { McpAuthRequiredError, decryptServerSecrets } from './types';
+import {
+  McpAuthRequiredError,
+  buildRequestInit,
+  decryptServerSecrets,
+} from './types';
 
 /**
  * Decrypt a DB-stored OAuth JSON column, tolerating null and legacy
@@ -387,6 +391,7 @@ export async function connectWithClientCredentials(rawServer: McpServerRow) {
   const provider = new McpClientCredentialsProvider(server);
   const transport = new StreamableHTTPClientTransport(new URL(server.url), {
     authProvider: provider,
+    ...buildRequestInit(server),
   });
   const client = new Client({ name: 'YAAWC', version }, { capabilities: {} });
   client.onerror = (err) => {
@@ -521,6 +526,7 @@ export async function handleOAuthCallback(
 
     const transport = new StreamableHTTPClientTransport(serverUrl, {
       authProvider: provider,
+      ...buildRequestInit(server),
     });
 
     // finishAuth exchanges code for tokens — this calls provider.codeVerifier()
@@ -603,6 +609,7 @@ export async function connectWithOAuth(server: McpServerRow) {
   const url = new URL(server.url);
   const transport = new StreamableHTTPClientTransport(url, {
     authProvider: provider,
+    ...buildRequestInit(server),
   });
 
   const client = new Client({ name: 'YAAWC', version }, { capabilities: {} });

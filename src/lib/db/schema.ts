@@ -383,6 +383,19 @@ export const mcpServers = sqliteTable(
       .default(false),
     headerName: text('header_name'),
     secretToken: text('secret_token'),
+    // Additional request headers, sent on every transport alongside whatever
+    // `authType` contributes. Some servers need a second credential header
+    // (e.g. a shared gate token plus a per-user API key) that the single
+    // header/token pair above can't express.
+    //
+    // Each *value* is encrypted individually rather than the map as a whole, so
+    // the JSON structure stays visible to SQLite — that lets PATCH merge single
+    // headers atomically via `json_patch` (same trick as `toolConfig`) instead
+    // of a read-modify-write that would force the client to resupply every
+    // secret to change one.
+    extraHeaders: text('extra_headers', { mode: 'json' }).$type<
+      Record<string, string>
+    >(),
     oauthClientId: text('oauth_client_id'),
     oauthClientSecret: text('oauth_client_secret'),
     oauthScope: text('oauth_scope'),

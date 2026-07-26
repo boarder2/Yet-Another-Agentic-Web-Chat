@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { mcpServers } from '@/lib/db/schema';
-import { redactServer } from '@/lib/mcp/types';
+import {
+  encryptHeaderValues,
+  redactServer,
+  validateExtraHeaders,
+} from '@/lib/mcp/types';
 import { encrypt, isEncryptionConfigured } from '@/lib/encryption';
 
 export async function GET() {
@@ -27,8 +31,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'url required' }, { status: 400 });
     }
 
+    if (body.extraHeaders !== undefined) {
+      const err = validateExtraHeaders(body.extraHeaders);
+      if (err) return NextResponse.json({ error: err }, { status: 400 });
+    }
+
     if (
-      (body.secretToken || body.oauthClientSecret) &&
+      (body.secretToken || body.oauthClientSecret || body.extraHeaders) &&
       !isEncryptionConfigured()
     ) {
       return NextResponse.json(
@@ -78,6 +87,9 @@ export async function POST(req: NextRequest) {
           ? encrypt(body.oauthClientSecret as string)
           : null,
         oauthScope: (body.oauthScope as string | undefined) ?? null,
+        extraHeaders: body.extraHeaders
+          ? encryptHeaderValues(body.extraHeaders as Record<string, string>)
+          : null,
       })
       .returning();
 

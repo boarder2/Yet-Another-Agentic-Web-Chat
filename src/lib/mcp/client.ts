@@ -12,6 +12,7 @@ import { mcpServers } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import {
   McpAuthRequiredError,
+  buildRequestInit,
   decryptServerSecrets,
   type McpServerRow,
 } from './types';
@@ -31,20 +32,6 @@ function parseUrl(urlStr: string, serverId: string): URL {
       `Invalid MCP server URL "${urlStr}" for server ${serverId}: ${String(e)}`,
     );
   }
-}
-
-function buildBearerTransport(
-  url: URL,
-  server: McpServerRow,
-): StreamableHTTPClientTransport {
-  const headerName = server.headerName ?? 'Authorization';
-  const headerValue =
-    headerName.toLowerCase() === 'authorization'
-      ? `Bearer ${server.secretToken ?? ''}`
-      : (server.secretToken ?? '');
-  return new StreamableHTTPClientTransport(url, {
-    requestInit: { headers: { [headerName]: headerValue } },
-  });
 }
 
 const authError = (server: McpServerRow): McpAuthRequiredError =>
@@ -98,28 +85,35 @@ export async function connectMcpServer(
     console.error(`[mcp] client error for server ${server.name}:`, err);
   };
 
-  if (server.authType === 'bearer') {
-    await client.connect(buildBearerTransport(url, server));
-  } else if (server.authType === 'oauth') {
+  if (server.authType === 'oauth') {
     // Full interactive OAuth: delegate to the OAuth module which constructs
     // the provider with DB-backed token storage and handles the auth dance.
     const { connectWithOAuth } = await import('./oauth');
     return connectWithOAuth(server);
-  } else if (server.authType === 'oauth_client_credentials') {
+  }
+  if (server.authType === 'oauth_client_credentials') {
     // Non-interactive OAuth: the provider hands the SDK static client creds and
     // a client_credentials token request; the SDK fetches/caches/refreshes.
     const { connectWithClientCredentials } = await import('./oauth');
     return connectWithClientCredentials(server);
-  } else if (
+  }
+
+  const opts = buildRequestInit(server);
+
+  if (
     server.transport === 'streamableHttp' ||
     server.resolvedTransport === 'streamableHttp'
   ) {
-    await connectOrAuth(client, new StreamableHTTPClientTransport(url), server);
+    await connectOrAuth(
+      client,
+      new StreamableHTTPClientTransport(url, opts),
+      server,
+    );
   } else if (server.transport === 'sse' || server.resolvedTransport === 'sse') {
-    await connectOrAuth(client, new SSEClientTransport(url), server);
+    await connectOrAuth(client, new SSEClientTransport(url, opts), server);
   } else {
     // auto: probe StreamableHTTP first, fall back to SSE only on non-401 errors
-    const probe = new StreamableHTTPClientTransport(url);
+    const probe = new StreamableHTTPClientTransport(url, opts);
     try {
       await client.connect(probe);
       await persistResolvedTransport(server, 'streamableHttp');
@@ -127,7 +121,7 @@ export async function connectMcpServer(
       await probe.close().catch(() => undefined);
       // Never fall back on 401 — surface auth error immediately
       if (e instanceof UnauthorizedError) throw authError(server);
-      await connectOrAuth(client, new SSEClientTransport(url), server);
+      await connectOrAuth(client, new SSEClientTransport(url, opts), server);
       await persistResolvedTransport(server, 'sse');
     }
   }

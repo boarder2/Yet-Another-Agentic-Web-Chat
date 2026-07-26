@@ -44,6 +44,11 @@ import { qk } from '@/lib/api/keys';
 type AuthType = 'none' | 'bearer' | 'oauth_client_credentials' | 'oauth';
 type TransportType = 'auto' | 'streamableHttp' | 'sse';
 
+interface HeaderRow {
+  name: string;
+  value: string;
+}
+
 interface ServerFormState {
   name: string;
   url: string;
@@ -54,6 +59,7 @@ interface ServerFormState {
   oauthClientId: string;
   oauthClientSecret: string;
   oauthScope: string;
+  extraHeaders: HeaderRow[];
 }
 
 const defaultForm = (): ServerFormState => ({
@@ -66,7 +72,116 @@ const defaultForm = (): ServerFormState => ({
   oauthClientId: '',
   oauthClientSecret: '',
   oauthScope: '',
+  extraHeaders: [],
 });
+
+/**
+ * Build the `extraHeaders` payload from form rows, or null when there are none.
+ * Rows without a name are dropped as incomplete.
+ */
+const headerRowsToPayload = (
+  rows: HeaderRow[],
+): Record<string, string> | null => {
+  const named = rows.filter((r) => r.name.trim());
+  if (!named.length) return null;
+  return Object.fromEntries(named.map((r) => [r.name.trim(), r.value]));
+};
+
+/**
+ * Diff edited rows against the header names the server already has, producing
+ * an RFC 7386 merge patch: entries to set, and `null` for entries to delete.
+ *
+ * Values are write-only — an untouched row keeps its blank value and is simply
+ * omitted, so editing one header never asks the user to retype the others.
+ * Returns null when nothing changed.
+ */
+const headerRowsToPatch = (
+  rows: HeaderRow[],
+  originalNames: string[],
+): Record<string, string | null> | null => {
+  const patch: Record<string, string | null> = {};
+
+  for (const { name, value } of rows) {
+    const trimmed = name.trim();
+    // A blank value on a pre-existing header means "leave it alone".
+    if (!trimmed || (!value && originalNames.includes(trimmed))) continue;
+    patch[trimmed] = value;
+  }
+
+  const kept = new Set(rows.map((r) => r.name.trim()));
+  for (const name of originalNames) {
+    if (!kept.has(name)) patch[name] = null;
+  }
+
+  return Object.keys(patch).length ? patch : null;
+};
+
+/**
+ * Repeatable name/value editor for additional request headers, sent on every
+ * transport regardless of auth type. Values are write-only: an existing row
+ * arrives with an empty value, so the parent requires re-entry before saving
+ * rather than silently blanking a stored credential.
+ */
+function ExtraHeadersEditor({
+  rows,
+  onChange,
+  storedNames = [],
+}: {
+  rows: HeaderRow[];
+  onChange: (rows: HeaderRow[]) => void;
+  /** Header names already saved — their values stay put if left blank. */
+  storedNames?: string[];
+}) {
+  const update = (i: number, patch: Partial<HeaderRow>) =>
+    onChange(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="text-xs text-fg/60">Extra headers</span>
+      {rows.map((row, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <input
+            className={inputClass}
+            aria-label={`Header ${i + 1} name`}
+            placeholder="Header name"
+            value={row.name}
+            onChange={(e) => update(i, { name: e.target.value })}
+          />
+          <input
+            className={inputClass}
+            aria-label={`Header ${i + 1} value`}
+            type="password"
+            placeholder={
+              storedNames.includes(row.name.trim()) ? 'Unchanged' : 'Value'
+            }
+            value={row.value}
+            onChange={(e) => update(i, { value: e.target.value })}
+          />
+          <button
+            type="button"
+            aria-label={`Remove header ${row.name || i + 1}`}
+            className="p-2 text-fg/50 hover:text-red-400 transition-colors duration-150"
+            onClick={() => onChange(rows.filter((_, j) => j !== i))}
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        className="self-start flex items-center gap-1 text-xs text-fg/60 hover:text-fg transition-colors duration-150"
+        onClick={() => onChange([...rows, { name: '', value: '' }])}
+      >
+        <PlusCircle size={14} /> Add header
+      </button>
+      <p className="text-xs text-fg/50">
+        Sent on every request, alongside the auth type above. Use for servers
+        needing a second credential header. Saved values stay hidden — leave one
+        blank to keep it as is.
+      </p>
+    </div>
+  );
+}
 
 const inputClass =
   'w-full bg-surface border border-surface-2 rounded-control px-3 py-2 text-sm text-fg placeholder:text-fg/40 focus:outline-none focus:border-accent transition-colors duration-150';
@@ -335,7 +450,12 @@ function ServerRow({ server }: { server: McpServer }) {
     oauthClientId: server.oauthClientId ?? '',
     oauthClientSecret: '', // never pre-fill secrets
     oauthScope: server.oauthScope ?? '',
+    // Names round-trip; values are write-only, so they start blank.
+    extraHeaders: server.extraHeaderNames.map((name) => ({ name, value: '' })),
   });
+  // Only send extraHeaders when touched — an untouched form has blank values
+  // that would otherwise wipe the stored ones.
+  const [headersDirty, setHeadersDirty] = useState(false);
 
   const patch = usePatchMcpServer(server.id);
   const del = useDeleteMcpServer(server.id);
@@ -366,6 +486,24 @@ function ServerRow({ server }: { server: McpServer }) {
     }
     if (form.authType === 'oauth') {
       update.oauthScope = form.oauthScope.trim() || null;
+    }
+    if (headersDirty) {
+      // A newly added header has no stored value to fall back on.
+      const missing = form.extraHeaders.find(
+        (r) =>
+          r.name.trim() &&
+          !r.value &&
+          !server.extraHeaderNames.includes(r.name.trim()),
+      );
+      if (missing) {
+        toast.error(`Enter a value for header "${missing.name.trim()}"`);
+        return;
+      }
+      const patch = headerRowsToPatch(
+        form.extraHeaders,
+        server.extraHeaderNames,
+      );
+      if (patch) update.extraHeadersPatch = patch;
     }
     patch.mutate(update, {
       onSuccess: () => {
@@ -585,6 +723,14 @@ function ServerRow({ server }: { server: McpServer }) {
             />
           </label>
         )}
+        <ExtraHeadersEditor
+          rows={form.extraHeaders}
+          storedNames={server.extraHeaderNames}
+          onChange={(extraHeaders) => {
+            setHeadersDirty(true);
+            setForm((f) => ({ ...f, extraHeaders }));
+          }}
+        />
         <div className="flex items-center gap-2 justify-end pt-1">
           <button
             type="button"
@@ -759,6 +905,7 @@ function AddServerForm({ onDone }: { onDone: () => void }) {
     if (form.authType === 'oauth') {
       data.oauthScope = form.oauthScope.trim() || undefined;
     }
+    data.extraHeaders = headerRowsToPayload(form.extraHeaders) ?? undefined;
     create.mutate(data as Parameters<typeof create.mutate>[0], {
       onSuccess: () => {
         toast.success(`Server "${form.name}" added`);
@@ -918,6 +1065,10 @@ function AddServerForm({ onDone }: { onDone: () => void }) {
           />
         </label>
       )}
+      <ExtraHeadersEditor
+        rows={form.extraHeaders}
+        onChange={(extraHeaders) => setForm((f) => ({ ...f, extraHeaders }))}
+      />
       <div className="flex items-center gap-2 justify-end">
         <button
           type="button"

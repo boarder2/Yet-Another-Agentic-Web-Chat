@@ -297,13 +297,13 @@ async function refreshDescriptors(
   }
 }
 
-/** List all tools from a client (paginating on nextCursor), capped at 50 per server. */
+/** List all tools from a client (paginating on nextCursor), capped at 100 per server. */
 async function fetchDescriptors(
   server: McpServerRow,
   client: Client,
   timeout = CONNECT_TIMEOUT_MS,
 ): Promise<McpToolDescriptor[]> {
-  const TOOL_CAP = 50;
+  const TOOL_CAP = 100;
   const descriptors: McpToolDescriptor[] = [];
   let cursor: string | undefined;
 

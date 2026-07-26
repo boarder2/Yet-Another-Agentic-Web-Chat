@@ -3,7 +3,12 @@ import db from '@/lib/db';
 import { mcpServers, mcpServerWorkspaces } from '@/lib/db/schema';
 import { eq, sql } from 'drizzle-orm';
 import { invalidateServer } from '@/lib/mcp/manager';
-import { redactServer } from '@/lib/mcp/types';
+import {
+  encryptHeaderPatch,
+  encryptHeaderValues,
+  redactServer,
+  validateExtraHeaders,
+} from '@/lib/mcp/types';
 import { encrypt, isEncryptionConfigured } from '@/lib/encryption';
 
 /** Cap on per-tool override entries to keep the JSON column bounded. */
@@ -91,8 +96,23 @@ export async function PATCH(
       if (err) return NextResponse.json({ error: err }, { status: 400 });
     }
 
+    if (body.extraHeaders !== undefined && body.extraHeaders !== null) {
+      const err = validateExtraHeaders(body.extraHeaders);
+      if (err) return NextResponse.json({ error: err }, { status: 400 });
+    }
+
+    if (body.extraHeadersPatch !== undefined) {
+      const err = validateExtraHeaders(body.extraHeadersPatch, {
+        allowNull: true,
+      });
+      if (err) return NextResponse.json({ error: err }, { status: 400 });
+    }
+
     if (
-      (body.secretToken || body.oauthClientSecret) &&
+      (body.secretToken ||
+        body.oauthClientSecret ||
+        body.extraHeaders ||
+        body.extraHeadersPatch) &&
       !isEncryptionConfigured()
     ) {
       return NextResponse.json(
@@ -139,6 +159,22 @@ export async function PATCH(
       update.oauthClientSecret = body.oauthClientSecret
         ? encrypt(body.oauthClientSecret)
         : null;
+    }
+    if ('extraHeaders' in body) {
+      // Whole-map replace.
+      update.extraHeaders = body.extraHeaders
+        ? encryptHeaderValues(body.extraHeaders as Record<string, string>)
+        : null;
+    }
+    // Atomic per-header merge, mirroring toolConfigPatch: json_patch (RFC 7386)
+    // sets the named headers and removes those whose value is null, leaving the
+    // rest untouched — so changing one header never requires resupplying the
+    // others, whose values the client can't read back.
+    if (body.extraHeadersPatch !== undefined) {
+      const encrypted = encryptHeaderPatch(
+        body.extraHeadersPatch as Record<string, string | null>,
+      );
+      update.extraHeaders = sql`json_patch(coalesce(${mcpServers.extraHeaders}, '{}'), ${JSON.stringify(encrypted)})`;
     }
     // Changing URL/auth/transport invalidates resolved transport
     if ('url' in body || 'authType' in body || 'transport' in body) {

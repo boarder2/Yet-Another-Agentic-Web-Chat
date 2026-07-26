@@ -14,6 +14,9 @@ export function migrateMcpAuth(): void {
   let migratedServers = 0;
   const servers = db.select().from(mcpServers).all();
   for (const server of servers) {
+    // `extraHeaders` needs no pass here: its values are encrypted individually
+    // on write and the column postdates encryption-at-rest, so no plaintext
+    // rows exist to migrate.
     const update: { secretToken?: string; oauthClientSecret?: string } = {};
     if (server.secretToken && !isEncrypted(server.secretToken)) {
       update.secretToken = encrypt(server.secretToken);

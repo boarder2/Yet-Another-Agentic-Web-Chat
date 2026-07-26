@@ -135,6 +135,91 @@ test.describe('POST /api/mcp/servers', () => {
     expect(body.server).not.toHaveProperty('oauthClientSecret');
   });
 
+  test('stores extraHeaders, exposing names but never values', async ({
+    request,
+  }) => {
+    const res = await request.post('/api/mcp/servers', {
+      data: {
+        name: uniq('mcp-headers'),
+        url: 'https://example.com/mcp',
+        authType: 'bearer',
+        secretToken: 'gate-token',
+        extraHeaders: { 'X-Portainer-API-Key': 'ptr_super_secret' },
+      },
+    });
+    expect(res.status()).toBe(201);
+    const body = await res.json();
+
+    expect(body.server.extraHeaderNames).toEqual(['X-Portainer-API-Key']);
+    expect(body.server).not.toHaveProperty('extraHeaders');
+    // The value must never reach the client, in any field.
+    expect(JSON.stringify(body.server)).not.toContain('ptr_super_secret');
+  });
+
+  test('reports no extra headers when none are configured', async ({
+    request,
+  }) => {
+    const res = await request.post('/api/mcp/servers', {
+      data: { name: uniq('mcp-noheaders'), url: 'https://example.com/mcp' },
+    });
+    expect(res.status()).toBe(201);
+    expect((await res.json()).server.extraHeaderNames).toEqual([]);
+  });
+
+  test('rejects an extraHeaders value containing CRLF with 400', async ({
+    request,
+  }) => {
+    const res = await request.post('/api/mcp/servers', {
+      data: {
+        name: uniq('mcp-crlf'),
+        url: 'https://example.com/mcp',
+        extraHeaders: { 'X-Api-Key': 'ok\r\nX-Injected: evil' },
+      },
+    });
+    expect(res.status()).toBe(400);
+    expect((await res.json()).error).toContain('control characters');
+  });
+
+  test('rejects an invalid extraHeaders header name with 400', async ({
+    request,
+  }) => {
+    const res = await request.post('/api/mcp/servers', {
+      data: {
+        name: uniq('mcp-badname'),
+        url: 'https://example.com/mcp',
+        extraHeaders: { 'bad header name': 'v' },
+      },
+    });
+    expect(res.status()).toBe(400);
+    expect((await res.json()).error).toContain('invalid header name');
+  });
+
+  test('rejects a non-string extraHeaders value with 400', async ({
+    request,
+  }) => {
+    const res = await request.post('/api/mcp/servers', {
+      data: {
+        name: uniq('mcp-nonstring'),
+        url: 'https://example.com/mcp',
+        extraHeaders: { 'X-Api-Key': 42 },
+      },
+    });
+    expect(res.status()).toBe(400);
+    expect((await res.json()).error).toContain('string value');
+  });
+
+  test('rejects a non-object extraHeaders with 400', async ({ request }) => {
+    const res = await request.post('/api/mcp/servers', {
+      data: {
+        name: uniq('mcp-arr'),
+        url: 'https://example.com/mcp',
+        extraHeaders: ['X-Api-Key'],
+      },
+    });
+    expect(res.status()).toBe(400);
+    expect((await res.json()).error).toContain('must be an object');
+  });
+
   test('redacts oauthClientSecret when provided', async ({ request }) => {
     const name = uniq('mcp-oauth');
     const res = await request.post('/api/mcp/servers', {
@@ -407,6 +492,114 @@ test.describe('PATCH /api/mcp/servers/[id]', () => {
     expect(body.server.authType).toBe('bearer');
     expect(body.server.hasToken).toBe(true);
     expect(body.server).not.toHaveProperty('secretToken');
+  });
+
+  test('patches a single extra header without disturbing the others', async ({
+    request,
+  }) => {
+    const createRes = await request.post('/api/mcp/servers', {
+      data: {
+        name: uniq('mcp-hdr-merge'),
+        url: 'https://example.com/mcp',
+        extraHeaders: { 'X-Gate': 'gate-v1', 'X-Key': 'key-v1' },
+      },
+    });
+    const created = (await createRes.json()).server;
+
+    // Change one header; the other must survive untouched — the client can't
+    // read values back, so a whole-map replace would silently destroy it.
+    const patched = await request.patch(`/api/mcp/servers/${created.id}`, {
+      data: { extraHeadersPatch: { 'X-Key': 'key-v2' } },
+    });
+    expect(patched.status()).toBe(200);
+    expect((await patched.json()).server.extraHeaderNames.sort()).toEqual([
+      'X-Gate',
+      'X-Key',
+    ]);
+
+    // Add a third alongside the existing two.
+    const added = await request.patch(`/api/mcp/servers/${created.id}`, {
+      data: { extraHeadersPatch: { 'X-Third': 'c' } },
+    });
+    expect((await added.json()).server.extraHeaderNames.sort()).toEqual([
+      'X-Gate',
+      'X-Key',
+      'X-Third',
+    ]);
+
+    // A null value deletes just that header.
+    const deleted = await request.patch(`/api/mcp/servers/${created.id}`, {
+      data: { extraHeadersPatch: { 'X-Gate': null } },
+    });
+    expect((await deleted.json()).server.extraHeaderNames.sort()).toEqual([
+      'X-Key',
+      'X-Third',
+    ]);
+  });
+
+  test('rejects an invalid extraHeadersPatch with 400', async ({ request }) => {
+    const createRes = await request.post('/api/mcp/servers', {
+      data: { name: uniq('mcp-patch-bad'), url: 'https://example.com/mcp' },
+    });
+    const created = (await createRes.json()).server;
+
+    const res = await request.patch(`/api/mcp/servers/${created.id}`, {
+      data: { extraHeadersPatch: { 'bad name': 'v' } },
+    });
+    expect(res.status()).toBe(400);
+    expect((await res.json()).error).toContain('invalid header name');
+  });
+
+  test('replaces extraHeaders wholesale and leaves them alone when omitted', async ({
+    request,
+  }) => {
+    const createRes = await request.post('/api/mcp/servers', {
+      data: {
+        name: uniq('mcp-hdr-patch'),
+        url: 'https://example.com/mcp',
+        extraHeaders: { 'X-One': 'a', 'X-Two': 'b' },
+      },
+    });
+    const created = (await createRes.json()).server;
+    expect(created.extraHeaderNames.sort()).toEqual(['X-One', 'X-Two']);
+
+    // A patch that doesn't mention extraHeaders must not disturb them.
+    const untouched = await request.patch(`/api/mcp/servers/${created.id}`, {
+      data: { enabled: false },
+    });
+    expect((await untouched.json()).server.extraHeaderNames.sort()).toEqual([
+      'X-One',
+      'X-Two',
+    ]);
+
+    // Supplying extraHeaders replaces the whole map rather than merging.
+    const replaced = await request.patch(`/api/mcp/servers/${created.id}`, {
+      data: { extraHeaders: { 'X-Three': 'c' } },
+    });
+    expect((await replaced.json()).server.extraHeaderNames).toEqual([
+      'X-Three',
+    ]);
+
+    // Null clears them.
+    const cleared = await request.patch(`/api/mcp/servers/${created.id}`, {
+      data: { extraHeaders: null },
+    });
+    expect((await cleared.json()).server.extraHeaderNames).toEqual([]);
+  });
+
+  test('rejects an invalid extraHeaders patch with 400', async ({
+    request,
+  }) => {
+    const createRes = await request.post('/api/mcp/servers', {
+      data: { name: uniq('mcp-hdr-bad'), url: 'https://example.com/mcp' },
+    });
+    const created = (await createRes.json()).server;
+
+    const res = await request.patch(`/api/mcp/servers/${created.id}`, {
+      data: { extraHeaders: { 'X-Api-Key': 'x\r\nEvil: 1' } },
+    });
+    expect(res.status()).toBe(400);
+    expect((await res.json()).error).toContain('control characters');
   });
 
   // -- visibleInGeneralChat -----------------------------------------------

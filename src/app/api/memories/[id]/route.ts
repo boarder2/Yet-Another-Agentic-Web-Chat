@@ -1,6 +1,5 @@
 import db from '@/lib/db';
 import { memories } from '@/lib/db/schema';
-import { NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { classifyMemory, MemoryCategory } from '@/lib/utils/memoryCategories';
 import { embedMemoryContent } from '@/lib/utils/memoryEmbedding';
@@ -13,14 +12,15 @@ import {
   getEmbeddingModelSelection,
   getMemoryModelSelection,
 } from '@/lib/settings/server';
+import { badRequest, notFound, route } from '@/lib/api/route';
 
 async function getEmbeddingModel(): Promise<CachedEmbeddings | null> {
-  const embeddingModelProviders = await getAvailableEmbeddingModelProviders();
+  const providers = await getAvailableEmbeddingModelProviders();
   const selected = getEmbeddingModelSelection();
 
   if (selected.provider && selected.name) {
-    const provider = embeddingModelProviders[selected.provider];
-    if (provider && provider[selected.name]) {
+    const provider = providers[selected.provider];
+    if (provider?.[selected.name]) {
       return new CachedEmbeddings(
         provider[selected.name].model,
         selected.provider,
@@ -29,9 +29,9 @@ async function getEmbeddingModel(): Promise<CachedEmbeddings | null> {
     }
   }
 
-  const defaultProvider = Object.keys(embeddingModelProviders)[0];
+  const defaultProvider = Object.keys(providers)[0];
   if (!defaultProvider) return null;
-  const provider = embeddingModelProviders[defaultProvider];
+  const provider = providers[defaultProvider];
   const defaultModel = Object.keys(provider)[0];
   if (!defaultModel) return null;
   return new CachedEmbeddings(
@@ -42,18 +42,15 @@ async function getEmbeddingModel(): Promise<CachedEmbeddings | null> {
 }
 
 async function getMemoryModel() {
-  const chatModelProviders = await getAvailableChatModelProviders();
+  const providers = await getAvailableChatModelProviders();
   const selected = getMemoryModelSelection();
 
   if (selected.provider && selected.name) {
-    const provider = chatModelProviders[selected.provider];
-    if (provider && provider[selected.name]) {
-      return provider[selected.name].model;
-    }
+    const provider = providers[selected.provider];
+    if (provider?.[selected.name]) return provider[selected.name].model;
   }
 
-  for (const providerName of Object.keys(chatModelProviders)) {
-    const provider = chatModelProviders[providerName];
+  for (const provider of Object.values(providers)) {
     for (const modelName of Object.keys(provider)) {
       if (modelName.toLowerCase().includes('embedding')) continue;
       return provider[modelName].model;
@@ -62,116 +59,67 @@ async function getMemoryModel() {
   return null;
 }
 
-type RouteContext = { params: Promise<{ id: string }> };
+type Ctx = { params: Promise<{ id: string }> };
 
-export async function GET(_req: Request, context: RouteContext) {
-  try {
-    const { id } = await context.params;
-    const memory = await db.query.memories.findFirst({
-      where: eq(memories.id, id),
-    });
-
-    if (!memory) {
-      return NextResponse.json({ error: 'Memory not found' }, { status: 404 });
-    }
-
-    return NextResponse.json(memory);
-  } catch (error) {
-    console.error('Failed to fetch memory:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch memory' },
-      { status: 500 },
-    );
-  }
+async function requireMemory(params: Ctx['params']) {
+  const { id } = await params;
+  const memory = await db.query.memories.findFirst({
+    where: eq(memories.id, id),
+  });
+  if (!memory) throw notFound('Memory not found');
+  return { id, memory };
 }
 
-export async function PUT(req: Request, context: RouteContext) {
-  try {
-    const { id } = await context.params;
+export const GET = route(
+  'Failed to fetch memory',
+  async (_req: Request, { params }: Ctx) =>
+    Response.json((await requireMemory(params)).memory),
+);
+
+export const PUT = route(
+  'Failed to update memory',
+  async (req: Request, { params }: Ctx) => {
     const { content } = await req.json();
-
-    if (
-      !content ||
-      typeof content !== 'string' ||
-      content.trim().length === 0
-    ) {
-      return NextResponse.json(
-        { error: 'Content is required' },
-        { status: 400 },
-      );
+    if (typeof content !== 'string' || !content.trim()) {
+      throw badRequest('Content is required');
     }
 
-    const existing = await db.query.memories.findFirst({
-      where: eq(memories.id, id),
-    });
+    const { id, memory } = await requireMemory(params);
+    const trimmed = content.trim();
+    const [embeddingModel, systemModel] = await Promise.all([
+      getEmbeddingModel(),
+      getMemoryModel(),
+    ]);
 
-    if (!existing) {
-      return NextResponse.json({ error: 'Memory not found' }, { status: 404 });
-    }
+    const embedding = embeddingModel
+      ? await embedMemoryContent(trimmed, embeddingModel)
+      : null;
+    const category: MemoryCategory = systemModel
+      ? await classifyMemory(trimmed, systemModel)
+      : (memory.category as MemoryCategory) || 'Preference';
 
-    const embeddingModel = await getEmbeddingModel();
-    const systemModel = await getMemoryModel();
-
-    let embedding: number[] | null = null;
-    let embeddingIdentifier: string | null = null;
-    let category: MemoryCategory =
-      (existing.category as MemoryCategory) || 'Preference';
-
-    if (embeddingModel) {
-      embedding = await embedMemoryContent(content.trim(), embeddingModel);
-      embeddingIdentifier = embeddingModel.getIdentifier();
-    }
-
-    if (systemModel) {
-      category = await classifyMemory(content.trim(), systemModel);
-    }
-
-    await db
+    const [updated] = await db
       .update(memories)
       .set({
-        content: content.trim(),
-        embedding: embedding ? JSON.stringify(embedding) : existing.embedding,
-        embeddingModel: embeddingIdentifier ?? existing.embeddingModel,
+        content: trimmed,
+        embedding: embedding ? JSON.stringify(embedding) : memory.embedding,
+        embeddingModel:
+          embeddingModel?.getIdentifier() ?? memory.embeddingModel,
         category,
         updatedAt: new Date(),
       })
       .where(eq(memories.id, id))
-      .execute();
+      .returning();
 
-    const updated = await db.query.memories.findFirst({
-      where: eq(memories.id, id),
-    });
+    return Response.json(updated);
+  },
+);
 
-    return NextResponse.json(updated);
-  } catch (error) {
-    console.error('Failed to update memory:', error);
-    return NextResponse.json(
-      { error: 'Failed to update memory' },
-      { status: 500 },
-    );
-  }
-}
-
-export async function DELETE(_req: Request, context: RouteContext) {
-  try {
-    const { id } = await context.params;
-
-    const existing = await db.query.memories.findFirst({
-      where: eq(memories.id, id),
-    });
-
-    if (!existing) {
-      return NextResponse.json({ error: 'Memory not found' }, { status: 404 });
-    }
-
+export const DELETE = route(
+  'Failed to delete memory',
+  async (_req: Request, { params }: Ctx) => {
+    const { id } = await requireMemory(params);
     await db.delete(memories).where(eq(memories.id, id)).execute();
-
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error('Failed to delete memory:', error);
-    return NextResponse.json(
-      { error: 'Failed to delete memory' },
-      { status: 500 },
-    );
-  }
-}
+    return Response.json({ success: true });
+  },
+);

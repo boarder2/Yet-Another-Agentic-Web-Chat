@@ -1,71 +1,45 @@
 import db from '@/lib/db';
 import { systemPrompts } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { NextResponse } from 'next/server';
+import { badRequest, notFound, route } from '@/lib/api/route';
 
-export async function PUT(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  try {
+type Ctx = { params: Promise<{ id: string }> };
+
+const VALID_TYPES = ['persona', 'methodology'];
+
+export const PUT = route(
+  'Failed to update prompt',
+  async (req: Request, { params }: Ctx) => {
     const { id } = await params;
     const { name, content, type } = await req.json();
-    if (!name || !content) {
-      return NextResponse.json(
-        { error: 'Name and content are required' },
-        { status: 400 },
-      );
-    }
+    if (!name || !content) throw badRequest('Name and content are required');
 
-    const validTypes = ['persona', 'methodology'] as const;
-
-    const updateData: Record<string, unknown> = {
-      name,
-      content,
-      updatedAt: new Date(),
-    };
-
-    if (validTypes.includes(type)) {
-      updateData.type = type;
-    }
-
-    const updatedPrompt = await db
+    const updated = await db
       .update(systemPrompts)
-      .set(updateData)
+      .set({
+        name,
+        content,
+        updatedAt: new Date(),
+        ...(VALID_TYPES.includes(type) && { type }),
+      })
       .where(eq(systemPrompts.id, id))
       .returning();
-    if (updatedPrompt.length === 0) {
-      return NextResponse.json({ error: 'Prompt not found' }, { status: 404 });
-    }
-    return NextResponse.json(updatedPrompt[0]);
-  } catch (error) {
-    console.error('Failed to update system prompt:', error);
-    return NextResponse.json(
-      { error: 'Failed to update prompt' },
-      { status: 500 },
-    );
-  }
-}
 
-export async function DELETE(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  try {
+    if (!updated.length) throw notFound('Prompt not found');
+    return Response.json(updated[0]);
+  },
+);
+
+export const DELETE = route(
+  'Failed to delete prompt',
+  async (_req: Request, { params }: Ctx) => {
     const { id } = await params;
-    const deletedPrompt = await db
+    const deleted = await db
       .delete(systemPrompts)
       .where(eq(systemPrompts.id, id))
       .returning();
-    if (deletedPrompt.length === 0) {
-      return NextResponse.json({ error: 'Prompt not found' }, { status: 404 });
-    }
-    return NextResponse.json({ message: 'Prompt deleted successfully' });
-  } catch (error) {
-    console.error('Failed to delete system prompt:', error);
-    return NextResponse.json(
-      { error: 'Failed to delete prompt' },
-      { status: 500 },
-    );
-  }
-}
+
+    if (!deleted.length) throw notFound('Prompt not found');
+    return Response.json({ message: 'Prompt deleted successfully' });
+  },
+);

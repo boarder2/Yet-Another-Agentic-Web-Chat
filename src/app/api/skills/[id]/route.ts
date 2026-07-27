@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { badRequest, notFound, route } from '@/lib/api/route';
 import {
   getUserSkillById,
   updateUserSkill,
@@ -10,90 +10,59 @@ import {
   MAX_SKILL_CONTENT_LEN,
 } from '@/lib/skills/validation';
 
-export async function GET(
-  _req: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  try {
-    const { id } = await params;
-    const skill = await getUserSkillById(id);
-    if (!skill) {
-      return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    }
-    return NextResponse.json(skill);
-  } catch (err) {
-    console.error('[api/skills/[id]] GET error:', err);
-    return NextResponse.json(
-      { error: 'Failed to fetch skill' },
-      { status: 500 },
-    );
-  }
+type Ctx = { params: Promise<{ id: string }> };
+
+async function requireSkill(params: Ctx['params']) {
+  const { id } = await params;
+  const skill = await getUserSkillById(id);
+  if (!skill) throw notFound();
+  return { id, skill };
 }
 
-export async function PUT(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  try {
-    const { id } = await params;
-    const skill = await getUserSkillById(id);
-    if (!skill) {
-      return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    }
+export const GET = route(
+  'Failed to fetch skill',
+  async (_req: Request, { params }: Ctx) => {
+    const { skill } = await requireSkill(params);
+    return Response.json(skill);
+  },
+);
 
-    const body = await req.json();
-    const { description, content, enabled, disableModelInvocation } = body;
+export const PUT = route(
+  'Failed to update skill',
+  async (req: Request, { params }: Ctx) => {
+    const { id } = await requireSkill(params);
+    const { description, content, enabled, disableModelInvocation } =
+      await req.json();
 
-    // Handle toggle
     if (typeof enabled === 'boolean') {
-      const updated = await setUserSkillEnabled(id, enabled);
-      return NextResponse.json(updated);
+      return Response.json(await setUserSkillEnabled(id, enabled));
     }
-
     if (description !== undefined && description.length > MAX_SKILL_DESC_LEN) {
-      return NextResponse.json(
-        { error: 'description too long', maxLength: MAX_SKILL_DESC_LEN },
-        { status: 400 },
-      );
+      throw badRequest('description too long', {
+        maxLength: MAX_SKILL_DESC_LEN,
+      });
     }
     if (content !== undefined && content.length > MAX_SKILL_CONTENT_LEN) {
-      return NextResponse.json({ error: 'content too long' }, { status: 400 });
+      throw badRequest('content too long');
     }
 
-    const updated = await updateUserSkill(id, {
-      description,
-      content,
-      ...(typeof disableModelInvocation === 'boolean' && {
-        disableModelInvocation,
+    return Response.json(
+      await updateUserSkill(id, {
+        description,
+        content,
+        ...(typeof disableModelInvocation === 'boolean' && {
+          disableModelInvocation,
+        }),
       }),
-    });
-    return NextResponse.json(updated);
-  } catch (err) {
-    console.error('[api/skills/[id]] PUT error:', err);
-    return NextResponse.json(
-      { error: 'Failed to update skill' },
-      { status: 500 },
     );
-  }
-}
+  },
+);
 
-export async function DELETE(
-  _req: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  try {
-    const { id } = await params;
-    const skill = await getUserSkillById(id);
-    if (!skill) {
-      return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    }
+export const DELETE = route(
+  'Failed to delete skill',
+  async (_req: Request, { params }: Ctx) => {
+    const { id } = await requireSkill(params);
     await deleteUserSkill(id);
-    return NextResponse.json({ success: true });
-  } catch (err) {
-    console.error('[api/skills/[id]] DELETE error:', err);
-    return NextResponse.json(
-      { error: 'Failed to delete skill' },
-      { status: 500 },
-    );
-  }
-}
+    return Response.json({ success: true });
+  },
+);

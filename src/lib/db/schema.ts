@@ -9,23 +9,32 @@ import {
 } from 'drizzle-orm/sqlite-core';
 import type { WorkspaceModelOverride } from '@/lib/workspaces/types';
 
-export const messages = sqliteTable('messages', {
-  id: integer('id').primaryKey(),
-  content: text('content').notNull(),
-  // Derived from `content` by removeToolCallMarkup (see src/lib/db/sanitizedContent.ts):
-  // execution UI markup (widget envelopes, legacy tool tags) stripped, ordinary
-  // prose kept. Null means a pre-migration row not yet backfilled. The sole
-  // message-text source for history search; never returned by chat/History APIs.
-  sanitizedContent: text('sanitized_content'),
-  chatId: text('chatId').notNull(),
-  messageId: text('messageId').notNull(),
-  role: text('type', {
-    enum: ['assistant', 'user', 'compaction', 'system'],
+export const messages = sqliteTable(
+  'messages',
+  {
+    id: integer('id').primaryKey(),
+    content: text('content').notNull(),
+    // Derived from `content` by removeToolCallMarkup (see src/lib/db/sanitizedContent.ts):
+    // execution UI markup (widget envelopes, legacy tool tags) stripped, ordinary
+    // prose kept. Null means a pre-migration row not yet backfilled. The sole
+    // message-text source for history search; never returned by chat/History APIs.
+    sanitizedContent: text('sanitized_content'),
+    chatId: text('chatId').notNull(),
+    messageId: text('messageId').notNull(),
+    role: text('type', {
+      enum: ['assistant', 'user', 'compaction', 'system'],
+    }),
+    metadata: text('metadata', {
+      mode: 'json',
+    }),
+  },
+  (t) => ({
+    // Rows carry the full message text, so an unindexed lookup scans every
+    // byte of chat history. `(chatId, role)` also serves chatId-only reads.
+    byChat: index('messages_chat_idx').on(t.chatId, t.role),
+    byMessage: index('messages_message_idx').on(t.messageId),
   }),
-  metadata: text('metadata', {
-    mode: 'json',
-  }),
-});
+);
 
 interface File {
   name: string;

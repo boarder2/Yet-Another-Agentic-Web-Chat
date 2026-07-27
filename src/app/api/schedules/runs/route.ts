@@ -6,7 +6,7 @@ import {
   workflows,
   messages as messagesSchema,
 } from '@/lib/db/schema';
-import { and, desc, eq, isNotNull, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull, inArray, sql } from 'drizzle-orm';
 import { computeSanitizedContent } from '@/lib/db/sanitizedContent';
 
 export const runtime = 'nodejs';
@@ -62,7 +62,9 @@ export async function GET(req: NextRequest) {
         inArray(messagesSchema.chatId, chatIds),
         eq(messagesSchema.role, 'assistant'),
       ),
-    );
+    )
+    // The preview is the run's first assistant reply, so order explicitly.
+    .orderBy(asc(messagesSchema.id));
 
   const previewMap = new Map<
     string,

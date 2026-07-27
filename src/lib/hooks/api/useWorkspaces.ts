@@ -12,7 +12,6 @@ export interface Workspace {
   color: string | null;
   icon: string | null;
   instructions: string | null;
-  sourceUrls?: string[];
   autoMemoryEnabled?: 0 | 1 | null;
   autoAcceptFileEdits?: 0 | 1;
   modelOverride?: WorkspaceModelOverride | null;

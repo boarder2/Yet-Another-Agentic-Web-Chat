@@ -298,9 +298,6 @@ export const workspaces = sqliteTable('workspaces', {
   color: text('color'),
   icon: text('icon'),
   instructions: text('instructions'),
-  sourceUrls: text('source_urls', { mode: 'json' })
-    .$type<string[]>()
-    .default(sql`'[]'`),
   autoMemoryEnabled: integer('auto_memory_enabled'),
   autoAcceptFileEdits: integer('auto_accept_file_edits').notNull().default(0),
   modelOverride: text('model_override', {

@@ -4,7 +4,6 @@ import {
   FolderOpen,
   MessageSquare,
   FileText,
-  Link2,
   Brain,
   Settings,
   LoaderCircle,
@@ -15,25 +14,17 @@ import { useParams } from 'next/navigation';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import FilesTab from '@/components/Workspaces/FilesTab';
-import UrlsTab from '@/components/Workspaces/UrlsTab';
 import ChatsTab from '@/components/Workspaces/ChatsTab';
 import InstructionsTab from '@/components/Workspaces/InstructionsTab';
 import SettingsTab from '@/components/Workspaces/SettingsTab';
 import WorkspaceMemoryTab from '@/components/Workspaces/WorkspaceMemoryTab';
 import { useWorkspace } from '@/lib/hooks/api/useWorkspaces';
 
-type TabId =
-  | 'chats'
-  | 'files'
-  | 'sources'
-  | 'instructions'
-  | 'memory'
-  | 'settings';
+type TabId = 'chats' | 'files' | 'instructions' | 'memory' | 'settings';
 
 const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
   { id: 'chats', label: 'Chats', icon: MessageSquare },
   { id: 'files', label: 'Files', icon: FileText },
-  { id: 'sources', label: 'Sources', icon: Link2 },
   { id: 'instructions', label: 'Instructions', icon: BookOpen },
   { id: 'memory', label: 'Memory', icon: Brain },
   { id: 'settings', label: 'Settings', icon: Settings },
@@ -98,7 +89,6 @@ const WorkspaceDetailPage = () => {
         <div className="max-w-screen-lg mx-auto px-4 sm:px-8 py-6 w-full flex-1 overflow-auto">
           {activeTab === 'chats' && <ChatsTab workspaceId={id} />}
           {activeTab === 'files' && <FilesTab workspaceId={id} />}
-          {activeTab === 'sources' && <UrlsTab workspaceId={id} />}
           {activeTab === 'instructions' && <InstructionsTab workspaceId={id} />}
           {activeTab === 'memory' && <WorkspaceMemoryTab workspaceId={id} />}
           {activeTab === 'settings' && <SettingsTab workspace={workspace} />}

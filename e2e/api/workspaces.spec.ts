@@ -75,7 +75,6 @@ test.describe('POST /api/workspaces', () => {
     expect(ws.id).not.toBe('');
     // timestamp columns serialize to ISO date strings
     expect(Number.isNaN(Date.parse(ws.createdAt))).toBe(false);
-    expect(ws.sourceUrls).toEqual([]);
     expect(ws.archivedAt).toBeNull();
   });
 });
@@ -477,81 +476,6 @@ test.describe('PATCH /api/workspaces/[id]/files/[fileId]', () => {
     expect(res.status()).toBe(404);
     expect(await res.json()).toMatchObject({ error: 'Not found' });
   });
-});
-
-// ---------------------------------------------------------------------------
-// GET /api/workspaces/[id]/urls
-// ---------------------------------------------------------------------------
-test.describe('GET /api/workspaces/[id]/urls', () => {
-  test('returns urls array', async ({ request }) => {
-    const wsId = await seedWorkspace(request);
-    const res = await request.get(`/api/workspaces/${wsId}/urls`);
-    expect(res.status()).toBe(200);
-    expect(await res.json()).toEqual({ urls: [] });
-  });
-
-  test('returns seeded URLs with exact values', async ({ request }) => {
-    const wsId = await seedWorkspace(request);
-    const urls = ['https://a.example', 'https://b.example'];
-    await request.put(`/api/workspaces/${wsId}/urls`, { data: { urls } });
-
-    const res = await request.get(`/api/workspaces/${wsId}/urls`);
-    expect(res.status()).toBe(200);
-    const body = await res.json();
-    expect(body.urls).toEqual(urls);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// PUT /api/workspaces/[id]/urls
-// ---------------------------------------------------------------------------
-test.describe('PUT /api/workspaces/[id]/urls', () => {
-  test('sets urls and returns them', async ({ request }) => {
-    const wsId = await seedWorkspace(request);
-    const urls = ['https://example.com', 'https://test.example'];
-    const res = await request.put(`/api/workspaces/${wsId}/urls`, {
-      data: { urls },
-    });
-    expect(res.status()).toBe(200);
-    const body = await res.json();
-    expect(body).toHaveProperty('urls');
-    expect(body.urls).toEqual(urls);
-  });
-
-  test('rejects missing urls array with 400', async ({ request }) => {
-    const wsId = await seedWorkspace(request);
-    const res = await request.put(`/api/workspaces/${wsId}/urls`, {
-      data: {},
-    });
-    expect(res.status()).toBe(400);
-    expect(await res.json()).toMatchObject({ error: 'urls[] required' });
-  });
-
-  test('rejects invalid URL with 400', async ({ request }) => {
-    const wsId = await seedWorkspace(request);
-    const res = await request.put(`/api/workspaces/${wsId}/urls`, {
-      data: { urls: ['not a url'] },
-    });
-    expect(res.status()).toBe(400);
-    expect(await res.json()).toEqual({ error: 'invalid URL: not a url' });
-  });
-});
-
-// ---------------------------------------------------------------------------
-// POST /api/workspaces/[id]/urls/check
-// ---------------------------------------------------------------------------
-test.describe('POST /api/workspaces/[id]/urls/check', () => {
-  test('rejects missing url with 400', async ({ request }) => {
-    const wsId = await seedWorkspace(request);
-    const res = await request.post(`/api/workspaces/${wsId}/urls/check`, {
-      data: {},
-    });
-    expect(res.status()).toBe(400);
-    expect(await res.json()).toMatchObject({ error: 'url required' });
-  });
-
-  // Success path requires outbound network (checkReachable does fetch)
-  // and is skipped to keep tests network-independent.
 });
 
 // ---------------------------------------------------------------------------

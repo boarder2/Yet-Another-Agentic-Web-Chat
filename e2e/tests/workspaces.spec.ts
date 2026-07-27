@@ -4,10 +4,9 @@ import { WorkspacesPage } from '../pages/WorkspacesPage';
 import { WorkspaceDetailPage } from '../pages/WorkspaceDetailPage';
 
 const FILE_NAME = 'notes.md';
-const URL_VALUE = 'https://example.com';
 
 test.describe('workspaces CRUD', () => {
-  test('create a workspace via UI, rename it, add and remove file/URL, archive and unarchive', async ({
+  test('create a workspace via UI, rename it, add and remove a file, archive and unarchive', async ({
     page,
     request,
   }) => {
@@ -61,21 +60,6 @@ test.describe('workspaces CRUD', () => {
     await detailPage.removeFile(FILE_NAME);
     const namesAfterRemove = await detailPage.fileNames();
     expect(namesAfterRemove).not.toContain(FILE_NAME);
-
-    // ── Add URL ──
-    await detailPage.addUrl(URL_VALUE);
-    const urls = await detailPage.urlValues();
-    expect(urls).toContain(URL_VALUE);
-
-    // Verify URL persisted via API.
-    const urlsRes = await request.get(`/api/workspaces/${wsId}/urls`);
-    const urlsBody = await urlsRes.json();
-    expect(urlsBody.urls).toContain(URL_VALUE);
-
-    // ── Remove URL ──
-    await detailPage.removeUrl(URL_VALUE);
-    const urlsAfterRemove = await detailPage.urlValues();
-    expect(urlsAfterRemove).not.toContain(URL_VALUE);
 
     // ── Archive ──
     await detailPage.archive();

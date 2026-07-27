@@ -18,7 +18,6 @@ export interface WorkspaceCreate {
   color?: string;
   icon?: string;
   instructions?: string;
-  sourceUrls?: string[];
   autoMemoryEnabled?: 0 | 1 | null;
   autoAcceptFileEdits?: 0 | 1;
   modelOverride?: WorkspaceModelOverride | null;

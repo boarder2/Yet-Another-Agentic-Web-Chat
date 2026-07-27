@@ -427,7 +427,6 @@ export const POST = async (req: Request) => {
       try {
         workspaceSuffix = await buildWorkspaceSystemPromptSuffix({
           workspaceId: resolvedWorkspaceId,
-          focusMode: body.focusMode,
         });
 
         const visionCapable = !!body.imageCapable;

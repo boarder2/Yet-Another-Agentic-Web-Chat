@@ -4,13 +4,7 @@ import { eq, isNull, isNotNull, desc } from 'drizzle-orm';
 import type { WorkspaceCreate, WorkspaceUpdate } from './types';
 
 export async function createWorkspace(input: WorkspaceCreate) {
-  const [row] = await db
-    .insert(workspaces)
-    .values({
-      ...input,
-      sourceUrls: input.sourceUrls ?? [],
-    })
-    .returning();
+  const [row] = await db.insert(workspaces).values(input).returning();
   return row;
 }
 

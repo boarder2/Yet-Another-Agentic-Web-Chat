@@ -85,7 +85,7 @@ Want to know more about the architecture? See [docs/architecture/README.md](docs
 | **Personalization**         | Per-message location and profile context injection                                                                                                                                                   |
 | **Memory**                  | Long-term memory with semantic retrieval, automatic extraction, deduplication, and a full management UI                                                                                              |
 | **Private Sessions**        | Temporary conversations with auto-expiry — no personalization, no memory, no trace left behind                                                                                                       |
-| **Workspaces**              | Project-centric containers with per-workspace chats, files, source URLs, instructions, agent tools, and isolated memory                                                                              |
+| **Workspaces**              | Project-centric containers with per-workspace chats, files, instructions, agent tools, and isolated memory                                                                                           |
 | **Privacy**                 | Self-hosted SearXNG — no tracking, no data brokering, no "we updated our privacy policy" emails                                                                                                      |
 | **Browser Integration**     | OpenSearch XML, autocomplete, `?q=` URL queries with saved preferences                                                                                                                               |
 | **Read Aloud (TTS)**        | Local neural voices (Kokoro) or your device's built-in speech, with play/pause/resume, live speed control, an LLM "narrate" mode that describes tables and charts, and optional auto-read of replies |
@@ -284,16 +284,15 @@ Two widget kinds:
 
 ## Workspaces
 
-Workspaces are project-centric containers that keep chats, uploaded files, source URLs, instructions, and memories organized under one banner. Each workspace acts as a self-contained research environment — switch between projects without mixing context.
+Workspaces are project-centric containers that keep chats, uploaded files, instructions, and memories organized under one banner. Each workspace acts as a self-contained research environment — switch between projects without mixing context.
 
 - **Project organization** — Create workspaces with a name, description, custom color, and icon. Archive unused workspaces to keep the list tidy.
-- **Per-workspace chats** — Start new chats scoped to a workspace. The agent has full awareness of the workspace's files, URLs, and instructions.
+- **Per-workspace chats** — Start new chats scoped to a workspace. The agent has full awareness of the workspace's files and instructions.
 - **File management** — Upload, view, edit, and search files within a workspace. The agent can list, read, create, and edit workspace files using dedicated tools (`workspace_ls`, `workspace_read`, `workspace_grep`, `workspace_edit`, `workspace_create`). File edits require user approval in the UI.
-- **Source URLs** — Attach reference URLs to a workspace for the agent to consult during research.
 - **Custom instructions** — Set workspace-specific instructions and link persona prompts. These shape how the agent behaves in all workspace chats without repeating setup each time.
 - **Workspace-scoped memory** — Each workspace has an isolated memory system, separate from the global memory store. Memories created inside a workspace stay with that project.
 - **Auto-memory & file edits** — Toggle automatic memory extraction and auto-accept file edits per workspace.
-- **Collapsible sidebar** — In workspace chats, a sidebar shows files, sources, instructions, and memory at a glance. Collapse it when you need more space.
+- **Collapsible sidebar** — In workspace chats, a sidebar shows files, instructions, and memory at a glance. Collapse it when you need more space.
 - **Quick switching** — Hop between workspaces (or no workspace) from any chat using the workspace picker in the message input.
 
 Configure workspaces from `/workspaces`, or pick one inline while chatting.

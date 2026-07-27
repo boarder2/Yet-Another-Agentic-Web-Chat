@@ -4,7 +4,6 @@ import {
   ChevronDown,
   ChevronRight,
   FileText,
-  Link2,
   BookOpen,
   Brain,
   Settings as SettingsIcon,
@@ -17,7 +16,6 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import FilesTab from './FilesTab';
-import UrlsTab from './UrlsTab';
 import InstructionsTab from './InstructionsTab';
 import WorkspaceMemoryTab from './WorkspaceMemoryTab';
 import SettingsTab from './SettingsTab';
@@ -25,11 +23,10 @@ import FileViewer from './FileViewer';
 import WorkspaceModal from './WorkspaceModal';
 import { useWorkspace } from '@/lib/hooks/api/useWorkspaces';
 import { useWorkspaceFiles } from '@/lib/hooks/api/useWorkspaceFiles';
-import { useWorkspaceUrls } from '@/lib/hooks/api/useWorkspaceUrls';
 import { useWorkspaceMemory } from '@/lib/hooks/api/useWorkspaceMemory';
 import { useWorkspaceSystemPrompts } from '@/lib/hooks/api/useWorkspaceSystemPrompts';
 
-type SectionKey = 'files' | 'sources' | 'instructions' | 'memory';
+type SectionKey = 'files' | 'instructions' | 'memory';
 
 function CollapsibleSection({
   icon: Icon,
@@ -84,13 +81,11 @@ export default function WorkspaceSidebar({
 }) {
   const { data: workspace } = useWorkspace(workspaceId);
   const { data: files } = useWorkspaceFiles(workspaceId);
-  const { data: urls } = useWorkspaceUrls(workspaceId);
   const { data: memories } = useWorkspaceMemory(workspaceId);
   const { data: linkedPromptIds } = useWorkspaceSystemPrompts(workspaceId);
 
   const [open, setOpen] = useState<Record<SectionKey, boolean>>({
     files: false,
-    sources: false,
     instructions: false,
     memory: false,
   });
@@ -106,15 +101,12 @@ export default function WorkspaceSidebar({
   }
 
   const fileCount = files?.length ?? null;
-  const urlCount = urls?.length ?? null;
   const memoryCount = memories?.length ?? null;
   const instructionsLength = workspace?.instructions?.length ?? null;
   const linkedCount = linkedPromptIds?.length ?? null;
 
   const filesSummary =
     fileCount === null ? '…' : `${fileCount} file${fileCount === 1 ? '' : 's'}`;
-  const sourcesSummary =
-    urlCount === null ? '…' : `${urlCount} URL${urlCount === 1 ? '' : 's'}`;
   const memorySummary =
     memoryCount === null
       ? '…'
@@ -233,16 +225,6 @@ export default function WorkspaceSidebar({
                 compact
                 onOpenFile={(id, edit) => setOpenFile({ id, edit: !!edit })}
               />
-            </CollapsibleSection>
-
-            <CollapsibleSection
-              icon={Link2}
-              title="Sources"
-              summary={sourcesSummary}
-              open={open.sources}
-              onToggle={() => toggle('sources')}
-            >
-              <UrlsTab workspaceId={workspaceId} compact />
             </CollapsibleSection>
 
             <CollapsibleSection

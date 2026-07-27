@@ -1,11 +1,8 @@
 import { getWorkspace } from './service';
 import { listLinkedPrompts } from './systemPromptLinks';
 
-const WEB_FOCUS_MODES = new Set(['webSearch']);
-
 export async function buildWorkspaceSystemPromptSuffix(opts: {
   workspaceId: string;
-  focusMode: string;
 }): Promise<string> {
   const ws = await getWorkspace(opts.workspaceId);
   if (!ws) return '';
@@ -23,20 +20,6 @@ export async function buildWorkspaceSystemPromptSuffix(opts: {
 
   if (ws.instructions && ws.instructions.trim()) {
     sections.push(`## Workspace instructions\n${ws.instructions.trim()}`);
-  }
-
-  if (
-    WEB_FOCUS_MODES.has(opts.focusMode) &&
-    Array.isArray(ws.sourceUrls) &&
-    ws.sourceUrls.length > 0
-  ) {
-    sections.push(
-      [
-        '## Preferred sources',
-        'Prefer fetching from the following URLs first when relevant. Fetch before citing; do not cite without reading.',
-        ...ws.sourceUrls.map((u, i) => `${i + 1}. ${u}`),
-      ].join('\n'),
-    );
   }
 
   sections.push(

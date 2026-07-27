@@ -4,7 +4,7 @@ import { BasePage } from './BasePage';
  * Drives the workspace-detail view at `/workspaces/[id]`.
  *
  * On desktop (≥lg), the main area shows ChatsTab content while the
- * right-hand WorkspaceSidebar hosts Files/Sources/Instructions/Memory
+ * right-hand WorkspaceSidebar hosts Files/Instructions/Memory
  * collapsible sections plus a "Workspace settings" gear button that opens
  * the SettingsTab in a WorkspaceModal.
  */
@@ -166,51 +166,5 @@ export class WorkspaceDetailPage extends BasePage {
       if (text) names.push(text.trim());
     }
     return names;
-  }
-
-  // ─── Sources / URLs ───
-
-  /** Add a URL via the Sources section. */
-  async addUrl(url: string) {
-    await this.expandSection('Sources');
-    const input = this.page.locator(
-      'section:has(button:has-text("Sources")) input[aria-label="URL"]',
-    );
-    await input.fill(url);
-    await this.page
-      .locator('section:has(button:has-text("Sources")) button', {
-        hasText: 'Add',
-      })
-      .click();
-    // Wait for the URL to appear in the list.
-    await this.page
-      .locator(`section:has(button:has-text("Sources")) a[href="${url}"]`)
-      .waitFor({ state: 'visible', timeout: 10_000 });
-  }
-
-  /** Remove a URL by value. */
-  async removeUrl(url: string) {
-    await this.expandSection('Sources');
-    const row = this.page.locator(
-      `section:has(button:has-text("Sources")) li:has(a[href="${url}"])`,
-    );
-    const delBtn = row.locator('button[title="Remove"]');
-    await delBtn.click();
-    await row.waitFor({ state: 'hidden' });
-  }
-
-  /** Get the visible URLs in the sidebar Sources list. */
-  async urlValues(): Promise<string[]> {
-    await this.expandSection('Sources');
-    const links = this.page.locator(
-      'section:has(button:has-text("Sources")) li a[href^="http"]',
-    );
-    const urls: string[] = [];
-    const count = await links.count();
-    for (let i = 0; i < count; i++) {
-      const href = await links.nth(i).getAttribute('href');
-      if (href) urls.push(href);
-    }
-    return urls;
   }
 }

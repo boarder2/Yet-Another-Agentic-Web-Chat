@@ -16,7 +16,6 @@ export const qk = {
   workspaces: (archived?: boolean) => ['workspaces', { archived }] as const,
   workspace: (id: string) => ['workspaces', id] as const,
   workspaceFiles: (id: string) => ['workspaces', id, 'files'] as const,
-  workspaceUrls: (id: string) => ['workspaces', id, 'urls'] as const,
   workspaceMemory: (id: string) => ['workspaces', id, 'memory'] as const,
   workspaceSysPrompts: (id: string) =>
     ['workspaces', id, 'system-prompts'] as const,

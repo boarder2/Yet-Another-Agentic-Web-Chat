@@ -42,7 +42,7 @@ The suite does **not** read the developer's root `config.toml`. `playwright.conf
 | `npm run test:e2e:ui`     | Open Playwright UI mode |
 | `npm run test:e2e:report` | Open the HTML report    |
 
-Each `test:e2e*` script runs `npm run build` first, since Playwright's `webServer` config launches the standalone build (`.next/standalone/server.js`), not a dev server — it won't pick up `src/` changes otherwise. The `webServer` command also initializes a fresh SQLite database at `e2e/.test-data/`, runs schema migrations, and launches that server. If the dev server is already running on port 5005, it will be reused (outside CI).
+Each `test:e2e*` script runs `npm run build` first, since Playwright's `webServer` config launches the standalone build (`.next/standalone/server.js`), not a dev server — it won't pick up `src/` changes otherwise. The `webServer` command also initializes a fresh SQLite database at `e2e/.test-data/`, runs schema migrations, and launches that server. It always boots its own server (`reuseExistingServer: false`) rather than reusing one already running, so a spec run never touches a dev server's DB — and it defaults to port 5050 (`PORT` env overridable), distinct from the dev server's 5005, so the two can run side by side.
 
 ## Test Database Isolation
 

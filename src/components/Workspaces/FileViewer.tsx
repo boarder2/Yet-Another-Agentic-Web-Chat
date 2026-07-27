@@ -4,8 +4,9 @@ import { useCallback, useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
-import { Edit3, Save, X, LoaderCircle, TriangleAlert } from 'lucide-react';
+import { LoaderCircle, TriangleAlert } from 'lucide-react';
 import MarkdownRenderer from '@/components/MarkdownRenderer';
+import DocEditActions from './DocEditActions';
 
 // CodeMirror touches window/document at module load, so load it client-only.
 const CodeEditor = dynamic(() => import('@/components/dashboard/CodeEditor'), {
@@ -50,9 +51,11 @@ function isMarkdownFile(name: string): boolean {
 export default function FileViewer({
   workspaceId,
   fileId,
+  startEditing = false,
 }: {
   workspaceId: string;
   fileId: string;
+  startEditing?: boolean;
 }) {
   const { data, isLoading, refetch } = useWorkspaceFileContent(
     workspaceId,
@@ -61,7 +64,7 @@ export default function FileViewer({
   const saveContent = useSaveWorkspaceFileContent(workspaceId, fileId);
 
   const [draft, setDraft] = useState('');
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(startEditing);
   // The version the draft was forked from. Sent back on save as the CAS token.
   const [base, setBase] = useState<{ sha: string; content: string } | null>(
     null,
@@ -135,42 +138,18 @@ export default function FileViewer({
           {meta.mime && <span className="text-xs text-fg/40">{meta.mime}</span>}
         </div>
         <div className="flex gap-2">
-          {isBinary ? null : editing ? (
-            <>
-              <button
-                type="button"
-                onClick={() => {
-                  adopt(meta.sha256, content);
-                  setEditing(false);
-                }}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-surface hover:bg-surface-2 transition"
-              >
-                <X size={14} />
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => save(base?.sha ?? meta.sha256)}
-                disabled={saveContent.isPending || conflict}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-surface bg-accent text-accent-fg hover:bg-accent/90 transition disabled:opacity-50"
-              >
-                {saveContent.isPending ? (
-                  <LoaderCircle size={14} className="animate-spin" />
-                ) : (
-                  <Save size={14} />
-                )}
-                Save
-              </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setEditing(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-surface border border-surface-2 bg-surface hover:bg-surface-2 transition"
-            >
-              <Edit3 size={14} />
-              Edit
-            </button>
+          {!isBinary && (
+            <DocEditActions
+              editing={editing}
+              saving={saveContent.isPending}
+              canSave={!conflict}
+              onEdit={() => setEditing(true)}
+              onCancel={() => {
+                adopt(meta.sha256, content);
+                setEditing(false);
+              }}
+              onSave={() => save(base?.sha ?? meta.sha256)}
+            />
           )}
         </div>
       </header>

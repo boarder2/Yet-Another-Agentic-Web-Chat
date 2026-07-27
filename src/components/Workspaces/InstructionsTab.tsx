@@ -1,13 +1,15 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Info } from 'lucide-react';
-import { useWorkspace, usePatchWorkspace } from '@/lib/hooks/api/useWorkspaces';
+import { Info, Edit3 } from 'lucide-react';
+import { useWorkspace } from '@/lib/hooks/api/useWorkspaces';
 import { useSystemPrompts } from '@/lib/hooks/api/useSystemPrompts';
 import {
   useWorkspaceSystemPrompts,
   useSaveWorkspaceSystemPromptLinks,
 } from '@/lib/hooks/api/useWorkspaceSystemPrompts';
+import WorkspaceModal from './WorkspaceModal';
+import InstructionsEditor from './InstructionsEditor';
 
 export default function InstructionsTab({
   workspaceId,
@@ -19,20 +21,11 @@ export default function InstructionsTab({
   const { data: workspace } = useWorkspace(workspaceId);
   const { data: allPrompts = [] } = useSystemPrompts();
   const { data: linkedIds = [] } = useWorkspaceSystemPrompts(workspaceId);
-  const patch = usePatchWorkspace(workspaceId);
   const saveLinks = useSaveWorkspaceSystemPromptLinks(workspaceId);
 
-  const [instructions, setInstructions] = useState('');
-  const [saved, setSaved] = useState(true);
+  const [open, setOpen] = useState<{ edit: boolean } | null>(null);
 
-  /* eslint-disable react-hooks/set-state-in-effect */
-  useEffect(() => {
-    if (workspace?.instructions !== undefined) {
-      setInstructions(workspace.instructions ?? '');
-      setSaved(true);
-    }
-  }, [workspace?.instructions]);
-  /* eslint-enable react-hooks/set-state-in-effect */
+  const instructions = workspace?.instructions ?? '';
 
   useEffect(() => {
     onSummaryChange?.({
@@ -40,10 +33,6 @@ export default function InstructionsTab({
       linkedCount: linkedIds.length,
     });
   }, [instructions.length, linkedIds.length, onSummaryChange]);
-
-  function saveInstructions() {
-    patch.mutate({ instructions }, { onSuccess: () => setSaved(true) });
-  }
 
   function toggleLink(id: string) {
     const next = linkedIds.includes(id)
@@ -55,30 +44,32 @@ export default function InstructionsTab({
   return (
     <div className="space-y-6">
       <section className="space-y-2">
-        <label className="text-sm font-medium">Workspace instructions</label>
-        <textarea
-          aria-label="Workspace instructions"
-          value={instructions}
-          onChange={(e) => {
-            setInstructions(e.target.value);
-            setSaved(false);
-          }}
-          className="w-full min-h-[200px] font-mono text-sm border border-surface-2 rounded-surface p-3 bg-surface focus:outline-none focus:border-accent resize-y"
-          placeholder="Free-text instructions appended to the system prompt for every chat in this workspace."
-        />
-        <div className="flex justify-end gap-2 text-sm">
-          {saved ? (
-            <span className="text-fg/40">Saved</span>
-          ) : (
-            <button
-              type="button"
-              onClick={saveInstructions}
-              className="px-3 py-1 rounded-surface bg-accent text-accent-fg hover:opacity-90 transition-opacity"
-            >
-              Save
-            </button>
-          )}
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-medium flex-1">
+            Workspace instructions
+          </label>
+          <button
+            type="button"
+            onClick={() => setOpen({ edit: true })}
+            className="p-1 rounded-control text-fg/40 hover:text-fg hover:bg-surface-2 transition-colors duration-150"
+            title="Edit"
+          >
+            <Edit3 size={14} />
+          </button>
         </div>
+        <button
+          type="button"
+          onClick={() => setOpen({ edit: !instructions })}
+          aria-label="Open workspace instructions"
+          className="w-full text-left text-sm whitespace-pre-wrap line-clamp-6 border border-surface-2 rounded-surface p-3 bg-surface hover:bg-surface-2 transition-colors duration-150"
+        >
+          {instructions || (
+            <span className="text-fg/50">
+              Free-text instructions appended to the system prompt for every
+              chat in this workspace.
+            </span>
+          )}
+        </button>
       </section>
       {allPrompts.length > 0 && (
         <section className="space-y-2">
@@ -111,6 +102,20 @@ export default function InstructionsTab({
           </ul>
         </section>
       )}
+
+      <WorkspaceModal
+        open={!!open}
+        onClose={() => setOpen(null)}
+        title="Workspace instructions"
+        size="lg"
+      >
+        {open && (
+          <InstructionsEditor
+            workspaceId={workspaceId}
+            startEditing={open.edit}
+          />
+        )}
+      </WorkspaceModal>
     </div>
   );
 }

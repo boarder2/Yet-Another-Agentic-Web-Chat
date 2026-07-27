@@ -5,7 +5,7 @@ const TEST_DATA_DIR = path.resolve('./e2e/.test-data');
 // Minimal, committed config so the suite never reads the developer's real
 // config.toml (whose provider URLs would otherwise seed into the test DB).
 const TEST_CONFIG = path.resolve('./e2e/config.test.toml');
-const PORT = process.env.PORT ?? '5005';
+const PORT = process.env.PORT ?? '5050';
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${PORT}`;
 
 // Second, dedicated server with NO ENCRYPTION_PASSPHRASE — the only way to

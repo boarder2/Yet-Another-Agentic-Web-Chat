@@ -26,12 +26,16 @@ export async function seedWorkspace(
     description: string;
     modelOverride: WorkspaceModelOverride | null;
     autoAcceptFileEdits: 0 | 1;
+    instructions: string;
   }>,
 ): Promise<string> {
   const body = await postJson(request, '/api/workspaces', {
     name: overrides?.name ?? uniq('ws'),
     ...(overrides?.description !== undefined
       ? { description: overrides.description }
+      : {}),
+    ...(overrides?.instructions !== undefined
+      ? { instructions: overrides.instructions }
       : {}),
     ...(overrides?.modelOverride !== undefined
       ? { modelOverride: overrides.modelOverride }

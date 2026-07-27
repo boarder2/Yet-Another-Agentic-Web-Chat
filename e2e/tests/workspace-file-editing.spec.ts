@@ -54,4 +54,26 @@ test.describe('workspace file editing', () => {
     await modal.getByRole('button', { name: 'Discard mine' }).click();
     await expect(modal.getByText('GOODBYE world')).toBeVisible();
   });
+
+  test('the per-file edit icon opens the editor, skipping the preview', async ({
+    page,
+    request,
+  }) => {
+    const wsId = await seedWorkspace(request);
+    await seedWorkspaceFile(request, wsId, {
+      name: 'notes.txt',
+      content: 'hello world',
+    });
+
+    await page.goto(`/workspaces/${wsId}`);
+
+    const sidebar = page.locator('aside');
+    await sidebar.getByRole('button', { name: 'Files' }).click();
+    await sidebar.getByRole('button', { name: 'Edit' }).click();
+
+    // Straight into the editor — no preview, no second Edit click.
+    const modal = page.locator('.fixed.inset-0.z-50');
+    await expect(modal.getByLabel('File content')).toContainText('hello world');
+    await expect(modal.getByRole('button', { name: 'Save' })).toBeVisible();
+  });
 });

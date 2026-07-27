@@ -95,7 +95,10 @@ export default function WorkspaceSidebar({
     memory: false,
   });
 
-  const [openFileId, setOpenFileId] = useState<string | null>(null);
+  const [openFile, setOpenFile] = useState<{
+    id: string;
+    edit: boolean;
+  } | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   function toggle(k: SectionKey) {
@@ -228,7 +231,7 @@ export default function WorkspaceSidebar({
               <FilesTab
                 workspaceId={workspaceId}
                 compact
-                onOpenFile={(id) => setOpenFileId(id)}
+                onOpenFile={(id, edit) => setOpenFile({ id, edit: !!edit })}
               />
             </CollapsibleSection>
 
@@ -264,13 +267,18 @@ export default function WorkspaceSidebar({
           </div>
 
           <WorkspaceModal
-            open={!!openFileId}
-            onClose={() => setOpenFileId(null)}
+            open={!!openFile}
+            onClose={() => setOpenFile(null)}
             title="File"
             size="lg"
           >
-            {openFileId && (
-              <FileViewer workspaceId={workspaceId} fileId={openFileId} />
+            {openFile && (
+              <FileViewer
+                key={openFile.id}
+                workspaceId={workspaceId}
+                fileId={openFile.id}
+                startEditing={openFile.edit}
+              />
             )}
           </WorkspaceModal>
         </aside>

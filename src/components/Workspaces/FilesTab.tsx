@@ -9,6 +9,7 @@ import {
   Trash2,
   LoaderCircle,
   FilePen,
+  Edit3,
 } from 'lucide-react';
 import {
   useWorkspaceFiles,
@@ -21,6 +22,9 @@ import {
 function isEditableFile(f: FileMeta): boolean {
   return !f.isBinary;
 }
+
+const EDIT_ACTION_CLASS =
+  'p-1 rounded-control text-fg/40 hover:text-fg hover:bg-surface-2 transition-colors duration-150 shrink-0';
 
 const AUTO_ACCEPT_SEGMENTS: {
   value: number | null;
@@ -99,7 +103,7 @@ export default function FilesTab({
   compact = false,
 }: {
   workspaceId: string;
-  onOpenFile?: (fileId: string) => void;
+  onOpenFile?: (fileId: string, edit?: boolean) => void;
   onCountChange?: (n: number) => void;
   compact?: boolean;
 }) {
@@ -222,6 +226,26 @@ export default function FilesTab({
                 <span className="truncate">{f.name}</span>
               </>
             );
+            const editButton =
+              isEditableFile(f) &&
+              (onOpenFile ? (
+                <button
+                  type="button"
+                  onClick={() => onOpenFile(f.id, true)}
+                  className={EDIT_ACTION_CLASS}
+                  title="Edit"
+                >
+                  <Edit3 size={12} />
+                </button>
+              ) : (
+                <Link
+                  href={`/workspaces/${workspaceId}/files/${f.id}?edit=1`}
+                  className={EDIT_ACTION_CLASS}
+                  title="Edit"
+                >
+                  <Edit3 size={12} />
+                </Link>
+              ));
             if (compact) {
               return (
                 <li
@@ -245,6 +269,7 @@ export default function FilesTab({
                         {inner}
                       </Link>
                     )}
+                    {editButton}
                     <button
                       type="button"
                       onClick={() => remove(f.id)}
@@ -298,6 +323,7 @@ export default function FilesTab({
                   )}
                   <span>{f.mime ?? '—'}</span>
                   <span>{(f.size / 1024).toFixed(1)}KB</span>
+                  {editButton}
                   <button
                     type="button"
                     onClick={() => remove(f.id)}

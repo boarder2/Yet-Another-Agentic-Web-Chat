@@ -173,11 +173,12 @@ editor renders a conflict banner and the agent maps it onto its `stale_state` er
 
 ## Skills
 
-| Endpoint           | Method         | Purpose                                                                                                          |
-| ------------------ | -------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `/api/skills`      | GET            | List skills. Params: `workspaceId` (includes global + workspace), `enabled=true` (only enabled). Returns array   |
-| `/api/skills`      | POST           | Create skill. Body: `{ name, description, content, workspaceId?, disableModelInvocation? }`. Returns skill (201) |
-| `/api/skills/[id]` | GET/PUT/DELETE | Get, update, or delete a skill                                                                                   |
+| Endpoint           | Method     | Purpose                                                                                                                                                                                                                                                                                                                        |
+| ------------------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `/api/skills`      | GET        | List skills. Params: `workspaceId` (includes global + workspace), `enabled=true` (only enabled). Returns array                                                                                                                                                                                                                 |
+| `/api/skills`      | POST       | Create skill. Body: `{ name, description, content, workspaceId?, disableModelInvocation? }`. Returns skill (201). `409` on a reserved system-skill name, or a name already taken **in that exact scope** — a workspace skill may shadow a same-named global one                                                                |
+| `/api/skills/[id]` | GET/DELETE | Get or delete a skill                                                                                                                                                                                                                                                                                                          |
+| `/api/skills/[id]` | PUT        | Patch any subset of `{ name, description, content, workspaceId, enabled, disableModelInvocation }`. A rename and/or a `workspaceId` change move the row's `(name, scope)` identity — `409` if the destination pair is taken, or if the new name is a reserved system-skill name. `workspaceId: null` moves the skill to global |
 
 ## Workflows & Schedules
 

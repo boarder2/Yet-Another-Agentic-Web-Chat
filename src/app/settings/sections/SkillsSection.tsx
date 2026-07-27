@@ -1,10 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { PlusCircle, Edit3, Trash2, X, Save, BookOpen } from 'lucide-react';
+import { PlusCircle, Edit3, Trash2, BookOpen } from 'lucide-react';
 import SettingsSection from '../components/SettingsSection';
-import InputComponent from '../components/InputComponent';
-import TextareaComponent from '../components/TextareaComponent';
+import SkillForm, { type SkillFormValue } from '../components/SkillForm';
 import AppSwitch from '@/components/ui/AppSwitch';
 import { toast } from 'sonner';
 import {
@@ -16,8 +15,23 @@ import {
   type UserSkill,
 } from '@/lib/hooks/api/useSkills';
 import { useWorkspacesList } from '@/lib/hooks/api/useWorkspaces';
+import { SKILL_NAME_PATTERN, isValidSkillName } from '@/lib/skills/validation';
 
-const NAME_REGEX = /^[a-z0-9][a-z0-9_:-]*$/;
+const EMPTY_SKILL: SkillFormValue = {
+  name: '',
+  description: '',
+  content: '',
+  workspaceId: null,
+  disableModelInvocation: false,
+};
+
+const toFormValue = (skill: UserSkill): SkillFormValue => ({
+  name: skill.name,
+  description: skill.description,
+  content: skill.content,
+  workspaceId: skill.workspaceId,
+  disableModelInvocation: skill.disableModelInvocation,
+});
 
 export default function SkillsSection() {
   const { data: skills = [], isLoading: loading } = useSkills();
@@ -27,72 +41,49 @@ export default function SkillsSection() {
   const deleteSkill = useDeleteSkill();
   const toggleSkill = useToggleSkill();
 
-  const [editingSkill, setEditingSkill] = useState<UserSkill | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState<SkillFormValue | null>(null);
   const [isAddingNew, setIsAddingNew] = useState(false);
-  const [newSkill, setNewSkill] = useState({
-    name: '',
-    description: '',
-    content: '',
-    workspaceId: '' as string | null,
-    disableModelInvocation: false,
-  });
+
+  const closeForm = () => {
+    setIsAddingNew(false);
+    setEditingId(null);
+    setForm(null);
+  };
+
+  const isValid = (value: SkillFormValue) => {
+    if (!value.name || !value.description || !value.content) {
+      toast.error('Name, description, and content are required');
+      return false;
+    }
+    if (!isValidSkillName(value.name)) {
+      toast.error(`Name must match pattern: ${SKILL_NAME_PATTERN}`);
+      return false;
+    }
+    return true;
+  };
 
   const handleCreate = () => {
-    const { name, description, content, workspaceId } = newSkill;
-    if (!name || !description || !content) {
-      toast.error('Name, description, and content are required');
-      return;
-    }
-    if (!NAME_REGEX.test(name)) {
-      toast.error('Name must match pattern: [a-z0-9][a-z0-9_:-]*');
-      return;
-    }
-    createSkill.mutate(
-      {
-        name,
-        description,
-        content,
-        workspaceId: workspaceId || null,
-        disableModelInvocation: newSkill.disableModelInvocation,
+    if (!form || !isValid(form)) return;
+    createSkill.mutate(form, {
+      onSuccess: () => {
+        toast.success(`Skill "${form.name}" created`);
+        closeForm();
       },
-      {
-        onSuccess: () => {
-          toast.success(`Skill "${name}" created`);
-          setIsAddingNew(false);
-          setNewSkill({
-            name: '',
-            description: '',
-            content: '',
-            workspaceId: '',
-            disableModelInvocation: false,
-          });
-        },
-        onError: (err) => {
-          toast.error(err.message ?? 'Failed to create skill');
-        },
-      },
-    );
+      onError: (err) => toast.error(err.message ?? 'Failed to create skill'),
+    });
   };
 
   const handleUpdate = () => {
-    if (!editingSkill) return;
+    if (!form || !editingId || !isValid(form)) return;
     updateSkill.mutate(
-      {
-        id: editingSkill.id,
-        data: {
-          description: editingSkill.description,
-          content: editingSkill.content,
-          disableModelInvocation: editingSkill.disableModelInvocation,
-        },
-      },
+      { id: editingId, data: form },
       {
         onSuccess: () => {
           toast.success('Skill updated');
-          setEditingSkill(null);
+          closeForm();
         },
-        onError: (err) => {
-          toast.error(err.message ?? 'Failed to update skill');
-        },
+        onError: (err) => toast.error(err.message ?? 'Failed to update skill'),
       },
     );
   };
@@ -119,8 +110,9 @@ export default function SkillsSection() {
 
   const getScopeBadge = (skill: UserSkill) => {
     if (!skill.workspaceId) return 'Global';
-    const ws = workspaces.find((w) => w.id === skill.workspaceId);
-    return ws ? ws.name : 'Workspace';
+    return (
+      workspaces.find((w) => w.id === skill.workspaceId)?.name ?? 'Workspace'
+    );
   };
 
   return (
@@ -129,7 +121,11 @@ export default function SkillsSection() {
       headerAction={
         <button
           type="button"
-          onClick={() => setIsAddingNew(true)}
+          onClick={() => {
+            setEditingId(null);
+            setForm(EMPTY_SKILL);
+            setIsAddingNew(true);
+          }}
           className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-control bg-accent text-accent-fg hover:bg-accent/90 transition-colors"
         >
           <PlusCircle size={14} />
@@ -142,98 +138,18 @@ export default function SkillsSection() {
         or workspace-scoped skills that the agent can load when needed.
       </p>
 
-      {isAddingNew && (
-        <div className="p-3 border border-accent/40 rounded-control bg-surface-2 space-y-3">
-          <p className="text-sm font-medium">New Skill</p>
-          <InputComponent
-            type="text"
-            value={newSkill.name}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-              setNewSkill({ ...newSkill, name: e.target.value })
-            }
-            placeholder="skill-name (lowercase, hyphens ok)"
+      {isAddingNew && form && (
+        <div className="p-3 border border-accent/40 rounded-control bg-surface-2">
+          <SkillForm
+            title="New Skill"
+            value={form}
+            workspaces={workspaces}
+            submitLabel="Create"
+            pending={createSkill.isPending}
+            onChange={setForm}
+            onSubmit={handleCreate}
+            onCancel={closeForm}
           />
-          <InputComponent
-            type="text"
-            value={newSkill.description}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-              setNewSkill({ ...newSkill, description: e.target.value })
-            }
-            placeholder="One-line description shown in autocomplete"
-          />
-          <TextareaComponent
-            value={newSkill.content}
-            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-              setNewSkill({ ...newSkill, content: e.target.value })
-            }
-            placeholder="Full skill body (markdown supported)"
-            className="min-h-[120px]"
-          />
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-fg/60">Scope:</label>
-            <select
-              value={newSkill.workspaceId ?? ''}
-              onChange={(e) =>
-                setNewSkill({
-                  ...newSkill,
-                  workspaceId: e.target.value || null,
-                })
-              }
-              className="text-sm bg-surface border border-surface-2 rounded-control px-2 py-1 focus:outline-none focus:border-accent"
-            >
-              <option value="">Global</option>
-              {workspaces.map((ws) => (
-                <option key={ws.id} value={ws.id}>
-                  {ws.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-medium">
-                Disable model auto-invocation
-              </p>
-              <p className="text-xs text-fg/50">
-                Slash-command only — hidden from model&apos;s available skills
-                list
-              </p>
-            </div>
-            <AppSwitch
-              checked={newSkill.disableModelInvocation}
-              onChange={(val: boolean) =>
-                setNewSkill({ ...newSkill, disableModelInvocation: val })
-              }
-            />
-          </div>
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setIsAddingNew(false);
-                setNewSkill({
-                  name: '',
-                  description: '',
-                  content: '',
-                  workspaceId: '',
-                  disableModelInvocation: false,
-                });
-              }}
-              className="px-3 py-2 text-sm rounded-control bg-surface hover:bg-surface-2 flex items-center gap-1.5"
-            >
-              <X size={14} />
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleCreate}
-              disabled={createSkill.isPending}
-              className="px-3 py-2 text-sm rounded-control bg-accent text-accent-fg flex items-center gap-1.5"
-            >
-              <Save size={14} />
-              Create
-            </button>
-          </div>
         </div>
       )}
 
@@ -253,71 +169,17 @@ export default function SkillsSection() {
                 !skill.enabled ? 'opacity-50' : ''
               }`}
             >
-              {editingSkill?.id === skill.id ? (
-                <div className="space-y-3">
-                  <p className="text-xs text-fg/50 font-mono">{skill.name}</p>
-                  <InputComponent
-                    type="text"
-                    value={editingSkill.description}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                      setEditingSkill({
-                        ...editingSkill,
-                        description: e.target.value,
-                      })
-                    }
-                    placeholder="Description"
-                  />
-                  <TextareaComponent
-                    value={editingSkill.content}
-                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-                      setEditingSkill({
-                        ...editingSkill,
-                        content: e.target.value,
-                      })
-                    }
-                    placeholder="Skill content"
-                    className="min-h-[120px]"
-                  />
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs font-medium">
-                        Disable model auto-invocation
-                      </p>
-                      <p className="text-xs text-fg/50">
-                        Slash-command only — hidden from model&apos;s available
-                        skills list
-                      </p>
-                    </div>
-                    <AppSwitch
-                      checked={editingSkill.disableModelInvocation}
-                      onChange={(val: boolean) =>
-                        setEditingSkill({
-                          ...editingSkill,
-                          disableModelInvocation: val,
-                        })
-                      }
-                    />
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setEditingSkill(null)}
-                      className="px-3 py-2 text-sm rounded-control bg-surface hover:bg-surface-2 flex items-center gap-1.5"
-                    >
-                      <X size={14} />
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleUpdate}
-                      disabled={updateSkill.isPending}
-                      className="px-3 py-2 text-sm rounded-control bg-accent text-accent-fg flex items-center gap-1.5"
-                    >
-                      <Save size={14} />
-                      Save
-                    </button>
-                  </div>
-                </div>
+              {editingId === skill.id && form ? (
+                <SkillForm
+                  title={`Edit ${skill.name}`}
+                  value={form}
+                  workspaces={workspaces}
+                  submitLabel="Save"
+                  pending={updateSkill.isPending}
+                  onChange={setForm}
+                  onSubmit={handleUpdate}
+                  onCancel={closeForm}
+                />
               ) : (
                 <div className="flex justify-between items-start gap-2">
                   <div className="flex-1 min-w-0">
@@ -345,7 +207,11 @@ export default function SkillsSection() {
                     />
                     <button
                       type="button"
-                      onClick={() => setEditingSkill({ ...skill })}
+                      onClick={() => {
+                        setIsAddingNew(false);
+                        setEditingId(skill.id);
+                        setForm(toFormValue(skill));
+                      }}
                       title="Edit"
                       className="p-1.5 rounded-control hover:bg-surface"
                     >

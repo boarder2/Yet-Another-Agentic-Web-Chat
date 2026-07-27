@@ -22,6 +22,8 @@ export const badRequest = (message: string, extra?: Record<string, unknown>) =>
 
 export const notFound = (message = 'Not found') => new HttpError(404, message);
 
+export const conflict = (message: string) => new HttpError(409, message);
+
 /**
  * Wraps a route handler. `fallback` is the 500 message and doubles as the log
  * label, so each route still names its own failure.

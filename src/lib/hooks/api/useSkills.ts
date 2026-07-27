@@ -16,14 +16,15 @@ export interface UserSkill {
   updatedAt: string;
 }
 
-export function useSkills(workspaceId?: string | null) {
+export function useSkills(workspaceId?: string | null, enabledOnly = false) {
   return useQuery({
-    queryKey: qk.skills(workspaceId),
+    queryKey: qk.skills(workspaceId, enabledOnly),
     queryFn: () => {
-      const url = workspaceId
-        ? `/api/skills?workspaceId=${workspaceId}`
-        : '/api/skills';
-      return apiFetch<UserSkill[]>(url);
+      const params = new URLSearchParams();
+      if (workspaceId) params.set('workspaceId', workspaceId);
+      if (enabledOnly) params.set('enabled', 'true');
+      const qs = params.toString();
+      return apiFetch<UserSkill[]>(`/api/skills${qs ? `?${qs}` : ''}`);
     },
     select: (d) => (Array.isArray(d) ? d : []),
   });

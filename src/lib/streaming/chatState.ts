@@ -112,6 +112,9 @@ export type PendingSkillEditApproval = {
   oldContent: string;
   newContent: string;
   scope: 'global' | 'workspace';
+  newScope?: 'global' | 'workspace';
+  oldDisableModelInvocation?: boolean;
+  disableModelInvocation?: boolean;
   workspaceId?: string | null;
   skillId?: string;
   createdAt?: number;

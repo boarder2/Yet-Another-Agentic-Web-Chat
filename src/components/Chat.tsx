@@ -507,6 +507,9 @@ const Chat = ({
               oldContent={current.oldContent}
               newContent={current.newContent}
               scope={current.scope}
+              newScope={current.newScope}
+              oldDisableModelInvocation={current.oldDisableModelInvocation}
+              disableModelInvocation={current.disableModelInvocation}
               onDecide={onSkillEditDecide}
               onDismiss={() => {
                 setTimeout(() => {

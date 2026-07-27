@@ -160,6 +160,7 @@ export async function seedSkill(
     name: string;
     description: string;
     content: string;
+    workspaceId: string | null;
   }>,
 ): Promise<string> {
   const name = overrides?.name ?? uniq('skill');
@@ -170,6 +171,7 @@ export async function seedSkill(
       name,
       description: overrides?.description ?? `Test skill ${name}`,
       content: overrides?.content ?? `# ${name}\n\nTest skill content.`,
+      workspaceId: overrides?.workspaceId ?? null,
     },
     201,
   );
@@ -362,6 +364,64 @@ export async function seedAwaitingWorkspaceEdit(
   const pending = events.find((e) => e.type === 'workspace_edit_pending');
   if (!pending) {
     throw new Error('workspace_edit_pending event never arrived');
+  }
+  const data = pending.data as Record<string, unknown>;
+  return {
+    chatId,
+    messageId,
+    approvalId: data.approvalId as string,
+    question: '',
+    events,
+  };
+}
+
+/**
+ * Start a skill-edit run with the `test-skill-edit` model and park it at the
+ * approval interrupt, so a spec can inspect what the approval panel offers
+ * before deciding. Omitted fields are left out of the tool call, which is how
+ * a spec scripts a scope-only move (or a proposal that changes nothing).
+ */
+export async function seedAwaitingSkillEdit(
+  edit: {
+    name: string;
+    scope?: 'global' | 'workspace';
+    newScope?: 'global' | 'workspace';
+    content?: string;
+    disableModelInvocation?: boolean;
+  },
+  workspaceId?: string,
+): Promise<AwaitingApproval> {
+  const chatId = uid();
+  const messageId = uid();
+  const events = await streamChatUntil(
+    baseURL(),
+    {
+      message: {
+        messageId,
+        chatId,
+        // The test model reads its tool-call args straight out of the prompt.
+        content: [
+          edit.name,
+          edit.scope ?? '',
+          edit.newScope ?? '',
+          edit.content ?? '',
+          edit.disableModelInvocation === undefined
+            ? ''
+            : String(edit.disableModelInvocation),
+        ].join('|'),
+      },
+      focusMode: 'webSearch',
+      files: [],
+      chatModel: { provider: 'test', name: 'test-skill-edit' },
+      systemModel: { provider: 'test', name: 'test-skill-edit' },
+      selectedSystemPromptIds: [],
+      ...(workspaceId && { workspaceId }),
+    },
+    (evts) => evts.some((e) => e.type === 'skill_edit_pending'),
+  );
+  const pending = events.find((e) => e.type === 'skill_edit_pending');
+  if (!pending) {
+    throw new Error('skill_edit_pending event never arrived');
   }
   const data = pending.data as Record<string, unknown>;
   return {

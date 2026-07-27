@@ -36,7 +36,13 @@ const EditSkillSchema = z.object({
     .optional()
     .default('global')
     .describe(
-      'Whether this skill applies globally or to the current workspace only.',
+      'Whether this skill applies globally or to the current workspace only. For update/delete this locates the skill; a workspace scope never falls through to a global skill of the same name.',
+    ),
+  newScope: z
+    .enum(['global', 'workspace'])
+    .optional()
+    .describe(
+      'Update only: move the skill to this scope. Omit to leave the scope unchanged.',
     ),
   disableModelInvocation: z
     .boolean()
@@ -71,10 +77,34 @@ export const editSkillTool = defineTool(
       description,
       content,
       scope,
+      newScope,
       disableModelInvocation,
     } = input;
     const effectiveWorkspaceId =
       scope === 'workspace' ? (workspaceId ?? null) : null;
+
+    const reply = (message: string) =>
+      new Command({
+        update: {
+          messages: [
+            new ToolMessage({ content: message, tool_call_id: toolCallId }),
+          ],
+        },
+      });
+
+    if (newScope && action !== 'update') {
+      return reply('Error: newScope is only valid for action "update".');
+    }
+    if ((scope === 'workspace' || newScope === 'workspace') && !workspaceId) {
+      return reply(
+        'Error: workspace scope requires an active workspace, but this chat has none.',
+      );
+    }
+    const targetWorkspaceId = newScope
+      ? newScope === 'workspace'
+        ? (workspaceId ?? null)
+        : null
+      : effectiveWorkspaceId;
 
     // Look up the existing skill for every action. Update/delete require it to
     // exist; create requires it to NOT exist. Fetching it unconditionally also
@@ -85,55 +115,31 @@ export const editSkillTool = defineTool(
 
     if (action === 'create') {
       if (!description || !content) {
-        return new Command({
-          update: {
-            messages: [
-              new ToolMessage({
-                content:
-                  'Error: description and content are required for create.',
-                tool_call_id: toolCallId,
-              }),
-            ],
-          },
-        });
+        return reply('Error: description and content are required for create.');
       }
       if (isSystemSkillName(name)) {
-        return new Command({
-          update: {
-            messages: [
-              new ToolMessage({
-                content: `Error: "${name}" is reserved by a built-in system skill and cannot be created as a user skill.`,
-                tool_call_id: toolCallId,
-              }),
-            ],
-          },
-        });
+        return reply(
+          `Error: "${name}" is reserved by a built-in system skill and cannot be created as a user skill.`,
+        );
       }
       if (existingSkill) {
-        return new Command({
-          update: {
-            messages: [
-              new ToolMessage({
-                content: `Error: A skill named "${name}" already exists in the ${scope ?? 'global'} scope. Use action "update" to modify it.`,
-                tool_call_id: toolCallId,
-              }),
-            ],
-          },
-        });
+        return reply(
+          `Error: A skill named "${name}" already exists in the ${scope ?? 'global'} scope. Use action "update" to modify it.`,
+        );
       }
     }
 
     if ((action === 'update' || action === 'delete') && !existingSkill) {
-      return new Command({
-        update: {
-          messages: [
-            new ToolMessage({
-              content: `Error: No user skill named "${name}" found in the ${scope ?? 'global'} scope.`,
-              tool_call_id: toolCallId,
-            }),
-          ],
-        },
-      });
+      return reply(
+        `Error: No user skill named "${name}" found in the ${scope ?? 'global'} scope.`,
+      );
+    }
+
+    const isMove = targetWorkspaceId !== effectiveWorkspaceId;
+    if (isMove && (await getUserSkillByName(name, targetWorkspaceId))) {
+      return reply(
+        `Error: A skill named "${name}" already exists in the ${newScope} scope, so it cannot be moved there.`,
+      );
     }
 
     // Build diff payload
@@ -173,8 +179,10 @@ export const editSkillTool = defineTool(
         oldContent,
         newContent,
         scope: scope ?? 'global',
+        newScope: isMove ? newScope : undefined,
         workspaceId: effectiveWorkspaceId,
         skillId: existingSkill?.id,
+        oldDisableModelInvocation,
         disableModelInvocation: newDisableModelInvocation,
         createdAt: Date.now(),
       },
@@ -183,32 +191,16 @@ export const editSkillTool = defineTool(
 
     // Cancellation discriminator
     if (response && (response as Record<string, unknown>).__cancelled) {
-      return new Command({
-        update: {
-          messages: [
-            new ToolMessage({
-              content: 'Skill edit cancelled by user.',
-              tool_call_id: toolCallId,
-            }),
-          ],
-        },
-      });
+      return reply('Skill edit cancelled by user.');
     }
 
     // Stale discriminator: the skill changed while awaiting approval, so the
     // approved diff no longer applies. Surface it so the agent re-reads + retries.
     if (response && (response as Record<string, unknown>).__stale) {
       const reason = (response as { reason?: string }).reason;
-      return new Command({
-        update: {
-          messages: [
-            new ToolMessage({
-              content: `${reason ?? 'The skill changed since this edit was proposed.'} Re-read it with \`read_skill\` and propose the change again.`,
-              tool_call_id: toolCallId,
-            }),
-          ],
-        },
-      });
+      return reply(
+        `${reason ?? 'The skill changed since this edit was proposed.'} Re-read it with \`read_skill\` and propose the change again.`,
+      );
     }
 
     const result = response as {
@@ -218,16 +210,7 @@ export const editSkillTool = defineTool(
 
     if (result.decision === 'reject') {
       const reason = result.freeformText ? `: ${result.freeformText}` : '';
-      return new Command({
-        update: {
-          messages: [
-            new ToolMessage({
-              content: `Skill edit rejected${reason}.`,
-              tool_call_id: toolCallId,
-            }),
-          ],
-        },
-      });
+      return reply(`Skill edit rejected${reason}.`);
     }
 
     // Apply the change
@@ -245,6 +228,7 @@ export const editSkillTool = defineTool(
           description:
             newDescription !== oldDescription ? newDescription : undefined,
           content: newContent !== oldContent ? newContent : undefined,
+          workspaceId: isMove ? targetWorkspaceId : undefined,
           disableModelInvocation:
             newDisableModelInvocation !== oldDisableModelInvocation
               ? newDisableModelInvocation
@@ -254,28 +238,14 @@ export const editSkillTool = defineTool(
         await deleteUserSkill(existingSkill.id);
       }
 
-      return new Command({
-        update: {
-          messages: [
-            new ToolMessage({
-              content: `Skill "${name}" ${action}d successfully.`,
-              tool_call_id: toolCallId,
-            }),
-          ],
-        },
-      });
+      return reply(
+        `Skill "${name}" ${action}d successfully${isMove ? ` and moved to the ${newScope} scope` : ''}.`,
+      );
     } catch (err) {
       console.error('[editSkillTool] Error applying skill change:', err);
-      return new Command({
-        update: {
-          messages: [
-            new ToolMessage({
-              content: `Error applying skill change: ${err instanceof Error ? err.message : String(err)}`,
-              tool_call_id: toolCallId,
-            }),
-          ],
-        },
-      });
+      return reply(
+        `Error applying skill change: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   },
   {

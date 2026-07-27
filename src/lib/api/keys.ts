@@ -21,8 +21,8 @@ export const qk = {
     ['workspaces', id, 'system-prompts'] as const,
   systemPrompts: ['system-prompts'] as const,
   skillsRoot: SKILLS_NS,
-  skills: (workspaceId?: string | null) =>
-    [...SKILLS_NS, { workspaceId }] as const,
+  skills: (workspaceId?: string | null, enabledOnly?: boolean) =>
+    [...SKILLS_NS, { workspaceId, enabledOnly }] as const,
   memoriesRoot: MEMORIES_NS,
   memories: (workspaceId?: string | null) =>
     [...MEMORIES_NS, { workspaceId }] as const,

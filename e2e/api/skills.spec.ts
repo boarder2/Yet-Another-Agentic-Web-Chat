@@ -165,6 +165,27 @@ test.describe('POST /api/skills', () => {
     expect(body.error).toContain('already exists');
   });
 
+  test('allows a workspace skill to shadow a global name', async ({
+    request,
+  }) => {
+    const name = `shadow-skill-${Date.now()}`;
+    const ws = await seedWorkspace(request, { name: 'skill-shadow-ws' });
+    await seedSkill(request, { name });
+
+    // Workspace skills override same-named global ones at resolve time, so the
+    // name being taken globally must not block the workspace-scoped override.
+    const res = await request.post('/api/skills', {
+      data: {
+        name,
+        description: 'Workspace override',
+        content: '# Override',
+        workspaceId: ws,
+      },
+    });
+    expect(res.status()).toBe(201);
+    expect((await res.json()).workspaceId).toBe(ws);
+  });
+
   test('stores disableModelInvocation when provided', async ({ request }) => {
     const name = `dmi-skill-${Date.now()}`;
     const res = await request.post('/api/skills', {
@@ -241,6 +262,146 @@ test.describe('PUT /api/skills/[id]', () => {
     expect(body.name).toBe('put-toggle-enabled');
     expect(body.description).toBe('Toggle test');
     expect(body.content).toBe('# Toggle\n\ncontent.');
+  });
+
+  test('applies every field of a combined patch', async ({ request }) => {
+    const id = await seedSkill(request, { name: 'put-combined-patch' });
+    const res = await request.put(`/api/skills/${id}`, {
+      data: { enabled: false, content: '# After\n\npatched.' },
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.enabled).toBe(false);
+    expect(body.content).toBe('# After\n\npatched.');
+  });
+
+  test('moves a global skill into a workspace', async ({ request }) => {
+    const ws = await seedWorkspace(request, { name: 'skill-move-target' });
+    const id = await seedSkill(request, { name: `move-to-ws-${Date.now()}` });
+
+    const res = await request.put(`/api/skills/${id}`, {
+      data: { workspaceId: ws },
+    });
+    expect(res.status()).toBe(200);
+    expect((await res.json()).workspaceId).toBe(ws);
+
+    // It is now invisible to every other scope.
+    const other = await seedWorkspace(request, { name: 'skill-move-other' });
+    const resOther = await request.get(
+      `/api/skills?workspaceId=${encodeURIComponent(other)}`,
+    );
+    const ids = (await resOther.json()).map((s: { id: string }) => s.id);
+    expect(ids).not.toContain(id);
+  });
+
+  test('moves a workspace skill back to global', async ({ request }) => {
+    const ws = await seedWorkspace(request, { name: 'skill-move-from' });
+    const id = await seedSkill(request, {
+      name: `move-to-global-${Date.now()}`,
+      workspaceId: ws,
+    });
+
+    const res = await request.put(`/api/skills/${id}`, {
+      data: { workspaceId: null },
+    });
+    expect(res.status()).toBe(200);
+    expect((await res.json()).workspaceId).toBe(null);
+  });
+
+  test('moves a skill between workspaces', async ({ request }) => {
+    const wsA = await seedWorkspace(request, { name: 'skill-move-a' });
+    const wsB = await seedWorkspace(request, { name: 'skill-move-b' });
+    const id = await seedSkill(request, {
+      name: `move-a-to-b-${Date.now()}`,
+      workspaceId: wsA,
+    });
+
+    const res = await request.put(`/api/skills/${id}`, {
+      data: { workspaceId: wsB },
+    });
+    expect(res.status()).toBe(200);
+    expect((await res.json()).workspaceId).toBe(wsB);
+  });
+
+  test('rejects a move that collides in the target scope with 409', async ({
+    request,
+  }) => {
+    const name = `move-collision-${Date.now()}`;
+    const ws = await seedWorkspace(request, { name: 'skill-collision-ws' });
+    await seedSkill(request, { name });
+    const wsSkillId = await seedSkill(request, { name, workspaceId: ws });
+
+    const res = await request.put(`/api/skills/${wsSkillId}`, {
+      data: { workspaceId: null },
+    });
+    expect(res.status()).toBe(409);
+    expect((await res.json()).error).toContain('already exists');
+
+    // The failed move left the skill where it was.
+    const after = await request.get(`/api/skills/${wsSkillId}`);
+    expect((await after.json()).workspaceId).toBe(ws);
+  });
+
+  test('renames a skill', async ({ request }) => {
+    const id = await seedSkill(request, { name: 'put-rename-before' });
+    const renamed = `put-rename-after-${Date.now()}`;
+    const res = await request.put(`/api/skills/${id}`, {
+      data: { name: renamed },
+    });
+    expect(res.status()).toBe(200);
+    expect((await res.json()).name).toBe(renamed);
+  });
+
+  test('renames and moves in one request', async ({ request }) => {
+    const ws = await seedWorkspace(request, { name: 'skill-rename-move-ws' });
+    const id = await seedSkill(request, { name: `rename-move-${Date.now()}` });
+    const renamed = `renamed-and-moved-${Date.now()}`;
+
+    const res = await request.put(`/api/skills/${id}`, {
+      data: { name: renamed, workspaceId: ws },
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.name).toBe(renamed);
+    expect(body.workspaceId).toBe(ws);
+  });
+
+  test('rejects a rename onto an existing name with 409', async ({
+    request,
+  }) => {
+    const taken = `rename-taken-${Date.now()}`;
+    await seedSkill(request, { name: taken });
+    const id = await seedSkill(request, {
+      name: `rename-source-${Date.now()}`,
+    });
+
+    const res = await request.put(`/api/skills/${id}`, {
+      data: { name: taken },
+    });
+    expect(res.status()).toBe(409);
+    expect((await res.json()).error).toContain('already exists');
+  });
+
+  test('rejects an invalid name with 400', async ({ request }) => {
+    const id = await seedSkill(request, { name: 'put-invalid-rename' });
+    const res = await request.put(`/api/skills/${id}`, {
+      data: { name: 'Not A Valid Name' },
+    });
+    expect(res.status()).toBe(400);
+    expect((await res.json()).error).toContain('name must match');
+  });
+
+  test('rejects a rename onto a reserved system skill name with 409', async ({
+    request,
+  }) => {
+    const id = await seedSkill(request, { name: `put-reserved-${Date.now()}` });
+    const res = await request.put(`/api/skills/${id}`, {
+      // A file-based system skill, so it is registered in every environment
+      // (unlike code-execution, which is omitted when the tool is disabled).
+      data: { name: 'deep-research' },
+    });
+    expect(res.status()).toBe(409);
+    expect((await res.json()).error).toContain('reserved');
   });
 
   test('returns 404 for nonexistent id', async ({ request }) => {

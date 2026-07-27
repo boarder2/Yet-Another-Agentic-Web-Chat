@@ -1,14 +1,12 @@
-import { badRequest, notFound, route } from '@/lib/api/route';
+import { badRequest, conflict, notFound, route } from '@/lib/api/route';
 import {
   getUserSkillById,
   updateUserSkill,
   deleteUserSkill,
-  setUserSkillEnabled,
+  isNameTakenInScope,
 } from '@/lib/skills/service';
-import {
-  MAX_SKILL_DESC_LEN,
-  MAX_SKILL_CONTENT_LEN,
-} from '@/lib/skills/validation';
+import { validateSkillFields } from '@/lib/skills/validation';
+import { isSystemSkillName } from '@/lib/skills/systemRegistry';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -30,29 +28,46 @@ export const GET = route(
 export const PUT = route(
   'Failed to update skill',
   async (req: Request, { params }: Ctx) => {
-    const { id } = await requireSkill(params);
-    const { description, content, enabled, disableModelInvocation } =
-      await req.json();
+    const { id, skill } = await requireSkill(params);
+    const {
+      name,
+      description,
+      content,
+      workspaceId,
+      enabled,
+      disableModelInvocation,
+    } = await req.json();
 
-    if (typeof enabled === 'boolean') {
-      return Response.json(await setUserSkillEnabled(id, enabled));
-    }
-    if (description !== undefined && description.length > MAX_SKILL_DESC_LEN) {
-      throw badRequest('description too long', {
-        maxLength: MAX_SKILL_DESC_LEN,
-      });
-    }
-    if (content !== undefined && content.length > MAX_SKILL_CONTENT_LEN) {
-      throw badRequest('content too long');
-    }
+    const invalid = validateSkillFields({ name, description, content });
+    if (invalid) throw badRequest(invalid.message, invalid.extra);
+
+    if (name !== undefined && isSystemSkillName(name))
+      throw conflict(`"${name}" is reserved by a built-in system skill`);
+
+    // A rename and a scope move each shift the row's (name, scope) identity,
+    // so validate the destination pair rather than either half alone.
+    const nextName = name ?? skill.name;
+    const nextScope =
+      workspaceId === undefined ? skill.workspaceId : (workspaceId ?? null);
+    if (
+      (nextName !== skill.name || nextScope !== skill.workspaceId) &&
+      (await isNameTakenInScope(nextName, nextScope, id))
+    )
+      throw conflict(
+        `A skill named "${nextName}" already exists in that scope`,
+      );
 
     return Response.json(
       await updateUserSkill(id, {
+        name,
         description,
         content,
-        ...(typeof disableModelInvocation === 'boolean' && {
-          disableModelInvocation,
-        }),
+        workspaceId: workspaceId === undefined ? undefined : nextScope,
+        enabled: typeof enabled === 'boolean' ? enabled : undefined,
+        disableModelInvocation:
+          typeof disableModelInvocation === 'boolean'
+            ? disableModelInvocation
+            : undefined,
       }),
     );
   },

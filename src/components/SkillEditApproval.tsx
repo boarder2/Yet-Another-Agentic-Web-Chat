@@ -128,6 +128,9 @@ export function SkillEditApproval({
   oldContent,
   newContent,
   scope,
+  newScope,
+  oldDisableModelInvocation,
+  disableModelInvocation,
   onDecide,
   onDismiss,
 }: {
@@ -139,6 +142,9 @@ export function SkillEditApproval({
   oldContent: string;
   newContent: string;
   scope: 'global' | 'workspace';
+  newScope?: 'global' | 'workspace';
+  oldDisableModelInvocation?: boolean;
+  disableModelInvocation?: boolean;
   onDecide: (
     approvalId: string,
     decision: 'accept' | 'reject',
@@ -178,6 +184,26 @@ export function SkillEditApproval({
     action !== 'delete' &&
     (oldContent !== newContent || oldDescription !== newDescription);
 
+  // Not every skill edit is a text edit: a scope move or an auto-invocation
+  // flip leaves both diffs empty, so they get spelled out as their own rows —
+  // otherwise the panel asks for approval of nothing visible.
+  const invocationLabel = (disabled?: boolean) =>
+    disabled ? 'slash command only' : 'model + slash command';
+  const changes: { label: string; value: string }[] = [];
+  if (action !== 'delete') {
+    if (newScope && newScope !== scope)
+      changes.push({ label: 'Scope', value: `${scope} → ${newScope}` });
+    if (
+      oldDisableModelInvocation !== undefined &&
+      disableModelInvocation !== undefined &&
+      oldDisableModelInvocation !== disableModelInvocation
+    )
+      changes.push({
+        label: 'Invocation',
+        value: `${invocationLabel(oldDisableModelInvocation)} → ${invocationLabel(disableModelInvocation)}`,
+      });
+  }
+
   return (
     <div className="mb-2 border border-surface-2 rounded-floating overflow-hidden bg-surface shadow-raised flex flex-col max-h-[calc(100svh-16rem)]">
       {/* Header */}
@@ -211,7 +237,27 @@ export function SkillEditApproval({
           <div className="px-5 py-4 text-sm text-fg/70 border-b border-surface-2">
             This will permanently delete the skill <strong>{name}</strong>.
           </div>
-        ) : showDiff ? (
+        ) : null}
+
+        {changes.length > 0 && (
+          <dl className="px-5 py-3 border-b border-surface-2 space-y-1">
+            {changes.map(({ label, value }) => (
+              <div key={label} className="flex items-baseline gap-2 text-sm">
+                <dt className="text-xs text-fg/50 w-20 shrink-0">{label}</dt>
+                <dd className="text-fg">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+
+        {action !== 'delete' && !showDiff && changes.length === 0 && (
+          <div className="px-5 py-4 text-sm text-fg/60 border-b border-surface-2">
+            No changes — <strong className="text-fg">{name}</strong> already
+            matches this proposal.
+          </div>
+        )}
+
+        {action !== 'delete' && showDiff ? (
           <div className="border-b border-surface-2">
             {oldDescription !== newDescription && (
               <div className="px-5 py-2 border-b border-surface-2">

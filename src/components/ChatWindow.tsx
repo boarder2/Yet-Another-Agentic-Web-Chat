@@ -56,6 +56,7 @@ import { qk } from '@/lib/api/keys';
 import { apiFetch } from '@/lib/api/client';
 import type { ActiveRunsData } from '@/lib/hooks/api/useActiveRuns';
 import { useMarkChatSeen } from '@/lib/hooks/api/useActiveRuns';
+import { useSkills } from '@/lib/hooks/api/useSkills';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { getSuggestions } from '@/lib/actions';
 import { SKILL_TOKEN_SCAN_REGEX } from '@/lib/skills/validation';
@@ -519,13 +520,6 @@ const ChatWindow = ({
 
   const [compacting, setCompacting] = useState(false);
 
-  // Enabled user skills for slash-command invocation and autocomplete
-  const [enabledUserSkillNames, setEnabledUserSkillNames] = useState<
-    Set<string>
-  >(new Set());
-  const [enabledSkillsForAutocomplete, setEnabledSkillsForAutocomplete] =
-    useState<Array<{ name: string; description: string }>>([]);
-
   const [files, setFiles] = useState<File[]>([]);
   const [fileIds, setFileIds] = useState<string[]>([]);
 
@@ -540,6 +534,13 @@ const ChatWindow = ({
   >(null);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(
     () => workspaceId ?? searchParams.get('workspace'),
+  );
+
+  // Enabled user skills for slash-command invocation and autocomplete
+  const { data: enabledSkills = [] } = useSkills(selectedWorkspaceId, true);
+  const enabledUserSkillNames = useMemo(
+    () => new Set(enabledSkills.map((s) => s.name)),
+    [enabledSkills],
   );
 
   const [isMessagesLoaded, setIsMessagesLoaded] = useState(false);
@@ -684,22 +685,6 @@ const ChatWindow = ({
     }
   };
 
-  // Load enabled user skills for slash-command invocation
-  const refreshEnabledSkills = useCallback(() => {
-    const params = new URLSearchParams();
-    params.set('enabled', 'true');
-    if (selectedWorkspaceId) params.set('workspaceId', selectedWorkspaceId);
-    fetch(`/api/skills?${params}`)
-      .then((r) => r.json())
-      .then((rows: Array<{ name: string; description: string }>) => {
-        setEnabledUserSkillNames(new Set(rows.map((r) => r.name)));
-        setEnabledSkillsForAutocomplete(
-          rows.map((r) => ({ name: r.name, description: r.description })),
-        );
-      })
-      .catch(() => {});
-  }, [selectedWorkspaceId]);
-
   // messageEnd asks (via a fetchSuggestions effect) for follow-up suggestions on
   // a completed, sourced answer that has none yet.
   const fetchSuggestions = async (messageId: string) => {
@@ -743,7 +728,7 @@ const ChatWindow = ({
         });
         break;
       case 'refreshSkills':
-        refreshEnabledSkills();
+        queryClient.invalidateQueries({ queryKey: qk.skillsRoot });
         break;
       case 'fetchSuggestions':
         void fetchSuggestions(effect.messageId);
@@ -1078,6 +1063,15 @@ const ChatWindow = ({
                         oldContent: p.oldContent as string,
                         newContent: p.newContent as string,
                         scope: p.scope as 'global' | 'workspace',
+                        newScope: p.newScope as
+                          | 'global'
+                          | 'workspace'
+                          | undefined,
+                        oldDisableModelInvocation:
+                          p.oldDisableModelInvocation as boolean | undefined,
+                        disableModelInvocation: p.disableModelInvocation as
+                          | boolean
+                          | undefined,
                         workspaceId: p.workspaceId as string | null | undefined,
                         skillId: p.skillId as string | undefined,
                         createdAt: p.createdAt as number | undefined,
@@ -1171,10 +1165,6 @@ const ChatWindow = ({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMessagesLoaded]);
-
-  useEffect(() => {
-    refreshEnabledSkills();
-  }, [refreshEnabledSkills]);
 
   const sendMessage = async (
     message: string,
@@ -2007,7 +1997,7 @@ const ChatWindow = ({
                   messageCount={messages.length}
                   onCompact={handleCompact}
                   compacting={compacting}
-                  enabledSkills={enabledSkillsForAutocomplete}
+                  enabledSkills={enabledSkills}
                 />
               </>
             ) : (
@@ -2038,7 +2028,7 @@ const ChatWindow = ({
                 setSelectedWorkspaceId={
                   workspaceId ? undefined : setSelectedWorkspaceId
                 }
-                enabledSkills={enabledSkillsForAutocomplete}
+                enabledSkills={enabledSkills}
               />
             )}
           </div>

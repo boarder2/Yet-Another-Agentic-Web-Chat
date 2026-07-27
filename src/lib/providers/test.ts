@@ -112,6 +112,45 @@ class FakeChatModel extends BaseChatModel {
       return;
     }
 
+    // Scripted by the prompt:
+    // "<name>|<scope>|<newScope>|<content>|<disableModelInvocation>".
+    // Empty fields are omitted from the call, so a spec can script an update
+    // that changes only the scope — or nothing at all.
+    if (this.modelName.includes('skill-edit') && !hasToolResult) {
+      const [name, scope, newScope, content, disableModelInvocation] =
+        lastHumanText(messages).split('|');
+      yield new ChatGenerationChunk({
+        text: '',
+        message: new AIMessageChunk({
+          content: '',
+          tool_calls: [
+            {
+              name: 'edit_skill',
+              args: {
+                action: 'update',
+                name: (name ?? '').trim(),
+                ...(scope?.trim() && { scope: scope.trim() }),
+                ...(newScope?.trim() && { newScope: newScope.trim() }),
+                ...(content && { content }),
+                ...(disableModelInvocation?.trim() && {
+                  disableModelInvocation:
+                    disableModelInvocation.trim() === 'true',
+                }),
+              },
+              id: 'test-skill-edit-call-1',
+              type: 'tool_call',
+            },
+          ],
+          usage_metadata: {
+            input_tokens: 12,
+            output_tokens: 4,
+            total_tokens: 16,
+          },
+        }),
+      });
+      return;
+    }
+
     // Scripted by the prompt: "<file>|<oldString>|<newString>".
     if (this.modelName.includes('workspace-edit') && !hasToolResult) {
       const [file, oldString, newString] = lastHumanText(messages).split('|');
@@ -448,6 +487,12 @@ export async function loadTestChatModels(): Promise<Record<string, ChatModel>> {
       displayName: 'Test (workspace edit)',
       model: new FakeChatModel({
         modelName: 'test-workspace-edit',
+      }) as unknown as BaseChatModel,
+    },
+    'test-skill-edit': {
+      displayName: 'Test (skill edit)',
+      model: new FakeChatModel({
+        modelName: 'test-skill-edit',
       }) as unknown as BaseChatModel,
     },
     'test-notitle': {

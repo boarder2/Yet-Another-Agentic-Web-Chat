@@ -10,9 +10,7 @@ export type UserSkillCreate = {
   disableModelInvocation?: boolean;
 };
 
-export type UserSkillUpdate = Partial<
-  Pick<UserSkillCreate, 'description' | 'content' | 'disableModelInvocation'>
->;
+export type UserSkillUpdate = Partial<UserSkillCreate> & { enabled?: boolean };
 
 export async function listUserSkills(workspaceId?: string | null) {
   if (workspaceId) {
@@ -32,18 +30,38 @@ export async function getUserSkillById(id: string) {
   return row ?? null;
 }
 
+/**
+ * Scope-exact lookup: a workspace scope never falls through to the global
+ * skill of the same name. Callers are addressing one row — the skill named
+ * `name` living in exactly this scope — not resolving which skill a chat would
+ * see (that is `resolveSkillsForChat`, where workspace shadows global).
+ */
 export async function getUserSkillByName(
   name: string,
   workspaceId?: string | null,
 ) {
-  const conditions = workspaceId
-    ? and(
+  const [row] = await db
+    .select()
+    .from(skills)
+    .where(
+      and(
         eq(skills.name, name),
-        or(isNull(skills.workspaceId), eq(skills.workspaceId, workspaceId)),
-      )
-    : and(eq(skills.name, name), isNull(skills.workspaceId));
-  const [row] = await db.select().from(skills).where(conditions!);
+        workspaceId
+          ? eq(skills.workspaceId, workspaceId)
+          : isNull(skills.workspaceId),
+      ),
+    );
   return row ?? null;
+}
+
+/** Whether `name` is already used in exactly `workspaceId`'s scope by another row. */
+export async function isNameTakenInScope(
+  name: string,
+  workspaceId: string | null,
+  excludeId?: string,
+) {
+  const existing = await getUserSkillByName(name, workspaceId);
+  return !!existing && existing.id !== excludeId;
 }
 
 export async function createUserSkill(input: UserSkillCreate) {
@@ -59,18 +77,16 @@ export async function createUserSkill(input: UserSkillCreate) {
 }
 
 export async function updateUserSkill(id: string, patch: UserSkillUpdate) {
-  const [row] = await db
-    .update(skills)
-    .set({ ...patch, updatedAt: new Date() })
-    .where(eq(skills.id, id))
-    .returning();
-  return row ?? null;
-}
+  // `workspaceId: null` is a real value (move to global), so filter on
+  // undefined rather than falsiness.
+  const set = Object.fromEntries(
+    Object.entries(patch).filter(([, v]) => v !== undefined),
+  );
+  if (Object.keys(set).length === 0) return getUserSkillById(id);
 
-export async function setUserSkillEnabled(id: string, enabled: boolean) {
   const [row] = await db
     .update(skills)
-    .set({ enabled, updatedAt: new Date() })
+    .set({ ...set, updatedAt: new Date() })
     .where(eq(skills.id, id))
     .returning();
   return row ?? null;

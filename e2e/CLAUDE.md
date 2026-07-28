@@ -17,6 +17,8 @@ Tests assert **correct** behavior — what the feature is _supposed_ to do, deri
 | `test-tool-multi`     | Emits two sequential `file_search` tool calls (each after the prior result), then a fixed answer.                                                                   |
 | `test-ask-user`       | Emits an `ask_user` tool call (triggers a real LangGraph interrupt — the run pauses `awaiting_user`); on resume, answers with fixed text.                           |
 | `test-structured`     | If tools are bound (`withStructuredOutput`), returns a matching tool call with deterministic args; otherwise answers with `<suggestions>` XML.                      |
+| `test-long`           | Answers with a fixed multi-paragraph block taller than any test viewport, for scroll-position specs.                                                                |
+| `test-tool-long`      | `test-tool`'s `file_search` call followed by the `test-long` answer — an answer that opens with a widget and runs past the viewport.                                |
 | `test-slow`           | Paces token delivery (300ms/token) so a spec can observe a run mid-stream.                                                                                          |
 | `test-spoof`          | Streams text containing a forged `yaawc:` widget fence, so a spec can assert it is neutralized before persistence.                                                  |
 | `test-workspace-edit` | Emits one `workspace_edit` tool call whose args are scripted by the prompt (`<file>\|<oldString>\|<newString>`).                                                    |

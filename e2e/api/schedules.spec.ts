@@ -208,33 +208,8 @@ test.describe('POST /api/schedules/[id]/run', () => {
   });
 });
 
-test.describe('GET /api/schedules/runs', () => {
-  test('includes a run entry with label, workflow name, and preview', async ({
-    request,
-  }) => {
-    const workflowName = uniq('runs-wf');
-    const label = uniq('runs-sched');
-    const workflowId = await seedWorkflow(request, { name: workflowName });
-    const scheduleId = await seedSchedule(request, workflowId, { label });
-    const { chatId } = await (
-      await request.post(`/api/schedules/${scheduleId}/run`)
-    ).json();
-
-    const res = await request.get('/api/schedules/runs?limit=100');
-    expect(res.status()).toBe(200);
-    const body = await res.json();
-    const entry = body.find((r: { id: string }) => r.id === chatId);
-    expect(entry).toBeTruthy();
-    expect(entry.scheduleId).toBe(scheduleId);
-    expect(entry.scheduleLabel).toBe(label);
-    expect(entry.workflowName).toBe(workflowName);
-    expect(entry.preview).toBe('This is a deterministic test answer.');
-    expect(entry.sourcesCount).toBe(0);
-  });
-});
-
 test.describe('scheduled runs unread flow', () => {
-  test('a fresh run is unread; marking it seen clears its flag', async ({
+  test('a finished run counts as unread history; opening it clears the count', async ({
     request,
   }) => {
     const workflowId = await seedWorkflow(request);
@@ -243,22 +218,24 @@ test.describe('scheduled runs unread flow', () => {
       await request.post(`/api/schedules/${scheduleId}/run`)
     ).json();
 
-    // A fresh scheduled run is unviewed in the runs list.
-    const runsBefore = await (
-      await request.get('/api/schedules/runs?limit=100')
-    ).json();
-    const before = runsBefore.find((r: { id: string }) => r.id === chatId);
-    expect(before.scheduledRunViewed).toBe(0);
+    // A headless scheduled run leaves the chat with a terminal run status and
+    // no viewer, so it is an ordinary unread run in History.
+    const chat = await (await request.get(`/api/chats/${chatId}`)).json();
+    expect(chat.chat.lastRunStatus).toBe('completed');
+    expect(chat.chat.lastRunViewed).toBe(0);
 
-    // Marking the chat seen flips only its flag.
+    const activeBefore = await (
+      await request.get('/api/chat/runs/active')
+    ).json();
+    expect(activeBefore.unreadCount).toBeGreaterThan(0);
+
+    // Marking it seen clears the flag and drops the global unread count.
     const seen = await request.post(`/api/chats/${chatId}/seen`);
     expect(seen.status()).toBe(200);
-    expect(typeof (await seen.json()).scheduledCount).toBe('number');
+    const { historyCount } = await seen.json();
+    expect(historyCount).toBe(activeBefore.unreadCount - 1);
 
-    const runsAfter = await (
-      await request.get('/api/schedules/runs?limit=100')
-    ).json();
-    const after = runsAfter.find((r: { id: string }) => r.id === chatId);
-    expect(after.scheduledRunViewed).toBe(1);
+    const after = await (await request.get(`/api/chats/${chatId}`)).json();
+    expect(after.chat.lastRunViewed).toBe(1);
   });
 });

@@ -1,0 +1,1 @@
+ALTER TABLE `chats` DROP COLUMN `scheduled_run_viewed`;

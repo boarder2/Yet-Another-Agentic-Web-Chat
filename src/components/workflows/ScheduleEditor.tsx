@@ -70,7 +70,7 @@ export default function ScheduleEditor({
     try {
       if (schedule) await patch.mutateAsync({ id: schedule.id, data });
       else await create.mutateAsync(data);
-      router.push('/automations/scheduled/manage');
+      router.push('/automations/scheduled');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save schedule');
     }
@@ -80,7 +80,7 @@ export default function ScheduleEditor({
     <div className="flex flex-col pt-4 max-w-2xl">
       <div className="flex items-center gap-3 px-1 mb-6">
         <Link
-          href="/automations/scheduled/manage"
+          href="/automations/scheduled"
           className="text-fg/60 hover:text-fg transition-colors duration-150"
         >
           <ArrowLeft size={20} />
@@ -233,7 +233,7 @@ export default function ScheduleEditor({
                 : 'Create Schedule'}
           </button>
           <Link
-            href="/automations/scheduled/manage"
+            href="/automations/scheduled"
             className="px-4 py-2 rounded-control text-fg/60 hover:text-fg transition-colors duration-150"
           >
             Cancel

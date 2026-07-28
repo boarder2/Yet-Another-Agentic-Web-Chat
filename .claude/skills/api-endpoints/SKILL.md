@@ -92,7 +92,7 @@ Note: The old `{"type":"init"}`, `{"type":"modelStats"}`, and `{"type":"end"}` e
 | ----------------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `/api/chat/cancel`                  | POST   | Hard-cancel a run. Body: `{ messageId: string }`                                                                                                                                                                |
 | `/api/chat/compact`                 | POST   | Summarize a chat's history to compress context. Body: `{ chatId, instructions?, chatModel?, systemModel? }`. Returns `{ compactionSummary, compactedMessageCount, lastCompactedId, tokensBefore, tokensAfter }` |
-| `/api/chat/runs/active`             | GET    | List running/awaiting_user runs (excluding scheduled tasks). Returns `{ active, stale, unreadCount, awaitingAttentionCount }`                                                                                   |
+| `/api/chat/runs/active`             | GET    | List running/awaiting_user runs (excluding scheduled tasks). Returns `{ active, stale, unreadCount, awaitingAttentionCount }` — `unreadCount` covers scheduled runs too                                         |
 | `/api/chat/runs/[messageId]/stream` | GET    | Re-attach to a run's event stream. Query params: `from=<seq>`, `chatId=<id>`. Returns SSE stream or `{"type":"gone"}`                                                                                           |
 | `/api/chat/runs/resume`             | POST   | Resume a paused (`awaiting_user`) run. Body: `{ approvalId, response }` or `{ resumeMap: { approvalId: response, ... } }`                                                                                       |
 | `/api/approvals/pending`            | GET    | List pending (unresolved) interrupt approvals. Query param: `chatId=<id>` (optional)                                                                                                                            |
@@ -103,7 +103,7 @@ Note: The old `{"type":"init"}`, `{"type":"modelStats"}`, and `{"type":"end"}` e
 | --------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `/api/chats`                | GET        | List chats. Params: `limit`, `offset`, `q` (search), `pinned=1`, `scheduled=0/1`, `workspaceId`, `workspaceIds`. Returns `{ chats, total, totalMessages, limit, offset, hasMore }` |
 | `/api/chats/[id]`           | GET/DELETE | Get or delete individual chat                                                                                                                                                      |
-| `/api/chats/[id]/seen`      | POST       | Mark a chat's latest run as viewed. Returns `{ historyCount, scheduledCount }`                                                                                                     |
+| `/api/chats/[id]/seen`      | POST       | Mark a chat's latest run as viewed. Returns `{ historyCount }`                                                                                                                     |
 | `/api/chats/search`         | GET        | Dedicated full-text search across chat content                                                                                                                                     |
 | `/api/messages/[messageId]` | GET/DELETE | Get or delete individual message                                                                                                                                                   |
 
@@ -194,8 +194,6 @@ Reusable parameterized prompts (workflow) + saved cron fill-sets (schedule). See
 | `/api/schedules`                | GET              | List all schedules joined to workflow name (with `running: bool`)                                                                                                                                    |
 | `/api/schedules/[id]`           | GET/PATCH/DELETE | Get, update (re-validates fill-set, reschedules cron), or delete (keeps past run chats, nulls `scheduleId`)                                                                                          |
 | `/api/schedules/[id]/run`       | POST             | Run-now: fire a schedule immediately (headless). Returns `{ chatId, status }`                                                                                                                        |
-| `/api/schedules/runs`           | GET              | Scheduled run history (chats keyed by `scheduleId`)                                                                                                                                                  |
-| `/api/schedules/runs/unread`    | GET              | Count unread scheduled runs                                                                                                                                                                          |
 
 ## Dashboard
 

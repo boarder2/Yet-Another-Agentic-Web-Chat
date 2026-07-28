@@ -197,6 +197,20 @@
       "when": 1785133511947,
       "tag": "0027_flat_hobgoblin",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "6",
+      "when": 1785221121553,
+      "tag": "0028_drop_scheduled_run_viewed_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "6",
+      "when": 1785221539155,
+      "tag": "0029_steady_weapon_omega",
+      "breakpoints": true
     }
   ]
 }

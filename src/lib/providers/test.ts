@@ -305,6 +305,13 @@ class FakeChatModel extends BaseChatModel {
     } else if (this.modelName.includes('tool-multi')) {
       answer =
         'Based on the documents, the multi-step answer is deterministic.';
+    } else if (this.modelName.includes('long')) {
+      // Taller than any test viewport, so scroll-position specs can tell the
+      // top of the answer apart from the bottom of the page.
+      answer = Array.from(
+        { length: 40 },
+        (_, i) => `Paragraph ${i + 1} of a deterministic long test answer.`,
+      ).join('\n\n');
     } else if (this.modelName.includes('structured')) {
       answer = STRUCTURED_SUGGESTIONS_ANSWER;
     } else if (this.modelName.includes('spoof')) {
@@ -469,6 +476,18 @@ export async function loadTestChatModels(): Promise<Record<string, ChatModel>> {
       displayName: 'Test (structured output)',
       model: new FakeChatModel({
         modelName: 'test-structured',
+      }) as unknown as BaseChatModel,
+    },
+    'test-long': {
+      displayName: 'Test (long answer)',
+      model: new FakeChatModel({
+        modelName: 'test-long',
+      }) as unknown as BaseChatModel,
+    },
+    'test-tool-long': {
+      displayName: 'Test (tool loop, long answer)',
+      model: new FakeChatModel({
+        modelName: 'test-tool-long',
       }) as unknown as BaseChatModel,
     },
     'test-slow': {

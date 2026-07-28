@@ -36,8 +36,6 @@ export const qk = {
   workflowSchedules: (id: string) => ['workflows', id, 'schedules'] as const,
   schedules: ['schedules'] as const,
   schedule: (id: string) => ['schedules', id] as const,
-  scheduleRuns: ['schedule-runs'] as const,
-  scheduleRunsUnread: ['schedule-runs', 'unread'] as const,
   chatsRoot: ['chats'] as const,
   chatsInfiniteRoot: ['chats', 'infinite'] as const,
   chatsInfinite: (filter: ChatsFilter) =>

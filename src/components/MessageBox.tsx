@@ -144,7 +144,7 @@ const MessageBox = ({
   };
 
   return (
-    <div>
+    <div id={`msg-${message.messageId}`}>
       {message.role === 'user' && (
         <div
           className={cn(

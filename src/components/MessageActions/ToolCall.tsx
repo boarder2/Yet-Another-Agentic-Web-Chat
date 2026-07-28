@@ -595,7 +595,10 @@ export const ToolCall = ({
     mcpExpandable;
 
   return (
-    <div className="my-3 bg-surface border border-surface-2 rounded-surface overflow-hidden">
+    <div
+      data-execution
+      className="my-3 bg-surface border border-surface-2 rounded-surface overflow-hidden"
+    >
       <div
         className={`flex items-start justify-between gap-2 text-sm font-medium px-4 py-3 ${
           isExpandable

@@ -60,17 +60,16 @@ export const GET = async () => {
       (r) => r.status === 'awaiting_user',
     ).length;
 
-    // Unread = a finished run the user hasn't seen. Mirror ChatRow's badge
-    // condition: lastRunViewed 0, a terminal status, and no run currently in
-    // flight (a run resets lastRunViewed to 0 on start, so the active guard
-    // keeps it from counting until it finishes).
+    // Unread = a finished run the user hasn't seen, scheduled or interactive.
+    // Mirror ChatRow's badge condition: lastRunViewed 0, a terminal status, and
+    // no run currently in flight (a run resets lastRunViewed to 0 on start, so
+    // the active guard keeps it from counting until it finishes).
     const [{ value: unreadCount }] = await db
       .select({ value: count() })
       .from(chats)
       .where(
         and(
           eq(chats.lastRunViewed, 0),
-          isNull(chats.scheduleId),
           isNull(chats.activeRunMessageId),
           isNotNull(chats.lastRunStatus),
         ),

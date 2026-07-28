@@ -233,15 +233,19 @@ const MessageTabs = ({
               gatheringSources={gatheringSources}
             />
           )}
-          <MarkdownRenderer
-            content={parsedMessage}
-            className="px-4"
-            messageId={message.messageId}
-            expandedThinkBoxes={message.expandedThinkBoxes}
-            onThinkBoxToggle={onThinkBoxToggle}
-            showThinking={true}
-            sources={message.sources}
-          />
+          {/* data-answer scopes the open-time scroll anchor (see Chat.tsx) to
+              the answer body, so it never lands on the footer below it. */}
+          <div data-answer>
+            <MarkdownRenderer
+              content={parsedMessage}
+              className="px-4"
+              messageId={message.messageId}
+              expandedThinkBoxes={message.expandedThinkBoxes}
+              onThinkBoxToggle={onThinkBoxToggle}
+              showThinking={true}
+              sources={message.sources}
+            />
+          </div>
           {loading && isLast ? null : (
             <div className="flex flex-row items-center justify-between w-full px-4 py-4">
               <div className="flex flex-row items-center space-x-1">

@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useScheduleRunsUnread } from '@/lib/hooks/api/useSchedules';
 import { useActiveRuns } from '@/lib/hooks/api/useActiveRuns';
 
 // Leading "(N) " badge we prepend to the tab title. Stripped before every
@@ -13,9 +12,8 @@ const stripBadge = (title: string) => title.replace(BADGE_RE, '');
 
 /**
  * Maintains a global "(N) " prefix on the document title where N is the total
- * of unread + attention-seeking items (scheduled-run unread, history-run
- * unread, history awaiting-attention). The same TanStack queries that drive the
- * Sidebar badges feed this, so it stays in sync app-wide with no extra polling.
+ * of unread + attention-seeking items (unread runs, awaiting-attention runs).
+ * The same TanStack query that drives the Sidebar badge feeds this, so it stays in sync app-wide with no extra polling.
  *
  * A changed title on a backgrounded tab is what makes Firefox surface its
  * native "something happened here" dot, so the prefix alone produces the effect.
@@ -28,13 +26,10 @@ const stripBadge = (title: string) => title.replace(BADGE_RE, '');
  * to avoid a feedback loop. Renders nothing.
  */
 export default function TitleBadge() {
-  const { data: scheduledUnread = 0 } = useScheduleRunsUnread();
   const { data: activeRuns } = useActiveRuns();
 
   const total =
-    scheduledUnread +
-    (activeRuns?.unreadCount ?? 0) +
-    (activeRuns?.awaitingAttentionCount ?? 0);
+    (activeRuns?.unreadCount ?? 0) + (activeRuns?.awaitingAttentionCount ?? 0);
 
   useEffect(() => {
     // The value we last wrote ourselves, so the observer can tell our own

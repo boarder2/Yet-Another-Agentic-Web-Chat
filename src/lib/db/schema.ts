@@ -127,7 +127,6 @@ export const chats = sqliteTable('chats', {
   // migration (migrateScheduledTasks) can remap it into `scheduleId`; no live
   // code reads it. Not dropped because that would be a destructive schema diff.
   scheduledTaskId: text('scheduled_task_id'),
-  scheduledRunViewed: integer('scheduled_run_viewed'),
   pinned: integer('pinned')
     .notNull()
     .default(sql`0`),

@@ -144,7 +144,10 @@ export const SubagentExecution: React.FC<SubagentExecutionProps> = ({
   };
 
   return (
-    <div className="my-3 border border-surface-2 rounded-surface bg-surface overflow-hidden">
+    <div
+      data-execution
+      className="my-3 border border-surface-2 rounded-surface bg-surface overflow-hidden"
+    >
       {/* Main header - always visible */}
       <button
         type="button"

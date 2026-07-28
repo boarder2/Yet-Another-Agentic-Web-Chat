@@ -23,7 +23,10 @@ const ThinkBox = ({ content, expanded, onToggle }: ThinkBoxProps) => {
     onToggle || (() => setInternalExpanded(!internalExpanded));
 
   return (
-    <div className="my-4 bg-surface/50 rounded-floating border border-surface-2 overflow-hidden">
+    <div
+      data-execution
+      className="my-4 bg-surface/50 rounded-floating border border-surface-2 overflow-hidden"
+    >
       <button
         type="button"
         onClick={handleToggle}

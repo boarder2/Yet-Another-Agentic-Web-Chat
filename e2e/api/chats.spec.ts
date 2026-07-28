@@ -521,15 +521,15 @@ test.describe('DELETE /api/chats/[id]', () => {
 });
 
 test.describe('POST /api/chats/[id]/seen', () => {
-  test('marks chat as seen and returns counts', async ({ request }) => {
+  test('marks chat as seen and returns the remaining unread count', async ({
+    request,
+  }) => {
     const chatId = await seedChat(request, { content: 'seen-test' });
     const res = await request.post(`/api/chats/${chatId}/seen`);
     expect(res.status()).toBe(200);
     const body = await res.json();
     expect(typeof body.historyCount).toBe('number');
     expect(body.historyCount).toBeGreaterThanOrEqual(0);
-    expect(typeof body.scheduledCount).toBe('number');
-    expect(body.scheduledCount).toBeGreaterThanOrEqual(0);
   });
 
   test('returns 404 for nonexistent id', async ({ request }) => {

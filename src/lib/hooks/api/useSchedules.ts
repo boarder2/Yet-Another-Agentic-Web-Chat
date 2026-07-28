@@ -42,22 +42,6 @@ export interface ScheduleListItem {
   running: boolean;
 }
 
-/** A scheduled run row as returned by GET /api/schedules/runs. */
-export interface ScheduleRunPreview {
-  id: string;
-  title: string;
-  createdAt: number;
-  focusMode: string;
-  scheduleId: string | null;
-  scheduledRunViewed: number | null;
-  activeRunMessageId: string | null;
-  scheduleLabel: string;
-  workflowName: string;
-  lastRunStatus: string | null;
-  preview: string;
-  sourcesCount: number;
-}
-
 export type ScheduleInput = Partial<
   Pick<
     Schedule,
@@ -152,34 +136,7 @@ export function useRunSchedule() {
       ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: qk.schedules });
-      qc.invalidateQueries({ queryKey: qk.scheduleRuns });
+      qc.invalidateQueries({ queryKey: qk.chatsRoot });
     },
-  });
-}
-
-export function useScheduleRunsList(limit = 50) {
-  return useQuery({
-    queryKey: [...qk.scheduleRuns, { limit }],
-    queryFn: () =>
-      apiFetch<ScheduleRunPreview[]>(`/api/schedules/runs?limit=${limit}`),
-    // Poll so an in-flight run updates on completion; faster while one is live.
-    refetchInterval: (q) =>
-      (q.state.data ?? []).some((r) => r.activeRunMessageId) ? 5000 : 30000,
-    refetchOnWindowFocus: true,
-  });
-}
-
-export function useScheduleRunsUnread() {
-  return useQuery({
-    queryKey: qk.scheduleRunsUnread,
-    queryFn: () => apiFetch<{ count: number }>('/api/schedules/runs/unread'),
-    select: (d) => d.count ?? 0,
-    refetchInterval: 30000,
-    // Keep polling while backgrounded so the title badge stays current.
-    refetchIntervalInBackground: true,
-    refetchOnWindowFocus: true,
-    // Always stale so navigating into an observing view refetches immediately.
-    staleTime: 0,
-    refetchOnMount: 'always',
   });
 }

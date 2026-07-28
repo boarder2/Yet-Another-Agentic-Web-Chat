@@ -10,7 +10,7 @@ SQLite + Drizzle ORM. The DB file is `db.sqlite` at the repo root (a working fil
 ## Golden rules
 
 - **Edit `src/lib/db/schema.ts` only.** It is the single source of truth (`drizzle.config.ts`: `dialect: 'sqlite'`, `schema: ./src/lib/db/schema.ts`, `out: ./drizzle`).
-- **Never hand-write or hand-edit files in `drizzle/`.** They are generated SQL migrations.
+- **Never hand-write or hand-edit files in `drizzle/`.** They are generated SQL migrations. The one escape hatch is SQL drizzle cannot derive from the schema (see the `DROP COLUMN` note below): `drizzle-kit generate --custom --name <name>` emits an empty stub to write into, and the next `db:generate` still diffs against the schema normally.
 
 ## Workflow
 
@@ -24,6 +24,12 @@ SQLite + Drizzle ORM. The DB file is `db.sqlite` at the repo root (a working fil
 - `src/lib/db/index.ts` — the `db` client (default export).
 - `src/lib/db/queries.ts`, `chatSearch.ts`, `messageLookup.ts` — query helpers; add new queries here rather than inlining raw Drizzle in routes/components.
 - `drizzle/` — generated migrations (`NNNN_name.sql`); do not touch by hand.
+
+## Verifying a migration
+
+`npm run test:unit` replays `drizzle/` onto an empty database (`src/lib/db/migrations.test.ts`) and asserts the result matches the newest snapshot. Run it after every `db:generate` — a developer's `db.sqlite` is maintained by `drizzle-kit push`, so it is **not** the database a new install gets, and the e2e suite builds its DB with `push` too. A migration can pass both and still break every new install.
+
+The trap that motivated it: SQLite refuses `DROP COLUMN` while an index references the column. Indexes created by old migrations but never declared in `schema.ts` (e.g. `chats_scheduled_run_viewed_idx` from `0004`) survive on migrate-built databases and are pruned from push-built ones — so the drop works locally and fails on a fresh replay. Drop the index in a `--custom` migration ordered before the generated `DROP COLUMN`, and backfill anything the column still holds in that same migration: once the drop lands, the data is unrecoverable.
 
 ## Notes
 

@@ -100,7 +100,7 @@ export async function runSchedule(
         files: [],
         isPrivate: 0,
         scheduleId: schedule.id,
-        scheduledRunViewed: 0,
+        lastRunViewed: 0,
         activeRunMessageId: userMessageId,
         activeRunStartedAt: Date.now(),
       })
@@ -226,9 +226,16 @@ export async function runSchedule(
       })
       .execute();
 
+    // Mirror runHost's terminate: stamp the chat-level run state so the run
+    // shows up as an ordinary unread run in History (headless, so never viewed).
     await db
       .update(chats)
-      .set({ activeRunMessageId: null, activeRunStartedAt: null })
+      .set({
+        activeRunMessageId: null,
+        activeRunStartedAt: null,
+        lastRunStatus: 'completed',
+        lastRunViewed: 0,
+      })
       .where(eq(chats.id, chatId))
       .execute();
 
@@ -270,7 +277,12 @@ export async function runSchedule(
     try {
       await db
         .update(chats)
-        .set({ activeRunMessageId: null, activeRunStartedAt: null })
+        .set({
+          activeRunMessageId: null,
+          activeRunStartedAt: null,
+          lastRunStatus: 'errored',
+          lastRunViewed: 0,
+        })
         .where(eq(chats.id, chatId))
         .execute();
     } catch {

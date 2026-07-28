@@ -47,7 +47,9 @@ export default function WorkspaceShell({
 
   return (
     <div className="bg-bg min-h-screen">
-      <div className="sticky top-0 z-40">
+      {/* data-sticky-header: overlays the content once scrolled, so scroll
+          targets must be offset by its height (see Chat.tsx's open anchor). */}
+      <div data-sticky-header className="sticky top-0 z-40">
         <WorkspaceDetailHeader
           workspace={workspace}
           contentClassName="px-4 sm:px-6"

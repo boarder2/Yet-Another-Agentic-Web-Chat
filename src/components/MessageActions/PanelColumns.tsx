@@ -159,7 +159,7 @@ export const PanelColumns: React.FC<PanelColumnsProps> = ({
         : 'all done';
 
   return (
-    <div className="my-3">
+    <div data-execution className="my-3">
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}

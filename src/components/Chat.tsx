@@ -19,6 +19,41 @@ import {
 } from './SkillEditApproval';
 import { PendingMcpApproval, McpToolApproval } from './McpToolApproval';
 
+const PROSE_BLOCKS = 'p,h1,h2,h3,h4,h5,h6,ul,ol,table,blockquote,pre';
+
+/**
+ * Where to park the viewport when a chat is opened: the first block of the
+ * answer's own prose. Answers routinely open with a wall of tool calls, which
+ * is execution detail (`data-execution`) rather than something to read — skip
+ * past it, falling back to the top of the message when there is no prose.
+ */
+const openAnchorFor = (message: HTMLElement): HTMLElement => {
+  const body = message.querySelector('[data-answer]');
+  const blocks = body?.querySelectorAll<HTMLElement>(PROSE_BLOCKS) ?? [];
+  for (const block of blocks) {
+    if (!block.closest('[data-execution]') && block.textContent?.trim())
+      return block;
+  }
+  return message;
+};
+
+/** Breathing room between a scrolled-to block and whatever sits above it. */
+const ANCHOR_GAP = 12;
+
+/** Scroll `target` just clear of the bars that overlay the top of the page. */
+const scrollBelowHeaders = (target: HTMLElement) => {
+  const headers = document.querySelectorAll('[data-sticky-header]');
+  const offset = Math.max(
+    0,
+    ...[...headers].map((h) => h.getBoundingClientRect().bottom),
+  );
+  window.scrollTo({
+    top:
+      target.getBoundingClientRect().top + window.scrollY - offset - ANCHOR_GAP,
+    behavior: 'smooth',
+  });
+};
+
 const Chat = ({
   loading,
   messages,
@@ -168,6 +203,10 @@ const Chat = ({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const isAtBottomRef = useRef(isAtBottom);
   const manuallyScrolledUpRef = useRef(manuallyScrolledUp);
+  // Parked at the top of an answer (see the anchor effect below).
+  const anchoredToTop = useRef(false);
+  // The open-time anchor decision is made once per mount, never re-run.
+  const openAnchorDecided = useRef(false);
   const SCROLL_THRESHOLD = 100; // pixels from bottom to consider "at bottom"
   // The in-flight message is the last user message while a response is loading.
   const currentMessageId = loading
@@ -252,6 +291,7 @@ const Chat = ({
     // state that the scroll listeners maintain. These resets are coupled to the
     // scroll side-effect performed here.
     if (messages[messages.length - 1]?.role === 'user') {
+      anchoredToTop.current = false;
       scroll();
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsAtBottom(true);
@@ -268,9 +308,40 @@ const Chat = ({
     manuallyScrolledUpRef.current = manuallyScrolledUp;
   }, [manuallyScrolledUp]);
 
+  // Opening an existing chat: start at the beginning of its last answer rather
+  // than dumped at the end of it. Decided once per mount so a later run can't
+  // re-anchor mid-thread. The latch (rather than the manuallyScrolledUp ref,
+  // which a sibling sync effect rewrites from state) is what holds the
+  // position: nothing else writes it, so the auto-scroll below can't undo it.
+  useEffect(() => {
+    if (openAnchorDecided.current || messages.length === 0) return;
+    openAnchorDecided.current = true;
+    const answer = [...messages].reverse().find((m) => m.role === 'assistant');
+    if (!answer) return;
+    // A turn in flight follows the stream to the bottom instead. Each signal
+    // covers a different open: `loading` for a send in this tab, a trailing
+    // user row for a turn whose answer isn't persisted yet, and the run status
+    // for attaching to a live run before `loading` commits.
+    if (
+      loading ||
+      messages[messages.length - 1].role === 'user' ||
+      answer.runStatus === 'running'
+    )
+      return;
+    const el = document.getElementById(`msg-${answer.messageId}`);
+    if (!el) return;
+    anchoredToTop.current = true;
+    scrollBelowHeaders(openAnchorFor(el));
+    // Surface the scroll-to-bottom affordance, since we're deliberately parked
+    // above the end of the thread.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setManuallyScrolledUp(true);
+  }, [loading, messages]);
+
   // Auto-scroll for assistant responses only if user is at bottom and hasn't manually scrolled up
   useEffect(() => {
     if (
+      !anchoredToTop.current &&
       isAtBottomRef.current &&
       !manuallyScrolledUpRef.current &&
       messages.length > 0
@@ -384,6 +455,7 @@ const Chat = ({
             <button
               type="button"
               onClick={() => {
+                anchoredToTop.current = false;
                 setManuallyScrolledUp(false);
                 setIsAtBottom(true);
                 messageEnd.current?.scrollIntoView({ behavior: 'smooth' });

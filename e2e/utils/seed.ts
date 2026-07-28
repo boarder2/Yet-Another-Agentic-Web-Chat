@@ -54,6 +54,8 @@ export async function seedChat(
     content: string;
     focusMode: string;
     workspaceId: string;
+    /** Test model name, e.g. `test-long` for an answer taller than a viewport. */
+    chatModel: string;
   }>,
 ): Promise<string> {
   const chatId = overrides?.chatId ?? uid();
@@ -67,7 +69,10 @@ export async function seedChat(
       },
       focusMode: overrides?.focusMode ?? 'webSearch',
       files: [],
-      chatModel: { provider: 'test', name: 'test-direct' },
+      chatModel: {
+        provider: 'test',
+        name: overrides?.chatModel ?? 'test-direct',
+      },
       systemModel: { provider: 'test', name: 'test-direct' },
       selectedSystemPromptIds: [],
       workspaceId: overrides?.workspaceId ?? null,
@@ -99,6 +104,8 @@ export async function seedToolChat(
     promptContent: string;
     fileContent: string;
     workspaceId: string;
+    /** Test model name, e.g. `test-tool-long` for a tool call + a tall answer. */
+    chatModel: string;
   }>,
 ): Promise<{ chatId: string; workspaceId: string }> {
   const workspaceId =
@@ -120,7 +127,10 @@ export async function seedToolChat(
       },
       focusMode: 'localResearch',
       files: [],
-      chatModel: { provider: 'test', name: 'test-tool' },
+      chatModel: {
+        provider: 'test',
+        name: overrides?.chatModel ?? 'test-tool',
+      },
       systemModel: { provider: 'test', name: 'test-tool' },
       selectedSystemPromptIds: [],
       workspaceId,

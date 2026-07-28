@@ -58,23 +58,15 @@ export function useMarkChatSeen() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (chatId: string) =>
-      apiFetch<{ historyCount: number; scheduledCount: number }>(
-        `/api/chats/${chatId}/seen`,
-        { method: 'POST' },
-      ),
+      apiFetch<{ historyCount: number }>(`/api/chats/${chatId}/seen`, {
+        method: 'POST',
+      }),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: qk.activeRuns });
       qc.invalidateQueries({ queryKey: qk.chatsInfiniteRoot });
-      // Refresh the scheduled-runs list so a viewed run loses its unread dot.
-      qc.invalidateQueries({ queryKey: qk.scheduleRuns });
       window.dispatchEvent(
         new CustomEvent('history-runs-unread-changed', {
           detail: { count: data.historyCount },
-        }),
-      );
-      window.dispatchEvent(
-        new CustomEvent('scheduled-runs-unread-changed', {
-          detail: { count: data.scheduledCount },
         }),
       );
     },

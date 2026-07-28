@@ -205,6 +205,8 @@ const loadMessages = async (
   activeRunStatus?: string | null;
   workspaceId?: string | null;
   loadedMessages?: Message[];
+  /** A finished run the user hasn't seen — drives mark-seen and load scroll. */
+  unread?: boolean;
 }> => {
   const res = await fetch(`/api/chats/${chatId}`, {
     method: 'GET',
@@ -275,6 +277,8 @@ const loadMessages = async (
     finalMessages.push(...markersHere);
   }
 
+  const unread =
+    data.chat.lastRunViewed === 0 && data.chat.lastRunStatus != null;
   setMessages(finalMessages);
 
   // If a run is still active (e.g. we just remounted onto /c/[chatId] right
@@ -326,6 +330,7 @@ const loadMessages = async (
     activeRunStatus: data.chat.activeRunStatus ?? null,
     workspaceId: data.chat.workspaceId ?? null,
     loadedMessages: finalMessages,
+    unread,
   };
 };
 
@@ -945,6 +950,7 @@ const ChatWindow = ({
           activeRunStatus,
           workspaceId: chatWorkspaceId,
           loadedMessages,
+          unread,
         } = {}) => {
           // If a workspace chat was opened on the non-workspace /c/[chatId] route
           // (e.g. a direct deep-link), route to the real workspace URL so it
@@ -955,6 +961,11 @@ const ChatWindow = ({
           }
           if (activeRunMessageId) {
             attachToRun(activeRunMessageId, loadedMessages);
+          } else if (unread) {
+            // Opening a finished, unseen run is what clears it: the server only
+            // auto-marks seen when a subscriber was connected at completion, so
+            // scheduled and background runs arrive here still unread.
+            markSeen.mutate(chatId);
           }
           // For awaiting_user runs: directly fetch pending approvals from DB so the
           // input prompts are restored even if the SSE stream is gone (server restart).

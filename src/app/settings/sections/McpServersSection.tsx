@@ -21,6 +21,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import SettingsSection from '../components/SettingsSection';
+import { Button } from '@/components/ui/Button';
 import AppSwitch from '@/components/ui/AppSwitch';
 import { toast } from 'sonner';
 import {
@@ -732,26 +733,17 @@ function ServerRow({ server }: { server: McpServer }) {
           }}
         />
         <div className="flex items-center gap-2 justify-end pt-1">
-          <button
-            type="button"
-            onClick={() => setEditing(false)}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-surface bg-surface-2 text-fg/70 hover:text-fg transition-colors duration-150"
-          >
-            <X size={14} /> Cancel
-          </button>
-          <button
-            type="button"
+          <Button icon={X} onClick={() => setEditing(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            icon={Save}
+            loading={patch.isPending}
             onClick={handleSave}
-            disabled={patch.isPending}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm rounded-surface bg-accent text-accent-fg hover:bg-accent/90 transition-colors duration-150 disabled:opacity-50"
           >
-            {patch.isPending ? (
-              <LoaderCircle size={14} className="animate-spin" />
-            ) : (
-              <Save size={14} />
-            )}
             Save
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -788,26 +780,17 @@ function ServerRow({ server }: { server: McpServer }) {
         </div>
       </div>
       <div className="flex flex-wrap gap-2 mt-3">
-        <button
-          type="button"
-          onClick={() => setEditing(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-control bg-surface-2 text-fg/70 hover:text-fg transition-colors duration-150"
-        >
-          <Edit3 size={12} /> Edit
-        </button>
-        <button
-          type="button"
+        <Button size="sm" icon={Edit3} onClick={() => setEditing(true)}>
+          Edit
+        </Button>
+        <Button
+          size="sm"
+          icon={TestTube}
+          loading={test.isPending}
           onClick={handleTest}
-          disabled={test.isPending}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-control bg-surface-2 text-fg/70 hover:text-fg transition-colors duration-150 disabled:opacity-50"
         >
-          {test.isPending ? (
-            <LoaderCircle size={12} className="animate-spin" />
-          ) : (
-            <TestTube size={12} />
-          )}
           Test
-        </button>
+        </Button>
         {server.authType === 'oauth' && (
           <button
             type="button"
@@ -841,13 +824,9 @@ function ServerRow({ server }: { server: McpServer }) {
           {showScope ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
           <FolderOpen size={12} /> Workspaces
         </button>
-        <button
-          type="button"
-          onClick={handleRefresh}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-control bg-surface-2 text-fg/70 hover:text-fg transition-colors duration-150"
-        >
-          <RefreshCw size={12} /> Refresh tools
-        </button>
+        <Button size="sm" icon={RefreshCw} onClick={handleRefresh}>
+          Refresh tools
+        </Button>
         <button
           type="button"
           onClick={() => {
@@ -1070,26 +1049,17 @@ function AddServerForm({ onDone }: { onDone: () => void }) {
         onChange={(extraHeaders) => setForm((f) => ({ ...f, extraHeaders }))}
       />
       <div className="flex items-center gap-2 justify-end">
-        <button
-          type="button"
-          onClick={onDone}
-          className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-surface bg-surface-2 text-fg/70 hover:text-fg transition-colors duration-150"
-        >
-          <X size={14} /> Cancel
-        </button>
-        <button
-          type="button"
+        <Button icon={X} onClick={onDone}>
+          Cancel
+        </Button>
+        <Button
+          variant="primary"
+          icon={Save}
+          loading={create.isPending}
           onClick={handleCreate}
-          disabled={create.isPending}
-          className="flex items-center gap-1.5 px-4 py-2 text-sm rounded-surface bg-accent text-accent-fg hover:bg-accent/90 transition-colors duration-150 disabled:opacity-50"
         >
-          {create.isPending ? (
-            <LoaderCircle size={14} className="animate-spin" />
-          ) : (
-            <Save size={14} />
-          )}
           Add Server
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -1124,14 +1094,9 @@ export default function McpServersSection() {
         ))}
         {adding && <AddServerForm onDone={() => setAdding(false)} />}
         {!adding && (
-          <button
-            type="button"
-            onClick={() => setAdding(true)}
-            className="flex items-center gap-2 px-4 py-2 text-sm rounded-surface bg-surface-2 text-fg/70 hover:text-fg border border-surface-2 transition-colors duration-150"
-          >
-            <PlusCircle size={16} />
+          <Button icon={PlusCircle} onClick={() => setAdding(true)}>
             Add MCP Server
-          </button>
+          </Button>
         )}
       </div>
     </SettingsSection>

@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { formatTimeDifference } from '@/lib/utils';
+import { Button } from '@/components/ui/Button';
 import {
   useWorkspaceMemory,
   useAddMemory,
@@ -121,27 +122,23 @@ export default function WorkspaceMemoryTab({
             }}
           />
           <div className="flex justify-end gap-2 mt-2">
-            <button
-              type="button"
+            <Button
+              variant="ghost"
               onClick={() => {
                 setIsAdding(false);
                 setNewContent('');
               }}
-              className="px-3 py-1.5 text-sm rounded-surface hover:bg-surface-2 transition"
             >
               Cancel
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="primary"
               onClick={handleAdd}
-              disabled={!newContent.trim() || addMemory.isPending}
-              className="px-3 py-1.5 text-sm rounded-surface bg-accent text-accent-fg hover:bg-accent/90 transition disabled:opacity-50 flex items-center gap-1.5"
+              disabled={!newContent.trim()}
+              loading={addMemory.isPending}
             >
-              {addMemory.isPending && (
-                <LoaderCircle size={12} className="animate-spin" />
-              )}
               Save to workspace
-            </button>
+            </Button>
           </div>
         </div>
       )}

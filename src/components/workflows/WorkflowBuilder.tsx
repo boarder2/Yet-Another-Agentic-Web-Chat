@@ -15,6 +15,8 @@ import {
 import { useSystemPrompts } from '@/lib/hooks/api/useSystemPrompts';
 import { parseWorkflowTemplate } from '@/lib/workflows/template';
 import { inputCls } from '@/components/workflows/styles';
+import { Button, buttonClasses } from '@/components/ui/Button';
+import { cn } from '@/lib/utils';
 import { ArrowLeft, Workflow as WorkflowIcon } from 'lucide-react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
@@ -303,20 +305,22 @@ export default function WorkflowBuilder({ workflow }: { workflow?: Workflow }) {
             </div>
           )}
           <div className="flex items-center gap-3">
-            <button
+            <Button
               type="submit"
-              disabled={saving || hasErrors}
-              className="px-6 py-2 rounded-control bg-accent text-accent-fg font-medium transition-colors duration-150 hover:bg-accent-700 disabled:opacity-50"
+              variant="primary"
+              size="lg"
+              loading={saving}
+              disabled={hasErrors}
             >
               {saving
                 ? 'Saving…'
                 : workflow
                   ? 'Update Workflow'
                   : 'Create Workflow'}
-            </button>
+            </Button>
             <Link
               href="/automations"
-              className="px-4 py-2 rounded-control text-fg/60 hover:text-fg transition-colors duration-150"
+              className={cn(buttonClasses('ghost', 'md'), 'text-fg/60')}
             >
               Cancel
             </Link>

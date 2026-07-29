@@ -20,6 +20,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
 import WidgetContent from '@/components/dashboard/WidgetContent';
+import { Button } from '@/components/ui/Button';
 import SourceListEditor from '@/components/dashboard/SourceListEditor';
 import WidgetChatPanel from '@/components/dashboard/WidgetChatPanel';
 import { CodeWidgetConfig } from '@/lib/types/widget';
@@ -252,16 +253,16 @@ const CodeWidgetConfigModal = ({
                 >
                   Cancel
                 </button>
-                <button
-                  type="button"
+                <Button
+                  variant="primary"
+                  size="lg"
                   onClick={() => {
                     acceptWarning();
                     setWarningAccepted(true);
                   }}
-                  className="px-4 py-2 text-sm rounded-control bg-accent text-accent-fg hover:bg-accent-700"
                 >
                   I understand — continue
-                </button>
+                </Button>
               </div>
             </DialogPanel>
           </div>
@@ -476,15 +477,14 @@ const CodeWidgetConfigModal = ({
                         — not saved
                       </span>
                     </h4>
-                    <button
-                      type="button"
+                    <Button
+                      variant="primary"
+                      icon={Play}
+                      loading={isPreviewLoading}
                       onClick={runPreview}
-                      disabled={isPreviewLoading}
-                      className="flex items-center gap-2 px-3 py-2 bg-accent text-accent-fg rounded-control hover:bg-accent-700 disabled:opacity-50"
                     >
-                      <Play size={16} />
                       {isPreviewLoading ? 'Running…' : 'Run Preview'}
-                    </button>
+                    </Button>
                   </div>
 
                   <div className="flex-1 min-h-0 p-4 border border-surface-2 rounded-control bg-surface overflow-y-auto">
@@ -526,21 +526,17 @@ const CodeWidgetConfigModal = ({
               </div>
 
               <div className="shrink-0 mt-4 flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={handleClose}
-                  className="px-4 py-2 text-sm font-medium text-fg bg-surface hover:bg-surface-2 rounded-control"
-                >
+                <Button size="lg" onClick={handleClose}>
                   Cancel
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <Button
+                  variant="primary"
+                  size="lg"
+                  icon={Save}
                   onClick={handleSave}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-accent-fg bg-accent hover:bg-accent-700 rounded-control"
                 >
-                  <Save size={16} />
                   {editingWidget ? 'Save to apply' : 'Create Widget'}
-                </button>
+                </Button>
               </div>
             </DialogPanel>
           </div>

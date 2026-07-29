@@ -6,6 +6,7 @@ import InputComponent from '../components/InputComponent';
 import TextareaComponent from '../components/TextareaComponent';
 import CopyTemplatePicker from '../components/CopyTemplatePicker';
 import { Prompt } from '@/lib/types/prompt';
+import { Button } from '@/components/ui/Button';
 
 export default function PersonaPromptsSection({
   userSystemPrompts,
@@ -80,22 +81,16 @@ export default function PersonaPromptsSection({
                     className="min-h-[100px]"
                   />
                   <div className="flex space-x-2 justify-end">
-                    <button
-                      type="button"
-                      onClick={() => setEditingPrompt(null)}
-                      className="px-3 py-2 text-sm rounded-control bg-surface hover:bg-surface-2 flex items-center gap-1.5"
-                    >
-                      <X size={16} />
+                    <Button icon={X} onClick={() => setEditingPrompt(null)}>
                       Cancel
-                    </button>
-                    <button
-                      type="button"
+                    </Button>
+                    <Button
+                      variant="primary"
+                      icon={Save}
                       onClick={onAddOrUpdate}
-                      className="px-3 py-2 text-sm rounded-control bg-accent flex items-center gap-1.5"
                     >
-                      <Save size={16} />
                       Save
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ) : (
@@ -156,37 +151,30 @@ export default function PersonaPromptsSection({
               className="min-h-[100px]"
             />
             <div className="flex space-x-2 justify-end">
-              <button
-                type="button"
+              <Button
+                icon={X}
                 onClick={() => {
                   setIsAddingNewPrompt(false);
                   setNewPromptName('');
                   setNewPromptContent('');
                 }}
-                className="px-3 py-2 text-sm rounded-control bg-surface hover:bg-surface-2 flex items-center gap-1.5"
               >
-                <X size={16} />
                 Cancel
-              </button>
-              <button
-                type="button"
-                onClick={onAddOrUpdate}
-                className="px-3 py-2 text-sm rounded-control bg-accent flex items-center gap-1.5"
-              >
-                <Save size={16} />
+              </Button>
+              <Button variant="primary" icon={Save} onClick={onAddOrUpdate}>
                 Add Persona Prompt
-              </button>
+              </Button>
             </div>
           </div>
         )}
         {!isAddingNewPrompt && (
-          <button
-            type="button"
+          <Button
+            icon={PlusCircle}
             onClick={() => setIsAddingNewPrompt(true)}
-            className="self-start px-3 py-2 text-sm rounded-control border border-surface-2 hover:bg-surface-2 flex items-center gap-1.5"
+            className="self-start"
           >
-            <PlusCircle size={18} /> Add Persona Prompt
-          </button>
+            Add Persona Prompt
+          </Button>
         )}
       </div>
     </SettingsSection>

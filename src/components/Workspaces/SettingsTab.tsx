@@ -12,6 +12,7 @@ import {
 } from '@/lib/hooks/api/useWorkspaces';
 import type { WorkspaceModelOverride } from '@/lib/workspaces/types';
 import { captureCurrentSelection } from '@/lib/models/presets';
+import { Button } from '@/components/ui/Button';
 
 interface Workspace {
   id: string;
@@ -211,24 +212,22 @@ export default function SettingsTab({ workspace }: { workspace: Workspace }) {
               />
             </div>
             <div className="flex gap-2 justify-end">
-              <button
-                type="button"
+              <Button
                 onClick={() => {
                   setShowDeleteConfirm(false);
                   setDeleteConfirmName('');
                 }}
-                className="px-4 py-2 rounded-surface border border-surface-2 text-sm hover:bg-surface-2 transition-colors"
               >
                 Cancel
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="danger"
                 onClick={confirmDelete}
-                disabled={deleting || deleteConfirmName !== workspace.name}
-                className="px-4 py-2 rounded-surface bg-danger text-danger-fg text-sm hover:bg-danger disabled:opacity-50 transition-colors"
+                loading={deleting}
+                disabled={deleteConfirmName !== workspace.name}
               >
                 {deleting ? 'Deleting…' : 'Delete'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

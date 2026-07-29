@@ -1,7 +1,7 @@
 import type { Document } from '@langchain/core/documents';
 import MessageSource from './MessageSource';
 import { useState } from 'react';
-import { LoaderCircle } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
 
 interface SourceGroup {
   searchQuery: string;
@@ -57,8 +57,7 @@ const MessageBoxLoading = ({
             {/* Answer now control */}
             {actionMessageId && gatheringSources.length > 0 && (
               <div className="">
-                <button
-                  type="button"
+                <Button
                   onClick={async (e) => {
                     try {
                       // Disable the button immediately to prevent double clicks
@@ -77,17 +76,13 @@ const MessageBoxLoading = ({
                       // no-op
                     }
                   }}
-                  disabled={isAnsweringNow}
-                  className="text-xs px-3 py-1 w-28 h-8 rounded-control bg-accent text-fg hover:bg-opacity-90 transition disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center gap-1"
+                  loading={isAnsweringNow}
+                  variant="primary"
+                  size="sm"
+                  className="w-28"
                 >
-                  {isAnsweringNow ? (
-                    <>
-                      <LoaderCircle size={24} className="animate-spin" />
-                    </>
-                  ) : (
-                    'Answer now'
-                  )}
-                </button>
+                  Answer now
+                </Button>
               </div>
             )}
           </div>

@@ -2,6 +2,8 @@
 
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { File, ImageAttachment, Message } from './ChatWindow';
+import { ChevronDown } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
 import CompactionIndicator from './CompactionIndicator';
 import MessageBox from './MessageBox';
 import MessageInput from './MessageInput';
@@ -452,32 +454,20 @@ const Chat = ({
         {/* Scroll to bottom button - appears above the MessageInput when user has scrolled up */}
         {manuallyScrolledUp && !isAtBottom && (
           <div className="absolute -top-14 right-2 z-10">
-            <button
-              type="button"
+            <Button
+              variant="primary"
+              icon={ChevronDown}
               onClick={() => {
                 anchoredToTop.current = false;
                 setManuallyScrolledUp(false);
                 setIsAtBottom(true);
                 messageEnd.current?.scrollIntoView({ behavior: 'smooth' });
               }}
-              className="bg-accent text-fg hover:bg-opacity-85 transition duration-100 rounded-pill px-4 py-2 shadow-raised flex items-center justify-center"
+              className="rounded-pill shadow-raised"
               aria-label="Scroll to bottom"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5 mr-1"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z"
-                  clipRule="evenodd"
-                  transform="rotate(180 10 10)"
-                />
-              </svg>
-              <span className="text-sm">Scroll to bottom</span>
-            </button>
+              Scroll to bottom
+            </Button>
           </div>
         )}
 

@@ -12,6 +12,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
+import { Button, buttonClasses } from '@/components/ui/Button';
 import { describeCron } from '@/lib/scheduledTasks/presets';
 import { formatTimeDifference } from '@/lib/utils';
 import {
@@ -49,10 +50,7 @@ export default function ScheduledTasksPage() {
           <p className="text-sm mb-4">
             Add a schedule from a workflow to run it on a cron.
           </p>
-          <Link
-            href="/automations"
-            className="px-4 py-2 rounded-control bg-accent text-accent-fg text-sm transition-colors duration-150 hover:bg-accent-700"
-          >
+          <Link href="/automations" className={buttonClasses('primary', 'md')}>
             Go to Workflows
           </Link>
         </div>
@@ -140,24 +138,25 @@ export default function ScheduledTasksPage() {
                 </Link>
                 {toDelete === s.id ? (
                   <span className="flex items-center gap-1">
-                    <button
-                      type="button"
+                    <Button
+                      variant="danger"
+                      size="sm"
                       onClick={() =>
                         del.mutate(s.id, {
                           onSettled: () => setToDelete(null),
                         })
                       }
-                      className="px-2 py-1 rounded-control bg-danger text-danger-fg text-xs"
                     >
                       Confirm
-                    </button>
-                    <button
-                      type="button"
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => setToDelete(null)}
-                      className="px-2 py-1 rounded-control text-fg/60 text-xs"
+                      className="text-fg/60"
                     >
                       Cancel
-                    </button>
+                    </Button>
                   </span>
                 ) : (
                   <button

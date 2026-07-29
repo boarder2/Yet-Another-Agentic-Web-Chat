@@ -7,6 +7,7 @@ import {
   missingRequired,
 } from '@/lib/workflows/template';
 import { inputCls } from '@/components/workflows/styles';
+import { Button } from '@/components/ui/Button';
 
 type Values = Record<string, string | string[]>;
 
@@ -65,13 +66,16 @@ export default function FillForm({
   };
 
   const submitBtn = hideSubmit ? null : (
-    <button
+    <Button
       type="submit"
-      disabled={submitting || missing.length > 0}
-      className="self-start px-6 py-2 rounded-control bg-accent text-accent-fg font-medium transition-colors duration-150 hover:bg-accent-700 disabled:opacity-50"
+      variant="primary"
+      size="lg"
+      loading={submitting}
+      disabled={missing.length > 0}
+      className="self-start"
     >
       {submitLabel}
-    </button>
+    </Button>
   );
 
   // Embedded (hideSubmit) instances live inside a parent <form>, so render a

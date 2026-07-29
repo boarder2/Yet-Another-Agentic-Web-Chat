@@ -25,6 +25,7 @@ import {
 import WidgetDisplay from '@/components/dashboard/WidgetDisplay';
 import WidgetModals from '@/components/dashboard/WidgetModals';
 import PageHeader from '@/components/PageHeader';
+import { Button } from '@/components/ui/Button';
 import { useWidgetBoard } from '@/lib/hooks/useWidgetBoard';
 import { DASHBOARD_CONSTRAINTS } from '@/lib/constants/dashboard';
 
@@ -48,14 +49,9 @@ const EmptyDashboard = ({ onAddWidget }: { onAddWidget: () => void }) => (
       </CardContent>
 
       <CardFooter className="justify-center">
-        <button
-          type="button"
-          onClick={onAddWidget}
-          className="px-4 py-2 bg-accent text-accent-fg rounded-control hover:bg-accent-700 transition duration-200 flex items-center space-x-2"
-        >
-          <Plus size={16} />
-          <span>Create Your First Widget</span>
-        </button>
+        <Button variant="primary" icon={Plus} onClick={onAddWidget}>
+          Create Your First Widget
+        </Button>
       </CardFooter>
     </Card>
   </div>

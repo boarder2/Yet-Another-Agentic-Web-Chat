@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { diffLines } from 'diff';
 import { Check, X } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
 import { WidgetBuilderState } from '@/lib/tools/agents/widgetBuilderTools';
 
 export interface WidgetProposal {
@@ -87,20 +88,12 @@ const WidgetProposalCard = ({
         </p>
       ) : (
         <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={onAccept}
-            className="flex items-center gap-1 px-2 py-1 text-xs rounded-control bg-accent text-accent-fg hover:bg-accent-700"
-          >
-            <Check size={13} /> Accept &amp; Preview
-          </button>
-          <button
-            type="button"
-            onClick={onReject}
-            className="flex items-center gap-1 px-2 py-1 text-xs rounded-control bg-surface hover:bg-surface-2 text-fg"
-          >
-            <X size={13} /> Reject
-          </button>
+          <Button variant="primary" size="sm" icon={Check} onClick={onAccept}>
+            Accept &amp; Preview
+          </Button>
+          <Button size="sm" icon={X} onClick={onReject}>
+            Reject
+          </Button>
         </div>
       )}
     </div>

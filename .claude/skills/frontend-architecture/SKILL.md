@@ -264,6 +264,13 @@ Before markdown parsing, the renderer extracts `<think>...</think>` blocks (and 
 - `theme/Provider.tsx` provides theme context
 - `theme/Switcher.tsx` provides the dark/light toggle
 
+### Shared UI primitives (`src/components/ui/`)
+
+- **`Button.tsx`** — the button primitive. Use it for every labeled action button; don't hand-roll `<button className="bg-accent …">`. `variant` (`primary`/`secondary`/`ghost`/`danger`), `size` (`sm`/`md`/`lg`), `icon`, `loading`. It owns the focus ring, disabled treatment and hover, so `className` is for layout only. Non-`<button>` triggers (a `<Link>` styled as a button) use the exported `buttonClasses(variant, size)`. Bare icon-only buttons, tab strips and chips are out of its scope and still style themselves.
+- **`card.tsx`**, **`AppSwitch.tsx`**, **`Select.tsx`** — surface, toggle and select primitives.
+
+See the `design-system` skill for the token rules these encode.
+
 ### Key Tailwind patterns
 
 ```
@@ -292,6 +299,7 @@ border-surface-2 — borders
 
 | File                                                         | Purpose                                                                                                                                                                                                              |
 | ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/components/ui/Button.tsx`                               | Shared button primitive — variants, sizes, focus ring, `loading`; `buttonClasses` for link-as-button                                                                                                                 |
 | `src/components/ChatWindow.tsx`                              | Main orchestrator — state, streaming, message send (~3400 lines)                                                                                                                                                     |
 | `src/components/NewChatWindow.tsx`                           | Wrapper that resets ChatWindow key on return to root path                                                                                                                                                            |
 | `src/components/Chat.tsx`                                    | Message list rendering, scroll management, approval widgets                                                                                                                                                          |

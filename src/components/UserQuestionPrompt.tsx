@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import { Button } from '@/components/ui/Button';
 import { HelpCircle, X, Send, SkipForward } from 'lucide-react';
 
 export type { PendingQuestion } from '@/lib/streaming/chatState';
@@ -212,27 +213,18 @@ export function UserQuestionPrompt({
 
       {/* Actions */}
       <div className="flex-shrink-0 flex gap-2 justify-end px-5 py-3 bg-surface border-t border-surface-2">
-        <button
-          type="button"
-          onClick={handleSkip}
-          className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-surface bg-surface-2 text-fg/70 hover:text-fg hover:bg-surface-2/80 transition-colors"
-        >
-          <SkipForward size={14} />
+        <Button size="lg" icon={SkipForward} onClick={handleSkip}>
           Skip
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="primary"
+          size="lg"
+          icon={Send}
           onClick={handleSubmit}
           disabled={!hasSelection}
-          className={`flex items-center gap-1.5 px-5 py-2 text-sm font-medium rounded-surface transition-colors ${
-            hasSelection
-              ? 'bg-accent text-accent-fg hover:bg-accent/90'
-              : 'bg-surface-2 text-fg/30 cursor-not-allowed'
-          }`}
         >
-          <Send size={14} />
           Submit
-        </button>
+        </Button>
       </div>
     </div>
   );

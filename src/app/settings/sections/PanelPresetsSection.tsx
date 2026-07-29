@@ -18,6 +18,7 @@ import { useLocalStorageJSON } from '@/lib/hooks/useLocalStorage';
 import { DEFAULT_CONTEXT_WINDOW } from '@/lib/models/presets';
 import ModelField from '@/components/models/ModelField';
 import SettingsSection from '../components/SettingsSection';
+import { Button } from '@/components/ui/Button';
 import {
   PANEL_SELECTION_KEY,
   EMPTY_PANEL_SELECTION,
@@ -225,21 +226,12 @@ export default function PanelPresetsSection() {
       </div>
 
       <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={saveDraft}
-          className="text-xs px-2.5 py-1.5 rounded-control bg-accent text-accent-fg hover:bg-accent-700 transition-colors duration-150 flex items-center gap-1"
-        >
-          <Check size={12} />
+        <Button variant="primary" size="sm" icon={Check} onClick={saveDraft}>
           {draft?.id ? 'Save changes' : 'Save preset'}
-        </button>
-        <button
-          type="button"
-          onClick={() => setDraft(null)}
-          className="text-xs px-2.5 py-1.5 rounded-control bg-surface-2 text-fg/70 hover:bg-surface-2/80 transition-colors duration-150"
-        >
+        </Button>
+        <Button size="sm" onClick={() => setDraft(null)}>
           Cancel
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -330,13 +322,13 @@ export default function PanelPresetsSection() {
                   {isDeleting ? (
                     <div className="flex items-center gap-1.5 shrink-0">
                       <span className="text-xs text-fg/60">Delete?</span>
-                      <button
-                        type="button"
+                      <Button
+                        variant="danger"
+                        size="sm"
                         onClick={() => deletePreset(preset.id)}
-                        className="text-xs px-2 py-1 rounded-control bg-danger text-danger-fg hover:bg-danger/80 transition-colors duration-150"
                       >
                         Yes
-                      </button>
+                      </Button>
                       <button
                         type="button"
                         onClick={() => setDeletingId(null)}

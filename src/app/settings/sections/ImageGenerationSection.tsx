@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import SettingsSection from '../components/SettingsSection';
 import Select from '../components/Select';
-import { LoaderCircle, RefreshCw } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
+import { RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { useModels } from '@/lib/hooks/api/useModels';
 import { useQueryClient } from '@tanstack/react-query';
@@ -77,20 +78,15 @@ export default function ImageGenerationSection() {
     <SettingsSection
       title="Image Generation"
       headerAction={
-        <button
-          type="button"
-          className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-control border border-surface-2 hover:bg-surface-2 transition disabled:opacity-60"
+        <Button
+          size="sm"
+          icon={RefreshCw}
+          loading={refreshing}
           onClick={handleRefresh}
-          disabled={refreshing}
           title="Refresh image generation models from OpenRouter"
         >
-          {refreshing ? (
-            <LoaderCircle size={12} className="animate-spin text-accent" />
-          ) : (
-            <RefreshCw size={12} />
-          )}
           {refreshing ? 'Refreshing…' : 'Refresh'}
-        </button>
+        </Button>
       }
     >
       <div className="flex flex-col space-y-4">

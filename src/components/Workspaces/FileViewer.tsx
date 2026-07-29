@@ -6,6 +6,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import { LoaderCircle, TriangleAlert } from 'lucide-react';
 import MarkdownRenderer from '@/components/MarkdownRenderer';
+import { Button } from '@/components/ui/Button';
 import DocEditActions from './DocEditActions';
 
 // CodeMirror touches window/document at module load, so load it client-only.
@@ -161,24 +162,21 @@ export default function FileViewer({
             This file changed since you started editing. Your unsaved changes
             are still here — saving now would overwrite the newer version.
           </p>
-          <button
-            type="button"
+          <Button
             onClick={() => {
               adopt(meta.sha256, content);
               setEditing(false);
             }}
-            className="px-3 py-1.5 rounded-surface border border-surface-2 bg-surface hover:bg-surface-2 transition"
           >
             Discard mine
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="primary"
             onClick={() => save(meta.sha256)}
-            disabled={saveContent.isPending}
-            className="px-3 py-1.5 rounded-surface bg-accent text-accent-fg hover:bg-accent/90 transition disabled:opacity-50"
+            loading={saveContent.isPending}
           >
             Overwrite anyway
-          </button>
+          </Button>
         </div>
       )}
 

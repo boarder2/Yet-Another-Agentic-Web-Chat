@@ -5,6 +5,7 @@ import { PlusCircle, Edit3, Trash2, BookOpen } from 'lucide-react';
 import SettingsSection from '../components/SettingsSection';
 import SkillForm, { type SkillFormValue } from '../components/SkillForm';
 import AppSwitch from '@/components/ui/AppSwitch';
+import { Button } from '@/components/ui/Button';
 import { toast } from 'sonner';
 import {
   useSkills,
@@ -119,18 +120,17 @@ export default function SkillsSection() {
     <SettingsSection
       title="Skills"
       headerAction={
-        <button
-          type="button"
+        <Button
+          variant="primary"
+          icon={PlusCircle}
           onClick={() => {
             setEditingId(null);
             setForm(EMPTY_SKILL);
             setIsAddingNew(true);
           }}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-control bg-accent text-accent-fg hover:bg-accent/90 transition-colors"
         >
-          <PlusCircle size={14} />
           New skill
-        </button>
+        </Button>
       }
     >
       <p className="text-xs text-fg/60">

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef } from 'react';
+import { Button } from '@/components/ui/Button';
 import { Plug, X, Check, Ban, ShieldCheck } from 'lucide-react';
 
 export type { PendingMcpApproval } from '@/lib/streaming/chatState';
@@ -96,33 +97,27 @@ export function McpToolApproval({
 
       {/* Actions */}
       <div className="flex flex-wrap gap-2 justify-end px-5 py-3 bg-surface border-t border-surface-2">
-        <button
-          type="button"
-          onClick={() => handleDecide(false)}
-          className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-surface bg-surface-2 text-fg/70 hover:text-fg hover:bg-surface-2/80 transition-colors duration-150"
-        >
-          <Ban size={14} />
+        <Button size="lg" icon={Ban} onClick={() => handleDecide(false)}>
           Decline
-        </button>
+        </Button>
         {serverId && (
-          <button
-            type="button"
+          <Button
+            size="lg"
+            icon={ShieldCheck}
             onClick={() => handleDecide(true, { alwaysAllow: true })}
             title="Approve and auto-run this tool from now on (set in Settings → MCP Servers)"
-            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-surface bg-surface-2 text-fg/70 hover:text-fg hover:bg-surface-2/80 transition-colors duration-150"
           >
-            <ShieldCheck size={14} />
             Always allow
-          </button>
+          </Button>
         )}
-        <button
-          type="button"
+        <Button
+          variant="primary"
+          size="lg"
+          icon={Check}
           onClick={() => handleDecide(true)}
-          className="flex items-center gap-1.5 px-5 py-2 text-sm font-medium rounded-surface bg-accent text-accent-fg hover:bg-accent/90 transition-colors duration-150"
         >
-          <Check size={14} />
           Approve
-        </button>
+        </Button>
       </div>
     </div>
   );

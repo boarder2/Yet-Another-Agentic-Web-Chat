@@ -11,6 +11,7 @@ import {
 import { X, Play, Save, Brain } from 'lucide-react';
 import { Fragment, useState, useEffect } from 'react';
 import WidgetContent from '@/components/dashboard/WidgetContent';
+import { Button } from '@/components/ui/Button';
 import ModelPicker from '@/components/models/ModelPicker';
 import ToolSelector from '@/components/MessageInputActions/ToolSelector';
 import SourceListEditor from '@/components/dashboard/SourceListEditor';
@@ -407,15 +408,14 @@ const WidgetConfigModal = ({
                             />
                           </Switch>
                         </div>
-                        <button
-                          type="button"
+                        <Button
+                          variant="primary"
+                          icon={Play}
+                          loading={isPreviewLoading}
                           onClick={handlePreview}
-                          disabled={isPreviewLoading}
-                          className="flex items-center gap-2 px-3 py-2 bg-accent text-accent-fg rounded-control hover:bg-accent-700 disabled:opacity-50"
                         >
-                          <Play size={16} />
                           {isPreviewLoading ? 'Loading...' : 'Run Preview'}
-                        </button>
+                        </Button>
                       </div>
                     </div>
 
@@ -481,21 +481,17 @@ const WidgetConfigModal = ({
 
                 {/* Action Buttons */}
                 <div className="shrink-0 mt-4 flex justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={handleClose}
-                    className="px-4 py-2 text-sm font-medium text-fg bg-surface hover:bg-surface-2 rounded-control"
-                  >
+                  <Button onClick={handleClose} size="lg">
                     Cancel
-                  </button>
-                  <button
-                    type="button"
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="lg"
+                    icon={Save}
                     onClick={handleSave}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-accent-fg bg-accent hover:bg-accent-700 rounded-control"
                   >
-                    <Save size={16} />
                     {editingWidget ? 'Update Widget' : 'Create Widget'}
-                  </button>
+                  </Button>
                 </div>
               </DialogPanel>
             </TransitionChild>

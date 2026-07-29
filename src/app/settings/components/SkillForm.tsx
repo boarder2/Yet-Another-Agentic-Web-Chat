@@ -4,6 +4,7 @@ import { X, Save } from 'lucide-react';
 import InputComponent from './InputComponent';
 import TextareaComponent from './TextareaComponent';
 import AppSwitch from '@/components/ui/AppSwitch';
+import { Button } from '@/components/ui/Button';
 
 export type SkillFormValue = {
   name: string;
@@ -95,23 +96,17 @@ export default function SkillForm({
         />
       </div>
       <div className="flex justify-end gap-2">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="px-3 py-2 text-sm rounded-control bg-surface hover:bg-surface-2 flex items-center gap-1.5"
-        >
-          <X size={14} />
+        <Button icon={X} onClick={onCancel}>
           Cancel
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="primary"
+          icon={Save}
           onClick={onSubmit}
           disabled={pending}
-          className="px-3 py-2 text-sm rounded-control bg-accent text-accent-fg flex items-center gap-1.5"
         >
-          <Save size={14} />
           {submitLabel}
-        </button>
+        </Button>
       </div>
     </div>
   );

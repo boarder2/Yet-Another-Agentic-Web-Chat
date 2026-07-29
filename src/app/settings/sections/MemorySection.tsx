@@ -14,6 +14,7 @@ import {
   Link as LinkIcon,
 } from 'lucide-react';
 import AppSwitch from '@/components/ui/AppSwitch';
+import { Button } from '@/components/ui/Button';
 import ModelField from '@/components/models/ModelField';
 import SettingsSection from '../components/SettingsSection';
 import { SettingsType } from '../types';
@@ -179,29 +180,22 @@ export default function MemorySection({
       title="Memory"
       headerAction={
         <div className="flex items-center gap-2">
-          <button
-            type="button"
+          <Button
+            icon={RefreshCw}
+            loading={reindex.isPending}
             onClick={handleReindex}
-            disabled={reindex.isPending}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-control bg-surface-2 hover:bg-surface border border-surface-2 transition-colors disabled:opacity-50"
           >
-            {reindex.isPending ? (
-              <LoaderCircle size={14} className="animate-spin text-accent" />
-            ) : (
-              <RefreshCw size={14} />
-            )}
             Re-index
-          </button>
+          </Button>
           {memories.length > 0 && (
-            <button
-              type="button"
+            <Button
+              icon={Trash2}
+              loading={deleteAll.isPending}
               onClick={handleDeleteAll}
-              disabled={deleteAll.isPending}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-control text-danger bg-surface-2 hover:bg-danger-soft border border-surface-2 transition-colors disabled:opacity-50"
+              className="text-danger enabled:hover:bg-danger-soft enabled:hover:text-danger"
             >
-              <Trash2 size={14} />
               Delete all
-            </button>
+            </Button>
           )}
         </div>
       }
@@ -379,40 +373,33 @@ export default function MemorySection({
             autoFocus
           />
           <div className="flex justify-end gap-2">
-            <button
-              type="button"
+            <Button
+              icon={X}
               onClick={() => {
                 setIsAdding(false);
                 setNewContent('');
               }}
-              className="px-3 py-2 text-sm rounded-control bg-surface hover:bg-surface-2 flex items-center gap-1.5"
             >
-              <X size={14} />
               Cancel
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="primary"
               onClick={handleAdd}
-              disabled={!newContent.trim() || addMemory.isPending}
-              className="px-3 py-2 text-sm rounded-control bg-accent text-accent-fg flex items-center gap-1.5 disabled:opacity-50"
+              disabled={!newContent.trim()}
+              loading={addMemory.isPending}
             >
-              {addMemory.isPending ? (
-                <LoaderCircle size={14} className="animate-spin" />
-              ) : (
-                'Save'
-              )}
-            </button>
+              Save
+            </Button>
           </div>
         </div>
       ) : (
-        <button
-          type="button"
+        <Button
+          icon={Plus}
           onClick={() => setIsAdding(true)}
-          className="flex items-center gap-2 px-4 py-2.5 text-sm rounded-control bg-surface-2 hover:bg-surface border border-surface-2 border-dashed transition-colors w-full justify-center"
+          className="w-full border border-dashed border-surface-2"
         >
-          <Plus size={16} />
           Add memory
-        </button>
+        </Button>
       )}
 
       {/* Memory list */}
@@ -449,21 +436,22 @@ export default function MemorySection({
                     }}
                   />
                   <div className="flex justify-end gap-2 mt-2">
-                    <button
-                      type="button"
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => setEditingId(null)}
-                      className="px-2.5 py-1 text-xs rounded-control hover:bg-surface transition"
                     >
                       Cancel
-                    </button>
-                    <button
-                      type="button"
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="sm"
                       onClick={() => handleEdit(memory.id)}
-                      disabled={!editContent.trim() || editMemory.isPending}
-                      className="px-2.5 py-1 text-xs rounded-control bg-accent text-accent-fg hover:bg-accent/90 transition disabled:opacity-50"
+                      disabled={!editContent.trim()}
+                      loading={editMemory.isPending}
                     >
                       Save
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ) : (

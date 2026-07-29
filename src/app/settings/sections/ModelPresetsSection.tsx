@@ -38,6 +38,7 @@ import {
 } from '@/lib/models/presets';
 import SettingsSection from '../components/SettingsSection';
 import ModelPicker from '@/components/models/ModelPicker';
+import { Button } from '@/components/ui/Button';
 
 const EMPTY_PRESETS: ModelPresetList = [];
 
@@ -291,25 +292,23 @@ export default function ModelPresetsSection({
               }}
               className="flex-1 text-xs bg-surface border border-surface-2 rounded-control px-2 py-1.5 text-fg outline-none focus:border-accent"
             />
-            <button
-              type="button"
+            <Button
+              variant="primary"
+              size="sm"
+              icon={Check}
               onClick={handleSaveCurrentAsPreset}
-              className="text-xs px-2 py-1.5 rounded-control bg-accent text-accent-fg hover:bg-accent-700 transition-colors duration-150 flex items-center gap-1"
             >
-              <Check size={12} />
               Save
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              size="sm"
+              icon={X}
               aria-label="Cancel"
               onClick={() => {
                 setSavingCurrentName(false);
                 setCurrentNameInput('');
               }}
-              className="text-xs px-2 py-1.5 rounded-control bg-surface-2 text-fg/70 hover:bg-surface-2/80 transition-colors duration-150"
-            >
-              <X size={12} />
-            </button>
+            />
           </div>
         ) : (
           <>
@@ -404,21 +403,17 @@ export default function ModelPresetsSection({
                       }}
                     />
                     <div className="flex items-center gap-2">
-                      <button
-                        type="button"
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        icon={Check}
                         onClick={handleSaveEdit}
-                        className="text-xs px-2.5 py-1.5 rounded-control bg-accent text-accent-fg hover:bg-accent-700 transition-colors duration-150 flex items-center gap-1"
                       >
-                        <Check size={12} />
                         Save
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEditState(null)}
-                        className="text-xs px-2.5 py-1.5 rounded-control bg-surface-2 text-fg/70 hover:bg-surface-2/80 transition-colors duration-150"
-                      >
+                      </Button>
+                      <Button size="sm" onClick={() => setEditState(null)}>
                         Cancel
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 ) : (
@@ -478,13 +473,13 @@ export default function ModelPresetsSection({
                     {isDeleting ? (
                       <div className="flex items-center gap-1.5 shrink-0">
                         <span className="text-xs text-fg/60">Delete?</span>
-                        <button
-                          type="button"
+                        <Button
+                          variant="danger"
+                          size="sm"
                           onClick={() => handleDelete(preset.id)}
-                          className="text-xs px-2 py-1 rounded-control bg-danger text-danger-fg hover:bg-danger/80 transition-colors duration-150"
                         >
                           Yes
-                        </button>
+                        </Button>
                         <button
                           type="button"
                           onClick={() => setDeletingId(null)}
@@ -590,8 +585,10 @@ export default function ModelPresetsSection({
             />
           )}
           <div className="flex items-center gap-2">
-            <button
-              type="button"
+            <Button
+              variant="primary"
+              size="sm"
+              icon={Check}
               disabled={
                 !editState?.name?.trim() ||
                 !editState?.chatModel ||
@@ -623,21 +620,18 @@ export default function ModelPresetsSection({
                 setEditState(null);
                 toast.success(`Preset "${preset.name}" created`);
               }}
-              className="text-xs px-2.5 py-1.5 rounded-control bg-accent text-accent-fg hover:bg-accent-700 transition-colors duration-150 flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              <Check size={12} />
               Create preset
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              size="sm"
               onClick={() => {
                 setAddingNew(false);
                 setEditState(null);
               }}
-              className="text-xs px-2.5 py-1.5 rounded-control bg-surface-2 text-fg/70 hover:bg-surface-2/80 transition-colors duration-150"
             >
               Cancel
-            </button>
+            </Button>
           </div>
         </div>
       ) : (

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 import WorkspaceModal from '@/components/Workspaces/WorkspaceModal';
+import { Button, buttonClasses } from '@/components/ui/Button';
 import DynamicIcon from '@/components/workflows/DynamicIcon';
 import FillForm from '@/components/workflows/FillForm';
 import {
@@ -94,24 +95,20 @@ function DeleteModal({
         </div>
       ) : null}
       <div className="flex items-center gap-3">
-        <button
-          type="button"
-          disabled={del.isPending}
+        <Button
+          variant="danger"
+          size="lg"
+          loading={del.isPending}
           onClick={async () => {
             await del.mutateAsync(workflow.id);
             onClose();
           }}
-          className="px-5 py-2 rounded-control bg-danger text-danger-fg font-medium transition-colors duration-150 hover:opacity-90 disabled:opacity-50"
         >
           {del.isPending ? 'Deleting…' : 'Delete'}
-        </button>
-        <button
-          type="button"
-          onClick={onClose}
-          className="px-4 py-2 rounded-control text-fg/60 hover:text-fg transition-colors duration-150"
-        >
+        </Button>
+        <Button variant="ghost" onClick={onClose} className="text-fg/60">
           Cancel
-        </button>
+        </Button>
       </div>
     </WorkspaceModal>
   );
@@ -130,9 +127,9 @@ export default function WorkflowsPage() {
         actions={
           <Link
             href="/automations/workflows/new"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-control bg-accent text-accent-fg text-sm transition-colors duration-150 hover:bg-accent-700"
+            className={buttonClasses('primary', 'md')}
           >
-            <Plus size={14} />
+            <Plus size={16} />
             New workflow
           </Link>
         }
@@ -153,9 +150,9 @@ export default function WorkflowsPage() {
           </p>
           <Link
             href="/automations/workflows/new"
-            className="flex items-center gap-1.5 px-4 py-2 rounded-control bg-accent text-accent-fg text-sm transition-colors duration-150 hover:bg-accent-700"
+            className={buttonClasses('primary', 'md')}
           >
-            <Plus size={14} />
+            <Plus size={16} />
             Create your first workflow
           </Link>
         </div>

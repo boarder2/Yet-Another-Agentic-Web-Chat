@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import { Button } from '@/components/ui/Button';
 import { FileText, X, Check, CheckCheck, Ban, Bell } from 'lucide-react';
 
 export type { PendingEditApproval } from '@/lib/streaming/chatState';
@@ -273,38 +274,32 @@ export function WorkspaceEditApproval({
             Send rejection
           </button>
         ) : (
-          <button
-            type="button"
-            onClick={() => setShowRejectInput(true)}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-surface bg-surface-2 text-fg/70 hover:text-fg hover:bg-surface-2/80 transition-colors"
-          >
-            <X size={14} />
+          <Button size="lg" icon={X} onClick={() => setShowRejectInput(true)}>
             Reject
-          </button>
+          </Button>
         )}
 
         {/* Always prompt for this file — only when workspace auto-accept is on */}
         {workspaceAutoAccept && (
-          <button
-            type="button"
+          <Button
+            size="lg"
+            icon={Bell}
             onClick={() => handleDecide('always_prompt')}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-surface bg-surface-2 text-fg/70 hover:text-fg hover:bg-surface-2/80 transition-colors"
             title="Always ask before editing this file, even when the workspace is set to auto-accept"
           >
-            <Bell size={14} />
             Always prompt for this file
-          </button>
+          </Button>
         )}
 
         {/* Accept once */}
-        <button
-          type="button"
+        <Button
+          variant="primary"
+          size="lg"
+          icon={Check}
           onClick={() => handleDecide('accept')}
-          className="flex items-center gap-1.5 px-5 py-2 text-sm font-medium rounded-surface bg-accent text-accent-fg hover:bg-accent/90 transition-colors"
         >
-          <Check size={14} />
           Accept
-        </button>
+        </Button>
 
         {/* Always accept this file */}
         <button

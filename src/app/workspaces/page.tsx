@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import PageHeader from '@/components/PageHeader';
+import { Button } from '@/components/ui/Button';
 import WorkspaceIcon from '@/components/Workspaces/WorkspaceIcon';
 import WorkspaceSettingsFields, {
   WorkspaceModelOverrideField,
@@ -98,23 +99,17 @@ const CreateModal = ({ onClose, onCreated }: CreateModalProps) => {
           />
           {error && <p className="text-xs text-danger">{error}</p>}
           <div className="flex justify-end gap-2 mt-1">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-sm rounded-surface hover:bg-surface-2 transition"
-            >
+            <Button variant="ghost" onClick={onClose}>
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
-              disabled={!name.trim() || createWorkspace.isPending}
-              className="px-4 py-2 text-sm rounded-surface bg-accent text-accent-fg hover:bg-accent/90 transition disabled:opacity-50 flex items-center gap-2"
+              variant="primary"
+              disabled={!name.trim()}
+              loading={createWorkspace.isPending}
             >
-              {createWorkspace.isPending && (
-                <LoaderCircle size={14} className="animate-spin" />
-              )}
               Create
-            </button>
+            </Button>
           </div>
         </form>
       </div>
@@ -153,14 +148,13 @@ const WorkspacesPage = () => {
               <Archive size={14} />
               {showArchived ? 'Active' : 'Archived'}
             </button>
-            <button
-              type="button"
+            <Button
+              variant="primary"
+              icon={Plus}
               onClick={() => setShowCreate(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-surface bg-accent text-accent-fg hover:bg-accent/90 transition duration-200"
             >
-              <Plus size={14} />
               New Workspace
-            </button>
+            </Button>
           </>
         }
       />

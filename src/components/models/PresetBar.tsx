@@ -9,6 +9,7 @@ import {
 import { Fragment } from 'react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/Button';
 import { useSettingsModal } from '@/components/settings/SettingsModalProvider';
 import { useLocalStorageJSON } from '@/lib/hooks/useLocalStorage';
 import {
@@ -177,23 +178,24 @@ export default function PresetBar({
                           }}
                           className="flex-1 min-w-0 text-xs bg-bg border border-surface-2 rounded-control px-2 py-1 text-fg outline-none focus:border-accent"
                         />
-                        <button
-                          type="button"
+                        <Button
+                          variant="primary"
+                          size="sm"
                           onClick={() => saveNewPreset(close)}
-                          className="shrink-0 text-xs px-2 py-1 rounded-control bg-accent text-accent-fg hover:bg-accent-700 transition-colors duration-150"
+                          className="shrink-0"
                         >
                           Save
-                        </button>
-                        <button
-                          type="button"
+                        </Button>
+                        <Button
+                          size="sm"
                           onClick={() => {
                             setNamingPreset(false);
                             setNameInput('');
                           }}
-                          className="shrink-0 text-xs px-2 py-1 rounded-control bg-surface-2 text-fg/70 hover:bg-surface-2/80 transition-colors duration-150"
+                          className="shrink-0"
                         >
                           Cancel
-                        </button>
+                        </Button>
                       </div>
                     ) : (
                       <>

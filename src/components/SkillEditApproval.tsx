@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import { Button } from '@/components/ui/Button';
 import { BookOpen, X, Check, Ban } from 'lucide-react';
 
 export type { PendingSkillEditApproval } from '@/lib/streaming/chatState';
@@ -311,23 +312,18 @@ export function SkillEditApproval({
             Send rejection
           </button>
         ) : (
-          <button
-            type="button"
-            onClick={() => setShowRejectInput(true)}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-surface bg-surface-2 text-fg/70 hover:text-fg hover:bg-surface-2/80 transition-colors"
-          >
-            <X size={14} />
+          <Button size="lg" icon={X} onClick={() => setShowRejectInput(true)}>
             Reject
-          </button>
+          </Button>
         )}
-        <button
-          type="button"
+        <Button
+          variant="primary"
+          size="lg"
+          icon={Check}
           onClick={() => handleDecide('accept')}
-          className="flex items-center gap-1.5 px-5 py-2 text-sm font-medium rounded-surface bg-accent text-accent-fg hover:bg-accent/90 transition-colors"
         >
-          <Check size={14} />
           Accept
-        </button>
+        </Button>
       </div>
     </div>
   );

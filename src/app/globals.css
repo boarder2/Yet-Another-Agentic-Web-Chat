@@ -29,6 +29,7 @@
 
   /* === SEMANTIC STATUS === */
   --color-danger: oklch(0.62 0.22 27);
+  --color-danger-700: oklch(0.54 0.22 27);
   --color-danger-fg: oklch(0.99 0 0);
   --color-danger-soft: color-mix(
     in oklch,
@@ -93,6 +94,7 @@
   --color-surface: color-mix(in oklch, var(--color-bg), white 8%);
   --color-surface-2: color-mix(in oklch, var(--color-bg), white 12%);
   --color-danger: oklch(0.7 0.2 27);
+  --color-danger-700: oklch(0.62 0.2 27);
   --color-success: oklch(0.74 0.17 150);
   --color-warning: oklch(0.82 0.16 80);
   --color-overlay: oklch(0 0 0 / 0.6);

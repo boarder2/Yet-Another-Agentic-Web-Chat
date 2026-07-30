@@ -34,7 +34,7 @@ A single self-contained file in the OS temp dir. Tailwind CDN for the report's o
       }
     </style>
   </head>
-  <body class="bg-stone-50 font-sans text-slate-900">
+  <body class="bg-stone-950 font-sans text-stone-100">
     <main class="mx-auto max-w-6xl space-y-12 px-6 py-12">
       <header>...</header>
       <section id="baseline">...</section>
@@ -93,8 +93,8 @@ One larger card. Which finding to do first, one sentence on why, anchor link. Th
 ## Style
 
 - Editorial, not corporate-dashboard. Generous whitespace. `font-serif` headings work well with stone/slate.
-- The report's own chrome must be visually distinct from the replicas — the reader should never confuse report UI with project UI. Keep report chrome stone/slate; let replicas be the only saturated colour on the page.
-- Colour sparingly outside replicas: one accent, red for drift, amber for warnings.
+- The report's own chrome is dark (`bg-stone-950`/`text-stone-100`) and must stay visually distinct from the replicas — the reader should never confuse report UI with project UI. Cards and tables sit on a lighter stone-900 panel (`bg-stone-900 border border-stone-800`) so they read as chrome, not content; let replicas be the only saturated colour on the page, and give each replica its own light card (`bg-white`/`bg-stone-50`) so a light-mode replica never blends into the dark page.
+- Colour sparingly outside replicas: one accent, red for drift, amber for warnings — bump to `-400` shades (e.g. `text-emerald-400`, `text-amber-400`, `text-red-400`) so badges stay legible on the dark chrome.
 - `text-xs uppercase tracking-wider` for labels inside replicas — schematic, not UI.
 - Tailwind CDN is the only script. No interactivity beyond the theme pairs rendering side by side.
 

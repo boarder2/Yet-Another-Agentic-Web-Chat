@@ -31,7 +31,7 @@ test.describe('workspace file editing', () => {
     await sidebar.getByRole('button', { name: 'Files' }).click();
     await sidebar.getByRole('button', { name: 'notes.txt' }).click();
 
-    const modal = page.locator('.fixed.inset-0.z-50');
+    const modal = page.getByRole('dialog');
     const draft = modal.getByLabel('File content');
     await modal.getByRole('button', { name: 'Edit' }).click();
     await draft.fill('MY UNSAVED DRAFT');
@@ -72,7 +72,7 @@ test.describe('workspace file editing', () => {
     await sidebar.getByRole('button', { name: 'Edit' }).click();
 
     // Straight into the editor — no preview, no second Edit click.
-    const modal = page.locator('.fixed.inset-0.z-50');
+    const modal = page.getByRole('dialog');
     await expect(modal.getByLabel('File content')).toContainText('hello world');
     await expect(modal.getByRole('button', { name: 'Save' })).toBeVisible();
   });

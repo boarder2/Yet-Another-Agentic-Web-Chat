@@ -11,17 +11,11 @@ import {
   Home,
   LayoutDashboard,
 } from 'lucide-react';
-import {
-  Description,
-  Dialog,
-  DialogBackdrop,
-  DialogPanel,
-  DialogTitle,
-  Transition,
-  TransitionChild,
-} from '@headlessui/react';
-import { Fragment, useState } from 'react';
+import { Description } from '@headlessui/react';
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/Button';
+import Modal from '@/components/ui/Modal';
 import { Widget } from '@/lib/types/widget';
 import { useConfig } from '@/lib/hooks/api/useConfig';
 import WidgetContent from './WidgetContent';
@@ -274,60 +268,36 @@ const WidgetDisplay = ({
         </div>
       </CardContent>
 
-      <Transition appear show={confirmDeleteOpen} as={Fragment}>
-        <Dialog
-          as="div"
-          className="relative z-50"
-          onClose={() => setConfirmDeleteOpen(false)}
-        >
-          <DialogBackdrop className="fixed inset-0 bg-overlay" />
-          <div className="fixed inset-0 overflow-y-auto">
-            <div className="flex min-h-full items-center justify-center p-4 text-center">
-              <TransitionChild
-                as={Fragment}
-                enter="ease-out duration-200"
-                enterFrom="opacity-0 scale-95"
-                enterTo="opacity-100 scale-100"
-                leave="ease-in duration-100"
-                leaveFrom="opacity-100 scale-100"
-                leaveTo="opacity-0 scale-95"
-              >
-                <DialogPanel className="w-full max-w-md transform rounded-floating bg-surface border border-surface-2 p-6 text-left align-middle shadow-floating transition-all">
-                  <DialogTitle className="text-lg font-medium leading-6">
-                    Delete widget
-                  </DialogTitle>
-                  <Description className="text-sm text-fg/70 mt-2">
-                    Permanently delete{' '}
-                    <span className="font-medium text-fg">{widget.title}</span>?
-                    It currently appears on {surfacesText}, and deleting removes
-                    it everywhere — this cannot be undone. To hide it from a
-                    single page instead, use the home/dashboard toggles.
-                  </Description>
-                  <div className="flex flex-row items-end justify-end space-x-4 mt-6">
-                    <button
-                      type="button"
-                      onClick={() => setConfirmDeleteOpen(false)}
-                      className="text-sm transition-colors duration-150"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setConfirmDeleteOpen(false);
-                        onDelete(widget.id);
-                      }}
-                      className="text-danger text-sm font-medium transition-colors duration-150"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </DialogPanel>
-              </TransitionChild>
-            </div>
-          </div>
-        </Dialog>
-      </Transition>
+      <Modal
+        open={confirmDeleteOpen}
+        onClose={() => setConfirmDeleteOpen(false)}
+        size="sm"
+        title="Delete widget"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setConfirmDeleteOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                setConfirmDeleteOpen(false);
+                onDelete(widget.id);
+              }}
+            >
+              Delete
+            </Button>
+          </>
+        }
+      >
+        <Description className="text-sm text-fg/70">
+          Permanently delete{' '}
+          <span className="font-medium text-fg">{widget.title}</span>? It
+          currently appears on {surfacesText}, and deleting removes it
+          everywhere — this cannot be undone. To hide it from a single page
+          instead, use the home/dashboard toggles.
+        </Description>
+      </Modal>
     </Card>
   );
 };

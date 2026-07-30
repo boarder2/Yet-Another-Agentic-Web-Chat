@@ -1,14 +1,6 @@
 'use client';
 
 import {
-  Dialog,
-  DialogPanel,
-  DialogTitle,
-  Transition,
-  TransitionChild,
-} from '@headlessui/react';
-import {
-  X,
   Play,
   Save,
   ChevronDown,
@@ -16,11 +8,12 @@ import {
   Copy,
   Undo2,
 } from 'lucide-react';
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
 import WidgetContent from '@/components/dashboard/WidgetContent';
 import { Button } from '@/components/ui/Button';
+import Modal from '@/components/ui/Modal';
 import SourceListEditor from '@/components/dashboard/SourceListEditor';
 import WidgetChatPanel from '@/components/dashboard/WidgetChatPanel';
 import { CodeWidgetConfig } from '@/lib/types/widget';
@@ -230,319 +223,260 @@ const CodeWidgetConfigModal = ({
 
   if (isOpen && !warningAccepted) {
     return (
-      <Transition appear show={isOpen} as={Fragment}>
-        <Dialog as="div" className="relative z-50" onClose={onClose}>
-          <div className="fixed inset-0 bg-overlay" />
-          <div className="fixed inset-0 flex items-center justify-center p-4">
-            <DialogPanel className="max-w-lg rounded-floating bg-surface p-6 space-y-4 shadow-floating">
-              <DialogTitle className="text-lg font-medium text-fg">
-                Run your own JavaScript?
-              </DialogTitle>
-              <p className="text-sm text-fg/80">
-                A code widget runs the JavaScript you write inside the sandboxed
-                Docker runtime on <strong>every refresh</strong>. Source data is
-                fetched server-side and passed to your code. The sandbox has no
-                network access and is destroyed after each run, but you are
-                responsible for the code you author.
-              </p>
-              <div className="flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-4 py-2 text-sm rounded-control bg-surface hover:bg-surface-2 text-fg"
-                >
-                  Cancel
-                </button>
-                <Button
-                  variant="primary"
-                  size="lg"
-                  onClick={() => {
-                    acceptWarning();
-                    setWarningAccepted(true);
-                  }}
-                >
-                  I understand — continue
-                </Button>
-              </div>
-            </DialogPanel>
-          </div>
-        </Dialog>
-      </Transition>
+      <Modal
+        open={isOpen}
+        onClose={onClose}
+        title="Run your own JavaScript?"
+        footer={
+          <>
+            <Button onClick={onClose}>Cancel</Button>
+            <Button
+              variant="primary"
+              onClick={() => {
+                acceptWarning();
+                setWarningAccepted(true);
+              }}
+            >
+              I understand — continue
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-fg/80">
+          A code widget runs the JavaScript you write inside the sandboxed
+          Docker runtime on <strong>every refresh</strong>. Source data is
+          fetched server-side and passed to your code. The sandbox has no
+          network access and is destroyed after each run, but you are
+          responsible for the code you author.
+        </p>
+      </Modal>
     );
   }
 
   return (
-    <Transition appear show={isOpen} as={Fragment}>
-      <Dialog as="div" className="relative z-50" onClose={handleClose}>
-        <TransitionChild
-          as={Fragment}
-          enter="ease-out duration-300"
-          enterFrom="opacity-0"
-          enterTo="opacity-100"
-          leave="ease-in duration-200"
-          leaveFrom="opacity-100"
-          leaveTo="opacity-0"
-        >
-          <div className="fixed inset-0 bg-overlay" />
-        </TransitionChild>
-
-        <div className="fixed inset-0 overflow-y-auto">
-          <div className="flex min-h-full items-center justify-center p-4">
-            <DialogPanel className="flex flex-col w-[95vw] max-w-[95vw] h-[92vh] transform overflow-hidden rounded-floating bg-surface p-6 text-left align-middle shadow-floating">
-              <DialogTitle
-                as="h3"
-                className="shrink-0 text-lg font-medium text-fg flex items-center justify-between"
-              >
-                <span className="flex items-center gap-2">
-                  {editingWidget ? 'Edit Code Widget' : 'Create Code Widget'}
-                  {isDirty && (
-                    <span className="text-xs font-normal text-warning">
-                      • Unsaved changes
-                    </span>
-                  )}
-                </span>
+    <Modal
+      open={isOpen}
+      onClose={handleClose}
+      size="full"
+      bodyClassName="overflow-hidden p-5"
+      title={
+        <>
+          {editingWidget ? 'Edit Code Widget' : 'Create Code Widget'}
+          {isDirty && (
+            <span className="text-xs font-normal text-warning">
+              • Unsaved changes
+            </span>
+          )}
+        </>
+      }
+      footer={
+        <>
+          <Button size="lg" onClick={handleClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" size="lg" icon={Save} onClick={handleSave}>
+            {editingWidget ? 'Save to apply' : 'Create Widget'}
+          </Button>
+        </>
+      }
+    >
+      <div className="h-full grid grid-cols-1 lg:grid-cols-2 gap-6 overflow-hidden">
+        {/* Left — Editor / Chat tabs */}
+        <div className="flex flex-col min-h-0">
+          <div className="shrink-0 flex items-center justify-between border-b border-surface-2 mb-3">
+            <div className="flex gap-1">
+              {(['editor', 'chat'] as const).map((tab) => (
                 <button
+                  key={tab}
                   type="button"
-                  onClick={handleClose}
-                  className="p-1 hover:bg-surface-2 rounded-control"
+                  onClick={() => setLeftTab(tab)}
+                  className={`flex items-center gap-1.5 px-3 py-2 text-sm capitalize border-b-2 -mb-px ${
+                    leftTab === tab
+                      ? 'border-accent text-fg'
+                      : 'border-transparent text-fg/60 hover:text-fg'
+                  }`}
                 >
-                  <X size={20} />
+                  {tab === 'chat' ? 'Assistant' : 'Editor'}
+                  {tab === 'editor' && (errors.title || errors.code) && (
+                    <span
+                      className="h-1.5 w-1.5 rounded-pill bg-danger"
+                      aria-label="Has validation errors"
+                    />
+                  )}
                 </button>
-              </DialogTitle>
+              ))}
+            </div>
+            {undoStack.length > 0 && (
+              <button
+                type="button"
+                onClick={undo}
+                className="flex items-center gap-1 px-2 py-1 text-xs text-fg/60 hover:bg-surface-2 rounded-control"
+                title="Undo last applied proposal"
+              >
+                <Undo2 size={13} /> Undo
+              </button>
+            )}
+          </div>
 
-              <div className="mt-4 flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-2 gap-6 overflow-hidden">
-                {/* Left — Editor / Chat tabs */}
-                <div className="flex flex-col min-h-0">
-                  <div className="shrink-0 flex items-center justify-between border-b border-surface-2 mb-3">
-                    <div className="flex gap-1">
-                      {(['editor', 'chat'] as const).map((tab) => (
-                        <button
-                          key={tab}
-                          type="button"
-                          onClick={() => setLeftTab(tab)}
-                          className={`flex items-center gap-1.5 px-3 py-2 text-sm capitalize border-b-2 -mb-px ${
-                            leftTab === tab
-                              ? 'border-accent text-fg'
-                              : 'border-transparent text-fg/60 hover:text-fg'
-                          }`}
-                        >
-                          {tab === 'chat' ? 'Assistant' : 'Editor'}
-                          {tab === 'editor' &&
-                            (errors.title || errors.code) && (
-                              <span
-                                className="h-1.5 w-1.5 rounded-pill bg-danger"
-                                aria-label="Has validation errors"
-                              />
-                            )}
-                        </button>
-                      ))}
-                    </div>
-                    {undoStack.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={undo}
-                        className="flex items-center gap-1 px-2 py-1 text-xs text-fg/60 hover:bg-surface-2 rounded-control"
-                        title="Undo last applied proposal"
-                      >
-                        <Undo2 size={13} /> Undo
-                      </button>
-                    )}
-                  </div>
+          <div className={leftTab === 'chat' ? 'flex-1 min-h-0' : 'hidden'}>
+            <WidgetChatPanel
+              getState={() => widgetState}
+              revision={revision}
+              lastError={lastError}
+              autoAccept={autoAccept}
+              onToggleAutoAccept={setAutoAccept}
+              onAccept={handleAcceptProposal}
+            />
+          </div>
 
-                  <div
-                    className={leftTab === 'chat' ? 'flex-1 min-h-0' : 'hidden'}
-                  >
-                    <WidgetChatPanel
-                      getState={() => widgetState}
-                      revision={revision}
-                      lastError={lastError}
-                      autoAccept={autoAccept}
-                      onToggleAutoAccept={setAutoAccept}
-                      onAccept={handleAcceptProposal}
-                    />
-                  </div>
+          <div
+            className={
+              leftTab === 'editor'
+                ? 'flex-1 min-h-0 overflow-y-auto space-y-4 pr-2'
+                : 'hidden'
+            }
+          >
+            <div>
+              <label className="block text-sm font-medium text-fg mb-1">
+                Widget Title
+              </label>
+              <input
+                type="text"
+                aria-label="Widget title"
+                value={config.title}
+                onChange={(e) => {
+                  setConfig((p) => ({ ...p, title: e.target.value }));
+                  if (e.target.value.trim())
+                    setErrors((p) => ({ ...p, title: undefined }));
+                  markRevision();
+                }}
+                className="w-full px-3 py-2 border border-surface-2 rounded-control bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+                placeholder="Enter widget title..."
+              />
+              {errors.title && (
+                <p className="text-xs text-danger mt-1">{errors.title}</p>
+              )}
+            </div>
 
-                  <div
-                    className={
-                      leftTab === 'editor'
-                        ? 'flex-1 min-h-0 overflow-y-auto space-y-4 pr-2'
-                        : 'hidden'
-                    }
-                  >
-                    <div>
-                      <label className="block text-sm font-medium text-fg mb-1">
-                        Widget Title
-                      </label>
-                      <input
-                        type="text"
-                        aria-label="Widget title"
-                        value={config.title}
-                        onChange={(e) => {
-                          setConfig((p) => ({ ...p, title: e.target.value }));
-                          if (e.target.value.trim())
-                            setErrors((p) => ({ ...p, title: undefined }));
-                          markRevision();
-                        }}
-                        className="w-full px-3 py-2 border border-surface-2 rounded-control bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
-                        placeholder="Enter widget title..."
-                      />
-                      {errors.title && (
-                        <p className="text-xs text-danger mt-1">
-                          {errors.title}
-                        </p>
-                      )}
-                    </div>
+            <div>
+              <label className="block text-sm font-medium text-fg mb-1">
+                Sources{' '}
+                <span className="text-fg/50 font-normal">(optional)</span>
+              </label>
+              <SourceListEditor
+                sources={config.sources}
+                onChange={(sources) => {
+                  setConfig((p) => ({ ...p, sources }));
+                  markRevision();
+                }}
+              />
+            </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-fg mb-1">
-                        Sources{' '}
-                        <span className="text-fg/50 font-normal">
-                          (optional)
-                        </span>
-                      </label>
-                      <SourceListEditor
-                        sources={config.sources}
-                        onChange={(sources) => {
-                          setConfig((p) => ({ ...p, sources }));
-                          markRevision();
-                        }}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-fg mb-1">
-                        Refresh Frequency
-                      </label>
-                      <div className="flex gap-2">
-                        <input
-                          type="number"
-                          aria-label="Refresh frequency"
-                          min="1"
-                          value={config.refreshFrequency}
-                          onChange={(e) =>
-                            setConfig((p) => ({
-                              ...p,
-                              refreshFrequency: parseInt(e.target.value) || 1,
-                            }))
-                          }
-                          className="flex-1 px-3 py-2 border border-surface-2 rounded-control bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
-                        />
-                        <select
-                          value={config.refreshUnit}
-                          onChange={(e) =>
-                            setConfig((p) => ({
-                              ...p,
-                              refreshUnit: e.target.value as
-                                | 'minutes'
-                                | 'hours',
-                            }))
-                          }
-                          className="px-3 py-2 border border-surface-2 rounded-control bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
-                        >
-                          <option value="minutes">Minutes</option>
-                          <option value="hours">Hours</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-fg mb-1">
-                        Code
-                      </label>
-                      <CodeEditor
-                        value={config.code}
-                        onChange={onCodeEdit}
-                        height="48vh"
-                      />
-                      {errors.code && (
-                        <p className="text-xs text-danger mt-1">
-                          {errors.code}
-                        </p>
-                      )}
-                    </div>
-
-                    <RuntimeHelp
-                      open={showHelp}
-                      onToggle={() => setShowHelp((v) => !v)}
-                    />
-                  </div>
-                </div>
-
-                {/* Right — preview (always visible) */}
-                <div className="flex flex-col min-h-0 space-y-3">
-                  <div className="shrink-0 flex items-center justify-between">
-                    <h4 className="text-sm font-medium text-fg">
-                      Preview{' '}
-                      <span className="text-fg/50 font-normal">
-                        — not saved
-                      </span>
-                    </h4>
-                    <Button
-                      variant="primary"
-                      icon={Play}
-                      loading={isPreviewLoading}
-                      onClick={runPreview}
-                    >
-                      {isPreviewLoading ? 'Running…' : 'Run Preview'}
-                    </Button>
-                  </div>
-
-                  <div className="flex-1 min-h-0 p-4 border border-surface-2 rounded-control bg-surface overflow-y-auto">
-                    {preview?.success ? (
-                      <WidgetContent
-                        content={preview.content}
-                        charts={preview.charts}
-                        className="max-w-full"
-                      />
-                    ) : (
-                      <div className="text-sm text-fg/50 italic">
-                        Click &quot;Run Preview&quot; to test your code.
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="shrink-0 max-h-44 overflow-y-auto space-y-2">
-                    {preview && !preview.success && (
-                      <PreviewError preview={preview} />
-                    )}
-                    {preview?.warnings?.map((w, i) => (
-                      <p key={i} className="text-xs text-warning">
-                        ⚠ {w}
-                      </p>
-                    ))}
-                    {preview &&
-                      (preview.logs.stdout || preview.logs.stderr) && (
-                        <details className="text-xs">
-                          <summary className="cursor-pointer text-fg/60">
-                            Logs
-                          </summary>
-                          <pre className="mt-1 p-2 bg-bg rounded-control overflow-x-auto whitespace-pre-wrap text-fg/80">
-                            {preview.logs.stderr || preview.logs.stdout}
-                          </pre>
-                        </details>
-                      )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="shrink-0 mt-4 flex justify-end gap-3">
-                <Button size="lg" onClick={handleClose}>
-                  Cancel
-                </Button>
-                <Button
-                  variant="primary"
-                  size="lg"
-                  icon={Save}
-                  onClick={handleSave}
+            <div>
+              <label className="block text-sm font-medium text-fg mb-1">
+                Refresh Frequency
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  aria-label="Refresh frequency"
+                  min="1"
+                  value={config.refreshFrequency}
+                  onChange={(e) =>
+                    setConfig((p) => ({
+                      ...p,
+                      refreshFrequency: parseInt(e.target.value) || 1,
+                    }))
+                  }
+                  className="flex-1 px-3 py-2 border border-surface-2 rounded-control bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+                />
+                <select
+                  value={config.refreshUnit}
+                  onChange={(e) =>
+                    setConfig((p) => ({
+                      ...p,
+                      refreshUnit: e.target.value as 'minutes' | 'hours',
+                    }))
+                  }
+                  className="px-3 py-2 border border-surface-2 rounded-control bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
                 >
-                  {editingWidget ? 'Save to apply' : 'Create Widget'}
-                </Button>
+                  <option value="minutes">Minutes</option>
+                  <option value="hours">Hours</option>
+                </select>
               </div>
-            </DialogPanel>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-fg mb-1">
+                Code
+              </label>
+              <CodeEditor
+                value={config.code}
+                onChange={onCodeEdit}
+                height="48vh"
+              />
+              {errors.code && (
+                <p className="text-xs text-danger mt-1">{errors.code}</p>
+              )}
+            </div>
+
+            <RuntimeHelp
+              open={showHelp}
+              onToggle={() => setShowHelp((v) => !v)}
+            />
           </div>
         </div>
-      </Dialog>
-    </Transition>
+
+        {/* Right — preview (always visible) */}
+        <div className="flex flex-col min-h-0 space-y-3">
+          <div className="shrink-0 flex items-center justify-between">
+            <h4 className="text-sm font-medium text-fg">
+              Preview{' '}
+              <span className="text-fg/50 font-normal">— not saved</span>
+            </h4>
+            <Button
+              variant="primary"
+              icon={Play}
+              loading={isPreviewLoading}
+              onClick={runPreview}
+            >
+              {isPreviewLoading ? 'Running…' : 'Run Preview'}
+            </Button>
+          </div>
+
+          <div className="flex-1 min-h-0 p-4 border border-surface-2 rounded-control bg-surface overflow-y-auto">
+            {preview?.success ? (
+              <WidgetContent
+                content={preview.content}
+                charts={preview.charts}
+                className="max-w-full"
+              />
+            ) : (
+              <div className="text-sm text-fg/50 italic">
+                Click &quot;Run Preview&quot; to test your code.
+              </div>
+            )}
+          </div>
+
+          <div className="shrink-0 max-h-44 overflow-y-auto space-y-2">
+            {preview && !preview.success && <PreviewError preview={preview} />}
+            {preview?.warnings?.map((w, i) => (
+              <p key={i} className="text-xs text-warning">
+                ⚠ {w}
+              </p>
+            ))}
+            {preview && (preview.logs.stdout || preview.logs.stderr) && (
+              <details className="text-xs">
+                <summary className="cursor-pointer text-fg/60">Logs</summary>
+                <pre className="mt-1 p-2 bg-bg rounded-control overflow-x-auto whitespace-pre-wrap text-fg/80">
+                  {preview.logs.stderr || preview.logs.stdout}
+                </pre>
+              </details>
+            )}
+          </div>
+        </div>
+      </div>
+    </Modal>
   );
 };
 

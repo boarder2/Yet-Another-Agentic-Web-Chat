@@ -21,6 +21,8 @@ export class SettingsPage extends BasePage {
 
   async close() {
     await this.closeBtn.click();
+    // The shared Modal animates out, so the panel outlives the click.
+    await this.closeBtn.waitFor({ state: 'hidden' });
   }
 
   /** Navigate to a section by its nav label (e.g. "Skills", "MCP Servers"). */

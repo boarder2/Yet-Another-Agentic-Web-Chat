@@ -12,7 +12,7 @@ import {
   Workflow as WorkflowIcon,
 } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
-import WorkspaceModal from '@/components/Workspaces/WorkspaceModal';
+import Modal from '@/components/ui/Modal';
 import { Button, buttonClasses } from '@/components/ui/Button';
 import DynamicIcon from '@/components/workflows/DynamicIcon';
 import FillForm from '@/components/workflows/FillForm';
@@ -36,7 +36,7 @@ function LaunchModal({
   const [error, setError] = useState('');
 
   return (
-    <WorkspaceModal open onClose={onClose} title={`Run “${workflow.name}”`}>
+    <Modal open onClose={onClose} title={`Run “${workflow.name}”`}>
       {error && (
         <div className="mb-4 px-4 py-2 rounded-surface bg-danger-soft border border-danger text-danger text-sm">
           {error}
@@ -58,7 +58,7 @@ function LaunchModal({
           }
         }}
       />
-    </WorkspaceModal>
+    </Modal>
   );
 }
 
@@ -73,7 +73,28 @@ function DeleteModal({
   const del = useDeleteWorkflow();
 
   return (
-    <WorkspaceModal open onClose={onClose} title={`Delete “${workflow.name}”`}>
+    <Modal
+      open
+      onClose={onClose}
+      title={`Delete “${workflow.name}”`}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose} className="text-fg/60">
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            loading={del.isPending}
+            onClick={async () => {
+              await del.mutateAsync(workflow.id);
+              onClose();
+            }}
+          >
+            {del.isPending ? 'Deleting…' : 'Delete'}
+          </Button>
+        </>
+      }
+    >
       <p className="text-sm text-fg/70 mb-3">
         This permanently deletes the workflow. Past run chats are kept.
       </p>
@@ -94,23 +115,7 @@ function DeleteModal({
           </ul>
         </div>
       ) : null}
-      <div className="flex items-center gap-3">
-        <Button
-          variant="danger"
-          size="lg"
-          loading={del.isPending}
-          onClick={async () => {
-            await del.mutateAsync(workflow.id);
-            onClose();
-          }}
-        >
-          {del.isPending ? 'Deleting…' : 'Delete'}
-        </Button>
-        <Button variant="ghost" onClick={onClose} className="text-fg/60">
-          Cancel
-        </Button>
-      </div>
-    </WorkspaceModal>
+    </Modal>
   );
 }
 

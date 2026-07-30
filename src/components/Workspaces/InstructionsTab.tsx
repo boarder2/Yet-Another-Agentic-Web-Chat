@@ -8,7 +8,7 @@ import {
   useWorkspaceSystemPrompts,
   useSaveWorkspaceSystemPromptLinks,
 } from '@/lib/hooks/api/useWorkspaceSystemPrompts';
-import WorkspaceModal from './WorkspaceModal';
+import Modal from '@/components/ui/Modal';
 import InstructionsEditor from './InstructionsEditor';
 
 export default function InstructionsTab({
@@ -103,7 +103,7 @@ export default function InstructionsTab({
         </section>
       )}
 
-      <WorkspaceModal
+      <Modal
         open={!!open}
         onClose={() => setOpen(null)}
         title="Workspace instructions"
@@ -115,7 +115,7 @@ export default function InstructionsTab({
             startEditing={open.edit}
           />
         )}
-      </WorkspaceModal>
+      </Modal>
     </div>
   );
 }

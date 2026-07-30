@@ -20,7 +20,7 @@ import InstructionsTab from './InstructionsTab';
 import WorkspaceMemoryTab from './WorkspaceMemoryTab';
 import SettingsTab from './SettingsTab';
 import FileViewer from './FileViewer';
-import WorkspaceModal from './WorkspaceModal';
+import Modal from '@/components/ui/Modal';
 import { useWorkspace } from '@/lib/hooks/api/useWorkspaces';
 import { useWorkspaceFiles } from '@/lib/hooks/api/useWorkspaceFiles';
 import { useWorkspaceMemory } from '@/lib/hooks/api/useWorkspaceMemory';
@@ -122,7 +122,7 @@ export default function WorkspaceSidebar({
   })();
 
   const settingsModal = (
-    <WorkspaceModal
+    <Modal
       open={settingsOpen}
       onClose={() => setSettingsOpen(false)}
       title="Workspace settings"
@@ -135,7 +135,7 @@ export default function WorkspaceSidebar({
           <LoaderCircle size={20} className="animate-spin text-accent" />
         </div>
       )}
-    </WorkspaceModal>
+    </Modal>
   );
 
   return (
@@ -248,7 +248,7 @@ export default function WorkspaceSidebar({
             </CollapsibleSection>
           </div>
 
-          <WorkspaceModal
+          <Modal
             open={!!openFile}
             onClose={() => setOpenFile(null)}
             title="File"
@@ -262,7 +262,7 @@ export default function WorkspaceSidebar({
                 startEditing={openFile.edit}
               />
             )}
-          </WorkspaceModal>
+          </Modal>
         </aside>
       )}
 

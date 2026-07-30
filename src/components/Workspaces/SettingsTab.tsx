@@ -13,6 +13,7 @@ import {
 import type { WorkspaceModelOverride } from '@/lib/workspaces/types';
 import { captureCurrentSelection } from '@/lib/models/presets';
 import { Button } from '@/components/ui/Button';
+import Modal from '@/components/ui/Modal';
 
 interface Workspace {
   id: string;
@@ -52,6 +53,10 @@ export default function SettingsTab({ workspace }: { workspace: Workspace }) {
   const [deleting, setDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteConfirmName, setDeleteConfirmName] = useState('');
+  const cancelDelete = () => {
+    setShowDeleteConfirm(false);
+    setDeleteConfirmName('');
+  };
 
   const nameRef = useRef(name);
   const descriptionRef = useRef(description);
@@ -189,49 +194,46 @@ export default function SettingsTab({ workspace }: { workspace: Workspace }) {
         </div>
       </section>
 
-      {showDeleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay">
-          <div className="w-full max-w-sm mx-4 rounded-floating bg-surface border border-surface-2 p-6 space-y-4 shadow-floating">
-            <h2 className="font-semibold text-lg">Delete workspace?</h2>
-            <p className="text-sm text-fg/70">
-              This will permanently delete{' '}
-              <strong>&ldquo;{workspace.name}&rdquo;</strong> and all its files.
-              Chats and memories will be detached but not deleted. This cannot
-              be undone.
-            </p>
-            <div className="space-y-1">
-              <label className="text-xs text-fg/60">
-                Type <strong>{workspace.name}</strong> to confirm
-              </label>
-              <input
-                aria-label={`Confirm workspace name: ${workspace.name}`}
-                value={deleteConfirmName}
-                onChange={(e) => setDeleteConfirmName(e.target.value)}
-                className="w-full rounded-surface border border-surface-2 bg-surface px-3 py-2 text-sm focus:outline-none focus:border-accent"
-                placeholder={workspace.name}
-              />
-            </div>
-            <div className="flex gap-2 justify-end">
-              <Button
-                onClick={() => {
-                  setShowDeleteConfirm(false);
-                  setDeleteConfirmName('');
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="danger"
-                onClick={confirmDelete}
-                loading={deleting}
-                disabled={deleteConfirmName !== workspace.name}
-              >
-                {deleting ? 'Deleting…' : 'Delete'}
-              </Button>
-            </div>
+      <Modal
+        open={showDeleteConfirm}
+        onClose={cancelDelete}
+        size="sm"
+        title="Delete workspace?"
+        footer={
+          <>
+            <Button onClick={cancelDelete}>Cancel</Button>
+            <Button
+              variant="danger"
+              onClick={confirmDelete}
+              loading={deleting}
+              disabled={deleteConfirmName !== workspace.name}
+            >
+              {deleting ? 'Deleting…' : 'Delete'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-fg/70">
+            This will permanently delete{' '}
+            <strong>&ldquo;{workspace.name}&rdquo;</strong> and all its files.
+            Chats and memories will be detached but not deleted. This cannot be
+            undone.
+          </p>
+          <div className="space-y-1">
+            <label className="text-xs text-fg/60">
+              Type <strong>{workspace.name}</strong> to confirm
+            </label>
+            <input
+              aria-label={`Confirm workspace name: ${workspace.name}`}
+              value={deleteConfirmName}
+              onChange={(e) => setDeleteConfirmName(e.target.value)}
+              className="w-full rounded-surface border border-surface-2 bg-surface px-3 py-2 text-sm focus:outline-none focus:border-accent"
+              placeholder={workspace.name}
+            />
           </div>
         </div>
-      )}
+      </Modal>
     </div>
   );
 }

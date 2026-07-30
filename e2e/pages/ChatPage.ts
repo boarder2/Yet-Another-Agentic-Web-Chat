@@ -50,7 +50,8 @@ export class ChatPage extends BasePage {
       .locator('div.overflow-hidden.shadow-raised')
       .first();
     await popover.locator('span.font-medium', { hasText: displayName }).click();
-    await dialog.getByRole('button', { name: 'Close' }).click();
+    await dialog.getByLabel('Close').click();
+    await dialog.waitFor({ state: 'hidden' });
   }
 
   /** A rendered message matching this exact text (markdown wrapper classes

@@ -1,17 +1,11 @@
 'use client';
 
-import {
-  Dialog,
-  DialogPanel,
-  DialogTitle,
-  Transition,
-  TransitionChild,
-  Switch,
-} from '@headlessui/react';
-import { X, Play, Save, Brain } from 'lucide-react';
-import { Fragment, useState, useEffect } from 'react';
+import { Switch } from '@headlessui/react';
+import { Play, Save, Brain } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import WidgetContent from '@/components/dashboard/WidgetContent';
 import { Button } from '@/components/ui/Button';
+import Modal from '@/components/ui/Modal';
 import ModelPicker from '@/components/models/ModelPicker';
 import ToolSelector from '@/components/MessageInputActions/ToolSelector';
 import SourceListEditor from '@/components/dashboard/SourceListEditor';
@@ -199,306 +193,255 @@ const WidgetConfigModal = ({
   };
 
   return (
-    <Transition appear show={isOpen} as={Fragment}>
-      <Dialog as="div" className="relative z-50" onClose={handleClose}>
-        <TransitionChild
-          as={Fragment}
-          enter="ease-out duration-300"
-          enterFrom="opacity-0"
-          enterTo="opacity-100"
-          leave="ease-in duration-200"
-          leaveFrom="opacity-100"
-          leaveTo="opacity-0"
-        >
-          <div className="fixed inset-0 bg-overlay" />
-        </TransitionChild>
+    <Modal
+      open={isOpen}
+      onClose={handleClose}
+      size="full"
+      title={editingWidget ? 'Edit Widget' : 'Create New Widget'}
+      bodyClassName="overflow-hidden p-5"
+      footer={
+        <>
+          <Button onClick={handleClose} size="lg">
+            Cancel
+          </Button>
+          <Button variant="primary" size="lg" icon={Save} onClick={handleSave}>
+            {editingWidget ? 'Update Widget' : 'Create Widget'}
+          </Button>
+        </>
+      }
+    >
+      <div className="h-full grid grid-cols-1 lg:grid-cols-2 gap-6 overflow-hidden">
+        {/* Left Column - Configuration */}
+        <div className="flex flex-col min-h-0 overflow-y-auto space-y-4 pr-2">
+          {/* Widget Title */}
+          <div>
+            <label className="block text-sm font-medium text-fg mb-1">
+              Widget Title
+            </label>
+            <input
+              type="text"
+              aria-label="Widget title"
+              value={config.title}
+              onChange={(e) =>
+                setConfig((prev) => ({
+                  ...prev,
+                  title: e.target.value,
+                }))
+              }
+              className="w-full px-3 py-2 border border-surface-2 rounded-control bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+              placeholder="Enter widget title..."
+            />
+            {errors.title && (
+              <p className="text-xs text-danger mt-1">{errors.title}</p>
+            )}
+          </div>
 
-        <div className="fixed inset-0 overflow-y-auto">
-          <div className="flex min-h-full items-center justify-center p-4 text-center">
-            <TransitionChild
-              as={Fragment}
-              enter="ease-out duration-300"
-              enterFrom="opacity-0 scale-95"
-              enterTo="opacity-100 scale-100"
-              leave="ease-in duration-200"
-              leaveFrom="opacity-100 scale-100"
-              leaveTo="opacity-0 scale-95"
-            >
-              <DialogPanel className="flex flex-col w-[95vw] max-w-[95vw] h-[92vh] transform overflow-hidden rounded-floating bg-surface p-6 text-left align-middle shadow-floating transition-all">
-                <DialogTitle
-                  as="h3"
-                  className="shrink-0 text-lg font-medium leading-6 text-fg flex items-center justify-between"
-                >
-                  {editingWidget ? 'Edit Widget' : 'Create New Widget'}
-                  <button
-                    type="button"
-                    onClick={handleClose}
-                    className="p-1 hover:bg-surface-2 rounded-control"
-                  >
-                    <X size={20} />
-                  </button>
-                </DialogTitle>
+          {/* Source URLs */}
+          <div>
+            <label className="block text-sm font-medium text-fg mb-1">
+              Source URLs
+            </label>
+            <SourceListEditor
+              sources={config.sources}
+              onChange={(sources) =>
+                setConfig((prev) => ({ ...prev, sources }))
+              }
+            />
+          </div>
 
-                <div className="mt-4 flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-2 gap-6 overflow-hidden">
-                  {/* Left Column - Configuration */}
-                  <div className="flex flex-col min-h-0 overflow-y-auto space-y-4 pr-2">
-                    {/* Widget Title */}
-                    <div>
-                      <label className="block text-sm font-medium text-fg mb-1">
-                        Widget Title
-                      </label>
-                      <input
-                        type="text"
-                        aria-label="Widget title"
-                        value={config.title}
-                        onChange={(e) =>
-                          setConfig((prev) => ({
-                            ...prev,
-                            title: e.target.value,
-                          }))
-                        }
-                        className="w-full px-3 py-2 border border-surface-2 rounded-control bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
-                        placeholder="Enter widget title..."
-                      />
-                      {errors.title && (
-                        <p className="text-xs text-danger mt-1">
-                          {errors.title}
-                        </p>
-                      )}
-                    </div>
+          {/* LLM Prompt */}
+          <div>
+            <label className="block text-sm font-medium text-fg mb-1">
+              LLM Prompt
+            </label>
+            <textarea
+              aria-label="LLM prompt"
+              value={config.prompt}
+              onChange={(e) =>
+                setConfig((prev) => ({
+                  ...prev,
+                  prompt: e.target.value,
+                }))
+              }
+              rows={8}
+              className="w-full px-3 py-2 border border-surface-2 rounded-control bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+              placeholder="Enter your prompt here..."
+            />
+            {errors.prompt && (
+              <p className="text-xs text-danger mt-1">{errors.prompt}</p>
+            )}
+          </div>
 
-                    {/* Source URLs */}
-                    <div>
-                      <label className="block text-sm font-medium text-fg mb-1">
-                        Source URLs
-                      </label>
-                      <SourceListEditor
-                        sources={config.sources}
-                        onChange={(sources) =>
-                          setConfig((prev) => ({ ...prev, sources }))
-                        }
-                      />
-                    </div>
+          {/* Provider and Model Selection */}
+          <div>
+            <label className="block text-sm font-medium text-fg mb-2">
+              Model & Provider
+            </label>
+            <ModelPicker
+              value={
+                {
+                  chatProvider: selectedModel?.provider ?? '',
+                  chatModel: selectedModel?.model ?? '',
+                  systemProvider: selectedModel?.provider ?? '',
+                  systemModel: selectedModel?.model ?? '',
+                } satisfies ModelSelection
+              }
+              onChange={(next) =>
+                setSelectedModel({
+                  provider: next.chatProvider,
+                  model: next.chatModel,
+                })
+              }
+            />
+            <p className="text-xs text-fg/60 mt-1">
+              Select the AI model and provider to process your widget content
+            </p>
+          </div>
 
-                    {/* LLM Prompt */}
-                    <div>
-                      <label className="block text-sm font-medium text-fg mb-1">
-                        LLM Prompt
-                      </label>
-                      <textarea
-                        aria-label="LLM prompt"
-                        value={config.prompt}
-                        onChange={(e) =>
-                          setConfig((prev) => ({
-                            ...prev,
-                            prompt: e.target.value,
-                          }))
-                        }
-                        rows={8}
-                        className="w-full px-3 py-2 border border-surface-2 rounded-control bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
-                        placeholder="Enter your prompt here..."
-                      />
-                      {errors.prompt && (
-                        <p className="text-xs text-danger mt-1">
-                          {errors.prompt}
-                        </p>
-                      )}
-                    </div>
+          {/* Tool Selection */}
+          <div>
+            <label className="block text-sm font-medium text-fg mb-2">
+              Available Tools
+            </label>
+            <ToolSelector
+              selectedToolNames={selectedTools}
+              onSelectedToolNamesChange={setSelectedTools}
+            />
+            <p className="text-xs text-fg/60 mt-1">
+              Select tools to assist the AI in processing your widget. Your
+              model must support tool calling.
+            </p>
+          </div>
 
-                    {/* Provider and Model Selection */}
-                    <div>
-                      <label className="block text-sm font-medium text-fg mb-2">
-                        Model & Provider
-                      </label>
-                      <ModelPicker
-                        value={
-                          {
-                            chatProvider: selectedModel?.provider ?? '',
-                            chatModel: selectedModel?.model ?? '',
-                            systemProvider: selectedModel?.provider ?? '',
-                            systemModel: selectedModel?.model ?? '',
-                          } satisfies ModelSelection
-                        }
-                        onChange={(next) =>
-                          setSelectedModel({
-                            provider: next.chatProvider,
-                            model: next.chatModel,
-                          })
-                        }
-                      />
-                      <p className="text-xs text-fg/60 mt-1">
-                        Select the AI model and provider to process your widget
-                        content
-                      </p>
-                    </div>
-
-                    {/* Tool Selection */}
-                    <div>
-                      <label className="block text-sm font-medium text-fg mb-2">
-                        Available Tools
-                      </label>
-                      <ToolSelector
-                        selectedToolNames={selectedTools}
-                        onSelectedToolNamesChange={setSelectedTools}
-                      />
-                      <p className="text-xs text-fg/60 mt-1">
-                        Select tools to assist the AI in processing your widget.
-                        Your model must support tool calling.
-                      </p>
-                    </div>
-
-                    {/* Refresh Frequency */}
-                    <div>
-                      <label className="block text-sm font-medium text-fg mb-1">
-                        Refresh Frequency
-                      </label>
-                      <div className="flex gap-2">
-                        <input
-                          type="number"
-                          aria-label="Refresh frequency"
-                          min="1"
-                          value={config.refreshFrequency}
-                          onChange={(e) =>
-                            setConfig((prev) => ({
-                              ...prev,
-                              refreshFrequency: parseInt(e.target.value) || 1,
-                            }))
-                          }
-                          className="flex-1 px-3 py-2 border border-surface-2 rounded-control bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
-                        />
-                        <select
-                          value={config.refreshUnit}
-                          onChange={(e) =>
-                            setConfig((prev) => ({
-                              ...prev,
-                              refreshUnit: e.target.value as
-                                | 'minutes'
-                                | 'hours',
-                            }))
-                          }
-                          className="px-3 py-2 border border-surface-2 rounded-control bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
-                        >
-                          <option value="minutes">Minutes</option>
-                          <option value="hours">Hours</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Right Column - Preview */}
-                  <div className="flex flex-col min-h-0 space-y-4">
-                    <div className="shrink-0 flex items-center justify-between">
-                      <h4 className="text-sm font-medium text-fg">Preview</h4>
-                      <div className="flex items-center gap-2">
-                        <div className="flex items-center gap-2">
-                          <Brain size={16} className="text-fg/70" />
-                          <span className="text-sm text-fg/80">Thinking</span>
-                          <Switch
-                            checked={showThinking}
-                            onChange={setShowThinking}
-                            className="bg-surface border border-surface-2 relative inline-flex h-5 w-10 sm:h-6 sm:w-11 items-center rounded-pill"
-                          >
-                            <span className="sr-only">Show thinking tags</span>
-                            <span
-                              className={`${
-                                showThinking
-                                  ? 'translate-x-6 bg-accent'
-                                  : 'translate-x-1 bg-fg/50'
-                              } inline-block h-3 w-3 sm:h-4 sm:w-4 transform rounded-pill transition-all duration-200`}
-                            />
-                          </Switch>
-                        </div>
-                        <Button
-                          variant="primary"
-                          icon={Play}
-                          loading={isPreviewLoading}
-                          onClick={handlePreview}
-                        >
-                          {isPreviewLoading ? 'Loading...' : 'Run Preview'}
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="flex-1 min-h-0 p-4 border border-surface-2 rounded-control bg-surface overflow-y-auto max-w-full">
-                      {previewContent ? (
-                        <WidgetContent
-                          content={previewContent}
-                          showThinking={showThinking}
-                          className="max-w-full"
-                        />
-                      ) : (
-                        <div className="text-sm text-fg/50 italic">
-                          Click &quot;Run Preview&quot; to see how your widget
-                          will look
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Variable Legend */}
-                    <div className="shrink-0 max-h-44 overflow-y-auto text-xs text-fg/70">
-                      <h5 className="font-medium mb-2">Available Variables:</h5>
-                      <div className="space-y-1">
-                        <div>
-                          <code className="bg-surface-2 px-1 rounded-control">
-                            {'{{current_utc_datetime}}'}
-                          </code>{' '}
-                          - Current UTC date and time
-                        </div>
-                        <div>
-                          <code className="bg-surface-2 px-1 rounded-control">
-                            {'{{current_local_datetime}}'}
-                          </code>{' '}
-                          - Current local date and time
-                        </div>
-                        <div>
-                          <code className="bg-surface-2 px-1 rounded-control">
-                            {'{{source_content_1}}'}
-                          </code>{' '}
-                          - Content from first source
-                        </div>
-                        <div>
-                          <code className="bg-surface-2 px-1 rounded-control">
-                            {'{{source_content_2}}'}
-                          </code>{' '}
-                          - Content from second source
-                        </div>
-                        <div>
-                          <code className="bg-surface-2 px-1 rounded-control">
-                            {'{{source_content_...}}'}
-                          </code>{' '}
-                          - Content from nth source
-                        </div>
-                        <div>
-                          <code className="bg-surface-2 px-1 rounded-control">
-                            {'{{location}}'}
-                          </code>{' '}
-                          - Your current location
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Action Buttons */}
-                <div className="shrink-0 mt-4 flex justify-end gap-3">
-                  <Button onClick={handleClose} size="lg">
-                    Cancel
-                  </Button>
-                  <Button
-                    variant="primary"
-                    size="lg"
-                    icon={Save}
-                    onClick={handleSave}
-                  >
-                    {editingWidget ? 'Update Widget' : 'Create Widget'}
-                  </Button>
-                </div>
-              </DialogPanel>
-            </TransitionChild>
+          {/* Refresh Frequency */}
+          <div>
+            <label className="block text-sm font-medium text-fg mb-1">
+              Refresh Frequency
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                aria-label="Refresh frequency"
+                min="1"
+                value={config.refreshFrequency}
+                onChange={(e) =>
+                  setConfig((prev) => ({
+                    ...prev,
+                    refreshFrequency: parseInt(e.target.value) || 1,
+                  }))
+                }
+                className="flex-1 px-3 py-2 border border-surface-2 rounded-control bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+              />
+              <select
+                value={config.refreshUnit}
+                onChange={(e) =>
+                  setConfig((prev) => ({
+                    ...prev,
+                    refreshUnit: e.target.value as 'minutes' | 'hours',
+                  }))
+                }
+                className="px-3 py-2 border border-surface-2 rounded-control bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+              >
+                <option value="minutes">Minutes</option>
+                <option value="hours">Hours</option>
+              </select>
+            </div>
           </div>
         </div>
-      </Dialog>
-    </Transition>
+
+        {/* Right Column - Preview */}
+        <div className="flex flex-col min-h-0 space-y-4">
+          <div className="shrink-0 flex items-center justify-between">
+            <h4 className="text-sm font-medium text-fg">Preview</h4>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2">
+                <Brain size={16} className="text-fg/70" />
+                <span className="text-sm text-fg/80">Thinking</span>
+                <Switch
+                  checked={showThinking}
+                  onChange={setShowThinking}
+                  className="bg-surface border border-surface-2 relative inline-flex h-5 w-10 sm:h-6 sm:w-11 items-center rounded-pill"
+                >
+                  <span className="sr-only">Show thinking tags</span>
+                  <span
+                    className={`${
+                      showThinking
+                        ? 'translate-x-6 bg-accent'
+                        : 'translate-x-1 bg-fg/50'
+                    } inline-block h-3 w-3 sm:h-4 sm:w-4 transform rounded-pill transition-all duration-200`}
+                  />
+                </Switch>
+              </div>
+              <Button
+                variant="primary"
+                icon={Play}
+                loading={isPreviewLoading}
+                onClick={handlePreview}
+              >
+                {isPreviewLoading ? 'Loading...' : 'Run Preview'}
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex-1 min-h-0 p-4 border border-surface-2 rounded-control bg-surface overflow-y-auto max-w-full">
+            {previewContent ? (
+              <WidgetContent
+                content={previewContent}
+                showThinking={showThinking}
+                className="max-w-full"
+              />
+            ) : (
+              <div className="text-sm text-fg/50 italic">
+                Click &quot;Run Preview&quot; to see how your widget will look
+              </div>
+            )}
+          </div>
+
+          {/* Variable Legend */}
+          <div className="shrink-0 max-h-44 overflow-y-auto text-xs text-fg/70">
+            <h5 className="font-medium mb-2">Available Variables:</h5>
+            <div className="space-y-1">
+              <div>
+                <code className="bg-surface-2 px-1 rounded-control">
+                  {'{{current_utc_datetime}}'}
+                </code>{' '}
+                - Current UTC date and time
+              </div>
+              <div>
+                <code className="bg-surface-2 px-1 rounded-control">
+                  {'{{current_local_datetime}}'}
+                </code>{' '}
+                - Current local date and time
+              </div>
+              <div>
+                <code className="bg-surface-2 px-1 rounded-control">
+                  {'{{source_content_1}}'}
+                </code>{' '}
+                - Content from first source
+              </div>
+              <div>
+                <code className="bg-surface-2 px-1 rounded-control">
+                  {'{{source_content_2}}'}
+                </code>{' '}
+                - Content from second source
+              </div>
+              <div>
+                <code className="bg-surface-2 px-1 rounded-control">
+                  {'{{source_content_...}}'}
+                </code>{' '}
+                - Content from nth source
+              </div>
+              <div>
+                <code className="bg-surface-2 px-1 rounded-control">
+                  {'{{location}}'}
+                </code>{' '}
+                - Your current location
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Modal>
   );
 };
 

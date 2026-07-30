@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import PageHeader from '@/components/PageHeader';
 import { Button } from '@/components/ui/Button';
+import Modal from '@/components/ui/Modal';
 import WorkspaceIcon from '@/components/Workspaces/WorkspaceIcon';
 import WorkspaceSettingsFields, {
   WorkspaceModelOverrideField,
@@ -23,6 +24,8 @@ interface CreateModalProps {
   onClose: () => void;
   onCreated: () => void;
 }
+
+const FORM_ID = 'new-workspace-form';
 
 const CreateModal = ({ onClose, onCreated }: CreateModalProps) => {
   const router = useRouter();
@@ -66,54 +69,62 @@ const CreateModal = ({ onClose, onCreated }: CreateModalProps) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay">
-      <div className="bg-surface rounded-floating border border-surface-2 p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <h2 className="text-lg font-medium mb-4">New Workspace</h2>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-          <WorkspaceSettingsFields
-            name={name}
-            onNameChange={setName}
-            description={description}
-            onDescriptionChange={setDescription}
-            color={color}
-            icon={icon}
-            onAppearanceChange={(next) => {
-              setColor(next.color);
-              setIcon(next.icon);
-            }}
-            autoMemory={autoMemory}
-            onAutoMemoryChange={setAutoMemory}
-            autoAcceptFileEdits={autoAcceptFileEdits}
-            onAutoAcceptFileEditsChange={setAutoAcceptFileEdits}
-            autoFocusName
-          />
-          <WorkspaceModelOverrideField
-            useCustomModels={useCustomModels}
-            onUseCustomModelsChange={(enabled) => {
-              setUseCustomModels(enabled);
-              if (enabled)
-                setModelOverride((prev) => prev ?? captureCurrentSelection());
-            }}
-            modelOverride={modelOverride}
-            onModelOverrideChange={setModelOverride}
-          />
-          {error && <p className="text-xs text-danger">{error}</p>}
-          <div className="flex justify-end gap-2 mt-1">
-            <Button variant="ghost" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              disabled={!name.trim()}
-              loading={createWorkspace.isPending}
-            >
-              Create
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <Modal
+      open
+      onClose={onClose}
+      title="New Workspace"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form={FORM_ID}
+            variant="primary"
+            disabled={!name.trim()}
+            loading={createWorkspace.isPending}
+          >
+            Create
+          </Button>
+        </>
+      }
+    >
+      <form
+        id={FORM_ID}
+        onSubmit={handleSubmit}
+        className="flex flex-col gap-3"
+      >
+        <WorkspaceSettingsFields
+          name={name}
+          onNameChange={setName}
+          description={description}
+          onDescriptionChange={setDescription}
+          color={color}
+          icon={icon}
+          onAppearanceChange={(next) => {
+            setColor(next.color);
+            setIcon(next.icon);
+          }}
+          autoMemory={autoMemory}
+          onAutoMemoryChange={setAutoMemory}
+          autoAcceptFileEdits={autoAcceptFileEdits}
+          onAutoAcceptFileEditsChange={setAutoAcceptFileEdits}
+          autoFocusName
+        />
+        <WorkspaceModelOverrideField
+          useCustomModels={useCustomModels}
+          onUseCustomModelsChange={(enabled) => {
+            setUseCustomModels(enabled);
+            if (enabled)
+              setModelOverride((prev) => prev ?? captureCurrentSelection());
+          }}
+          modelOverride={modelOverride}
+          onModelOverrideChange={setModelOverride}
+        />
+        {error && <p className="text-xs text-danger">{error}</p>}
+      </form>
+    </Modal>
   );
 };
 

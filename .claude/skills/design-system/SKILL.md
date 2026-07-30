@@ -45,6 +45,15 @@ Use `animate-spin` from Tailwind for continuous rotation (spinners).
 - Non-`<button>` triggers (a `<Link>` styled as a button) use the exported `buttonClasses(variant, size)`
 - Out of scope: bare icon-only buttons, tab strips, sidebar links and chips still style themselves
 
+## Modals
+
+`src/components/ui/Modal.tsx` is the **only** dialog shell — never hand-roll a `fixed inset-0` scrim, and never reach for headlessui's `Dialog`/`DialogPanel` directly. It supplies the focus trap, `role="dialog"`, Escape, background inerting and the fade/scale transition.
+
+- `size`: `sm` (`max-w-md`) · `md` (default, `max-w-2xl`) · `lg` (`max-w-4xl`) · `xl` (`max-w-5xl`) · `full` (`w-[95vw] h-[92vh]`). Never pass a width class — pick a size. Non-`full` sizes cap at `max-h-[85vh]`; `xl`/`full` go edge-to-edge below `lg`.
+- `title` renders the header bar and its close `X`; omit it for a panel with no chrome (a warning band, a consent gate).
+- `footer` renders the `justify-end` action row — put the `Button`s there, not in the body. A footer submit for a body `<form>` uses `form={id}`.
+- The body scrolls and is padded (`p-5`); override via `bodyClassName` (e.g. `overflow-hidden p-0` when the content manages its own scroll).
+
 ## Loading indicators
 
 - Use `<LoaderCircle className="animate-spin ..." />` from `lucide-react` for all loading spinners.
@@ -61,7 +70,8 @@ Use `animate-spin` from Tailwind for continuous rotation (spinners).
 - **ALWAYS** use the 4px Tailwind spacing scale; the most common values in this codebase are `py-2 px-3`, `gap-2`, `p-2`, `p-4`. Match neighbors.
 - **ALWAYS** default body text to `text-sm` at normal weight (`400`); use `font-medium` (`500`) for emphasis and `font-semibold` (`600`) for headings.
 - **ALWAYS** pair `transition-colors` with `duration-150` (or `100`/`200`) for hover/focus states.
-- **ALWAYS** use `bg-overlay` (or `bg-overlay-strong`) for modal/dialog/popover scrims and backdrops — it's a theme-aware dark scrim. This is what every modal here uses (`SettingsDialog`, `WorkspaceModal`, `WidgetConfigModal`, etc.).
+- **ALWAYS** use the `Modal` primitive (`src/components/ui/Modal.tsx`) for any dialog — it already owns the `bg-overlay` scrim, panel chrome, sizing and accessibility.
+- **ALWAYS** use `bg-overlay` (or `bg-overlay-strong`) for popover scrims and backdrops outside `Modal` — it's a theme-aware dark scrim.
 - **ALWAYS** add new tokens to `@theme` in `src/app/globals.css` if a needed semantic doesn't yet exist — extend the system rather than reach for a raw value.
 
 ## NEVER

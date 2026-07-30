@@ -14,15 +14,8 @@ export class WorkspaceDetailPage extends BasePage {
     'button[title="Workspace settings"]',
   );
 
-  /**
-   * The settings modal (WorkspaceModal) panel. Scoped to the element that
-   * contains the modal's Close button — the Models section's ModelPicker
-   * renders its own `rounded-floating` popover-trigger buttons inside this
-   * same overlay, which would otherwise also match `[class*="rounded-floating"]`.
-   */
-  private readonly settingsModal = this.page.locator(
-    '.fixed.inset-0.z-50 [class*="rounded-floating"]:has(button[aria-label="Close"])',
-  );
+  /** The settings modal — the shared `Modal` primitive's `role="dialog"` root. */
+  private readonly settingsModal = this.page.getByRole('dialog');
 
   async goto(id: string) {
     await super.goto(`/workspaces/${id}`);

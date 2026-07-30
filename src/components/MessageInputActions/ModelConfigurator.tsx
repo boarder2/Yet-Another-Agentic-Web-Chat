@@ -1,16 +1,15 @@
 import { useMemo, useState } from 'react';
 import { Cpu, SlidersHorizontal } from 'lucide-react';
 import {
-  Dialog,
-  DialogPanel,
   Popover,
   PopoverButton,
   PopoverPanel,
   Transition,
-  TransitionChild,
 } from '@headlessui/react';
 import { Fragment } from 'react';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/Button';
+import Modal from '@/components/ui/Modal';
 import {
   useLocalStorageBoolean,
   useLocalStorageString,
@@ -286,63 +285,27 @@ export default function ModelConfigurator({
         </button>
       )}
 
-      <Transition show={open} as={Fragment}>
-        <Dialog onClose={() => setOpen(false)} className="relative z-50">
-          <TransitionChild
-            as={Fragment}
-            enter="transition-opacity ease-out duration-200"
-            enterFrom="opacity-0"
-            enterTo="opacity-100"
-            leave="transition-opacity ease-in duration-150"
-            leaveFrom="opacity-100"
-            leaveTo="opacity-0"
-          >
-            <div className="fixed inset-0 bg-overlay" />
-          </TransitionChild>
-
-          <div className="fixed inset-0 flex items-center justify-center p-4">
-            <TransitionChild
-              as={Fragment}
-              enter="transition ease-out duration-200"
-              enterFrom="opacity-0 translate-y-1"
-              enterTo="opacity-100 translate-y-0"
-              leave="transition ease-in duration-150"
-              leaveFrom="opacity-100 translate-y-0"
-              leaveTo="opacity-0 translate-y-1"
-            >
-              <DialogPanel className="w-full max-w-lg rounded-surface bg-surface border border-surface-2 shadow-raised">
-                <div className="px-5 py-4 border-b border-surface-2">
-                  <h2 className="text-sm font-semibold text-fg/90">
-                    Model Configuration
-                  </h2>
-                  <p className="text-xs text-fg/60 mt-1">
-                    Choose the Chat and System models, or apply a preset.
-                  </p>
-                </div>
-                <div className="p-5">
-                  <ModelPicker
-                    value={value}
-                    onChange={handleChange}
-                    fields={{ system: true, vision: true, contextWindow: true }}
-                    presets="full"
-                    layout="dialog"
-                  />
-                </div>
-
-                <div className="px-5 py-3 border-t border-surface-2 flex justify-end gap-2">
-                  <button
-                    type="button"
-                    className="px-3 py-1.5 text-sm rounded-control bg-surface-2 hover:bg-surface-2/80 text-fg/80"
-                    onClick={() => setOpen(false)}
-                  >
-                    Close
-                  </button>
-                </div>
-              </DialogPanel>
-            </TransitionChild>
-          </div>
-        </Dialog>
-      </Transition>
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Model Configuration"
+        footer={
+          <Button variant="secondary" onClick={() => setOpen(false)}>
+            Close
+          </Button>
+        }
+      >
+        <p className="text-xs text-fg/60 mb-4">
+          Choose the Chat and System models, or apply a preset.
+        </p>
+        <ModelPicker
+          value={value}
+          onChange={handleChange}
+          fields={{ system: true, vision: true, contextWindow: true }}
+          presets="full"
+          layout="dialog"
+        />
+      </Modal>
     </>
   );
 }

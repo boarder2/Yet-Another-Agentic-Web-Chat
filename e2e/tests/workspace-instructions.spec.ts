@@ -1,7 +1,7 @@
 import { test, expect } from '../fixtures';
 import { seedWorkspace } from '../utils/seed';
 
-const MODAL = '.fixed.inset-0.z-50';
+const MODAL = '[role="dialog"]';
 
 test.describe('workspace instructions editing', () => {
   test('opens to a rendered preview, then edits and saves', async ({

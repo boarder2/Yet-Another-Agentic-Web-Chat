@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { Button } from '@/components/ui/Button';
+import ApprovalPanel, { ApprovalChip } from '@/components/ui/ApprovalPanel';
 import { BookOpen, X, Check, Ban } from 'lucide-react';
 
 export type { PendingSkillEditApproval } from '@/lib/streaming/chatState';
@@ -206,125 +207,106 @@ export function SkillEditApproval({
   }
 
   return (
-    <div className="mb-2 border border-surface-2 rounded-floating overflow-hidden bg-surface shadow-raised flex flex-col max-h-[calc(100svh-16rem)]">
-      {/* Header */}
-      <div className="shrink-0 flex items-center justify-between px-5 py-3 bg-surface-2/70">
-        <div className="flex items-center gap-2">
-          <BookOpen size={16} className="text-accent" />
-          <span className="text-sm font-semibold text-fg">{actionLabel}</span>
-          <code className="text-xs bg-surface px-1.5 py-0.5 rounded-control text-fg/80 border border-surface-2">
-            {name}
-          </code>
-          <span className="text-xs text-fg/50 bg-surface-2 px-2 py-0.5 rounded-pill">
+    <ApprovalPanel
+      icon={BookOpen}
+      title={actionLabel}
+      chips={
+        <>
+          <ApprovalChip>{name}</ApprovalChip>
+          <span className="shrink-0 text-xs text-fg/50 bg-surface-2 px-2 py-0.5 rounded-pill">
             {scope}
           </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-fg/40">Waiting on input</span>
-          <button
-            type="button"
-            onClick={() => handleDecide('reject')}
-            className="p-1 rounded-control hover:bg-surface-2 transition-colors text-fg/50 hover:text-fg"
-            aria-label="Dismiss"
+        </>
+      }
+      onDismiss={() => handleDecide('reject')}
+      footer={
+        <>
+          {showRejectInput ? (
+            <button
+              type="button"
+              onClick={handleRejectSubmit}
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-surface bg-danger-soft text-danger hover:bg-danger-soft border border-danger transition-colors"
+            >
+              <Ban size={14} />
+              Send rejection
+            </button>
+          ) : (
+            <Button size="lg" icon={X} onClick={() => setShowRejectInput(true)}>
+              Reject
+            </Button>
+          )}
+          <Button
+            variant="primary"
+            size="lg"
+            icon={Check}
+            onClick={() => handleDecide('accept')}
           >
-            <X size={14} />
-          </button>
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="overflow-y-auto flex-1 min-h-0">
-        {action === 'delete' ? (
-          <div className="px-5 py-4 text-sm text-fg/70 border-b border-surface-2">
-            This will permanently delete the skill <strong>{name}</strong>.
-          </div>
-        ) : null}
-
-        {changes.length > 0 && (
-          <dl className="px-5 py-3 border-b border-surface-2 space-y-1">
-            {changes.map(({ label, value }) => (
-              <div key={label} className="flex items-baseline gap-2 text-sm">
-                <dt className="text-xs text-fg/50 w-20 shrink-0">{label}</dt>
-                <dd className="text-fg">{value}</dd>
-              </div>
-            ))}
-          </dl>
-        )}
-
-        {action !== 'delete' && !showDiff && changes.length === 0 && (
-          <div className="px-5 py-4 text-sm text-fg/60 border-b border-surface-2">
-            No changes — <strong className="text-fg">{name}</strong> already
-            matches this proposal.
-          </div>
-        )}
-
-        {action !== 'delete' && showDiff ? (
-          <div className="border-b border-surface-2">
-            {oldDescription !== newDescription && (
-              <div className="px-5 py-2 border-b border-surface-2">
-                <p className="text-xs text-fg/50 mb-1">Description</p>
-                <DiffView
-                  oldString={oldDescription}
-                  newString={newDescription}
-                />
-              </div>
-            )}
-            {oldContent !== newContent && (
-              <div>
-                <p className="text-xs text-fg/50 px-5 pt-2">Content</p>
-                <DiffView oldString={oldContent} newString={newContent} />
-              </div>
-            )}
-          </div>
-        ) : null}
-
-        {showRejectInput && (
-          <div className="px-5 py-3 border-b border-surface-2">
-            <textarea
-              autoFocus
-              aria-label="Rejection reason"
-              value={rejectText}
-              onChange={(e) => setRejectText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleRejectSubmit();
-                }
-                if (e.key === 'Escape') setShowRejectInput(false);
-              }}
-              placeholder="Optional: tell the agent why you rejected this…"
-              className="w-full bg-surface-2/50 border border-surface-2 rounded-surface px-3 py-2 text-sm text-fg placeholder:text-fg/30 focus:outline-none focus:border-accent resize-none"
-              rows={2}
-            />
-          </div>
-        )}
-      </div>
-
-      {/* Actions */}
-      <div className="shrink-0 flex flex-wrap gap-2 justify-end px-5 py-3 bg-surface border-t border-surface-2">
-        {showRejectInput ? (
-          <button
-            type="button"
-            onClick={handleRejectSubmit}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-surface bg-danger-soft text-danger hover:bg-danger-soft border border-danger transition-colors"
-          >
-            <Ban size={14} />
-            Send rejection
-          </button>
-        ) : (
-          <Button size="lg" icon={X} onClick={() => setShowRejectInput(true)}>
-            Reject
+            Accept
           </Button>
-        )}
-        <Button
-          variant="primary"
-          size="lg"
-          icon={Check}
-          onClick={() => handleDecide('accept')}
-        >
-          Accept
-        </Button>
-      </div>
-    </div>
+        </>
+      }
+    >
+      {action === 'delete' ? (
+        <div className="px-5 py-4 text-sm text-fg/70 border-b border-surface-2">
+          This will permanently delete the skill <strong>{name}</strong>.
+        </div>
+      ) : null}
+
+      {changes.length > 0 && (
+        <dl className="px-5 py-3 border-b border-surface-2 space-y-1">
+          {changes.map(({ label, value }) => (
+            <div key={label} className="flex items-baseline gap-2 text-sm">
+              <dt className="text-xs text-fg/50 w-20 shrink-0">{label}</dt>
+              <dd className="text-fg">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+
+      {action !== 'delete' && !showDiff && changes.length === 0 && (
+        <div className="px-5 py-4 text-sm text-fg/60 border-b border-surface-2">
+          No changes — <strong className="text-fg">{name}</strong> already
+          matches this proposal.
+        </div>
+      )}
+
+      {action !== 'delete' && showDiff ? (
+        <div className="border-b border-surface-2">
+          {oldDescription !== newDescription && (
+            <div className="px-5 py-2 border-b border-surface-2">
+              <p className="text-xs text-fg/50 mb-1">Description</p>
+              <DiffView oldString={oldDescription} newString={newDescription} />
+            </div>
+          )}
+          {oldContent !== newContent && (
+            <div>
+              <p className="text-xs text-fg/50 px-5 pt-2">Content</p>
+              <DiffView oldString={oldContent} newString={newContent} />
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      {showRejectInput && (
+        <div className="px-5 py-3 border-b border-surface-2">
+          <textarea
+            autoFocus
+            aria-label="Rejection reason"
+            value={rejectText}
+            onChange={(e) => setRejectText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleRejectSubmit();
+              }
+              if (e.key === 'Escape') setShowRejectInput(false);
+            }}
+            placeholder="Optional: tell the agent why you rejected this…"
+            className="w-full bg-surface-2/50 border border-surface-2 rounded-surface px-3 py-2 text-sm text-fg placeholder:text-fg/30 focus:outline-none focus:border-accent resize-none"
+            rows={2}
+          />
+        </div>
+      )}
+    </ApprovalPanel>
   );
 }

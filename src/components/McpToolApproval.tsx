@@ -2,7 +2,8 @@
 
 import { useState, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/Button';
-import { Plug, X, Check, Ban, ShieldCheck } from 'lucide-react';
+import ApprovalPanel, { ApprovalChip } from '@/components/ui/ApprovalPanel';
+import { Plug, Check, Ban, ShieldCheck } from 'lucide-react';
 
 export type { PendingMcpApproval } from '@/lib/streaming/chatState';
 
@@ -50,35 +51,44 @@ export function McpToolApproval({
   const hasArgs = Object.keys(args).length > 0;
 
   return (
-    <div className="mb-2 border border-surface-2 rounded-floating overflow-hidden bg-surface shadow-raised flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between px-5 py-3 bg-surface-2/70">
-        <div className="flex items-center gap-2">
-          <Plug size={16} className="text-accent" />
-          <span className="text-sm font-semibold text-fg">Run MCP tool</span>
-          <code className="text-xs bg-surface px-1.5 py-0.5 rounded-control text-fg/80 border border-surface-2">
-            {serverName}
-          </code>
-          <code className="text-xs bg-surface px-1.5 py-0.5 rounded-control text-fg/80 border border-surface-2">
-            {toolName}
-          </code>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-fg/40">Waiting on input</span>
-          <button
-            type="button"
-            onClick={() => handleDecide(false)}
-            className="p-1 rounded-control hover:bg-surface-2 transition-colors duration-150 text-fg/50 hover:text-fg"
-            aria-label="Dismiss"
+    <ApprovalPanel
+      icon={Plug}
+      title="Run MCP tool"
+      chips={
+        <>
+          <ApprovalChip>{serverName}</ApprovalChip>
+          <ApprovalChip>{toolName}</ApprovalChip>
+        </>
+      }
+      onDismiss={() => handleDecide(false)}
+      footer={
+        <>
+          <Button size="lg" icon={Ban} onClick={() => handleDecide(false)}>
+            Decline
+          </Button>
+          {serverId && (
+            <Button
+              size="lg"
+              icon={ShieldCheck}
+              onClick={() => handleDecide(true, { alwaysAllow: true })}
+              title="Approve and auto-run this tool from now on (set in Settings → MCP Servers)"
+            >
+              Always allow
+            </Button>
+          )}
+          <Button
+            variant="primary"
+            size="lg"
+            icon={Check}
+            onClick={() => handleDecide(true)}
           >
-            <X size={14} />
-          </button>
-        </div>
-      </div>
-
-      {/* Content */}
+            Approve
+          </Button>
+        </>
+      }
+    >
       {(description || hasArgs) && (
-        <div className="px-5 py-3 border-t border-surface-2 space-y-2">
+        <div className="px-5 py-3 space-y-2">
           {description && (
             <p className="text-xs text-fg/60 line-clamp-3" title={description}>
               {description}
@@ -94,31 +104,6 @@ export function McpToolApproval({
           )}
         </div>
       )}
-
-      {/* Actions */}
-      <div className="flex flex-wrap gap-2 justify-end px-5 py-3 bg-surface border-t border-surface-2">
-        <Button size="lg" icon={Ban} onClick={() => handleDecide(false)}>
-          Decline
-        </Button>
-        {serverId && (
-          <Button
-            size="lg"
-            icon={ShieldCheck}
-            onClick={() => handleDecide(true, { alwaysAllow: true })}
-            title="Approve and auto-run this tool from now on (set in Settings → MCP Servers)"
-          >
-            Always allow
-          </Button>
-        )}
-        <Button
-          variant="primary"
-          size="lg"
-          icon={Check}
-          onClick={() => handleDecide(true)}
-        >
-          Approve
-        </Button>
-      </div>
-    </div>
+    </ApprovalPanel>
   );
 }

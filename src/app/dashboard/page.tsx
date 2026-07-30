@@ -21,7 +21,7 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card';
+} from '@/components/ui/Card';
 import WidgetDisplay from '@/components/dashboard/WidgetDisplay';
 import WidgetModals from '@/components/dashboard/WidgetModals';
 import PageHeader from '@/components/PageHeader';

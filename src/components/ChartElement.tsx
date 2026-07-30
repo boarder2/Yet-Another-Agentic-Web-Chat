@@ -1,5 +1,6 @@
 import ChartWidget from './ChartWidget';
 import { useChartSpec } from '@/lib/chart/ChartSpecContext';
+import { Card } from '@/components/ui/Card';
 
 /**
  * Resolves a `<Chart id="…"/>` placement against the specs streamed for the
@@ -10,9 +11,9 @@ const ChartElement = ({ id }: { id?: string }) => {
   if (!id) return null;
   if (!spec) {
     return (
-      <div className="my-3 bg-surface border border-surface-2 rounded-surface px-4 py-3 text-sm text-fg/60 italic">
+      <Card className="my-3 px-4 py-3 text-sm text-fg/60 italic">
         Loading chart…
-      </div>
+      </Card>
     );
   }
   return <ChartWidget spec={spec} />;

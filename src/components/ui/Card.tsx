@@ -2,6 +2,8 @@ import React from 'react';
 import { cn } from '@/lib/utils';
 
 interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
+  /** `surface` (default) for cards; `floating` for outer containers wrapping nested cards. */
+  radius?: 'surface' | 'floating';
   children: React.ReactNode;
 }
 
@@ -26,11 +28,12 @@ interface CardDescriptionProps extends React.HTMLAttributes<HTMLParagraphElement
 }
 
 const Card = React.forwardRef<HTMLDivElement, CardProps>(
-  ({ className, children, ...props }, ref) => (
+  ({ className, radius = 'surface', children, ...props }, ref) => (
     <div
       ref={ref}
       className={cn(
-        'rounded-surface border border-surface-2 bg-surface text-fg shadow-resting',
+        'border border-surface-2 bg-surface text-fg',
+        radius === 'floating' ? 'rounded-floating' : 'rounded-surface',
         className,
       )}
       {...props}
@@ -45,7 +48,7 @@ const CardHeader = React.forwardRef<HTMLDivElement, CardHeaderProps>(
   ({ className, children, ...props }, ref) => (
     <div
       ref={ref}
-      className={cn('flex flex-col space-y-1.5 p-6', className)}
+      className={cn('flex flex-col space-y-1.5 p-4', className)}
       {...props}
     >
       {children}
@@ -56,14 +59,7 @@ CardHeader.displayName = 'CardHeader';
 
 const CardTitle = React.forwardRef<HTMLParagraphElement, CardTitleProps>(
   ({ className, children, ...props }, ref) => (
-    <h3
-      ref={ref}
-      className={cn(
-        'text-2xl font-semibold leading-none tracking-tight',
-        className,
-      )}
-      {...props}
-    >
+    <h3 ref={ref} className={cn('text-lg font-medium', className)} {...props}>
       {children}
     </h3>
   ),
@@ -82,7 +78,7 @@ CardDescription.displayName = 'CardDescription';
 
 const CardContent = React.forwardRef<HTMLDivElement, CardContentProps>(
   ({ className, children, ...props }, ref) => (
-    <div ref={ref} className={cn('p-6 pt-0', className)} {...props}>
+    <div ref={ref} className={cn('p-4 pt-0', className)} {...props}>
       {children}
     </div>
   ),
@@ -93,7 +89,7 @@ const CardFooter = React.forwardRef<HTMLDivElement, CardFooterProps>(
   ({ className, children, ...props }, ref) => (
     <div
       ref={ref}
-      className={cn('flex items-center p-6 pt-0', className)}
+      className={cn('flex items-center p-4 pt-0', className)}
       {...props}
     >
       {children}

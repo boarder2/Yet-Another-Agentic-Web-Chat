@@ -2,12 +2,13 @@
 
 import { useState } from 'react';
 import { CodeBlock } from './CodeBlock';
+import ApprovalPanel from '@/components/ui/ApprovalPanel';
 import {
   CodeExecutionWarning,
   hasAcceptedWarning,
   acceptWarning,
 } from './CodeExecutionWarning';
-import { Terminal, X } from 'lucide-react';
+import { Terminal } from 'lucide-react';
 
 export type { PendingExecution } from '@/lib/streaming/chatState';
 
@@ -73,60 +74,14 @@ export function CodeExecutionApproval({
   }
 
   return (
-    <div className="mb-2 border border-surface-2 rounded-floating overflow-hidden bg-surface shadow-raised">
-      <div className="flex items-center justify-between px-5 py-3 bg-surface-2/70">
-        <div className="flex items-center gap-2">
-          <Terminal size={16} className="text-accent" />
-          <span className="text-sm font-semibold text-fg">
-            Code Execution Request
-          </span>
-          {queueTotal && queueTotal > 1 && (
-            <span className="text-xs font-medium text-fg/60 bg-surface-2 px-2 py-0.5 rounded-pill">
-              {queuePosition} of {queueTotal}
-            </span>
-          )}
-        </div>
-        <button
-          type="button"
-          onClick={() => sendApproval(false)}
-          className="p-1 rounded-control hover:bg-surface-2 transition-colors text-fg/50 hover:text-fg"
-          aria-label="Dismiss"
-        >
-          <X size={14} />
-        </button>
-      </div>
-      {description && (
-        <div className="px-5 py-2 text-sm text-fg/70 border-b border-surface-2 bg-surface-2/30">
-          {description}
-        </div>
-      )}
-      <div className="max-h-[75vh] overflow-y-auto">
-        <CodeBlock className="language-javascript">{code}</CodeBlock>
-      </div>
-      {denying && (
-        <div className="px-5 py-3 border-t border-surface-2 bg-surface-2/30">
-          <label className="block text-xs font-medium text-fg/70 mb-1.5">
-            Tell the assistant what to do differently (optional)
-          </label>
-          <textarea
-            autoFocus
-            aria-label="Reason for denial"
-            value={denyReason}
-            onChange={(e) => setDenyReason(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                e.preventDefault();
-                sendApproval(false, denyReason.trim() || undefined);
-              }
-            }}
-            placeholder="e.g. don't fetch from the network; use a smaller input; try a different approach..."
-            className="w-full bg-surface border border-surface-2 rounded-surface px-3 py-2 text-sm text-fg placeholder:text-fg/30 focus:outline-none focus:border-accent resize-none"
-            rows={3}
-          />
-        </div>
-      )}
-      <div className="flex gap-2 justify-end px-5 py-3 border-t border-surface-2 bg-surface">
-        {denying ? (
+    <ApprovalPanel
+      icon={Terminal}
+      title="Code Execution Request"
+      queuePosition={queuePosition}
+      queueTotal={queueTotal}
+      onDismiss={() => sendApproval(false)}
+      footer={
+        denying ? (
           <>
             <button
               type="button"
@@ -165,8 +120,37 @@ export function CodeExecutionApproval({
               Run
             </button>
           </>
-        )}
-      </div>
-    </div>
+        )
+      }
+    >
+      {description && (
+        <div className="px-5 py-2 text-sm text-fg/70 border-b border-surface-2 bg-surface-2/30">
+          {description}
+        </div>
+      )}
+      <CodeBlock className="language-javascript">{code}</CodeBlock>
+      {denying && (
+        <div className="px-5 py-3 border-t border-surface-2 bg-surface-2/30">
+          <label className="block text-xs font-medium text-fg/70 mb-1.5">
+            Tell the assistant what to do differently (optional)
+          </label>
+          <textarea
+            autoFocus
+            aria-label="Reason for denial"
+            value={denyReason}
+            onChange={(e) => setDenyReason(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                sendApproval(false, denyReason.trim() || undefined);
+              }
+            }}
+            placeholder="e.g. don't fetch from the network; use a smaller input; try a different approach..."
+            className="w-full bg-surface border border-surface-2 rounded-surface px-3 py-2 text-sm text-fg placeholder:text-fg/30 focus:outline-none focus:border-accent resize-none"
+            rows={3}
+          />
+        </div>
+      )}
+    </ApprovalPanel>
   );
 }

@@ -19,6 +19,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { ChartSpec, ChartSpecSchema } from '@/lib/chart/chartSpec';
+import { Card } from '@/components/ui/Card';
 
 // Design-system-compatible series palette.
 // These are Tailwind CSS variables from the YAAWC design system.
@@ -334,7 +335,7 @@ export default function ChartWidget({ spec }: ChartWidgetProps) {
   const validSpec = validation.data;
 
   return (
-    <div className="my-3 bg-surface border border-surface-2 rounded-surface overflow-hidden">
+    <Card className="my-3 overflow-hidden">
       {validSpec.title && (
         <div className="px-4 pt-3 pb-1 text-sm font-semibold text-fg">
           {validSpec.title}
@@ -343,6 +344,6 @@ export default function ChartWidget({ spec }: ChartWidgetProps) {
       <div className="px-2 py-3">
         <ChartWidgetInner spec={validSpec} />
       </div>
-    </div>
+    </Card>
   );
 }

@@ -6,6 +6,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import { LoaderCircle, TriangleAlert } from 'lucide-react';
 import MarkdownRenderer from '@/components/MarkdownRenderer';
+import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import DocEditActions from './DocEditActions';
 
@@ -182,19 +183,19 @@ export default function FileViewer({
 
       {isBinary ? (
         meta.mime?.startsWith('image/') ? (
-          <div className="bg-surface rounded-floating border border-surface-2 p-4 flex justify-center">
+          <Card radius="floating" className="p-4 flex justify-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={`/api/workspaces/${workspaceId}/files/${fileId}?raw=true`}
               alt={meta.name}
               className="max-w-full max-h-[70vh] rounded-surface object-contain"
             />
-          </div>
+          </Card>
         ) : (
-          <p className="text-fg/50 text-sm bg-surface rounded-floating border border-surface-2 p-4">
+          <Card radius="floating" className="text-fg/50 text-sm p-4">
             Binary file ({meta.mime ?? 'unknown'}). Editing not supported.
             Replace by deleting and re-uploading with the same name.
-          </p>
+          </Card>
         )
       ) : editing ? (
         <CodeEditor
@@ -205,9 +206,9 @@ export default function FileViewer({
           ariaLabel="File content"
         />
       ) : isMarkdownFile(meta.name) ? (
-        <div className="prose-sm bg-surface rounded-floating border border-surface-2 p-6">
+        <Card radius="floating" className="prose-sm p-6">
           <MarkdownRenderer content={content} />
-        </div>
+        </Card>
       ) : (
         <div className="rounded-floating overflow-hidden">
           <SyntaxHighlighter

@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { Button } from '@/components/ui/Button';
+import ApprovalPanel, { ApprovalChip } from '@/components/ui/ApprovalPanel';
 import { FileText, X, Check, CheckCheck, Ban, Bell } from 'lucide-react';
 
 export type { PendingEditApproval } from '@/lib/streaming/chatState';
@@ -193,125 +194,102 @@ export function WorkspaceEditApproval({
   const actionLabel = action === 'create' ? 'Create file' : 'Edit file';
 
   return (
-    <div className="mb-2 border border-surface-2 rounded-floating overflow-hidden bg-surface shadow-raised flex flex-col max-h-[calc(100svh-16rem)]">
-      {/* Header */}
-      <div className="shrink-0 flex items-center justify-between px-5 py-3 bg-surface-2/70">
-        <div className="flex items-center gap-2">
-          <FileText size={16} className="text-accent" />
-          <span className="text-sm font-semibold text-fg">{actionLabel}</span>
-          <code className="text-xs bg-surface px-1.5 py-0.5 rounded-control text-fg/80 border border-surface-2">
-            {file}
-          </code>
-          {queueTotal && queueTotal > 1 && (
-            <span className="text-xs font-medium text-fg/60 bg-surface-2 px-2 py-0.5 rounded-pill">
-              {queuePosition} of {queueTotal}
-            </span>
+    <ApprovalPanel
+      icon={FileText}
+      title={actionLabel}
+      chips={<ApprovalChip>{file}</ApprovalChip>}
+      queuePosition={queuePosition}
+      queueTotal={queueTotal}
+      onDismiss={() => handleDecide('reject')}
+      footer={
+        <>
+          {/* Reject */}
+          {showRejectInput ? (
+            <button
+              type="button"
+              onClick={handleRejectSubmit}
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-surface bg-danger-soft text-danger hover:bg-danger-soft border border-danger transition-colors"
+            >
+              <Ban size={14} />
+              Send rejection
+            </button>
+          ) : (
+            <Button size="lg" icon={X} onClick={() => setShowRejectInput(true)}>
+              Reject
+            </Button>
           )}
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-fg/40">Waiting on input</span>
-          <button
-            type="button"
-            onClick={() => handleDecide('reject')}
-            className="p-1 rounded-control hover:bg-surface-2 transition-colors text-fg/50 hover:text-fg"
-            aria-label="Dismiss"
-          >
-            <X size={14} />
-          </button>
-        </div>
-      </div>
 
-      {/* Scrollable content */}
-      <div className="overflow-y-auto flex-1 min-h-0">
-        <div className="border-b border-surface-2">
-          {action === 'edit' &&
-          oldString !== undefined &&
-          newString !== undefined ? (
-            <DiffView
-              oldString={oldString}
-              newString={newString}
-              replaceAll={replaceAll}
-              occurrences={occurrences}
-            />
-          ) : action === 'create' && content !== undefined ? (
-            <ContentPreview content={content} />
-          ) : null}
-        </div>
+          {/* Always prompt for this file — only when workspace auto-accept is on */}
+          {workspaceAutoAccept && (
+            <Button
+              size="lg"
+              icon={Bell}
+              onClick={() => handleDecide('always_prompt')}
+              title="Always ask before editing this file, even when the workspace is set to auto-accept"
+            >
+              Always prompt for this file
+            </Button>
+          )}
 
-        {/* Reject freeform input */}
-        {showRejectInput && (
-          <div className="px-5 py-3 border-b border-surface-2">
-            <textarea
-              autoFocus
-              aria-label="Rejection reason"
-              value={rejectText}
-              onChange={(e) => setRejectText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleRejectSubmit();
-                }
-                if (e.key === 'Escape') setShowRejectInput(false);
-              }}
-              placeholder="Optional: tell the agent why you rejected this…"
-              className="w-full bg-surface-2/50 border border-surface-2 rounded-surface px-3 py-2 text-sm text-fg placeholder:text-fg/30 focus:outline-none focus:border-accent resize-none"
-              rows={2}
-            />
-          </div>
-        )}
-      </div>
-
-      {/* Actions */}
-      <div className="shrink-0 flex flex-wrap gap-2 justify-end px-5 py-3 bg-surface border-t border-surface-2">
-        {/* Reject */}
-        {showRejectInput ? (
-          <button
-            type="button"
-            onClick={handleRejectSubmit}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-surface bg-danger-soft text-danger hover:bg-danger-soft border border-danger transition-colors"
-          >
-            <Ban size={14} />
-            Send rejection
-          </button>
-        ) : (
-          <Button size="lg" icon={X} onClick={() => setShowRejectInput(true)}>
-            Reject
-          </Button>
-        )}
-
-        {/* Always prompt for this file — only when workspace auto-accept is on */}
-        {workspaceAutoAccept && (
+          {/* Accept once */}
           <Button
+            variant="primary"
             size="lg"
-            icon={Bell}
-            onClick={() => handleDecide('always_prompt')}
-            title="Always ask before editing this file, even when the workspace is set to auto-accept"
+            icon={Check}
+            onClick={() => handleDecide('accept')}
           >
-            Always prompt for this file
+            Accept
           </Button>
-        )}
 
-        {/* Accept once */}
-        <Button
-          variant="primary"
-          size="lg"
-          icon={Check}
-          onClick={() => handleDecide('accept')}
-        >
-          Accept
-        </Button>
-
-        {/* Always accept this file */}
-        <button
-          type="button"
-          onClick={() => handleDecide('accept_always')}
-          className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-surface border border-accent/40 text-accent hover:bg-accent/10 transition-colors"
-          title="Always accept edits to this file without prompting"
-        >
-          <CheckCheck size={14} />
-          Always accept this file
-        </button>
+          {/* Always accept this file */}
+          <button
+            type="button"
+            onClick={() => handleDecide('accept_always')}
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-surface border border-accent/40 text-accent hover:bg-accent/10 transition-colors"
+            title="Always accept edits to this file without prompting"
+          >
+            <CheckCheck size={14} />
+            Always accept this file
+          </button>
+        </>
+      }
+    >
+      <div className="border-b border-surface-2">
+        {action === 'edit' &&
+        oldString !== undefined &&
+        newString !== undefined ? (
+          <DiffView
+            oldString={oldString}
+            newString={newString}
+            replaceAll={replaceAll}
+            occurrences={occurrences}
+          />
+        ) : action === 'create' && content !== undefined ? (
+          <ContentPreview content={content} />
+        ) : null}
       </div>
-    </div>
+
+      {/* Reject freeform input */}
+      {showRejectInput && (
+        <div className="px-5 py-3 border-b border-surface-2">
+          <textarea
+            autoFocus
+            aria-label="Rejection reason"
+            value={rejectText}
+            onChange={(e) => setRejectText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleRejectSubmit();
+              }
+              if (e.key === 'Escape') setShowRejectInput(false);
+            }}
+            placeholder="Optional: tell the agent why you rejected this…"
+            className="w-full bg-surface-2/50 border border-surface-2 rounded-surface px-3 py-2 text-sm text-fg placeholder:text-fg/30 focus:outline-none focus:border-accent resize-none"
+            rows={2}
+          />
+        </div>
+      )}
+    </ApprovalPanel>
   );
 }

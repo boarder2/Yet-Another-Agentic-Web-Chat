@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import Markdown, { MarkdownToJSX } from 'markdown-to-jsx';
 import { cn } from '@/lib/utils';
+import { Card } from '@/components/ui/Card';
 import ChartElement, { spaceChartTags } from '../ChartElement';
 import type { PanelColumnPayload } from '@/lib/widgets/envelope';
 import { removeThinkingBlocks } from '@/lib/utils/contentStripping';
@@ -86,7 +87,7 @@ const StatusIcon: React.FC<{ status: string }> = ({ status }) => {
 const Column: React.FC<{ ex: PanelColumnPayload }> = ({ ex }) => {
   const text = spaceChartTags(removeThinkingBlocks(ex.responseText || ''));
   return (
-    <div className="flex flex-col min-w-0 border border-surface-2 rounded-surface bg-surface overflow-hidden">
+    <Card className="flex flex-col min-w-0 overflow-hidden">
       <div className="px-3 py-2 flex items-center gap-2 border-b border-surface-2 bg-surface-2/40">
         <StatusIcon status={ex.status} />
         <span className="font-medium text-xs truncate flex-1" title={ex.model}>
@@ -128,7 +129,7 @@ const Column: React.FC<{ ex: PanelColumnPayload }> = ({ ex }) => {
           <div className="text-xs text-fg/50 italic">Researching…</div>
         )}
       </div>
-    </div>
+    </Card>
   );
 };
 

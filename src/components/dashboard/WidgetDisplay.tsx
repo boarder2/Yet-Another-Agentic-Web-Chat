@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { Description } from '@headlessui/react';
 import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
 import { Widget } from '@/lib/types/widget';
@@ -83,7 +83,7 @@ const WidgetDisplay = ({
   return (
     <Card
       className={`flex flex-col h-full w-full ${
-        isEditMode ? '' : 'border-0 bg-transparent shadow-none rounded-none'
+        isEditMode ? '' : 'border-0 bg-transparent rounded-none'
       }`}
     >
       {isEditMode && (
@@ -98,9 +98,7 @@ const WidgetDisplay = ({
                 <GripVertical size={16} className="text-fg/50" />
               </div>
 
-              <CardTitle className="text-lg font-medium truncate">
-                {widget.title}
-              </CardTitle>
+              <CardTitle className="truncate">{widget.title}</CardTitle>
               {isCode && (
                 <span
                   className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-control bg-surface-2 text-fg/60 text-[10px]"

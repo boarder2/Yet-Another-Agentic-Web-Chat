@@ -12,6 +12,7 @@ import {
   Clipboard,
 } from 'lucide-react';
 import SettingsSection from '../components/SettingsSection';
+import { Card } from '@/components/ui/Card';
 import InputComponent from '../components/InputComponent';
 import TextareaComponent from '../components/TextareaComponent';
 import Select from '../components/Select';
@@ -114,7 +115,7 @@ export default function ResearchMethodologiesSection({
         instead.
       </p>
       <div className="flex flex-col space-y-4">
-        <div className="flex items-center justify-between p-3 bg-surface rounded-surface border border-surface-2 gap-3">
+        <Card className="flex items-center justify-between p-3 gap-3">
           <div className="text-sm">Copy a built-in methodology template</div>
           <div className="flex items-center gap-2">
             <Select
@@ -137,10 +138,10 @@ export default function ResearchMethodologiesSection({
               )}
             </button>
           </div>
-        </div>
+        </Card>
 
         {/* Tool Reference Panel */}
-        <div className="border border-surface-2 rounded-surface bg-surface">
+        <Card>
           <button
             type="button"
             onClick={() => setToolRefOpen(!toolRefOpen)}
@@ -169,7 +170,7 @@ export default function ResearchMethodologiesSection({
               ))}
             </div>
           )}
-        </div>
+        </Card>
 
         {userMethodologies
           .filter((m) => m.type === 'methodology')

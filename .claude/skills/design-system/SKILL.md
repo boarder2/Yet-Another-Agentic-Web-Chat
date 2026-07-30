@@ -45,6 +45,17 @@ Use `animate-spin` from Tailwind for continuous rotation (spinners).
 - Non-`<button>` triggers (a `<Link>` styled as a button) use the exported `buttonClasses(variant, size)`
 - Out of scope: bare icon-only buttons, tab strips, sidebar links and chips still style themselves
 
+## Cards
+
+`src/components/ui/Card.tsx` is the shared surface primitive — **use it for every bordered content surface**; don't retype `bg-surface border border-surface-2 rounded-*`. It is flat by design (no shadow): this UI reads elevation from borders and surface contrast.
+
+- `radius`: `surface` (default) · `floating` for an outer container that wraps nested `rounded-surface` cards. Concentric radii — outer larger, inner smaller.
+- Pass `className` for padding and layout only (`p-4`, `flex flex-col`); it spreads the rest, so `onClick`/`data-*` work.
+- `CardHeader` / `CardTitle` / `CardDescription` / `CardContent` / `CardFooter` are optional slots at `p-4`; most cards supply their own header instead.
+- Out of scope: form controls, popovers/dropdowns (they own elevation + focus behavior) and hover chips. They share the recipe but not the role.
+
+`src/components/ui/ApprovalPanel.tsx` is the shell for every in-message approval/prompt (code execution, MCP tool, workspace + skill edits, agent questions). It owns the header bar, the `shadow-raised` floating card, the height cap with a scrolling body, and the `justify-end` footer — pass `icon`, `title`, optional `chips` (`ApprovalChip` for a monospace identifier), `queuePosition`/`queueTotal`, `onDismiss`, `footer` and the body as children.
+
 ## Modals
 
 `src/components/ui/Modal.tsx` is the **only** dialog shell — never hand-roll a `fixed inset-0` scrim, and never reach for headlessui's `Dialog`/`DialogPanel` directly. It supplies the focus trap, `role="dialog"`, Escape, background inerting and the fade/scale transition.
@@ -70,6 +81,7 @@ Use `animate-spin` from Tailwind for continuous rotation (spinners).
 - **ALWAYS** use the 4px Tailwind spacing scale; the most common values in this codebase are `py-2 px-3`, `gap-2`, `p-2`, `p-4`. Match neighbors.
 - **ALWAYS** default body text to `text-sm` at normal weight (`400`); use `font-medium` (`500`) for emphasis and `font-semibold` (`600`) for headings.
 - **ALWAYS** pair `transition-colors` with `duration-150` (or `100`/`200`) for hover/focus states.
+- **ALWAYS** use the `Card` primitive (`src/components/ui/Card.tsx`) for a bordered content surface, and `ApprovalPanel` for an in-message approval — never retype the `bg-surface border border-surface-2 rounded-*` recipe.
 - **ALWAYS** use the `Modal` primitive (`src/components/ui/Modal.tsx`) for any dialog — it already owns the `bg-overlay` scrim, panel chrome, sizing and accessibility.
 - **ALWAYS** use `bg-overlay` (or `bg-overlay-strong`) for popover scrims and backdrops outside `Modal` — it's a theme-aware dark scrim.
 - **ALWAYS** add new tokens to `@theme` in `src/app/globals.css` if a needed semantic doesn't yet exist — extend the system rather than reach for a raw value.
@@ -80,6 +92,7 @@ Use `animate-spin` from Tailwind for continuous rotation (spinners).
 - **NEVER** use raw Tailwind palette colors (`bg-red-500`, `text-green-400`, `border-amber-500/30`, `text-gray-700`, etc.) in app code. Map to semantic status / surface tokens.
 - **NEVER** use `text-white`, `bg-white`, `text-black`, `bg-black` directly — they don't flip with theme. Use `text-fg` / `bg-bg`, or `text-accent-fg` on accent fills, or `bg-overlay` for scrims.
 - **NEVER** use `bg-fg/30` (or any `bg-fg/*`) for a modal scrim — `fg` is light on dark themes, so the backdrop reads bright. Use `bg-overlay` instead.
+- **NEVER** hand-roll a card surface (`<div className="bg-surface border border-surface-2 rounded-surface …">`) — that is what produced 21 spellings of one role, drifting on radius and shadow. Use `Card`.
 - **NEVER** introduce new shadow utilities outside `shadow-resting` / `shadow-raised` / `shadow-floating`.
 - **NEVER** hand-roll a labeled action button (`<button className="px-3 py-2 rounded-control bg-accent …">`) — that is what produced 46 spellings of one role. Use `Button`, or `buttonClasses()` for a non-`<button>` trigger.
 - **NEVER** strip a button's focus ring with `outline-none` — `Button` provides a `focus-visible` outline that works on every surface.
@@ -98,4 +111,5 @@ Use `animate-spin` from Tailwind for continuous rotation (spinners).
 - `src/app/globals.css` — token definitions (`@theme` block + `[data-theme='dark']` overrides).
 - `src/components/theme/Controller.tsx` — runtime theming logic; mutates CSS variables on `:root`.
 - `src/components/ui/Button.tsx` — the shared button primitive (variants, sizes, focus ring).
-- `src/components/ui/card.tsx` — canonical example of a token-correct component.
+- `src/components/ui/Card.tsx` — the shared card/surface primitive (flat, `radius` prop).
+- `src/components/ui/ApprovalPanel.tsx` — the in-message approval shell (header + scrolling body + footer).

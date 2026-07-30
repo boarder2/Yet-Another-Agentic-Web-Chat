@@ -21,6 +21,7 @@ import WorkspaceMemoryTab from './WorkspaceMemoryTab';
 import SettingsTab from './SettingsTab';
 import FileViewer from './FileViewer';
 import Modal from '@/components/ui/Modal';
+import { Card } from '@/components/ui/Card';
 import { useWorkspace } from '@/lib/hooks/api/useWorkspaces';
 import { useWorkspaceFiles } from '@/lib/hooks/api/useWorkspaceFiles';
 import { useWorkspaceMemory } from '@/lib/hooks/api/useWorkspaceMemory';
@@ -44,7 +45,7 @@ function CollapsibleSection({
   children: React.ReactNode;
 }) {
   return (
-    <section className="border border-surface-2 rounded-floating bg-surface overflow-hidden">
+    <Card data-workspace-section radius="floating" className="overflow-hidden">
       <button
         type="button"
         onClick={onToggle}
@@ -64,7 +65,7 @@ function CollapsibleSection({
           {children}
         </div>
       )}
-    </section>
+    </Card>
   );
 }
 

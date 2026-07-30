@@ -2,6 +2,7 @@ import type { Document } from '@langchain/core/documents';
 import MessageSource from './MessageSource';
 import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 
 interface SourceGroup {
   searchQuery: string;
@@ -25,7 +26,7 @@ const MessageBoxLoading = ({
     <div className="flex flex-col space-y-4 w-full lg:w-9/12">
       {/* Sources gathered during search phase */}
       {gatheringSources.length > 0 && (
-        <div className="bg-surface rounded-surface p-4 border border-surface-2">
+        <Card className="p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <button
@@ -108,7 +109,7 @@ const MessageBoxLoading = ({
               ))}
             </div>
           )}
-        </div>
+        </Card>
       )}
     </div>
   );

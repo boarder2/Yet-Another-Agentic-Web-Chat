@@ -7,6 +7,7 @@ import TextareaComponent from '../components/TextareaComponent';
 import CopyTemplatePicker from '../components/CopyTemplatePicker';
 import { Prompt } from '@/lib/types/prompt';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 
 export default function PersonaPromptsSection({
   userSystemPrompts,
@@ -42,12 +43,12 @@ export default function PersonaPromptsSection({
         research process itself; use a Research Methodology for that.
       </p>
       <div className="flex flex-col space-y-4">
-        <div className="flex items-center justify-between p-3 bg-surface rounded-surface border border-surface-2 gap-3">
+        <Card className="flex items-center justify-between p-3 gap-3">
           <div className="text-sm">
             Copy a starter Formatting & Citations template
           </div>
           <CopyTemplatePicker />
-        </div>
+        </Card>
         {userSystemPrompts
           .filter((prompt) => prompt.type === 'persona')
           .map((prompt) => (

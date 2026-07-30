@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import ChartWidget from '@/components/ChartWidget';
+import { Card } from '@/components/ui/Card';
 import { useChartSpec } from '@/lib/chart/ChartSpecContext';
 
 // Code-widget output is an arbitrary HTML string (already sanitized by
@@ -52,9 +53,9 @@ const ChartPortal = ({ id, target }: { id: string; target: Element }) => {
     spec ? (
       <ChartWidget spec={spec} />
     ) : (
-      <div className="my-3 bg-surface border border-surface-2 rounded-surface px-4 py-3 text-sm text-fg/60 italic">
+      <Card className="my-3 px-4 py-3 text-sm text-fg/60 italic">
         Loading chart…
-      </div>
+      </Card>
     ),
     target,
   );

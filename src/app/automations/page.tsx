@@ -14,6 +14,7 @@ import {
 import PageHeader from '@/components/PageHeader';
 import Modal from '@/components/ui/Modal';
 import { Button, buttonClasses } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import DynamicIcon from '@/components/workflows/DynamicIcon';
 import FillForm from '@/components/workflows/FillForm';
 import {
@@ -166,10 +167,10 @@ export default function WorkflowsPage() {
       {!isLoading && workflows.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pb-20 lg:pb-2">
           {workflows.map((w) => (
-            <div
+            <Card
               key={w.id}
               onClick={() => setLaunch(w)}
-              className="group flex flex-col gap-3 p-4 rounded-surface border border-surface-2 bg-surface cursor-pointer transition-colors duration-150 hover:border-accent"
+              className="group flex flex-col gap-3 p-4 cursor-pointer transition-colors duration-150 hover:border-accent"
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0">
@@ -217,7 +218,7 @@ export default function WorkflowsPage() {
                   <Trash2 size={16} />
                 </button>
               </div>
-            </div>
+            </Card>
           ))}
         </div>
       )}

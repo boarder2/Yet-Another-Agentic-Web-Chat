@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { LoaderCircle } from 'lucide-react';
 import MarkdownRenderer from '@/components/MarkdownRenderer';
+import { Card } from '@/components/ui/Card';
 import DocEditActions from './DocEditActions';
 import { useWorkspace, usePatchWorkspace } from '@/lib/hooks/api/useWorkspaces';
 
@@ -81,14 +82,14 @@ export default function InstructionsEditor({
           ariaLabel="Workspace instructions"
         />
       ) : draft ? (
-        <div className="prose-sm bg-surface rounded-floating border border-surface-2 p-6">
+        <Card radius="floating" className="prose-sm p-6">
           <MarkdownRenderer content={draft} />
-        </div>
+        </Card>
       ) : (
-        <p className="text-fg/50 text-sm bg-surface rounded-floating border border-surface-2 p-6">
+        <Card radius="floating" className="text-fg/50 text-sm p-6">
           No instructions yet. These are appended to the system prompt for every
           chat in this workspace.
-        </p>
+        </Card>
       )}
     </div>
   );

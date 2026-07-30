@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import SettingsSection from '../components/SettingsSection';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import AppSwitch from '@/components/ui/AppSwitch';
 import { toast } from 'sonner';
 import {
@@ -567,7 +568,7 @@ function ServerRow({ server }: { server: McpServer }) {
 
   if (editing) {
     return (
-      <div className="border border-surface-2 rounded-surface p-4 bg-surface space-y-3">
+      <Card className="p-4 space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <label className={labelClass}>
             Name
@@ -745,12 +746,12 @@ function ServerRow({ server }: { server: McpServer }) {
             Save
           </Button>
         </div>
-      </div>
+      </Card>
     );
   }
 
   return (
-    <div className="border border-surface-2 rounded-surface p-4 bg-surface">
+    <Card className="p-4">
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
@@ -853,7 +854,7 @@ function ServerRow({ server }: { server: McpServer }) {
       {showScope && (
         <WorkspaceScopePanel server={server} scopedIds={scopedIds} />
       )}
-    </div>
+    </Card>
   );
 }
 

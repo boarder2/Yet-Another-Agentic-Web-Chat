@@ -30,6 +30,7 @@ import {
   Plug,
 } from 'lucide-react';
 import { CodeBlock } from '../CodeBlock';
+import { Card } from '@/components/ui/Card';
 import { useMessage } from '@/lib/hooks/api/useMessage';
 import { decodeHtmlEntities } from '@/lib/utils/html';
 import MarkdownRenderer from '../MarkdownRenderer';
@@ -595,10 +596,7 @@ export const ToolCall = ({
     mcpExpandable;
 
   return (
-    <div
-      data-execution
-      className="my-3 bg-surface border border-surface-2 rounded-surface overflow-hidden"
-    >
+    <Card data-execution className="my-3 overflow-hidden">
       <div
         className={`flex items-start justify-between gap-2 text-sm font-medium px-4 py-3 ${
           isExpandable
@@ -716,7 +714,7 @@ export const ToolCall = ({
           )}
         </div>
       )}
-    </div>
+    </Card>
   );
 };
 

@@ -8,6 +8,7 @@ import {
   ChevronRight,
   ListTodo,
 } from 'lucide-react';
+import { Card } from '@/components/ui/Card';
 
 export interface TodoItemData {
   content: string;
@@ -47,7 +48,7 @@ const TodoWidget = ({ items }: TodoWidgetProps) => {
   };
 
   return (
-    <div className="mb-2 bg-surface border border-surface-2 rounded-surface overflow-hidden shadow-resting">
+    <Card className="mb-2 overflow-hidden">
       {/* Collapsed header */}
       <button
         type="button"
@@ -92,7 +93,7 @@ const TodoWidget = ({ items }: TodoWidgetProps) => {
           ))}
         </div>
       )}
-    </div>
+    </Card>
   );
 };
 

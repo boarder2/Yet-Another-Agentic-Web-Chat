@@ -17,6 +17,7 @@ import { useModels } from '@/lib/hooks/api/useModels';
 import { useLocalStorageJSON } from '@/lib/hooks/useLocalStorage';
 import { DEFAULT_CONTEXT_WINDOW } from '@/lib/models/presets';
 import ModelField from '@/components/models/ModelField';
+import { Card } from '@/components/ui/Card';
 import SettingsSection from '../components/SettingsSection';
 import { Button } from '@/components/ui/Button';
 import {
@@ -277,10 +278,7 @@ export default function PanelPresetsSection() {
             const available = isPanelPresetAvailable(preset, providers);
             const isDeleting = deletingId === preset.id;
             return (
-              <div
-                key={preset.id}
-                className="rounded-surface border border-surface-2 bg-surface p-3"
-              >
+              <Card key={preset.id} className="p-3">
                 <div className="flex items-start gap-2">
                   <div className="flex flex-col gap-0.5 shrink-0 pt-0.5">
                     <button
@@ -373,7 +371,7 @@ export default function PanelPresetsSection() {
                     </div>
                   )}
                 </div>
-              </div>
+              </Card>
             );
           })}
         </div>

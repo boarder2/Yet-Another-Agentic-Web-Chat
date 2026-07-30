@@ -11,6 +11,7 @@ import {
   Globe,
 } from 'lucide-react';
 import { decodeHtmlEntities } from '@/lib/utils/html';
+import { Card } from '@/components/ui/Card';
 import Markdown, { MarkdownToJSX } from 'markdown-to-jsx';
 import { cn } from '@/lib/utils';
 import { ToolCall } from './ToolCall';
@@ -144,10 +145,7 @@ export const SubagentExecution: React.FC<SubagentExecutionProps> = ({
   };
 
   return (
-    <div
-      data-execution
-      className="my-3 border border-surface-2 rounded-surface bg-surface overflow-hidden"
-    >
+    <Card data-execution className="my-3 overflow-hidden">
       {/* Main header - always visible */}
       <button
         type="button"
@@ -255,6 +253,6 @@ export const SubagentExecution: React.FC<SubagentExecutionProps> = ({
           )}
         </div>
       )}
-    </div>
+    </Card>
   );
 };

@@ -93,12 +93,12 @@ export class WorkspaceDetailPage extends BasePage {
 
   /** Expand a collapsible section by its title text. */
   async expandSection(title: string) {
-    const sectionBtn = this.page.locator('section button', {
+    const sectionBtn = this.page.locator('[data-workspace-section] button', {
       hasText: title,
     });
     // If the section content is already visible, don't click again.
     const content = this.page.locator(
-      `section:has(button:has-text("${title}")) > div:last-child`,
+      `[data-workspace-section]:has(button:has-text("${title}")) > div:last-child`,
     );
     if (await content.isVisible()) return;
     await sectionBtn.click();
@@ -112,25 +112,33 @@ export class WorkspaceDetailPage extends BasePage {
     await this.expandSection('Files');
     // Click "New file"
     await this.page
-      .locator('section:has(button:has-text("Files")) button', {
-        hasText: 'New file',
-      })
+      .locator(
+        '[data-workspace-section]:has(button:has-text("Files")) button',
+        {
+          hasText: 'New file',
+        },
+      )
       .click();
     // The note-name input appears
     const nameInput = this.page.locator(
-      'section:has(button:has-text("Files")) input[aria-label="Note name"]',
+      '[data-workspace-section]:has(button:has-text("Files")) input[aria-label="Note name"]',
     );
     await nameInput.fill(name);
     // Click "Create"
     await this.page
-      .locator('section:has(button:has-text("Files")) button', {
-        hasText: 'Create',
-      })
+      .locator(
+        '[data-workspace-section]:has(button:has-text("Files")) button',
+        {
+          hasText: 'Create',
+        },
+      )
       .click();
     // After creating, there's no inline content dialog — the file is created empty.
     // Wait for the file to appear in the list.
     await this.page
-      .locator(`section:has(button:has-text("Files")) li`, { hasText: name })
+      .locator(`[data-workspace-section]:has(button:has-text("Files")) li`, {
+        hasText: name,
+      })
       .waitFor({ state: 'visible' });
   }
 
@@ -138,7 +146,7 @@ export class WorkspaceDetailPage extends BasePage {
   async removeFile(name: string) {
     await this.expandSection('Files');
     const row = this.page.locator(
-      `section:has(button:has-text("Files")) li:has-text("${name}")`,
+      `[data-workspace-section]:has(button:has-text("Files")) li:has-text("${name}")`,
     );
     const delBtn = row.locator('button[title="Delete"]');
     this.page.once('dialog', (d) => d.accept());
@@ -150,7 +158,7 @@ export class WorkspaceDetailPage extends BasePage {
   async fileNames(): Promise<string[]> {
     await this.expandSection('Files');
     const items = this.page.locator(
-      'section:has(button:has-text("Files")) li span.truncate',
+      '[data-workspace-section]:has(button:has-text("Files")) li span.truncate',
     );
     const names: string[] = [];
     const count = await items.count();

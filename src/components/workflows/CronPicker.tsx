@@ -8,6 +8,7 @@ import {
 } from '@/lib/scheduledTasks/presets';
 import type { Preset } from '@/lib/scheduledTasks/presets';
 import { inputCls } from '@/components/workflows/styles';
+import Select from '@/components/ui/Select';
 
 const DAY_NAMES = [
   'Sunday',
@@ -104,17 +105,16 @@ export default function CronPicker({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2 flex-wrap">
-        <select
+        <Select
           aria-label="Schedule kind"
           value={kind}
           onChange={(e) => update({ kind: e.target.value as Preset['kind'] })}
-          className={inputCls}
         >
           <option value="hourly">Hourly</option>
           <option value="daily">Daily</option>
           <option value="weekly">Weekly</option>
           <option value="advanced">Advanced (cron)</option>
-        </select>
+        </Select>
 
         {kind === 'hourly' && (
           <div className="flex items-center gap-1">
@@ -164,7 +164,7 @@ export default function CronPicker({
 
         {kind === 'weekly' && (
           <div className="flex items-center gap-1 flex-wrap">
-            <select
+            <Select
               aria-label="Day of week"
               value={current.kind === 'weekly' ? current.day : 1}
               onChange={(e) =>
@@ -179,14 +179,13 @@ export default function CronPicker({
                     | 6,
                 })
               }
-              className={inputCls}
             >
               {DAY_NAMES.map((d, i) => (
                 <option key={i} value={i}>
                   {d}
                 </option>
               ))}
-            </select>
+            </Select>
             <span className="text-sm text-fg/60">at</span>
             <input
               type="number"

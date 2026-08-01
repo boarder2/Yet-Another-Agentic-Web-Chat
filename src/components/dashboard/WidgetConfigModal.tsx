@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import WidgetContent from '@/components/dashboard/WidgetContent';
 import { Button } from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
+import Select from '@/components/ui/Select';
 import ModelPicker from '@/components/models/ModelPicker';
 import ToolSelector from '@/components/MessageInputActions/ToolSelector';
 import SourceListEditor from '@/components/dashboard/SourceListEditor';
@@ -332,7 +333,7 @@ const WidgetConfigModal = ({
                 }
                 className="flex-1 px-3 py-2 border border-surface-2 rounded-control bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
               />
-              <select
+              <Select
                 value={config.refreshUnit}
                 onChange={(e) =>
                   setConfig((prev) => ({
@@ -340,11 +341,11 @@ const WidgetConfigModal = ({
                     refreshUnit: e.target.value as 'minutes' | 'hours',
                   }))
                 }
-                className="px-3 py-2 border border-surface-2 rounded-control bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+                className="bg-bg"
               >
                 <option value="minutes">Minutes</option>
                 <option value="hours">Hours</option>
-              </select>
+              </Select>
             </div>
           </div>
         </div>

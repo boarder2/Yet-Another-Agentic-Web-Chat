@@ -6,7 +6,7 @@ import ModelField from '@/components/models/ModelField';
 import { useVoices } from '@/lib/hooks/api/useVoices';
 import { useLocalStorageString } from '@/lib/hooks/useLocalStorage';
 import SettingsSection from '../components/SettingsSection';
-import Select from '../components/Select';
+import Select from '@/components/ui/Select';
 
 type NarrationMode = 'read' | 'narrate';
 

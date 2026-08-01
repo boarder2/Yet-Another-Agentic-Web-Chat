@@ -1,6 +1,7 @@
 'use client';
 
 import { Plus, Trash2 } from 'lucide-react';
+import Select from '@/components/ui/Select';
 import { Source } from '@/lib/types/widget';
 
 interface SourceListEditorProps {
@@ -32,16 +33,16 @@ const SourceListEditor = ({ sources, onChange }: SourceListEditorProps) => {
             className="flex-1 px-3 py-2 border border-surface-2 rounded-control bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
             placeholder="https://example.com"
           />
-          <select
+          <Select
             value={source.type}
             onChange={(e) =>
               update(index, 'type', e.target.value as Source['type'])
             }
-            className="px-3 py-2 border border-surface-2 rounded-control bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+            className="bg-bg"
           >
             <option value="Web Page">Web Page</option>
             <option value="HTTP Data">HTTP Data</option>
-          </select>
+          </Select>
           <button
             type="button"
             onClick={() => remove(index)}

@@ -16,6 +16,7 @@ import { useSystemPrompts } from '@/lib/hooks/api/useSystemPrompts';
 import { parseWorkflowTemplate } from '@/lib/workflows/template';
 import { inputCls } from '@/components/workflows/styles';
 import { Button, buttonClasses } from '@/components/ui/Button';
+import Select from '@/components/ui/Select';
 import { cn } from '@/lib/utils';
 import { ArrowLeft, Workflow as WorkflowIcon } from 'lucide-react';
 import Link from 'next/link';
@@ -218,17 +219,16 @@ export default function WorkflowBuilder({ workflow }: { workflow?: Workflow }) {
               <label className="text-sm font-medium text-fg/70">
                 Focus Mode
               </label>
-              <select
+              <Select
                 value={focusMode}
                 onChange={(e) => setFocusMode(e.target.value)}
-                className={inputCls}
               >
                 {focusModes.map((mode) => (
                   <option key={mode.key} value={mode.key}>
                     {mode.title} — {mode.description}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
 
             <div className="flex flex-col gap-1.5">
@@ -279,12 +279,11 @@ export default function WorkflowBuilder({ workflow }: { workflow?: Workflow }) {
                 <label className="text-sm font-medium text-fg/70">
                   Methodology (optional)
                 </label>
-                <select
+                <Select
                   value={selectedMethodologyId || ''}
                   onChange={(e) =>
                     setSelectedMethodologyId(e.target.value || null)
                   }
-                  className={inputCls}
                 >
                   <option value="">None</option>
                   {methodologies.map((m) => (
@@ -292,7 +291,7 @@ export default function WorkflowBuilder({ workflow }: { workflow?: Workflow }) {
                       {m.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
             )}
           </div>

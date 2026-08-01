@@ -15,7 +15,7 @@ import SettingsSection from '../components/SettingsSection';
 import { Card } from '@/components/ui/Card';
 import InputComponent from '../components/InputComponent';
 import TextareaComponent from '../components/TextareaComponent';
-import Select from '../components/Select';
+import Select from '@/components/ui/Select';
 import { Prompt } from '@/lib/types/prompt';
 import { builtinMethodologyTemplates } from '@/lib/prompts/methodologyTemplates';
 import { Button } from '@/components/ui/Button';

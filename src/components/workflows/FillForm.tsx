@@ -8,6 +8,7 @@ import {
 } from '@/lib/workflows/template';
 import { inputCls } from '@/components/workflows/styles';
 import { Button } from '@/components/ui/Button';
+import Select from '@/components/ui/Select';
 
 type Values = Record<string, string | string[]>;
 
@@ -129,11 +130,10 @@ export default function FillForm({
             )}
 
             {f.type === 'select' && (
-              <select
+              <Select
                 aria-label={f.label}
                 value={typeof value === 'string' ? value : ''}
                 onChange={(e) => setValue(f.name, e.target.value)}
-                className={inputCls}
               >
                 {!f.required && <option value="">—</option>}
                 {(f.options ?? []).map((opt) => (
@@ -141,7 +141,7 @@ export default function FillForm({
                     {opt}
                   </option>
                 ))}
-              </select>
+              </Select>
             )}
 
             {f.type === 'multi' && (

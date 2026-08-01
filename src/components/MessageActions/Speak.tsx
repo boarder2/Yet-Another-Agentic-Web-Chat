@@ -2,6 +2,7 @@ import { LoaderCircle, Pause, Play, Square, Volume2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useSpeech } from 'react-text-to-speech';
 import { toSpeechText } from '@/lib/utils/contentStripping';
+import Select from '@/components/ui/Select';
 
 type Status = 'idle' | 'loading' | 'playing' | 'paused';
 type Engine = 'kokoro' | 'browser';
@@ -336,10 +337,10 @@ const Speak = ({
         </button>
       )}
       {kokoroActive && (
-        <select
+        <Select
           value={String(rate)}
           onChange={(e) => changeRate(parseFloat(e.target.value))}
-          className="bg-surface border border-surface-2 rounded-floating text-xs py-1 pl-1.5 pr-1 opacity-70 hover:opacity-100 cursor-pointer"
+          className="text-xs py-1 pl-1.5 pr-1 opacity-70 hover:opacity-100 cursor-pointer rounded-floating"
           title="Playback speed"
           aria-label="Playback speed"
         >
@@ -348,7 +349,7 @@ const Speak = ({
               {s}×
             </option>
           ))}
-        </select>
+        </Select>
       )}
     </div>
   );

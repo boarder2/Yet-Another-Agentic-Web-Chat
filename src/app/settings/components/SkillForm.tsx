@@ -5,6 +5,7 @@ import InputComponent from './InputComponent';
 import TextareaComponent from './TextareaComponent';
 import AppSwitch from '@/components/ui/AppSwitch';
 import { Button } from '@/components/ui/Button';
+import Select from '@/components/ui/Select';
 
 export type SkillFormValue = {
   name: string;
@@ -69,11 +70,10 @@ export default function SkillForm({
         <label htmlFor="skill-scope" className="text-xs text-fg/60">
           Scope:
         </label>
-        <select
+        <Select
           id="skill-scope"
           value={value.workspaceId ?? ''}
           onChange={(e) => patch({ workspaceId: e.target.value || null })}
-          className="text-sm bg-surface border border-surface-2 rounded-control px-2 py-1 focus:outline-none focus:border-accent"
         >
           <option value="">Global</option>
           {workspaces.map((ws) => (
@@ -81,7 +81,7 @@ export default function SkillForm({
               {ws.name}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
       <div className="flex items-center justify-between">
         <div>

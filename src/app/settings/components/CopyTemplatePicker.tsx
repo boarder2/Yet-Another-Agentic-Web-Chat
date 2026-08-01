@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { PlusCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import Select from './Select';
+import Select from '@/components/ui/Select';
 import {
   formattingAndCitationsLocal,
   formattingAndCitationsScholarly,

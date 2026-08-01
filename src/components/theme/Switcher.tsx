@@ -1,5 +1,6 @@
 'use client';
 import { useLocalStorageString } from '@/lib/hooks/useLocalStorage';
+import Select from '@/components/ui/Select';
 
 type Theme = 'dark' | 'light' | 'custom';
 
@@ -11,16 +12,15 @@ const ThemeSwitcher = ({ className }: { className?: string }) => {
   return (
     <div className={className}>
       <div className="flex gap-2">
-        <select
+        <Select
           aria-label="App theme"
-          className="bg-surface text-fg px-3 py-2 rounded-surface border border-surface-2 text-sm"
           value={theme}
           onChange={(e) => setTheme(e.target.value as Theme)}
         >
           <option value="light">Light</option>
           <option value="dark">Dark</option>
           <option value="custom">Custom</option>
-        </select>
+        </Select>
         {theme === 'custom' && (
           <div className="flex items-center gap-2">
             <label className="text-xs text-foreground/70 flex items-center gap-1">

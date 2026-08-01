@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import SettingsSection from '../components/SettingsSection';
-import Select from '../components/Select';
+import Select from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
 import { RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';

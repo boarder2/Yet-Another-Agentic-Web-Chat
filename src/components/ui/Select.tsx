@@ -1,26 +1,33 @@
+'use client';
+
 import { cn } from '@/lib/utils';
-import { SelectHTMLAttributes } from 'react';
+import { SelectHTMLAttributes, ReactNode } from 'react';
 
 interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
-  options: { value: string; label: string; disabled?: boolean }[];
+  options?: { value: string; label: string; disabled?: boolean }[];
+  children?: ReactNode;
 }
 
-export const Select = ({ className, options, ...restProps }: SelectProps) => {
+export const Select = ({
+  className,
+  options,
+  children,
+  ...restProps
+}: SelectProps) => {
   return (
     <select
       {...restProps}
       className={cn(
-        'bg-surface px-3 py-2 flex items-center overflow-hidden border border-surface-2 text-fg rounded-surface text-sm',
+        'bg-surface px-3 py-2 border border-surface-2 rounded-control text-sm text-fg',
         className,
       )}
     >
-      {options.map(({ label, value, disabled }) => {
-        return (
+      {children ??
+        options?.map(({ label, value, disabled }) => (
           <option key={value} value={value} disabled={disabled}>
             {label}
           </option>
-        );
-      })}
+        ))}
     </select>
   );
 };

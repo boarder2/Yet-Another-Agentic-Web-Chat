@@ -23,6 +23,7 @@ import {
 import SettingsSection from '../components/SettingsSection';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import Select from '@/components/ui/Select';
 import AppSwitch from '@/components/ui/AppSwitch';
 import { toast } from 'sonner';
 import {
@@ -187,8 +188,6 @@ function ExtraHeadersEditor({
 
 const inputClass =
   'w-full bg-surface border border-surface-2 rounded-control px-3 py-2 text-sm text-fg placeholder:text-fg/40 focus:outline-none focus:border-accent transition-colors duration-150';
-const selectClass =
-  'w-full bg-surface border border-surface-2 rounded-control px-3 py-2 text-sm text-fg focus:outline-none focus:border-accent transition-colors duration-150';
 const labelClass = 'flex flex-col gap-1 text-xs text-fg/60';
 
 function statusBadge(server: McpServer) {
@@ -594,9 +593,9 @@ function ServerRow({ server }: { server: McpServer }) {
         <div className="grid grid-cols-2 gap-3">
           <label className={labelClass}>
             Transport
-            <select
+            <Select
               aria-label="Transport"
-              className={selectClass}
+              className="w-full"
               value={form.transport}
               onChange={(e) =>
                 setForm((f) => ({
@@ -608,13 +607,13 @@ function ServerRow({ server }: { server: McpServer }) {
               <option value="auto">Auto (probe StreamableHTTP first)</option>
               <option value="streamableHttp">Streamable HTTP</option>
               <option value="sse">SSE</option>
-            </select>
+            </Select>
           </label>
           <label className={labelClass}>
             Auth Type
-            <select
+            <Select
               aria-label="Auth type"
-              className={selectClass}
+              className="w-full"
               value={form.authType}
               onChange={(e) =>
                 setForm((f) => ({
@@ -629,7 +628,7 @@ function ServerRow({ server }: { server: McpServer }) {
                 OAuth Client Credentials
               </option>
               <option value="oauth">OAuth (Interactive)</option>
-            </select>
+            </Select>
           </label>
         </div>
         {form.authType === 'bearer' && (
@@ -923,9 +922,9 @@ function AddServerForm({ onDone }: { onDone: () => void }) {
       <div className="grid grid-cols-2 gap-3">
         <label className={labelClass}>
           Transport
-          <select
+          <Select
             aria-label="Transport"
-            className={selectClass}
+            className="w-full"
             value={form.transport}
             onChange={(e) =>
               setForm((f) => ({
@@ -937,13 +936,13 @@ function AddServerForm({ onDone }: { onDone: () => void }) {
             <option value="auto">Auto (probe StreamableHTTP first)</option>
             <option value="streamableHttp">Streamable HTTP</option>
             <option value="sse">SSE</option>
-          </select>
+          </Select>
         </label>
         <label className={labelClass}>
           Auth Type
-          <select
+          <Select
             aria-label="Auth type"
-            className={selectClass}
+            className="w-full"
             value={form.authType}
             onChange={(e) =>
               setForm((f) => ({
@@ -958,7 +957,7 @@ function AddServerForm({ onDone }: { onDone: () => void }) {
               OAuth Client Credentials
             </option>
             <option value="oauth">OAuth (Interactive)</option>
-          </select>
+          </Select>
         </label>
       </div>
       {form.authType === 'bearer' && (

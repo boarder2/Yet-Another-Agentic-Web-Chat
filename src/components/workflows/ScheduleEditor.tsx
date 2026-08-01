@@ -18,6 +18,7 @@ import {
 } from '@/lib/hooks/api/useSchedules';
 import { inputCls } from '@/components/workflows/styles';
 import { Button, buttonClasses } from '@/components/ui/Button';
+import Select from '@/components/ui/Select';
 import { cn } from '@/lib/utils';
 
 type Values = Record<string, string | string[]>;
@@ -160,7 +161,7 @@ export default function ScheduleEditor({
           <label className="text-sm font-medium text-fg/70">
             Retention (optional)
           </label>
-          <select
+          <Select
             value={retentionMode === null ? 'global' : 'override'}
             onChange={(e) => {
               if (e.target.value === 'global') {
@@ -171,22 +172,20 @@ export default function ScheduleEditor({
                 setRetentionValue(10);
               }
             }}
-            className={inputCls}
           >
             <option value="global">Use global default</option>
             <option value="override">Override</option>
-          </select>
+          </Select>
           {retentionMode !== null && (
             <div className="flex items-center gap-2">
-              <select
+              <Select
                 value={retentionMode}
                 onChange={(e) => setRetentionMode(e.target.value)}
-                className={inputCls}
               >
                 <option value="days">Keep for N days</option>
                 <option value="count">Keep N most recent</option>
                 <option value="disabled">Disabled</option>
-              </select>
+              </Select>
               {retentionMode !== 'disabled' && (
                 <input
                   type="number"

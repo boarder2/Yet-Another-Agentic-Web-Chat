@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import SettingsSection from '../components/SettingsSection';
-import Select from '../components/Select';
+import Select from '@/components/ui/Select';
 import InputComponent from '../components/InputComponent';
 import { useLocalStorageString } from '@/lib/hooks/useLocalStorage';
 

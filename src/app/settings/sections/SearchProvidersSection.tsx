@@ -2,7 +2,7 @@
 
 import SettingsSection from '../components/SettingsSection';
 import InputComponent from '../components/InputComponent';
-import Select from '../components/Select';
+import Select from '@/components/ui/Select';
 import { SettingsType } from '../types';
 import { useLocalStorageString } from '@/lib/hooks/useLocalStorage';
 import { useRefreshModels } from '@/lib/hooks/api/useModels';

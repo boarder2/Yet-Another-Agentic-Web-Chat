@@ -3,7 +3,7 @@
 import { PROVIDER_METADATA } from '@/lib/providers/metadata';
 import { LoaderCircle, RefreshCw } from 'lucide-react';
 import SettingsSection from '../components/SettingsSection';
-import Select from '../components/Select';
+import Select from '@/components/ui/Select';
 import InputComponent from '../components/InputComponent';
 import { SettingsType } from '../types';
 import { useLocalStorageString } from '@/lib/hooks/useLocalStorage';

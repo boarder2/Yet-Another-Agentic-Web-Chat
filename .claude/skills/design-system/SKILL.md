@@ -65,6 +65,15 @@ Use `animate-spin` from Tailwind for continuous rotation (spinners).
 - `footer` renders the `justify-end` action row — put the `Button`s there, not in the body. A footer submit for a body `<form>` uses `form={id}`.
 - The body scrolls and is padded (`p-5`); override via `bodyClassName` (e.g. `overflow-hidden p-0` when the content manages its own scroll).
 
+## Selects
+
+`src/components/ui/Select.tsx` is the shared select primitive — **use it for every `<select>`**; don't hand-roll the recipe.
+
+- Canonical recipe: `bg-surface px-3 py-2 border border-surface-2 rounded-control text-sm text-fg`
+- API: `options` (array of `{ value, label, disabled? }`) or `children` — children win when both are present, which covers `<option>` shapes the prop can't express (numeric values, conditional options)
+- Deliberate focus treatment: the native UA outline is the standard — the primitive carries **no `focus:` classes**, and callers must not add `focus:outline-none` or rings. Unlike `Button`, Select owns no focus ring
+- Pass `className` only for layout (`w-full`) or a deliberate override (`bg-bg`, a compact pill); `cn` merges with twMerge
+
 ## Loading indicators
 
 - Use `<LoaderCircle className="animate-spin ..." />` from `lucide-react` for all loading spinners.
@@ -113,3 +122,4 @@ Use `animate-spin` from Tailwind for continuous rotation (spinners).
 - `src/components/ui/Button.tsx` — the shared button primitive (variants, sizes, focus ring).
 - `src/components/ui/Card.tsx` — the shared card/surface primitive (flat, `radius` prop).
 - `src/components/ui/ApprovalPanel.tsx` — the in-message approval shell (header + scrolling body + footer).
+- `src/components/ui/Select.tsx` — the shared select primitive (canonical recipe, `options`/`children` API, native outline focus).

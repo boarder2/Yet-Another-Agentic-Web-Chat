@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import AppSwitch from '@/components/ui/AppSwitch';
 import { Button } from '@/components/ui/Button';
+import Select from '@/components/ui/Select';
 import ModelField from '@/components/models/ModelField';
 import SettingsSection from '../components/SettingsSection';
 import { SettingsType } from '../types';
@@ -325,29 +326,24 @@ export default function MemorySection({
           )}
         </div>
 
-        <select
+        <Select
           value={selectedCategory}
           onChange={(e) => setSelectedCategory(e.target.value)}
-          className="px-3 py-2 text-sm bg-surface-2 rounded-control border border-surface-2 focus:outline-none focus:border-accent"
         >
           {CATEGORIES.map((cat) => (
             <option key={cat} value={cat}>
               {cat}
             </option>
           ))}
-        </select>
+        </Select>
 
-        <select
-          value={sortBy}
-          onChange={(e) => setSortBy(e.target.value)}
-          className="px-3 py-2 text-sm bg-surface-2 rounded-control border border-surface-2 focus:outline-none focus:border-accent"
-        >
+        <Select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
           {SORT_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
               {opt.label}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
 
       {/* Add memory */}

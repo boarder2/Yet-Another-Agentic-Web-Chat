@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import Select from '@/app/settings/components/Select';
+import Select from '@/components/ui/Select';
 import {
   DEFAULT_CONTEXT_WINDOW,
   PREDEFINED_CONTEXT_SIZES,

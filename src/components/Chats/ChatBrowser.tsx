@@ -3,6 +3,7 @@
 
 import ChatRow, { WorkspaceMeta } from './ChatRow';
 import { cn } from '@/lib/utils';
+import { Input } from '@/components/ui/Input';
 import { workspaceColorClasses } from '@/lib/workspaces/appearance';
 import WorkspaceIcon from '@/components/Workspaces/WorkspaceIcon';
 import {
@@ -334,7 +335,7 @@ const ChatBrowser = ({ workspaceId }: Props) => {
             className="absolute left-3 top-1/2 -translate-y-1/2 text-fg/40 pointer-events-none"
             size={15}
           />
-          <input
+          <Input
             type="text"
             aria-label="Search chats"
             value={searchQuery}
@@ -343,7 +344,7 @@ const ChatBrowser = ({ workspaceId }: Props) => {
               if (e.key === 'Enter') handleLlmSearch();
             }}
             placeholder="Search conversations..."
-            className="w-full pl-9 pr-9 py-2 bg-surface border border-surface-2 rounded-surface text-sm focus:outline-none focus:border-fg/30 placeholder:text-fg/40"
+            className="pl-9 pr-9 rounded-surface"
           />
           {searchQuery && (
             <button

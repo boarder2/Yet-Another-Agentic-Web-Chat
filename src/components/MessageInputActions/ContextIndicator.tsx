@@ -9,6 +9,7 @@ import {
 } from '@headlessui/react';
 import { Fragment } from 'react';
 import { cn } from '@/lib/utils';
+import { Textarea } from '@/components/ui/Textarea';
 import { formatTokens } from '@/lib/utils/tokens';
 import { LoaderCircle } from 'lucide-react';
 
@@ -160,13 +161,13 @@ export default function ContextIndicator({
               <p className="text-xs font-semibold mb-1.5">
                 Compaction Instructions
               </p>
-              <textarea
+              <Textarea
                 aria-label="Compaction instructions"
                 value={compactInstructions}
                 onChange={(e) => setCompactInstructions(e.target.value)}
                 placeholder="Optional: specify what the summary should capture (key decisions, preferences, code patterns, etc.)"
                 rows={2}
-                className="w-full px-2 py-1 text-xs rounded-control border border-surface-2 bg-bg resize-none"
+                className="px-2 py-1 text-xs resize-none"
               />
             </div>
 

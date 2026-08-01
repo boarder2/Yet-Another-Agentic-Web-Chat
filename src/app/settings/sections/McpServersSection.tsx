@@ -23,6 +23,8 @@ import {
 import SettingsSection from '../components/SettingsSection';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { Field } from '@/components/ui/Field';
+import { Input } from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
 import AppSwitch from '@/components/ui/AppSwitch';
 import { toast } from 'sonner';
@@ -143,15 +145,13 @@ function ExtraHeadersEditor({
       <span className="text-xs text-fg/60">Extra headers</span>
       {rows.map((row, i) => (
         <div key={i} className="flex items-center gap-2">
-          <input
-            className={inputClass}
+          <Input
             aria-label={`Header ${i + 1} name`}
             placeholder="Header name"
             value={row.name}
             onChange={(e) => update(i, { name: e.target.value })}
           />
-          <input
-            className={inputClass}
+          <Input
             aria-label={`Header ${i + 1} value`}
             type="password"
             placeholder={
@@ -185,10 +185,6 @@ function ExtraHeadersEditor({
     </div>
   );
 }
-
-const inputClass =
-  'w-full bg-surface border border-surface-2 rounded-control px-3 py-2 text-sm text-fg placeholder:text-fg/40 focus:outline-none focus:border-accent transition-colors duration-150';
-const labelClass = 'flex flex-col gap-1 text-xs text-fg/60';
 
 function statusBadge(server: McpServer) {
   const { status } = server;
@@ -569,33 +565,24 @@ function ServerRow({ server }: { server: McpServer }) {
     return (
       <Card className="p-4 space-y-3">
         <div className="grid grid-cols-2 gap-3">
-          <label className={labelClass}>
-            Name
-            <input
-              aria-label="Server name"
-              className={inputClass}
+          <Field label="Name">
+            <Input
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
               placeholder="My MCP Server"
             />
-          </label>
-          <label className={labelClass}>
-            URL
-            <input
-              aria-label="Server URL"
-              className={inputClass}
+          </Field>
+          <Field label="URL">
+            <Input
               value={form.url}
               onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
               placeholder="https://example.com/mcp"
             />
-          </label>
+          </Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <label className={labelClass}>
-            Transport
+          <Field label="Transport">
             <Select
-              aria-label="Transport"
-              className="w-full"
               value={form.transport}
               onChange={(e) =>
                 setForm((f) => ({
@@ -608,12 +595,9 @@ function ServerRow({ server }: { server: McpServer }) {
               <option value="streamableHttp">Streamable HTTP</option>
               <option value="sse">SSE</option>
             </Select>
-          </label>
-          <label className={labelClass}>
-            Auth Type
+          </Field>
+          <Field label="Auth Type">
             <Select
-              aria-label="Auth type"
-              className="w-full"
               value={form.authType}
               onChange={(e) =>
                 setForm((f) => ({
@@ -629,27 +613,21 @@ function ServerRow({ server }: { server: McpServer }) {
               </option>
               <option value="oauth">OAuth (Interactive)</option>
             </Select>
-          </label>
+          </Field>
         </div>
         {form.authType === 'bearer' && (
           <div className="grid grid-cols-2 gap-3">
-            <label className={labelClass}>
-              Header Name (default: Authorization)
-              <input
-                aria-label="Header name"
-                className={inputClass}
+            <Field label="Header Name (default: Authorization)">
+              <Input
                 value={form.headerName}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, headerName: e.target.value }))
                 }
                 placeholder="Authorization"
               />
-            </label>
-            <label className={labelClass}>
-              Token / API Key
-              <input
-                aria-label="Token or API key"
-                className={inputClass}
+            </Field>
+            <Field label="Token / API Key">
+              <Input
                 type="password"
                 value={form.secretToken}
                 onChange={(e) =>
@@ -659,28 +637,22 @@ function ServerRow({ server }: { server: McpServer }) {
                   server.hasToken ? '(leave blank to keep existing)' : 'sk-...'
                 }
               />
-            </label>
+            </Field>
           </div>
         )}
         {form.authType === 'oauth_client_credentials' && (
           <div className="grid grid-cols-2 gap-3">
-            <label className={labelClass}>
-              Client ID
-              <input
-                aria-label="Client ID"
-                className={inputClass}
+            <Field label="Client ID">
+              <Input
                 value={form.oauthClientId}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, oauthClientId: e.target.value }))
                 }
                 placeholder="client-id"
               />
-            </label>
-            <label className={labelClass}>
-              Client Secret
-              <input
-                aria-label="Client secret"
-                className={inputClass}
+            </Field>
+            <Field label="Client Secret">
+              <Input
                 type="password"
                 value={form.oauthClientSecret}
                 onChange={(e) =>
@@ -695,34 +667,28 @@ function ServerRow({ server }: { server: McpServer }) {
                     : 'client-secret'
                 }
               />
-            </label>
-            <label className={labelClass}>
-              Scope (optional)
-              <input
-                aria-label="OAuth scope"
-                className={inputClass}
+            </Field>
+            <Field label="Scope (optional)">
+              <Input
                 value={form.oauthScope}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, oauthScope: e.target.value }))
                 }
                 placeholder="read write"
               />
-            </label>
+            </Field>
           </div>
         )}
         {form.authType === 'oauth' && (
-          <label className={labelClass}>
-            Scope (optional)
-            <input
-              aria-label="OAuth scope"
-              className={inputClass}
+          <Field label="Scope (optional)">
+            <Input
               value={form.oauthScope}
               onChange={(e) =>
                 setForm((f) => ({ ...f, oauthScope: e.target.value }))
               }
               placeholder="read write"
             />
-          </label>
+          </Field>
         )}
         <ExtraHeadersEditor
           rows={form.extraHeaders}
@@ -898,33 +864,24 @@ function AddServerForm({ onDone }: { onDone: () => void }) {
     <div className="border border-accent/30 rounded-surface p-4 bg-surface space-y-3">
       <h3 className="text-sm font-semibold text-fg">Add MCP Server</h3>
       <div className="grid grid-cols-2 gap-3">
-        <label className={labelClass}>
-          Name
-          <input
-            aria-label="Server name"
-            className={inputClass}
+        <Field label="Name">
+          <Input
             value={form.name}
             onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
             placeholder="My MCP Server"
           />
-        </label>
-        <label className={labelClass}>
-          URL
-          <input
-            aria-label="Server URL"
-            className={inputClass}
+        </Field>
+        <Field label="URL">
+          <Input
             value={form.url}
             onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
             placeholder="https://example.com/mcp"
           />
-        </label>
+        </Field>
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <label className={labelClass}>
-          Transport
+        <Field label="Transport">
           <Select
-            aria-label="Transport"
-            className="w-full"
             value={form.transport}
             onChange={(e) =>
               setForm((f) => ({
@@ -937,12 +894,9 @@ function AddServerForm({ onDone }: { onDone: () => void }) {
             <option value="streamableHttp">Streamable HTTP</option>
             <option value="sse">SSE</option>
           </Select>
-        </label>
-        <label className={labelClass}>
-          Auth Type
+        </Field>
+        <Field label="Auth Type">
           <Select
-            aria-label="Auth type"
-            className="w-full"
             value={form.authType}
             onChange={(e) =>
               setForm((f) => ({
@@ -958,27 +912,21 @@ function AddServerForm({ onDone }: { onDone: () => void }) {
             </option>
             <option value="oauth">OAuth (Interactive)</option>
           </Select>
-        </label>
+        </Field>
       </div>
       {form.authType === 'bearer' && (
         <div className="grid grid-cols-2 gap-3">
-          <label className={labelClass}>
-            Header Name (default: Authorization)
-            <input
-              aria-label="Header name"
-              className={inputClass}
+          <Field label="Header Name (default: Authorization)">
+            <Input
               value={form.headerName}
               onChange={(e) =>
                 setForm((f) => ({ ...f, headerName: e.target.value }))
               }
               placeholder="Authorization"
             />
-          </label>
-          <label className={labelClass}>
-            Token / API Key
-            <input
-              aria-label="Token or API key"
-              className={inputClass}
+          </Field>
+          <Field label="Token / API Key">
+            <Input
               type="password"
               value={form.secretToken}
               onChange={(e) =>
@@ -986,28 +934,22 @@ function AddServerForm({ onDone }: { onDone: () => void }) {
               }
               placeholder="sk-..."
             />
-          </label>
+          </Field>
         </div>
       )}
       {form.authType === 'oauth_client_credentials' && (
         <div className="grid grid-cols-2 gap-3">
-          <label className={labelClass}>
-            Client ID
-            <input
-              aria-label="Client ID"
-              className={inputClass}
+          <Field label="Client ID">
+            <Input
               value={form.oauthClientId}
               onChange={(e) =>
                 setForm((f) => ({ ...f, oauthClientId: e.target.value }))
               }
               placeholder="client-id"
             />
-          </label>
-          <label className={labelClass}>
-            Client Secret
-            <input
-              aria-label="Client secret"
-              className={inputClass}
+          </Field>
+          <Field label="Client Secret">
+            <Input
               type="password"
               value={form.oauthClientSecret}
               onChange={(e) =>
@@ -1015,34 +957,28 @@ function AddServerForm({ onDone }: { onDone: () => void }) {
               }
               placeholder="client-secret"
             />
-          </label>
-          <label className={labelClass}>
-            Scope (optional)
-            <input
-              aria-label="OAuth scope"
-              className={inputClass}
+          </Field>
+          <Field label="Scope (optional)">
+            <Input
               value={form.oauthScope}
               onChange={(e) =>
                 setForm((f) => ({ ...f, oauthScope: e.target.value }))
               }
               placeholder="read write"
             />
-          </label>
+          </Field>
         </div>
       )}
       {form.authType === 'oauth' && (
-        <label className={labelClass}>
-          Scope (optional)
-          <input
-            aria-label="OAuth scope"
-            className={inputClass}
+        <Field label="Scope (optional)">
+          <Input
             value={form.oauthScope}
             onChange={(e) =>
               setForm((f) => ({ ...f, oauthScope: e.target.value }))
             }
             placeholder="read write"
           />
-        </label>
+        </Field>
       )}
       <ExtraHeadersEditor
         rows={form.extraHeaders}

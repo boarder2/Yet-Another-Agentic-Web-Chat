@@ -116,6 +116,15 @@ test.describe('settings depth', () => {
 
     // Disable it via the row's AppSwitch. Other specs leave skills seeded in
     // the shared test DB, so scope to this skill's own row, not just any switch.
+    // The create flow's toasts (validation error + success) float over the row
+    // for sonner's default 4s lifetime — and sonner pauses that timer while the
+    // pointer hovers the toast region, which the Create click can leave it
+    // doing. Move the pointer clear so the timers run, then let them drain
+    // before clicking.
+    await page.mouse.move(0, 0);
+    await expect(page.locator('[data-sonner-toast]')).toHaveCount(0, {
+      timeout: 10_000,
+    });
     const row = page
       .locator('div.p-3.border.border-surface-2.rounded-control.bg-surface-2')
       .filter({ hasText: name });
@@ -147,8 +156,8 @@ test.describe('settings depth', () => {
     await page.getByRole('button', { name: 'Add Server' }).click();
     await expect(page.getByText('Name and URL are required')).toBeVisible();
 
-    await page.getByLabel('Server name').fill(name);
-    await page.getByLabel('Server URL').fill(url);
+    await page.getByLabel('Name').fill(name);
+    await page.getByLabel('URL').fill(url);
     await page.getByRole('button', { name: 'Add Server' }).click();
 
     await expect(page.getByText(name, { exact: true })).toBeVisible();

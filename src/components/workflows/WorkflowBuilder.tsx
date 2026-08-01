@@ -14,7 +14,8 @@ import {
 } from '@/lib/hooks/api/useWorkflows';
 import { useSystemPrompts } from '@/lib/hooks/api/useSystemPrompts';
 import { parseWorkflowTemplate } from '@/lib/workflows/template';
-import { inputCls } from '@/components/workflows/styles';
+import { Field } from '@/components/ui/Field';
+import { Input } from '@/components/ui/Input';
 import { Button, buttonClasses } from '@/components/ui/Button';
 import Select from '@/components/ui/Select';
 import { cn } from '@/lib/utils';
@@ -124,43 +125,35 @@ export default function WorkflowBuilder({ workflow }: { workflow?: Workflow }) {
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">
         <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-4">
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-fg/70">Name</label>
-            <input
+          <Field label="Name">
+            <Input
               type="text"
               aria-label="Workflow name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Competitor Report"
               required
-              className={inputCls}
             />
-          </div>
-          <div className="flex flex-col gap-1.5 sm:w-52">
-            <label className="text-sm font-medium text-fg/70">
-              Icon (lucide name)
-            </label>
+          </Field>
+          <Field label="Icon (lucide name)" className="sm:w-52">
             <IconAutocomplete
               value={icon}
               onChange={setIcon}
-              id="workflow-icon"
               ariaLabel="Workflow icon"
               placeholder="bar-chart"
             />
-          </div>
+          </Field>
         </div>
 
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-fg/70">Description</label>
-          <input
+        <Field label="Description">
+          <Input
             type="text"
             aria-label="Workflow description"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Shown on the workflow card"
-            className={inputCls}
           />
-        </div>
+        </Field>
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-5 lg:items-start">
           <div className="flex flex-col gap-4">

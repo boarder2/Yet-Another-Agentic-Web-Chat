@@ -2,6 +2,8 @@
 
 import { cn } from '@/lib/utils';
 import { SelectHTMLAttributes, ReactNode } from 'react';
+import { controlClasses } from './Input';
+import { useFieldControl } from './Field';
 
 interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   options?: { value: string; label: string; disabled?: boolean }[];
@@ -14,13 +16,14 @@ export const Select = ({
   children,
   ...restProps
 }: SelectProps) => {
+  const { describedBy, invalid } = useFieldControl();
+
   return (
     <select
+      aria-describedby={describedBy}
+      aria-invalid={invalid || undefined}
       {...restProps}
-      className={cn(
-        'bg-surface px-3 py-2 border border-surface-2 rounded-control text-sm text-fg',
-        className,
-      )}
+      className={cn(controlClasses, className)}
     >
       {children ??
         options?.map(({ label, value, disabled }) => (

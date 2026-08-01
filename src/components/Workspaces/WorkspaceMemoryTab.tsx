@@ -12,6 +12,7 @@ import {
 import { useEffect, useState } from 'react';
 import { formatTimeDifference } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
+import { Textarea } from '@/components/ui/Textarea';
 import {
   useWorkspaceMemory,
   useAddMemory,
@@ -103,12 +104,12 @@ export default function WorkspaceMemoryTab({
           <p className="text-xs text-accent mb-2 font-medium">
             Save to workspace
           </p>
-          <textarea
+          <Textarea
             aria-label="New workspace memory content"
             value={newContent}
             onChange={(e) => setNewContent(e.target.value)}
             placeholder="Enter a fact, preference, or instruction to remember..."
-            className="w-full min-h-15 text-sm border border-surface-2 rounded-surface p-3 bg-surface focus:outline-none focus:border-accent resize-y"
+            className="min-h-15 p-3"
             autoFocus
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
@@ -160,11 +161,11 @@ export default function WorkspaceMemoryTab({
               <li key={m.id} className="flex items-start gap-3 p-3">
                 <div className="flex-1 min-w-0">
                   {isEditing ? (
-                    <textarea
+                    <Textarea
                       aria-label="Edit workspace memory content"
                       value={editContent}
                       onChange={(e) => setEditContent(e.target.value)}
-                      className="w-full bg-bg border border-surface-2 rounded-surface p-2 text-sm focus:outline-none focus:border-accent resize-y min-h-[60px]"
+                      className="rounded-surface p-2 min-h-[60px]"
                       autoFocus
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {

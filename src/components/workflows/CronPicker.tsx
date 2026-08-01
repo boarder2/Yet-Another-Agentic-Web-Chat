@@ -7,7 +7,7 @@ import {
   describeCron,
 } from '@/lib/scheduledTasks/presets';
 import type { Preset } from '@/lib/scheduledTasks/presets';
-import { inputCls } from '@/components/workflows/styles';
+import { Input } from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
 
 const DAY_NAMES = [
@@ -119,7 +119,7 @@ export default function CronPicker({
         {kind === 'hourly' && (
           <div className="flex items-center gap-1">
             <span className="text-sm text-fg/60">at minute</span>
-            <input
+            <Input
               type="number"
               aria-label="Minute"
               min={0}
@@ -128,7 +128,7 @@ export default function CronPicker({
               onChange={(e) =>
                 update({ minute: parseInt(e.target.value, 10) || 0 })
               }
-              className={`${inputCls} w-16`}
+              className="w-16"
             />
           </div>
         )}
@@ -136,7 +136,7 @@ export default function CronPicker({
         {kind === 'daily' && (
           <div className="flex items-center gap-1">
             <span className="text-sm text-fg/60">at</span>
-            <input
+            <Input
               type="number"
               aria-label="Hour"
               min={0}
@@ -145,10 +145,10 @@ export default function CronPicker({
               onChange={(e) =>
                 update({ hour: parseInt(e.target.value, 10) || 0 })
               }
-              className={`${inputCls} w-16`}
+              className="w-16"
             />
             <span className="text-sm text-fg/60">:</span>
-            <input
+            <Input
               type="number"
               aria-label="Minute"
               min={0}
@@ -157,7 +157,7 @@ export default function CronPicker({
               onChange={(e) =>
                 update({ minute: parseInt(e.target.value, 10) || 0 })
               }
-              className={`${inputCls} w-16`}
+              className="w-16"
             />
           </div>
         )}
@@ -187,7 +187,7 @@ export default function CronPicker({
               ))}
             </Select>
             <span className="text-sm text-fg/60">at</span>
-            <input
+            <Input
               type="number"
               aria-label="Hour"
               min={0}
@@ -196,10 +196,10 @@ export default function CronPicker({
               onChange={(e) =>
                 update({ hour: parseInt(e.target.value, 10) || 0 })
               }
-              className={`${inputCls} w-16`}
+              className="w-16"
             />
             <span className="text-sm text-fg/60">:</span>
-            <input
+            <Input
               type="number"
               aria-label="Minute"
               min={0}
@@ -208,19 +208,19 @@ export default function CronPicker({
               onChange={(e) =>
                 update({ minute: parseInt(e.target.value, 10) || 0 })
               }
-              className={`${inputCls} w-16`}
+              className="w-16"
             />
           </div>
         )}
 
         {kind === 'advanced' && (
-          <input
+          <Input
             type="text"
             aria-label="Cron expression"
             value={value}
             onChange={(e) => onChange(e.target.value)}
             placeholder="*/5 * * * *"
-            className={`${inputCls} flex-1 font-mono`}
+            className="flex-1 font-mono"
           />
         )}
       </div>

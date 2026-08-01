@@ -7,6 +7,7 @@ import { useVoices } from '@/lib/hooks/api/useVoices';
 import { useLocalStorageString } from '@/lib/hooks/useLocalStorage';
 import SettingsSection from '../components/SettingsSection';
 import Select from '@/components/ui/Select';
+import { Input } from '@/components/ui/Input';
 
 type NarrationMode = 'read' | 'narrate';
 
@@ -170,13 +171,13 @@ export default function VoiceSection() {
               )}
             </div>
             <div className="flex items-center gap-2 pt-1">
-              <input
+              <Input
                 type="text"
                 value={testText}
                 onChange={(e) => setTestText(e.target.value)}
                 placeholder={SAMPLE_TEXT}
                 aria-label="Voice preview text"
-                className="flex-1 bg-surface px-3 py-2 border border-surface-2 rounded-surface text-sm placeholder:opacity-60"
+                className="flex-1 rounded-surface"
               />
               <Speak
                 text={testText.trim() || SAMPLE_TEXT}

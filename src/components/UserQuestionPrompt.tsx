@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react';
 import { Button } from '@/components/ui/Button';
 import { HelpCircle, Send, SkipForward } from 'lucide-react';
 import ApprovalPanel from '@/components/ui/ApprovalPanel';
+import { Textarea } from '@/components/ui/Textarea';
 
 export type { PendingQuestion } from '@/lib/streaming/chatState';
 
@@ -188,7 +189,7 @@ export function UserQuestionPrompt({
       {/* Freeform text input */}
       {allowFreeformInput !== false && (
         <div className="px-5 py-3 border-b border-surface-2">
-          <textarea
+          <Textarea
             autoFocus
             aria-label="Your response"
             value={freeformText}
@@ -199,7 +200,7 @@ export function UserQuestionPrompt({
                 ? 'Type additional context or an alternative response...'
                 : 'Type your response...'
             }
-            className="w-full bg-surface-2/50 border border-surface-2 rounded-surface px-3 py-2 text-sm text-fg placeholder:text-fg/30 focus:outline-none focus:border-accent resize-none"
+            className="bg-surface-2/50 rounded-surface placeholder:text-fg/30 resize-none"
             rows={2}
           />
         </div>

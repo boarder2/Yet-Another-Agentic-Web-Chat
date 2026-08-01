@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import AppSwitch from '@/components/ui/AppSwitch';
 import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { Textarea } from '@/components/ui/Textarea';
 import Select from '@/components/ui/Select';
 import ModelField from '@/components/models/ModelField';
 import SettingsSection from '../components/SettingsSection';
@@ -307,13 +309,13 @@ export default function MemorySection({
             size={16}
             className="absolute left-3 top-1/2 -translate-y-1/2 text-fg/40"
           />
-          <input
+          <Input
             type="text"
             aria-label="Search memories"
             placeholder="Search memories..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-8 py-2 text-sm bg-surface-2 rounded-control border border-surface-2 focus:outline-none focus:border-accent"
+            className="pl-9 pr-8 bg-surface-2"
           />
           {searchQuery && (
             <button
@@ -327,6 +329,7 @@ export default function MemorySection({
         </div>
 
         <Select
+          aria-label="Category"
           value={selectedCategory}
           onChange={(e) => setSelectedCategory(e.target.value)}
         >
@@ -337,7 +340,11 @@ export default function MemorySection({
           ))}
         </Select>
 
-        <Select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+        <Select
+          aria-label="Sort by"
+          value={sortBy}
+          onChange={(e) => setSortBy(e.target.value)}
+        >
           {SORT_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
               {opt.label}
@@ -349,13 +356,13 @@ export default function MemorySection({
       {/* Add memory */}
       {isAdding ? (
         <div className="p-3 border border-accent/40 rounded-control bg-surface-2 space-y-2">
-          <textarea
+          <Textarea
             ref={newInputRef}
             aria-label="New memory content"
             value={newContent}
             onChange={(e) => setNewContent(e.target.value)}
             placeholder="Enter a fact, preference, or instruction to remember..."
-            className="w-full min-h-15 text-sm border border-surface-2 rounded-control p-3 bg-surface focus:outline-none focus:border-accent resize-y"
+            className="min-h-15 p-3"
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -417,12 +424,12 @@ export default function MemorySection({
             >
               {editingId === memory.id ? (
                 <div>
-                  <textarea
+                  <Textarea
                     ref={editInputRef}
                     aria-label="Edit memory content"
                     value={editContent}
                     onChange={(e) => setEditContent(e.target.value)}
-                    className="w-full bg-transparent text-sm resize-none focus:outline-none min-h-[40px]"
+                    className="bg-transparent border-transparent px-0 py-0 resize-none min-h-[40px]"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();

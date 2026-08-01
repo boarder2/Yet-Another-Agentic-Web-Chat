@@ -13,6 +13,8 @@ import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
 import WidgetContent from '@/components/dashboard/WidgetContent';
 import { Button } from '@/components/ui/Button';
+import { Field } from '@/components/ui/Field';
+import { Input } from '@/components/ui/Input';
 import Modal from '@/components/ui/Modal';
 import Select from '@/components/ui/Select';
 import SourceListEditor from '@/components/dashboard/SourceListEditor';
@@ -337,11 +339,8 @@ const CodeWidgetConfigModal = ({
                 : 'hidden'
             }
           >
-            <div>
-              <label className="block text-sm font-medium text-fg mb-1">
-                Widget Title
-              </label>
-              <input
+            <Field label="Widget Title">
+              <Input
                 type="text"
                 aria-label="Widget title"
                 value={config.title}
@@ -351,13 +350,12 @@ const CodeWidgetConfigModal = ({
                     setErrors((p) => ({ ...p, title: undefined }));
                   markRevision();
                 }}
-                className="w-full px-3 py-2 border border-surface-2 rounded-control bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
                 placeholder="Enter widget title..."
               />
-              {errors.title && (
-                <p className="text-xs text-danger mt-1">{errors.title}</p>
-              )}
-            </div>
+            </Field>
+            {errors.title && (
+              <p className="text-xs text-danger mt-1">{errors.title}</p>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-fg mb-1">
@@ -378,7 +376,7 @@ const CodeWidgetConfigModal = ({
                 Refresh Frequency
               </label>
               <div className="flex gap-2">
-                <input
+                <Input
                   type="number"
                   aria-label="Refresh frequency"
                   min="1"
@@ -389,7 +387,6 @@ const CodeWidgetConfigModal = ({
                       refreshFrequency: parseInt(e.target.value) || 1,
                     }))
                   }
-                  className="flex-1 px-3 py-2 border border-surface-2 rounded-control bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
                 />
                 <Select
                   value={config.refreshUnit}
@@ -399,7 +396,6 @@ const CodeWidgetConfigModal = ({
                       refreshUnit: e.target.value as 'minutes' | 'hours',
                     }))
                   }
-                  className="bg-bg"
                 >
                   <option value="minutes">Minutes</option>
                   <option value="hours">Hours</option>

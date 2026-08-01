@@ -3,6 +3,7 @@
 import { cn } from '@/lib/utils';
 import { useEffect, useRef, useState } from 'react';
 import { AlertCircle } from 'lucide-react';
+import { Input } from '@/components/ui/Input';
 import WorkspaceIcon, {
   isValidIcon,
   getIconSuggestions,
@@ -95,9 +96,10 @@ const IconAutocomplete = ({
   return (
     <div ref={containerRef} className="relative">
       <div className="flex items-center gap-2">
-        <input
+        <Input
           type="text"
           role="combobox"
+          id={id}
           value={value}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
@@ -112,10 +114,8 @@ const IconAutocomplete = ({
           aria-expanded={dropdownOpen}
           aria-controls={`${id}-listbox`}
           className={cn(
-            'flex-1 px-2.5 py-1.5 text-xs bg-bg rounded-control border focus:outline-none transition-colors duration-150',
-            showError
-              ? 'border-danger focus:border-danger'
-              : 'border-surface-2 focus:border-accent',
+            'flex-1 px-2.5 py-1.5 text-xs',
+            showError && 'border-danger',
             inputClassName,
           )}
         />

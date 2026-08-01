@@ -6,7 +6,9 @@ import {
   parseWorkflowTemplate,
   missingRequired,
 } from '@/lib/workflows/template';
-import { inputCls } from '@/components/workflows/styles';
+import { Field } from '@/components/ui/Field';
+import { Input } from '@/components/ui/Input';
+import { Textarea } from '@/components/ui/Textarea';
 import { Button } from '@/components/ui/Button';
 import Select from '@/components/ui/Select';
 
@@ -99,52 +101,17 @@ export default function FillForm({
     <Wrapper {...wrapperProps} className="flex flex-col gap-4">
       {fields.map((f) => {
         const value = values[f.name];
-        return (
-          <div key={f.name} className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-fg/70">
-              {f.label}
-              {f.required && <span className="text-danger"> *</span>}
-            </label>
-            {f.description && (
-              <p className="text-xs text-fg/50">{f.description}</p>
-            )}
 
-            {f.type === 'text' && (
-              <input
-                type="text"
-                aria-label={f.label}
-                value={typeof value === 'string' ? value : ''}
-                onChange={(e) => setValue(f.name, e.target.value)}
-                className={inputCls}
-              />
-            )}
-
-            {f.type === 'longtext' && (
-              <textarea
-                aria-label={f.label}
-                value={typeof value === 'string' ? value : ''}
-                onChange={(e) => setValue(f.name, e.target.value)}
-                rows={3}
-                className={`${inputCls} resize-y`}
-              />
-            )}
-
-            {f.type === 'select' && (
-              <Select
-                aria-label={f.label}
-                value={typeof value === 'string' ? value : ''}
-                onChange={(e) => setValue(f.name, e.target.value)}
-              >
-                {!f.required && <option value="">—</option>}
-                {(f.options ?? []).map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt}
-                  </option>
-                ))}
-              </Select>
-            )}
-
-            {f.type === 'multi' && (
+        if (f.type === 'multi') {
+          return (
+            <div key={f.name} className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium text-fg">
+                {f.label}
+                {f.required && <span className="text-danger"> *</span>}
+              </span>
+              {f.description && (
+                <p className="text-xs text-fg/60">{f.description}</p>
+              )}
               <div className="flex flex-wrap gap-2">
                 {(f.options ?? []).map((opt) => {
                   const selected = Array.isArray(value) && value.includes(opt);
@@ -172,8 +139,47 @@ export default function FillForm({
                   );
                 })}
               </div>
+            </div>
+          );
+        }
+
+        return (
+          <Field
+            key={f.name}
+            label={
+              <>
+                {f.label}
+                {f.required && <span className="text-danger"> *</span>}
+              </>
+            }
+            hint={f.description}
+          >
+            {f.type === 'text' ? (
+              <Input
+                type="text"
+                value={typeof value === 'string' ? value : ''}
+                onChange={(e) => setValue(f.name, e.target.value)}
+              />
+            ) : f.type === 'longtext' ? (
+              <Textarea
+                value={typeof value === 'string' ? value : ''}
+                onChange={(e) => setValue(f.name, e.target.value)}
+                rows={3}
+              />
+            ) : (
+              <Select
+                value={typeof value === 'string' ? value : ''}
+                onChange={(e) => setValue(f.name, e.target.value)}
+              >
+                {!f.required && <option value="">—</option>}
+                {(f.options ?? []).map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </Select>
             )}
-          </div>
+          </Field>
         );
       })}
 

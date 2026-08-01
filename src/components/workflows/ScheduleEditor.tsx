@@ -16,7 +16,8 @@ import {
   usePatchSchedule,
   type Schedule,
 } from '@/lib/hooks/api/useSchedules';
-import { inputCls } from '@/components/workflows/styles';
+import { Field } from '@/components/ui/Field';
+import { Input } from '@/components/ui/Input';
 import { Button, buttonClasses } from '@/components/ui/Button';
 import Select from '@/components/ui/Select';
 import { cn } from '@/lib/utils';
@@ -110,37 +111,31 @@ export default function ScheduleEditor({
           </div>
         )}
 
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-fg/70">Label</label>
-          <input
+        <Field label="Label">
+          <Input
             type="text"
             aria-label="Schedule label"
             value={label}
             onChange={(e) => setLabel(e.target.value)}
             placeholder="Acme — Mondays"
             required
-            className={inputCls}
           />
-        </div>
+        </Field>
 
         <div className="flex flex-col gap-1.5">
           <label className="text-sm font-medium text-fg/70">Schedule</label>
           <CronPicker value={cron} onChange={setCron} />
         </div>
 
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-fg/70">
-            Timezone (optional)
-          </label>
-          <input
+        <Field label="Timezone (optional)">
+          <Input
             type="text"
             aria-label="Timezone"
             value={timezone}
             onChange={(e) => setTimezone(e.target.value)}
             placeholder="e.g. America/New_York (empty = system timezone)"
-            className={inputCls}
           />
-        </div>
+        </Field>
 
         {fields.length > 0 && (
           <div className="flex flex-col gap-1.5">
@@ -187,7 +182,7 @@ export default function ScheduleEditor({
                 <option value="disabled">Disabled</option>
               </Select>
               {retentionMode !== 'disabled' && (
-                <input
+                <Input
                   type="number"
                   aria-label="Retention value"
                   min={1}
@@ -195,7 +190,7 @@ export default function ScheduleEditor({
                   onChange={(e) =>
                     setRetentionValue(parseInt(e.target.value, 10) || 1)
                   }
-                  className={`${inputCls} w-24`}
+                  className="w-24"
                 />
               )}
             </div>

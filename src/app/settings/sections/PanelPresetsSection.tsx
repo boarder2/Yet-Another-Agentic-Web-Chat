@@ -18,6 +18,7 @@ import { useLocalStorageJSON } from '@/lib/hooks/useLocalStorage';
 import { DEFAULT_CONTEXT_WINDOW } from '@/lib/models/presets';
 import ModelField from '@/components/models/ModelField';
 import { Card } from '@/components/ui/Card';
+import { Input } from '@/components/ui/Input';
 import SettingsSection from '../components/SettingsSection';
 import { Button } from '@/components/ui/Button';
 import {
@@ -177,7 +178,7 @@ export default function PanelPresetsSection() {
       <p className="text-xs font-medium text-fg/70">
         {draft?.id ? 'Edit Panel Preset' : 'New Panel Preset'}
       </p>
-      <input
+      <Input
         autoFocus
         type="text"
         aria-label="Panel preset name"
@@ -187,7 +188,7 @@ export default function PanelPresetsSection() {
         onChange={(e) =>
           setDraft((d) => (d ? { ...d, name: e.target.value } : d))
         }
-        className="text-sm bg-surface border border-surface-2 rounded-control px-2 py-1.5 text-fg outline-none focus:border-accent w-full"
+        className="px-2 py-1.5"
       />
 
       <div className="space-y-2">

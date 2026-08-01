@@ -10,6 +10,7 @@ import { Fragment } from 'react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
 import { useSettingsModal } from '@/components/settings/SettingsModalProvider';
 import { useLocalStorageJSON } from '@/lib/hooks/useLocalStorage';
 import {
@@ -161,7 +162,7 @@ export default function PresetBar({
                   <div className="border-t border-surface-2 px-3 py-2 flex items-center justify-between">
                     {namingPreset ? (
                       <div className="flex items-center gap-1.5 w-full">
-                        <input
+                        <Input
                           autoFocus
                           type="text"
                           aria-label="Preset name"
@@ -176,7 +177,7 @@ export default function PresetBar({
                               setNameInput('');
                             }
                           }}
-                          className="flex-1 min-w-0 text-xs bg-bg border border-surface-2 rounded-control px-2 py-1 text-fg outline-none focus:border-accent"
+                          className="flex-1 min-w-0 text-xs px-2 py-1"
                         />
                         <Button
                           variant="primary"

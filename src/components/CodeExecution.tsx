@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { CodeBlock } from './CodeBlock';
 import ApprovalPanel from '@/components/ui/ApprovalPanel';
+import { Textarea } from '@/components/ui/Textarea';
 import {
   CodeExecutionWarning,
   hasAcceptedWarning,
@@ -134,7 +135,7 @@ export function CodeExecutionApproval({
           <label className="block text-xs font-medium text-fg/70 mb-1.5">
             Tell the assistant what to do differently (optional)
           </label>
-          <textarea
+          <Textarea
             autoFocus
             aria-label="Reason for denial"
             value={denyReason}
@@ -146,7 +147,7 @@ export function CodeExecutionApproval({
               }
             }}
             placeholder="e.g. don't fetch from the network; use a smaller input; try a different approach..."
-            className="w-full bg-surface border border-surface-2 rounded-surface px-3 py-2 text-sm text-fg placeholder:text-fg/30 focus:outline-none focus:border-accent resize-none"
+            className="rounded-surface placeholder:text-fg/30 resize-none"
             rows={3}
           />
         </div>

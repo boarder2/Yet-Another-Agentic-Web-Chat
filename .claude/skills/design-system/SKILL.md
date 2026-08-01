@@ -65,13 +65,23 @@ Use `animate-spin` from Tailwind for continuous rotation (spinners).
 - `footer` renders the `justify-end` action row — put the `Button`s there, not in the body. A footer submit for a body `<form>` uses `form={id}`.
 - The body scrolls and is padded (`p-5`); override via `bodyClassName` (e.g. `overflow-hidden p-0` when the content manages its own scroll).
 
+## Form controls
+
+`src/components/ui/Field.tsx`, `Input.tsx` and `Textarea.tsx` are the shared form-control primitives — **use them for every `<input>` and `<textarea>`** (search/rename inputs and approval forms included, with density via `className`); don't hand-roll the recipe. The only raw inputs left in the codebase are non-text controls: `type=file`, `type=color`, checkbox/radio. The chat composer is the one text exception: it's a `react-textarea-autosize`, which can't swap in the `Textarea` component — it reuses `controlClasses` directly.
+
+- Canonical recipe (Input, Textarea, and Select all share `controlClasses` in `Input.tsx`): `bg-well px-3 py-2 border border-surface-2 rounded-control text-sm text-fg placeholder:text-fg/40 disabled:opacity-50 disabled:cursor-not-allowed` — `bg-well` is the derived midpoint of `bg` and `surface` (auto-adapts to dark/custom themes), so a control reads as a gentle recess on both `bg-surface` cards and bare `bg-bg` pages without the contrast swing of either endpoint
+- Focus: **1px accent border, in place** — `focus-visible:outline-none focus-visible:border-accent` (with `transition-colors`). Nothing reflows and no ring is drawn; the border flip is the indicator. Do not add `focus:ring-*`, a bare `focus:border-accent`, or `outline-none` without the flip
+- Textarea adds `resize-y`; compact/approval sites pass `resize-none`
+- `Field` renders a real `<label>` that wraps the control — association is implicit and works for any child (Input, Select, ModelField, AppSwitch). The label is `text-sm font-medium text-fg`; the optional `hint` (`text-xs text-fg/60`) and `error` (replaces the hint, `text-danger`, and marks the control `aria-invalid`) render **outside** the label so they stay out of the accessible name. Input/Textarea/Select read the caption back through `FieldContext` and wire `aria-describedby`/`aria-invalid` themselves. Composite controls that can't be wrapped (SourceListEditor, CronPicker, ModelPicker, a chip group) keep their raw label
+- Where a Field supplies the visible label, don't also set `aria-label` on the control — the visible text _is_ the accessible name
+- Pass `className` only for layout (`w-full`, `flex-1`), density (`px-2 py-1 text-xs`), or a deliberate shape/fill override (`bg-surface-2`, `rounded-surface`, `bg-transparent`) — `cn` merges with twMerge
+
 ## Selects
 
 `src/components/ui/Select.tsx` is the shared select primitive — **use it for every `<select>`**; don't hand-roll the recipe.
 
-- Canonical recipe: `bg-surface px-3 py-2 border border-surface-2 rounded-control text-sm text-fg`
+- Canonical recipe: shares `controlClasses` with Input/Textarea (same fill, border and 1px accent focus flip), minus `w-full` — Selects are often inline
 - API: `options` (array of `{ value, label, disabled? }`) or `children` — children win when both are present, which covers `<option>` shapes the prop can't express (numeric values, conditional options)
-- Deliberate focus treatment: the native UA outline is the standard — the primitive carries **no `focus:` classes**, and callers must not add `focus:outline-none` or rings. Unlike `Button`, Select owns no focus ring
 - Pass `className` only for layout (`w-full`) or a deliberate override (`bg-bg`, a compact pill); `cn` merges with twMerge
 
 ## Loading indicators
@@ -82,7 +92,7 @@ Use `animate-spin` from Tailwind for continuous rotation (spinners).
 
 ## ALWAYS
 
-- **ALWAYS** use surface tokens: `bg-bg`, `bg-surface`, `bg-surface-2`, `text-fg`, `border-surface-2`.
+- **ALWAYS** use surface tokens: `bg-bg`, `bg-surface`, `bg-surface-2`, `bg-well`, `text-fg`, `border-surface-2`.
 - **ALWAYS** use the `Button` primitive (`src/components/ui/Button.tsx`) for labeled action buttons — it already encodes the accent/danger fills, focus ring, disabled and hover rules below.
 - **ALWAYS** use accent tokens for brand fill/action: `bg-accent` with `text-accent-fg`, hover to `bg-accent-700` — via `<Button variant="primary">` unless the element can't be a button.
 - **ALWAYS** use semantic status tokens (`bg-danger-soft`, `text-danger`, `bg-success-soft`, `bg-warning-soft`, `bg-info-soft`) for errors/success/warnings/info.
@@ -104,6 +114,7 @@ Use `animate-spin` from Tailwind for continuous rotation (spinners).
 - **NEVER** hand-roll a card surface (`<div className="bg-surface border border-surface-2 rounded-surface …">`) — that is what produced 21 spellings of one role, drifting on radius and shadow. Use `Card`.
 - **NEVER** introduce new shadow utilities outside `shadow-resting` / `shadow-raised` / `shadow-floating`.
 - **NEVER** hand-roll a labeled action button (`<button className="px-3 py-2 rounded-control bg-accent …">`) — that is what produced 46 spellings of one role. Use `Button`, or `buttonClasses()` for a non-`<button>` trigger.
+- **NEVER** hand-roll a form control (`<input className="px-3 py-2 rounded-control bg-surface …">`) — that is what produced four fills, two radii, and two focus idioms for one role. Use `Input` / `Textarea` / `Field` / `Select`.
 - **NEVER** strip a button's focus ring with `outline-none` — `Button` provides a `focus-visible` outline that works on every surface.
 - **NEVER** use arbitrary radius values (`rounded-[10px]`, `rounded-[14px]`). Pick a semantic radius.
 - **NEVER** use legacy aliases (`bg-light-primary`, `bg-dark-primary`, `bg-light-secondary`, `bg-dark-100`, `border-light-200`, etc.) in new code. They exist only for backwards compat.
@@ -122,4 +133,7 @@ Use `animate-spin` from Tailwind for continuous rotation (spinners).
 - `src/components/ui/Button.tsx` — the shared button primitive (variants, sizes, focus ring).
 - `src/components/ui/Card.tsx` — the shared card/surface primitive (flat, `radius` prop).
 - `src/components/ui/ApprovalPanel.tsx` — the in-message approval shell (header + scrolling body + footer).
-- `src/components/ui/Select.tsx` — the shared select primitive (canonical recipe, `options`/`children` API, native outline focus).
+- `src/components/ui/Select.tsx` — the shared select primitive (canonical recipe, `options`/`children` API, 1px accent border flip).
+- `src/components/ui/Input.tsx` — the shared text input primitive (canonical recipe + `controlClasses`, 1px accent border flip).
+- `src/components/ui/Textarea.tsx` — the shared textarea primitive (canonical recipe + `resize-y`).
+- `src/components/ui/Field.tsx` — the label/control wrapper (wrapping `<label>`, `hint`/`error`, `FieldContext` aria wiring).

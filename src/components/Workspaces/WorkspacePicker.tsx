@@ -2,6 +2,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
+import { Input } from '@/components/ui/Input';
 import { workspaceColorClasses } from '@/lib/workspaces/appearance';
 import WorkspaceIcon from './WorkspaceIcon';
 import { Check, ChevronDown, FolderOpen, Search } from 'lucide-react';
@@ -121,7 +122,7 @@ const WorkspacePicker = ({ value, onChange }: Props) => {
               className="absolute left-2.5 top-1/2 -translate-y-1/2 text-fg/40"
               size={13}
             />
-            <input
+            <Input
               autoFocus
               aria-label="Search workspaces"
               value={filter}
@@ -130,7 +131,7 @@ const WorkspacePicker = ({ value, onChange }: Props) => {
                 setActiveIndex(0);
               }}
               placeholder="Search workspaces…"
-              className="w-full pl-8 pr-2 py-2 text-xs bg-transparent focus:outline-none"
+              className="pl-8 pr-2 text-xs bg-transparent border-transparent"
             />
           </div>
           <ul className="max-h-64 overflow-y-auto py-1" role="listbox">

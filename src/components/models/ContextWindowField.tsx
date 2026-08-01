@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import Select from '@/components/ui/Select';
+import { Input } from '@/components/ui/Input';
 import {
   DEFAULT_CONTEXT_WINDOW,
   PREDEFINED_CONTEXT_SIZES,
@@ -34,7 +35,7 @@ export default function ContextWindowField({
       <span className="text-xs text-fg/60">{label}</span>
       <div className="flex items-center gap-2">
         {customMode && (
-          <input
+          <Input
             type="number"
             min={512}
             aria-label="Custom context window size"
@@ -42,7 +43,7 @@ export default function ContextWindowField({
             onChange={(e) =>
               onChange(Math.max(512, parseInt(e.target.value) || 512))
             }
-            className="w-28 text-xs bg-bg border border-surface-2 rounded-control px-2 py-1.5 text-fg outline-none focus:border-accent"
+            className="w-28 text-xs px-2 py-1.5"
           />
         )}
         <Select

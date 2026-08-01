@@ -39,6 +39,7 @@ import {
 import SettingsSection from '../components/SettingsSection';
 import ModelPicker from '@/components/models/ModelPicker';
 import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
 
 const EMPTY_PRESETS: ModelPresetList = [];
 
@@ -275,7 +276,7 @@ export default function ModelPresetsSection({
       <div className="flex items-center gap-2 p-3 bg-bg rounded-surface border border-surface-2">
         {savingCurrentName ? (
           <div className="flex items-center gap-2 w-full">
-            <input
+            <Input
               autoFocus
               type="text"
               aria-label="Preset name"
@@ -290,7 +291,7 @@ export default function ModelPresetsSection({
                   setCurrentNameInput('');
                 }
               }}
-              className="flex-1 text-xs bg-surface border border-surface-2 rounded-control px-2 py-1.5 text-fg outline-none focus:border-accent"
+              className="flex-1 text-xs px-2 py-1.5"
             />
             <Button
               variant="primary"
@@ -366,7 +367,7 @@ export default function ModelPresetsSection({
               >
                 {isEditing ? (
                   <div className="flex flex-col gap-3">
-                    <input
+                    <Input
                       autoFocus
                       type="text"
                       aria-label="Preset name"
@@ -375,7 +376,7 @@ export default function ModelPresetsSection({
                       onChange={(e) =>
                         setEditState((s) => s && { ...s, name: e.target.value })
                       }
-                      className="text-sm bg-bg border border-surface-2 rounded-control px-2 py-1.5 text-fg outline-none focus:border-accent w-full"
+                      className="px-2 py-1.5"
                       placeholder="Preset name"
                     />
                     <ModelPicker
@@ -537,7 +538,7 @@ export default function ModelPresetsSection({
       {addingNew ? (
         <div className="border border-surface-2 rounded-surface p-3 flex flex-col gap-3 bg-bg">
           <p className="text-xs font-medium text-fg/70">New Preset</p>
-          <input
+          <Input
             autoFocus
             type="text"
             aria-label="New preset name"
@@ -560,7 +561,7 @@ export default function ModelPresetsSection({
                     },
               )
             }
-            className="text-sm bg-surface border border-surface-2 rounded-control px-2 py-1.5 text-fg outline-none focus:border-accent w-full"
+            className="px-2 py-1.5"
           />
           {editState && (
             <ModelPicker

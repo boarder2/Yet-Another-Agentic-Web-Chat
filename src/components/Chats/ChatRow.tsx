@@ -3,6 +3,7 @@
 import DeleteChat from '@/components/DeleteChat';
 import WorkspaceChip from '@/components/Workspaces/WorkspaceChip';
 import { cn, formatTimeDifference } from '@/lib/utils';
+import { Input } from '@/components/ui/Input';
 import {
   AlertCircle,
   CalendarClock,
@@ -185,7 +186,7 @@ const ChatRow = ({
           <span className="shrink-0 w-2.5 h-2.5 rounded-pill bg-accent" />
         )}
         {isEditing ? (
-          <input
+          <Input
             type="text"
             aria-label="Chat title"
             maxLength={200}
@@ -199,7 +200,7 @@ const ChatRow = ({
               if (e.key === 'Escape') cancel();
             }}
             onBlur={cancel}
-            className="lg:text-xl font-medium bg-surface-2 rounded-surface px-2 py-0.5 outline-none focus:ring-1 focus:ring-accent text-fg min-w-0 flex-1"
+            className="w-auto lg:text-xl font-medium bg-surface-2 rounded-surface px-2 py-0.5 min-w-0 flex-1"
           />
         ) : (
           <span className="lg:text-xl font-medium truncate transition duration-200 group-hover:text-accent">

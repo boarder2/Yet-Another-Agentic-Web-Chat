@@ -11,6 +11,7 @@ import {
 import { Message } from './ChatWindow';
 import { useEffect, useState, Fragment, useMemo } from 'react';
 import { formatTimeDifference } from '@/lib/utils';
+import { Input } from '@/components/ui/Input';
 import DeleteChat from './DeleteChat';
 import {
   Popover,
@@ -153,7 +154,7 @@ const ChatActions = ({
             <div className="flex flex-col py-3 px-3 gap-3">
               <div className="px-3 py-2 flex flex-col gap-1">
                 {isEditing ? (
-                  <input
+                  <Input
                     type="text"
                     aria-label="Chat title"
                     maxLength={200}
@@ -165,7 +166,7 @@ const ChatActions = ({
                       if (e.key === 'Escape') cancel();
                     }}
                     onBlur={cancel}
-                    className="text-sm font-medium bg-surface-2 rounded-surface px-2 py-1 outline-none focus:ring-1 focus:ring-accent text-fg"
+                    className="w-auto text-sm font-medium bg-surface-2 rounded-surface px-2 py-1"
                   />
                 ) : (
                   <div className="text-sm font-medium truncate text-fg">

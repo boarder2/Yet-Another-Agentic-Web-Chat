@@ -1,8 +1,10 @@
 'use client';
 
-import { cn } from '@/lib/utils';
 import { Description, Field, Label } from '@headlessui/react';
 import AppSwitch from '@/components/ui/AppSwitch';
+import { Field as FormField } from '@/components/ui/Field';
+import { Input } from '@/components/ui/Input';
+import { Textarea } from '@/components/ui/Textarea';
 import AppearancePicker from './AppearancePicker';
 import ModelPicker from '@/components/models/ModelPicker';
 import type { WorkspaceModelOverride } from '@/lib/workspaces/types';
@@ -46,59 +48,49 @@ export default function WorkspaceSettingsFields({
   variant = 'modal',
 }: WorkspaceSettingsFieldsProps) {
   const isSettings = variant === 'settings';
-  const inputClass = cn(
-    'px-3 py-2 text-sm rounded-surface border border-surface-2 focus:outline-none focus:border-accent',
-    isSettings ? 'w-full bg-surface' : 'bg-bg',
-  );
 
   return (
     <>
       {isSettings ? (
-        <div className="space-y-2">
-          <label className="text-xs text-fg/60">Name</label>
-          <input
+        <FormField label="Name">
+          <Input
             type="text"
-            aria-label="Workspace name"
             value={name}
             onChange={(e) => onNameChange(e.target.value)}
             onBlur={onNameBlur}
-            className={inputClass}
           />
-        </div>
+        </FormField>
       ) : (
-        <input
+        <Input
           type="text"
           aria-label="Workspace name"
           placeholder="Workspace name"
           value={name}
           onChange={(e) => onNameChange(e.target.value)}
           onBlur={onNameBlur}
-          className={inputClass}
           autoFocus={autoFocusName}
         />
       )}
 
       {isSettings ? (
-        <div className="space-y-2">
-          <label className="text-xs text-fg/60">Description</label>
-          <textarea
-            aria-label="Workspace description"
+        <FormField label="Description">
+          <Textarea
             value={description}
             onChange={(e) => onDescriptionChange(e.target.value)}
             onBlur={onDescriptionBlur}
             rows={3}
-            className={cn(inputClass, 'resize-none')}
+            className="resize-none"
           />
-        </div>
+        </FormField>
       ) : (
-        <textarea
+        <Textarea
           aria-label="Workspace description"
           placeholder="Description (optional)"
           value={description}
           onChange={(e) => onDescriptionChange(e.target.value)}
           onBlur={onDescriptionBlur}
           rows={2}
-          className={cn(inputClass, 'resize-none')}
+          className="resize-none"
         />
       )}
 

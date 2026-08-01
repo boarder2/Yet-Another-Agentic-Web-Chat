@@ -2,8 +2,9 @@
 
 import { LoaderCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Input } from '@/components/ui/Input';
 
-interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+interface InputComponentProps extends React.InputHTMLAttributes<HTMLInputElement> {
   isSaving?: boolean;
   onSave?: (value: string) => void;
 }
@@ -13,16 +14,12 @@ const InputComponent = ({
   isSaving,
   onSave,
   ...restProps
-}: InputProps) => {
+}: InputComponentProps) => {
   return (
     <div className="relative">
-      <input
+      <Input
         {...restProps}
-        className={cn(
-          'bg-surface w-full px-3 py-2 flex items-center overflow-hidden rounded-surface text-sm',
-          isSaving && 'pr-10',
-          className,
-        )}
+        className={cn(isSaving && 'pr-10', className)}
         onBlur={(e) => onSave?.(e.target.value)}
       />
       {isSaving && (

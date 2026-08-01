@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Send, LoaderCircle } from 'lucide-react';
 import MarkdownRenderer from '@/components/MarkdownRenderer';
 import ModelPicker from '@/components/models/ModelPicker';
+import { Textarea } from '@/components/ui/Textarea';
 import WidgetProposalCard, {
   WidgetProposal,
 } from '@/components/dashboard/WidgetProposalCard';
@@ -313,7 +314,7 @@ const WidgetChatPanel = ({
           Auto-apply proposals to the editor (you still Preview &amp; Save)
         </label>
         <div className="flex gap-2 px-0.5 pb-0.5">
-          <textarea
+          <Textarea
             value={input}
             aria-label="Message to assistant"
             onChange={(e) => setInput(e.target.value)}
@@ -325,7 +326,7 @@ const WidgetChatPanel = ({
             }}
             rows={2}
             placeholder="Describe a change…"
-            className="flex-1 px-3 py-2 border border-surface-2 rounded-control bg-bg text-fg text-sm focus:outline-none focus:ring-2 focus:ring-accent resize-none"
+            className="flex-1 resize-none"
           />
           <button
             type="button"

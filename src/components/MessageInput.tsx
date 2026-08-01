@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
+import { cn } from '@/lib/utils';
+import { controlClasses } from '@/components/ui/Input';
 import {
   subscribeLocalStorage,
   useLocalStorageString,
@@ -482,7 +484,11 @@ const MessageInput = ({
             onChange={handleTextareaChange}
             onPaste={handlePaste}
             minRows={1}
-            className="px-3 py-2 overflow-y-auto flex rounded-surface bg-transparent text-sm resize-none w-full max-h-24 lg:max-h-36 xl:max-h-48"
+            className={cn(
+              'w-full',
+              controlClasses,
+              'overflow-y-auto flex resize-none max-h-24 lg:max-h-36 xl:max-h-48',
+            )}
             placeholder={
               firstMessage
                 ? 'What would you like to learn today?'

@@ -18,6 +18,7 @@ import {
   usePatchWorkspaceFile,
   type FileMeta,
 } from '@/lib/hooks/api/useWorkspaceFiles';
+import { Input } from '@/components/ui/Input';
 
 function isEditableFile(f: FileMeta): boolean {
   return !f.isBinary;
@@ -168,9 +169,9 @@ export default function FilesTab({
               compact ? 'flex flex-col gap-2 w-full' : 'flex gap-2 items-center'
             }
           >
-            <input
+            <Input
               aria-label="Note name"
-              className="min-w-0 w-full border border-surface-2 rounded-surface px-2 py-1.5 text-sm bg-bg focus:outline-none focus:border-accent"
+              className="min-w-0 rounded-surface px-2 py-1.5"
               value={noteName}
               onChange={(e) => setNoteName(e.target.value)}
               autoFocus

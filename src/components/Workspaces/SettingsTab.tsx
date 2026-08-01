@@ -13,6 +13,7 @@ import {
 import type { WorkspaceModelOverride } from '@/lib/workspaces/types';
 import { captureCurrentSelection } from '@/lib/models/presets';
 import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
 import Modal from '@/components/ui/Modal';
 
 interface Workspace {
@@ -224,11 +225,10 @@ export default function SettingsTab({ workspace }: { workspace: Workspace }) {
             <label className="text-xs text-fg/60">
               Type <strong>{workspace.name}</strong> to confirm
             </label>
-            <input
+            <Input
               aria-label={`Confirm workspace name: ${workspace.name}`}
               value={deleteConfirmName}
               onChange={(e) => setDeleteConfirmName(e.target.value)}
-              className="w-full rounded-surface border border-surface-2 bg-surface px-3 py-2 text-sm focus:outline-none focus:border-accent"
               placeholder={workspace.name}
             />
           </div>

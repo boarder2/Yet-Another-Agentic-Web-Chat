@@ -1,23 +1,25 @@
 'use client';
 
 import { LoaderCircle } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Textarea } from '@/components/ui/Textarea';
 
-interface TextareaProps extends React.InputHTMLAttributes<HTMLTextAreaElement> {
+interface TextareaComponentProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
   isSaving?: boolean;
   onSave?: (value: string) => void;
 }
 
 const TextareaComponent = ({
-  className: _className,
+  className,
   isSaving,
   onSave,
   ...restProps
-}: TextareaProps) => {
+}: TextareaComponentProps) => {
   return (
     <div className="relative">
-      <textarea
+      <Textarea
         placeholder="Any special instructions for the LLM"
-        className="placeholder:text-sm text-sm w-full flex items-center justify-between p-3 bg-surface rounded-surface hover:bg-surface-2 transition-colors"
+        className={cn('p-3', isSaving && 'pr-10', className)}
         rows={4}
         onBlur={(e) => onSave?.(e.target.value)}
         {...restProps}

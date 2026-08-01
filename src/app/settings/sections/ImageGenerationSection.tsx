@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import SettingsSection from '../components/SettingsSection';
 import Select from '@/components/ui/Select';
+import { Field } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
 import { RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
@@ -113,50 +114,46 @@ export default function ImageGenerationSection() {
 
         {enabled && (
           <>
-            <div className="flex flex-col space-y-1">
-              <p className="text-sm">Image Generation Model</p>
-              <p className="text-xs text-fg/50">
-                Choose an OpenRouter model that supports image output. Requires
-                a valid OpenRouter API key.
-              </p>
+            <Field
+              label="Image Generation Model"
+              hint="Choose an OpenRouter model that supports image output. Requires a valid OpenRouter API key."
+            >
               <Select
                 value={model}
                 options={modelOptions}
                 onChange={(e) => setModel(e.target.value)}
               />
-              {loadingModels && (
-                <p className="text-xs text-fg/50">Loading models...</p>
-              )}
-              {!loadingModels && imageGenModels.length === 0 && (
-                <p className="text-xs text-fg/50">
-                  No models available — check your API key.
-                </p>
-              )}
-            </div>
-
-            <div className="flex flex-col space-y-1">
-              <p className="text-sm">Default Aspect Ratio</p>
+            </Field>
+            {loadingModels && (
+              <p className="text-xs text-fg/50">Loading models...</p>
+            )}
+            {!loadingModels && imageGenModels.length === 0 && (
               <p className="text-xs text-fg/50">
-                The agent will use this unless the user specifies otherwise.
+                No models available — check your API key.
               </p>
+            )}
+
+            <Field
+              label="Default Aspect Ratio"
+              hint="The agent will use this unless the user specifies otherwise."
+            >
               <Select
                 value={aspectRatio}
                 options={ASPECT_RATIOS}
                 onChange={(e) => setAspectRatio(e.target.value)}
               />
-            </div>
+            </Field>
 
-            <div className="flex flex-col space-y-1">
-              <p className="text-sm">Default Resolution</p>
-              <p className="text-xs text-fg/50">
-                Higher resolutions produce more detail but may be slower.
-              </p>
+            <Field
+              label="Default Resolution"
+              hint="Higher resolutions produce more detail but may be slower."
+            >
               <Select
                 value={imageSize}
                 options={IMAGE_SIZES}
                 onChange={(e) => setImageSize(e.target.value)}
               />
-            </div>
+            </Field>
           </>
         )}
       </div>

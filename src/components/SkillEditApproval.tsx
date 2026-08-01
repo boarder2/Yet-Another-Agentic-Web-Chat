@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import { Button } from '@/components/ui/Button';
 import ApprovalPanel, { ApprovalChip } from '@/components/ui/ApprovalPanel';
+import { Textarea } from '@/components/ui/Textarea';
 import { BookOpen, X, Check, Ban } from 'lucide-react';
 
 export type { PendingSkillEditApproval } from '@/lib/streaming/chatState';
@@ -289,7 +290,7 @@ export function SkillEditApproval({
 
       {showRejectInput && (
         <div className="px-5 py-3 border-b border-surface-2">
-          <textarea
+          <Textarea
             autoFocus
             aria-label="Rejection reason"
             value={rejectText}
@@ -302,7 +303,7 @@ export function SkillEditApproval({
               if (e.key === 'Escape') setShowRejectInput(false);
             }}
             placeholder="Optional: tell the agent why you rejected this…"
-            className="w-full bg-surface-2/50 border border-surface-2 rounded-surface px-3 py-2 text-sm text-fg placeholder:text-fg/30 focus:outline-none focus:border-accent resize-none"
+            className="bg-surface-2/50 rounded-surface placeholder:text-fg/30 resize-none"
             rows={2}
           />
         </div>

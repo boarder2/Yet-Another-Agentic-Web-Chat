@@ -15,6 +15,11 @@
   --color-fg: oklch(0.21 0 0); /* text */
   --color-surface: color-mix(in oklch, var(--color-bg), black 6%);
   --color-surface-2: color-mix(in oklch, var(--color-bg), black 10%);
+  --color-well: color-mix(
+    in oklch,
+    var(--color-bg) 50%,
+    var(--color-surface)
+  ); /* recessed field fill, midway between bg and surface */
   --color-border: var(--color-surface-2);
   --color-border-strong: color-mix(in oklch, var(--color-fg), transparent 70%);
   --color-overlay: oklch(0 0 0 / 0.5);
@@ -132,13 +137,6 @@
   input[type='submit']:not(:disabled):hover,
   input[type='reset']:not(:disabled):hover {
     color: var(--color-accent);
-  }
-
-  input[type='text']:focus,
-  textarea:focus {
-    border-color: var(--color-accent);
-    outline: none;
-    border: 1px solid var(--color-accent);
   }
 
   a:hover {

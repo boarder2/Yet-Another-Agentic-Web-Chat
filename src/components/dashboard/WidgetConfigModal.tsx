@@ -5,6 +5,9 @@ import { Play, Save, Brain } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import WidgetContent from '@/components/dashboard/WidgetContent';
 import { Button } from '@/components/ui/Button';
+import { Field } from '@/components/ui/Field';
+import { Input } from '@/components/ui/Input';
+import { Textarea } from '@/components/ui/Textarea';
 import Modal from '@/components/ui/Modal';
 import Select from '@/components/ui/Select';
 import ModelPicker from '@/components/models/ModelPicker';
@@ -215,11 +218,8 @@ const WidgetConfigModal = ({
         {/* Left Column - Configuration */}
         <div className="flex flex-col min-h-0 overflow-y-auto space-y-4 pr-2">
           {/* Widget Title */}
-          <div>
-            <label className="block text-sm font-medium text-fg mb-1">
-              Widget Title
-            </label>
-            <input
+          <Field label="Widget Title">
+            <Input
               type="text"
               aria-label="Widget title"
               value={config.title}
@@ -229,13 +229,12 @@ const WidgetConfigModal = ({
                   title: e.target.value,
                 }))
               }
-              className="w-full px-3 py-2 border border-surface-2 rounded-control bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
               placeholder="Enter widget title..."
             />
-            {errors.title && (
-              <p className="text-xs text-danger mt-1">{errors.title}</p>
-            )}
-          </div>
+          </Field>
+          {errors.title && (
+            <p className="text-xs text-danger mt-1">{errors.title}</p>
+          )}
 
           {/* Source URLs */}
           <div>
@@ -251,11 +250,8 @@ const WidgetConfigModal = ({
           </div>
 
           {/* LLM Prompt */}
-          <div>
-            <label className="block text-sm font-medium text-fg mb-1">
-              LLM Prompt
-            </label>
-            <textarea
+          <Field label="LLM Prompt">
+            <Textarea
               aria-label="LLM prompt"
               value={config.prompt}
               onChange={(e) =>
@@ -265,13 +261,12 @@ const WidgetConfigModal = ({
                 }))
               }
               rows={8}
-              className="w-full px-3 py-2 border border-surface-2 rounded-control bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
               placeholder="Enter your prompt here..."
             />
-            {errors.prompt && (
-              <p className="text-xs text-danger mt-1">{errors.prompt}</p>
-            )}
-          </div>
+          </Field>
+          {errors.prompt && (
+            <p className="text-xs text-danger mt-1">{errors.prompt}</p>
+          )}
 
           {/* Provider and Model Selection */}
           <div>
@@ -320,7 +315,7 @@ const WidgetConfigModal = ({
               Refresh Frequency
             </label>
             <div className="flex gap-2">
-              <input
+              <Input
                 type="number"
                 aria-label="Refresh frequency"
                 min="1"
@@ -331,7 +326,6 @@ const WidgetConfigModal = ({
                     refreshFrequency: parseInt(e.target.value) || 1,
                   }))
                 }
-                className="flex-1 px-3 py-2 border border-surface-2 rounded-control bg-bg text-fg focus:outline-none focus:ring-2 focus:ring-accent"
               />
               <Select
                 value={config.refreshUnit}
@@ -341,7 +335,6 @@ const WidgetConfigModal = ({
                     refreshUnit: e.target.value as 'minutes' | 'hours',
                   }))
                 }
-                className="bg-bg"
               >
                 <option value="minutes">Minutes</option>
                 <option value="hours">Hours</option>

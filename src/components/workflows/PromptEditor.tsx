@@ -63,7 +63,7 @@ function buildFrontmatterLines(doc: string) {
   const { frontmatter, frontmatterOffset, bodyOffset } = splitFrontmatter(doc);
   const builder = new RangeSetBuilder<Decoration>();
   if (frontmatter !== null) {
-    for (let p = frontmatterOffset; p < bodyOffset; ) {
+    for (let p = frontmatterOffset; p < bodyOffset;) {
       builder.add(p, p, frontmatterLine);
       const nl = doc.indexOf('\n', p);
       if (nl === -1) break;

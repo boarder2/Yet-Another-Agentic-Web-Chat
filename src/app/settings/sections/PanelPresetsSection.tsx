@@ -26,7 +26,7 @@ import {
   EMPTY_PANEL_SELECTION,
   PANEL_MIN,
   PANEL_MAX,
-  isPanelSelectionReady,
+  hasValidExecutors,
   sameModel,
   type PanelSelection,
   type PanelModelEntry,
@@ -150,8 +150,8 @@ export default function PanelPresetsSection() {
   };
 
   const saveCurrent = () => {
-    if (!isPanelSelectionReady(selection)) {
-      toast.error('Configure an enabled panel in the composer first');
+    if (!hasValidExecutors(selection)) {
+      toast.error('Configure a panel in the composer first');
       return;
     }
     setDeletingId(null);

@@ -188,10 +188,7 @@ export const getSearxngApiEndpoint = () =>
   process.env.SEARXNG_API_URL || getSearxngApiUrl();
 
 export type SearchProviderIdType =
-  | 'searxng'
-  | 'brave_search'
-  | 'brave_llm'
-  | 'mojeek';
+  'searxng' | 'brave_search' | 'brave_llm' | 'mojeek';
 
 export const getBraveSearchApiKey = () => getCredential('search.braveSearch');
 

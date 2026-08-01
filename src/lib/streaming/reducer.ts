@@ -849,8 +849,7 @@ function reduceCodeExecutionResult(
         ? {
             ...execution,
             status: (d.denied ? 'denied' : 'completed') as
-              | 'denied'
-              | 'completed',
+              'denied' | 'completed',
             result: d as PendingExecution['result'],
           }
         : execution,

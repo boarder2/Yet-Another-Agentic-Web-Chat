@@ -37,7 +37,12 @@ test.describe('settings persistence', () => {
       .waitFor({ state: 'visible' });
 
     // 2. Find the AppSwitch for Automatic Suggestions and toggle it off.
-    const toggle = page.locator('button[role="switch"]').first();
+    // Scoped to the dialog: the composer's agent-panel toggle is also a
+    // `button[role="switch"]` and appears earlier in the DOM.
+    const toggle = page
+      .getByRole('dialog')
+      .locator('button[role="switch"]')
+      .first();
     const initiallyChecked = (await toggle.getAttribute('data-checked')) === '';
 
     // Toggle to the opposite state.
@@ -88,7 +93,10 @@ test.describe('settings persistence', () => {
       .first()
       .waitFor({ state: 'visible' });
 
-    const toggleAfterReload = page.locator('button[role="switch"]').first();
+    const toggleAfterReload = page
+      .getByRole('dialog')
+      .locator('button[role="switch"]')
+      .first();
     const reloadChecked =
       (await toggleAfterReload.getAttribute('data-checked')) === '';
     expect(reloadChecked).toBe(expectedState);

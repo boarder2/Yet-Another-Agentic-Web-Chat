@@ -2,11 +2,7 @@ import type { EventEmitter } from 'stream';
 import type { StreamEvent } from '@/lib/streaming/events';
 
 export type RunStatus =
-  | 'running'
-  | 'awaiting_user'
-  | 'completed'
-  | 'errored'
-  | 'cancelled';
+  'running' | 'awaiting_user' | 'completed' | 'errored' | 'cancelled';
 
 export type SeqEvent = {
   seq: number;

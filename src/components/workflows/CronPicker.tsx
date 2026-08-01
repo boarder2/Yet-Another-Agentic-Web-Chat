@@ -170,13 +170,7 @@ export default function CronPicker({
               onChange={(e) =>
                 update({
                   day: parseInt(e.target.value, 10) as
-                    | 0
-                    | 1
-                    | 2
-                    | 3
-                    | 4
-                    | 5
-                    | 6,
+                    0 | 1 | 2 | 3 | 4 | 5 | 6,
                 })
               }
             >

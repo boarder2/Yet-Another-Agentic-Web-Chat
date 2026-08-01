@@ -162,7 +162,7 @@ const distinctFiles = (e) => new Set(e.sites.map((s) => s.split(':')[0])).size;
 
 function scan(text, re, fn) {
   re.lastIndex = 0;
-  for (let m; (m = re.exec(text)); ) fn(m);
+  for (let m; (m = re.exec(text));) fn(m);
 }
 
 /* ---------------------------------------------------------- raw literals */

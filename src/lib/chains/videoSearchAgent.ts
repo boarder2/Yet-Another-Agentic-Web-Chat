@@ -145,9 +145,7 @@ const handleVideoSearch = (
   llm: BaseChatModel,
 ) => {
   const VideoSearchChain = createVideoSearchChain(llm, !!input.isPrivate);
-  return VideoSearchChain.invoke(input, {
-    /* ...getLangfuseCallbacks() */
-  });
+  return VideoSearchChain.invoke(input, {/* ...getLangfuseCallbacks() */});
 };
 
 export default handleVideoSearch;

@@ -1,8 +1,5 @@
 export type SearchProviderId =
-  | 'searxng'
-  | 'brave_search'
-  | 'brave_llm'
-  | 'mojeek';
+  'searxng' | 'brave_search' | 'brave_llm' | 'mojeek';
 
 export type SearchCapability = 'web' | 'images' | 'videos' | 'autocomplete';
 

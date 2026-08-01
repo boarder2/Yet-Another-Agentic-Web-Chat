@@ -105,8 +105,7 @@ export function isModelRefAvailable(
   provider: string,
   model: string,
   modelsData:
-    | Record<string, Record<string, { displayName: string }>>
-    | undefined,
+    Record<string, Record<string, { displayName: string }>> | undefined,
 ): boolean {
   if (!modelsData) return true;
   if (provider === 'custom_openai') return true;
@@ -118,8 +117,7 @@ export function isModelRefAvailable(
 export function isPresetAvailable(
   preset: ModelPreset,
   modelsData:
-    | Record<string, Record<string, { displayName: string }>>
-    | undefined,
+    Record<string, Record<string, { displayName: string }>> | undefined,
 ): boolean {
   return (
     isModelRefAvailable(preset.chatProvider, preset.chatModel, modelsData) &&

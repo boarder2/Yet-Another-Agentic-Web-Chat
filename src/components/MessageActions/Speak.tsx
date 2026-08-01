@@ -23,8 +23,7 @@ const readMode = (): Mode =>
     : 'read';
 
 const readNarrationModel = ():
-  | { provider: string; name: string }
-  | undefined => {
+  { provider: string; name: string } | undefined => {
   if (typeof window === 'undefined') return undefined;
   const provider = localStorage.getItem('ttsNarrationProvider') || '';
   const name = localStorage.getItem('ttsNarrationModel') || '';

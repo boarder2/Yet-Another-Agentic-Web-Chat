@@ -138,9 +138,7 @@ const handleImageSearch = (
   llm: BaseChatModel,
 ) => {
   const imageSearchChain = createImageSearchChain(llm, !!input.isPrivate);
-  return imageSearchChain.invoke(input, {
-    /* ...getLangfuseCallbacks() */
-  });
+  return imageSearchChain.invoke(input, {/* ...getLangfuseCallbacks() */});
 };
 
 export default handleImageSearch;

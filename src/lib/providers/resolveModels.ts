@@ -41,8 +41,7 @@ export async function resolveModelRef(
 
   const providers = await getAvailableChatModelProviders();
   let llm = providers[ref.provider]?.[ref.name]?.model as unknown as
-    | BaseChatModel
-    | undefined;
+    BaseChatModel | undefined;
   if (!llm) return null;
 
   // `isolate` callers (e.g. panel executors) run this model concurrently with
@@ -155,8 +154,7 @@ export async function resolveChatAndEmbedding(input: {
       chatModelProviders[sysProvider][sysName]
     ) {
       systemLlm = chatModelProviders[sysProvider][sysName].model as unknown as
-        | BaseChatModel
-        | undefined;
+        BaseChatModel | undefined;
     }
     if (systemLlm) {
       const cw = input.systemModel?.contextWindowSize || DEFAULT_CONTEXT_WINDOW;

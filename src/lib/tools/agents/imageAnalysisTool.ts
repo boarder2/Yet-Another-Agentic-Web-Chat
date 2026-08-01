@@ -173,9 +173,7 @@ Be factual and specific. Describe only what you can actually see in the image.`;
       const usageData =
         result.usage_metadata ??
         (result.response_metadata?.usage as
-          | Record<string, number>
-          | null
-          | undefined);
+          Record<string, number> | null | undefined);
       if (usageData) {
         const rawUsage = usageData as Record<string, number>;
         const inputTokens =

@@ -145,9 +145,7 @@ export function buildToolForDescriptor(
         });
 
         const res = response as
-          | { approved?: boolean; __cancelled?: boolean }
-          | null
-          | undefined;
+          { approved?: boolean; __cancelled?: boolean } | null | undefined;
         if (!res || res.__cancelled) {
           return makeMsg('Tool call cancelled by user.');
         }

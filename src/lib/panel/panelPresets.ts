@@ -96,8 +96,7 @@ export function findMatchingPanelPreset(
 export function isPanelPresetAvailable(
   preset: PanelPreset,
   modelsData:
-    | Record<string, Record<string, { displayName: string }>>
-    | undefined,
+    Record<string, Record<string, { displayName: string }>> | undefined,
 ): boolean {
   if (!modelsData) return true;
   const has = (m: PanelModelEntry): boolean => {

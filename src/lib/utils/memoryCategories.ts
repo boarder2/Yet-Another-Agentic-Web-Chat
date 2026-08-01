@@ -3,11 +3,7 @@ import { HumanMessage } from '@langchain/core/messages';
 import { classificationPrompt } from '@/lib/prompts/memory/classification';
 
 export type MemoryCategory =
-  | 'Preference'
-  | 'Profile'
-  | 'Professional'
-  | 'Project'
-  | 'Instruction';
+  'Preference' | 'Profile' | 'Professional' | 'Project' | 'Instruction';
 
 export const MEMORY_CATEGORIES: MemoryCategory[] = [
   'Preference',

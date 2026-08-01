@@ -31,13 +31,14 @@ export const EMPTY_PANEL_SELECTION: PanelSelection = {
 export const PANEL_MIN = PANEL_MIN_EXECUTORS;
 export const PANEL_MAX = PANEL_MAX_EXECUTORS;
 
+/** Whether the selection holds a usable executor set, regardless of on/off. */
+export function hasValidExecutors(sel: PanelSelection): boolean {
+  return sel.executors.length >= PANEL_MIN && sel.executors.length <= PANEL_MAX;
+}
+
 /** A panel selection is sendable when enabled with 2–4 executors. */
 export function isPanelSelectionReady(sel: PanelSelection): boolean {
-  return (
-    sel.enabled &&
-    sel.executors.length >= PANEL_MIN &&
-    sel.executors.length <= PANEL_MAX
-  );
+  return sel.enabled && hasValidExecutors(sel);
 }
 
 export function sameModel(a: PanelModelEntry, b: PanelModelEntry): boolean {

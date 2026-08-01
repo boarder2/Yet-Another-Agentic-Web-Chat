@@ -917,8 +917,7 @@ test.describe('GET /api/chat/runs/[messageId]/stream', () => {
       await request.get(`/api/chat/runs/${messageId}/stream`),
     );
     const complete = replayEvents.find((e) => e.type === 'replay_complete') as
-      | { type: string; content?: string }
-      | undefined;
+      { type: string; content?: string } | undefined;
     expect(complete).toBeDefined();
     expect(complete!.content).toBe('This is a deterministic test answer.');
   });

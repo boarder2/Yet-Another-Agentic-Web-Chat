@@ -387,9 +387,7 @@ async function assertSnapshotFresh(
       );
     }
     const expectedHash = snapshot.existingSkillContentHash as
-      | string
-      | null
-      | undefined;
+      string | null | undefined;
     if (current && expectedHash) {
       const currentHash = createHash('sha256')
         .update(current.content)
@@ -686,8 +684,7 @@ async function performResume(items: ResumeItem[]): Promise<void> {
       .map(
         (a) =>
           (a.payload as Record<string, unknown> | null)?._descriptorSnapshot as
-            | import('@/lib/mcp/types').McpToolDescriptor
-            | undefined,
+            import('@/lib/mcp/types').McpToolDescriptor | undefined,
       )
       .filter(
         (s): s is import('@/lib/mcp/types').McpToolDescriptor => s != null,

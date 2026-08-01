@@ -23,27 +23,73 @@ test.describe('agent panel', () => {
     await flushed;
   });
 
-  test('enabling requires 2-4 executors before it is usable', async ({
+  test('the composer toggle only engages once 2-4 executors are selected', async ({
     page,
   }) => {
     const chat = new ChatPage(page);
     await chat.goto('/');
 
-    await chat.openAgentPanel();
-    await chat.setAgentPanelEnabled(true);
-    await expect(
-      page.getByText('Select 2–4 executors to use the panel.'),
-    ).toBeVisible();
+    const hint = page.getByText('Add at least 2 models to enable the panel.');
 
+    // Under-configured: the toggle half opens configuration rather than
+    // engaging a panel that would silently run single-model.
+    await chat.panelToggle.click();
+    await expect(chat.agentPanel()).toBeVisible();
+    await expect(chat.panelToggle).toHaveAttribute('aria-checked', 'false');
+    await expect(hint).toBeVisible();
+
+    // One executor is still under-configured, so the toggle stays disengaged.
     await chat.addPanelExecutor('Test (direct)');
-    await expect(
-      page.getByText('Select 2–4 executors to use the panel.'),
-    ).toBeVisible();
+    await expect(hint).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(chat.agentPanel()).toHaveCount(0);
+    await chat.panelToggle.click();
+    await expect(chat.panelToggle).toHaveAttribute('aria-checked', 'false');
+    await expect(chat.agentPanel()).toBeVisible();
 
     await chat.addPanelExecutor('Test (slow stream)');
-    await expect(
-      page.getByText('Select 2–4 executors to use the panel.'),
-    ).toHaveCount(0);
+    await expect(hint).toHaveCount(0);
+
+    // Configured: one click engages, one click releases — no popover needed.
+    await page.keyboard.press('Escape');
+    await expect(chat.agentPanel()).toHaveCount(0);
+    await chat.panelToggle.click();
+    await expect(chat.panelToggle).toHaveAttribute('aria-checked', 'true');
+    await expect(chat.agentPanel()).toHaveCount(0);
+
+    await chat.panelToggle.click();
+    await expect(chat.panelToggle).toHaveAttribute('aria-checked', 'false');
+    await expect(chat.agentPanel()).toHaveCount(0);
+  });
+
+  test('removing executors below the minimum disables the panel', async ({
+    page,
+  }) => {
+    const chat = new ChatPage(page);
+    await chat.goto('/');
+
+    await chat.configureAgentPanel(['Test (direct)', 'Test (tool loop)']);
+    await expect(chat.panelToggle).toHaveAttribute('aria-checked', 'true');
+
+    await chat.openAgentPanel();
+    await chat
+      .agentPanel()
+      .getByRole('button', { name: 'Remove' })
+      .first()
+      .click();
+    await expect(chat.panelToggle).toHaveAttribute('aria-checked', 'false');
+
+    // A turn sent while disabled carries no panel config.
+    const panelRequests: string[] = [];
+    page.on('response', (r) => {
+      if (r.url().includes('/api/chat') && r.request().method() === 'POST') {
+        panelRequests.push(r.request().postData() ?? '');
+      }
+    });
+    await chat.page.keyboard.press('Escape');
+    await chat.sendMessage(`panel-disabled-${Date.now()}`);
+    await chat.waitForStreamComplete();
+    expect(panelRequests.every((b) => !b.includes('"panel":'))).toBe(true);
   });
 
   test('fans a prompt across 2 executors, shows per-executor progress, and synthesizes one answer', async ({

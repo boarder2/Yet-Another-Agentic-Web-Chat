@@ -12,7 +12,13 @@ export class ChatPage extends BasePage {
   readonly focusButton = this.page.getByTitle('Focus Mode');
   readonly sourcesButton = this.page.getByTitle('Sources');
   readonly attachInput = this.page.locator('input[aria-label="Attach files"]');
-  readonly panelButton = this.page.getByTitle('Agent Panel');
+  /** Split control: the icon half toggles, the chevron half opens config. */
+  readonly panelToggle = this.page.getByRole('switch', {
+    name: /^Agent Panel/,
+  });
+  readonly panelConfigButton = this.page.getByRole('button', {
+    name: 'Configure agent panel',
+  });
 
   async goto(path = '/') {
     await super.goto(path);
@@ -68,9 +74,14 @@ export class ChatPage extends BasePage {
     await this.sourcesButton.click();
   }
 
-  /** Open the Agent Panel popover (composer control, disabled outside research modes). */
+  /** Open the Agent Panel popover (composer control, disabled outside research
+   * modes). Idempotent — the chevron toggles, so re-clicking an open popover
+   * would dismiss it. */
   async openAgentPanel() {
-    await this.panelButton.click();
+    if (!(await this.agentPanel().isVisible())) {
+      await this.panelConfigButton.click();
+    }
+    await this.agentPanel().waitFor({ state: 'visible' });
   }
 
   /** The Agent Panel popover, scoped by its heading (shares ring/shadow classes
@@ -81,14 +92,15 @@ export class ChatPage extends BasePage {
       .filter({ hasText: 'Agent Panel' });
   }
 
-  /** Drive the panel switch to a known state — the selection is DB-synced, so a
-   * blind toggle would invert whatever the composer hydrated. */
+  /** Drive the composer toggle to a known state — the selection is DB-synced,
+   * so a blind toggle would invert whatever the composer hydrated. Enabling
+   * only takes effect once 2–4 executors are selected; otherwise the toggle
+   * opens the config popover instead. */
   async setAgentPanelEnabled(enabled: boolean) {
-    const toggle = this.agentPanel().getByRole('switch', {
-      name: 'Enable agent panel',
-    });
-    if ((await toggle.getAttribute('aria-checked')) !== String(enabled)) {
-      await toggle.click();
+    if (
+      (await this.panelToggle.getAttribute('aria-checked')) !== String(enabled)
+    ) {
+      await this.panelToggle.click();
     }
   }
 
@@ -112,15 +124,18 @@ export class ChatPage extends BasePage {
     await model.click();
   }
 
-  /** Enable the panel and select its executors in one call, then close the
-   * popover so it doesn't cover the composer for subsequent interactions. */
+  /** Select the panel's executors and enable it. Models come first: the panel
+   * can only be switched on once it holds a valid executor set. */
   async configureAgentPanel(executorDisplayNames: string[]) {
     await this.openAgentPanel();
-    await this.setAgentPanelEnabled(true);
     for (const name of executorDisplayNames) {
       await this.addPanelExecutor(name);
     }
     await this.page.keyboard.press('Escape');
+    // Wait for the leave transition to finish — the popover stays "visible"
+    // while fading out, which would fool a later isVisible() idempotency check.
+    await this.agentPanel().waitFor({ state: 'hidden' });
+    await this.setAgentPanelEnabled(true);
   }
 
   /** Upload a document through the real attach flow (not a workspace-file seed). */

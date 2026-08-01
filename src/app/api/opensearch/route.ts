@@ -54,12 +54,10 @@ export async function GET(request: Request) {
     if (headers['x-forwarded-port']) {
       const port = headers['x-forwarded-port'];
       // Don't append standard ports (80 for HTTP, 443 for HTTPS)
-      if (
-        !(
-          (protocol === 'http' && port === '80') ||
-          (protocol === 'https' && port === '443')
-        )
-      ) {
+      if (!(
+        (protocol === 'http' && port === '80') ||
+        (protocol === 'https' && port === '443')
+      )) {
         origin = `${origin}:${port}`;
       }
     }

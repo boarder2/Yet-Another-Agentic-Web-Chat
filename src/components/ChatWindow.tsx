@@ -1023,12 +1023,10 @@ const ChatWindow = ({
                         questionId: approval.approvalId,
                         question: p.question as string,
                         options: p.options as
-                          | { label: string; description?: string }[]
-                          | undefined,
+                          { label: string; description?: string }[] | undefined,
                         multiSelect: p.multiSelect as boolean | undefined,
                         allowFreeformInput: p.allowFreeformInput as
-                          | boolean
-                          | undefined,
+                          boolean | undefined,
                         context: p.context as string | undefined,
                         toolCallId: p.toolCallId as string | undefined,
                         createdAt: p.createdAt as number | undefined,
@@ -1075,14 +1073,11 @@ const ChatWindow = ({
                         newContent: p.newContent as string,
                         scope: p.scope as 'global' | 'workspace',
                         newScope: p.newScope as
-                          | 'global'
-                          | 'workspace'
-                          | undefined,
+                          'global' | 'workspace' | undefined,
                         oldDisableModelInvocation:
                           p.oldDisableModelInvocation as boolean | undefined,
                         disableModelInvocation: p.disableModelInvocation as
-                          | boolean
-                          | undefined,
+                          boolean | undefined,
                         workspaceId: p.workspaceId as string | null | undefined,
                         skillId: p.skillId as string | undefined,
                         createdAt: p.createdAt as number | undefined,
@@ -1157,8 +1152,7 @@ const ChatWindow = ({
     const hydrated: Record<string, Record<string, ChartSpec>> = {};
     for (const msg of messages) {
       const specs = (msg as unknown as Record<string, unknown>).chartSpecs as
-        | Record<string, unknown>
-        | undefined;
+        Record<string, unknown> | undefined;
       if (specs && Object.keys(specs).length > 0) {
         const validSpecs: Record<string, ChartSpec> = {};
         for (const [id, spec] of Object.entries(specs)) {
@@ -1857,10 +1851,7 @@ const ChatWindow = ({
                   onEditDecide={async (
                     approvalId: string,
                     decision:
-                      | 'accept'
-                      | 'accept_always'
-                      | 'reject'
-                      | 'always_prompt',
+                      'accept' | 'accept_always' | 'reject' | 'always_prompt',
                     freeformText?: string,
                   ) => {
                     setPendingEditApprovals((prev) => {
@@ -1958,8 +1949,7 @@ const ChatWindow = ({
                             ? {
                                 ...a,
                                 status: (approved ? 'approved' : 'denied') as
-                                  | 'approved'
-                                  | 'denied',
+                                  'approved' | 'denied',
                               }
                             : a,
                         );

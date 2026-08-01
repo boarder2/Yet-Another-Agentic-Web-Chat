@@ -38,7 +38,7 @@ Phase 1 runs only on a **new** message; **resume never re-runs Phase 1** (it reu
 
 ## UI & persistence
 
-- Composer entry: `src/components/MessageInputActions/PanelSelector.tsx` + device-local `panelSelection`.
+- Composer entry: `src/components/MessageInputActions/PanelSelector.tsx` + device-local `panelSelection`. Split control: the icon half toggles the panel in one click, the chevron half opens configuration. `enabled` can only be set while the selection holds 2–4 executors (`hasValidExecutors`), so the engaged state always matches what the turn sends — clicking the toggle on an under-configured panel opens the popover instead. Removing executors below the minimum clears `enabled`. Applying a preset is the one action that enables implicitly.
 - Presets: `src/lib/panel/panelPresets.ts` (stored like model presets) with a Settings section (`src/app/settings/sections/PanelPresetsSection.tsx`).
 - `panelPresets` and `panelSelection` are in `MIGRATED_SETTING_KEYS` (DB-synced) — see the `settings-persistence` skill.
 

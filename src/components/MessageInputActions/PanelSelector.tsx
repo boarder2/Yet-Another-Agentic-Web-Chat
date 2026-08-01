@@ -18,6 +18,7 @@ import {
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import AppSwitch from '@/components/ui/AppSwitch';
 import { useSettingsModal } from '@/components/settings/SettingsModalProvider';
 import { useLocalStorageJSON } from '@/lib/hooks/useLocalStorage';
 import { useModels } from '@/lib/hooks/api/useModels';
@@ -58,6 +59,12 @@ const UNSUPPORTED_LABEL =
  * to focus mode; the panel only applies in research focus modes (webSearch /
  * localResearch), so it is disabled in the conversational-only modes where
  * multi-agent research adds nothing.
+ *
+ * Below sm the split collapses to the chevron alone (restyled as a single
+ * Layers button) and the popover header carries an on/off switch — one
+ * trigger on every viewport, which headlessui requires: the panel anchors to
+ * the last-mounted PopoverButton, so an extra hidden one would anchor it to
+ * an invisible element.
  *
  * `enabled` is only ever set while the selection holds 2–4 executors
  * (`hasValidExecutors`), so the engaged state always matches what the turn
@@ -173,13 +180,18 @@ const PanelSelector = ({ focusMode }: { focusMode: string }) => {
     'aria-label': supported ? label : UNSUPPORTED_LABEL,
     'aria-checked': active,
     disabled: !supported,
-    className: cn(halfClasses, 'p-2 rounded-l-control'),
+    className: cn(halfClasses, 'hidden sm:inline-block p-2 rounded-l-control'),
   };
 
   return (
     <Popover className="relative">
       {({ open }) => (
         <>
+          {/* Split control: the icon half toggles in one click, the chevron
+              half opens configuration. Below sm the icon half hides and the
+              chevron becomes the whole button — one trigger on every
+              viewport, so the panel's anchor (the last PopoverButton) stays
+              visible. */}
           <div className="flex items-center rounded-control">
             {configured ? (
               <button
@@ -201,14 +213,15 @@ const PanelSelector = ({ focusMode }: { focusMode: string }) => {
               disabled={!supported}
               className={cn(
                 halfClasses,
-                'py-2 pl-0.5 pr-1.5 rounded-r-control',
+                'p-2 sm:py-2 sm:pl-0.5 sm:pr-1.5 rounded-control sm:rounded-r-control',
                 open && 'text-accent bg-surface-2',
               )}
             >
+              <Layers className="sm:hidden" size={18} />
               <ChevronDown
                 size={12}
                 className={cn(
-                  'transition-transform duration-150',
+                  'hidden sm:block transition-transform duration-150',
                   open ? 'rotate-180' : '',
                 )}
               />
@@ -237,10 +250,11 @@ const PanelSelector = ({ focusMode }: { focusMode: string }) => {
                       synthesize
                     </p>
                   </div>
-                  {/* Read-only: the composer's toggle half owns on/off. */}
+                  {/* Read-only on desktop: the composer's toggle half owns
+                      on/off. Below sm it is a real switch. */}
                   <span
                     className={cn(
-                      'shrink-0 text-xs font-medium px-2 py-0.5 rounded-pill',
+                      'hidden sm:inline-flex shrink-0 text-xs font-medium px-2 py-0.5 rounded-pill',
                       active
                         ? 'bg-accent/10 text-accent'
                         : 'bg-surface-2 text-fg/60',
@@ -248,6 +262,14 @@ const PanelSelector = ({ focusMode }: { focusMode: string }) => {
                   >
                     {active ? 'On' : 'Off'}
                   </span>
+                  <div className="sm:hidden">
+                    <AppSwitch
+                      checked={active}
+                      onChange={() => update({ enabled: !selection.enabled })}
+                      disabled={!supported || !configured}
+                      aria-label={supported ? label : UNSUPPORTED_LABEL}
+                    />
+                  </div>
                 </div>
 
                 {!supported ? (

@@ -194,4 +194,47 @@ test.describe('agent panel', () => {
     await expect(columns.locator('.recharts-wrapper').first()).toBeVisible();
     await expect(page.getByText('yaawc:panel')).toHaveCount(0);
   });
+
+  test.describe('mobile layout', () => {
+    // Below sm the split control collapses to the chevron alone (a single
+    // Layers button), and the popover header carries the on/off switch —
+    // disabled until 2-4 executors are configured. Same coupled semantics as
+    // the desktop toggle.
+    test.use({ viewport: { width: 375, height: 667 } });
+
+    test('a single button opens the popover and the header switch engages once configured', async ({
+      page,
+    }) => {
+      const chat = new ChatPage(page);
+      await chat.goto('/');
+
+      // One trigger only: the desktop toggle half is gone, so no switch
+      // exists until the popover opens.
+      await expect(chat.panelConfigButton).toBeVisible();
+      await expect(chat.panelToggle).toHaveCount(0);
+
+      const hint = page.getByText('Add at least 2 models to enable the panel.');
+
+      // The trigger only opens the popover — the header switch owns on/off.
+      await chat.panelConfigButton.click();
+      await expect(chat.agentPanel()).toBeVisible();
+      await expect(chat.panelToggle).toBeVisible();
+      await expect(chat.panelToggle).toBeDisabled();
+      await expect(hint).toBeVisible();
+
+      // One executor is still under-configured, so the switch stays disabled.
+      await chat.addPanelExecutor('Test (direct)');
+      await expect(chat.panelToggle).toBeDisabled();
+      await expect(hint).toBeVisible();
+
+      // Configured: the switch engages and releases the panel.
+      await chat.addPanelExecutor('Test (slow stream)');
+      await expect(hint).toHaveCount(0);
+      await expect(chat.panelToggle).toBeEnabled();
+      await chat.panelToggle.click();
+      await expect(chat.panelToggle).toHaveAttribute('aria-checked', 'true');
+      await chat.panelToggle.click();
+      await expect(chat.panelToggle).toHaveAttribute('aria-checked', 'false');
+    });
+  });
 });

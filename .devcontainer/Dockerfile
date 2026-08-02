@@ -27,10 +27,9 @@ RUN apt-get update \
 # Enable Yarn via Corepack (ships with Node)
 RUN corepack enable
 
-# Playwright OS dependencies (Chromium). Browser binaries are installed in postCreateCommand.
+# Chromium OS dependencies only; the binary is installed per-user in postCreateCommand.
 RUN npm install -g playwright @playwright/cli@latest typescript-language-server typescript --no-fund --no-audit \
-  && npx playwright install --with-deps \
-  && npx playwright install chrome --with-deps \
+  && npx playwright install-deps chromium \
   && apt-get clean && rm -rf /var/lib/apt/lists/* /root/.npm
 
 # Create directories used by the app when DATA_DIR points here

@@ -1,10 +1,21 @@
 {
   "name": "YAAWC",
-  "dockerComposeFile": ["docker-compose.devcontainer.yml"],
-  "service": "app",
+  "build": { "dockerfile": "Dockerfile" },
+  // Ignored when cloning into a named volume; VS Code mounts the clone volume at /workspaces itself.
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/YAAWC,type=bind,consistency=cached",
   "workspaceFolder": "/workspaces/YAAWC",
-  "shutdownAction": "stopCompose",
-  "overrideCommand": false,
+  "runArgs": ["--init", "--cap-add=SYS_ADMIN", "--network=host"],
+  "mounts": [
+    "source=yaawc-data,target=/home/yaawc/data,type=volume",
+    "source=yaawc-uploads,target=/home/yaawc/uploads,type=volume",
+    "source=yaawc-deep-research,target=/home/yaawc/storage/deep_research,type=volume",
+    "source=yaawc-user-state,target=/home/node/.persist,type=volume"
+  ],
+  "containerEnv": {
+    "SEARXNG_API_URL": "${localEnv:SEARXNG_API_SCHEME:https}://${localEnv:SEARXNG_API_HOST:searxng.int.bit-shift.com}",
+    "DATA_DIR": "/home/yaawc/data"
+  },
+  "shutdownAction": "stopContainer",
   "remoteUser": "node",
   "features": {
     "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}

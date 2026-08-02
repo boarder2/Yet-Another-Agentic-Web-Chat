@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { oneDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import { LoaderCircle, TriangleAlert } from 'lucide-react';
+import { prismStyleFor } from '@/lib/theme/syntax';
+import { useActiveTheme } from '@/lib/theme/useActiveTheme';
 import MarkdownRenderer from '@/components/MarkdownRenderer';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -64,6 +65,8 @@ export default function FileViewer({
     fileId,
   );
   const saveContent = useSaveWorkspaceFileContent(workspaceId, fileId);
+  const theme = useActiveTheme();
+  const syntax = prismStyleFor(theme.syntax, theme.mode);
 
   const [draft, setDraft] = useState('');
   const [editing, setEditing] = useState(startEditing);
@@ -213,8 +216,12 @@ export default function FileViewer({
         <div className="rounded-floating overflow-hidden">
           <SyntaxHighlighter
             language={langFromName(meta.name)}
-            style={oneDark}
-            customStyle={{ margin: 0, borderRadius: '0.75rem' }}
+            style={syntax.style}
+            customStyle={{
+              margin: 0,
+              borderRadius: '0.75rem',
+              backgroundColor: syntax.background ?? 'var(--color-surface)',
+            }}
           >
             {content || ' '}
           </SyntaxHighlighter>

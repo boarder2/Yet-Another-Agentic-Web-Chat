@@ -33,6 +33,7 @@ export interface SettingsType {
 }
 
 export type SectionKey =
+  | 'appearance'
   | 'automation'
   | 'personalization'
   | 'voice'
@@ -59,6 +60,7 @@ export const SETTINGS_SECTIONS: {
   label: string;
   group: string;
 }[] = [
+  { key: 'appearance', label: 'Appearance', group: 'General' },
   { key: 'automation', label: 'Automation', group: 'General' },
   { key: 'mcp-servers', label: 'MCP Servers', group: 'General' },
   { key: 'memory', label: 'Memory', group: 'General' },

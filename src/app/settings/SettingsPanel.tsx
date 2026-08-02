@@ -37,6 +37,7 @@ import {
 } from './components/SettingsNav';
 import AutomationSection from './sections/AutomationSection';
 import PersonalizationSection from './sections/PersonalizationSection';
+import AppearanceSection from './sections/AppearanceSection';
 import VoiceSection from './sections/VoiceSection';
 import MemorySection from './sections/MemorySection';
 import RetentionSection from './sections/RetentionSection';
@@ -775,6 +776,8 @@ export default function SettingsPanel({
                     }}
                   />
                 )}
+
+                {activeSection === 'appearance' && <AppearanceSection />}
 
                 {activeSection === 'personalization' && (
                   <PersonalizationSection

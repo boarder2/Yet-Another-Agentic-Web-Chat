@@ -10,7 +10,7 @@ export interface Source {
 // selected dashboard theme. Values are concrete CSS color strings (e.g. rgb(...))
 // resolved from the live theme tokens — usable in inline styles and chart colors.
 export interface WidgetTheme {
-  mode: 'light' | 'dark' | 'custom';
+  mode: 'light' | 'dark';
   colors: {
     background: string;
     foreground: string;

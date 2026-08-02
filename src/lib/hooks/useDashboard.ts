@@ -19,6 +19,7 @@ import {
   getResponsiveConstraints,
 } from '@/lib/constants/dashboard';
 import { resolveWidgetTheme } from '@/lib/widgets/widgetTheme';
+import { THEME_CHANGE_EVENT } from '@/lib/theme/apply';
 
 // Helper function to request location permission and get user's location
 const requestLocationPermission = async (): Promise<string | undefined> => {
@@ -664,6 +665,15 @@ export const useDashboard = (): UseDashboardReturn => {
   const clearCache = useCallback(() => {
     localStorage.removeItem(DASHBOARD_STORAGE_KEYS.CACHE);
   }, []);
+
+  // Widgets bake the theme's colors into their output when they're processed,
+  // so a cached result is stale as soon as the theme changes. Dropping the
+  // cache re-processes them on the next visit rather than on every swatch click.
+  useEffect(() => {
+    const onThemeChange = () => clearCache();
+    window.addEventListener(THEME_CHANGE_EVENT, onThemeChange);
+    return () => window.removeEventListener(THEME_CHANGE_EVENT, onThemeChange);
+  }, [clearCache]);
 
   const invalidateWidgetCache = useCallback((id: string) => {
     const cache = getWidgetCache();

@@ -11,8 +11,11 @@
  * - Secrets: all provider/search API keys and MCP auth — encrypted in the
  *   dedicated `credentials` table (`src/lib/credentials.ts`), never here,
  *   since this table is shipped verbatim to every client.
- * - Device-local UI prefs: `appTheme`, `userBg`, `userAccent`, `chatWidthWide`,
- *   `codeExecutionWarningAccepted`.
+ * - Device-local UI prefs: `appTheme`, `customTheme`, `appThemeCache`,
+ *   `chatWidthWide`, `codeExecutionWarningAccepted`. Theme stays local because
+ *   lighting differs per device and this layer is last-write-wins, so two
+ *   devices with different preferences would clobber each other; the Appearance
+ *   section offers copy/paste instead.
  * - Legacy `perplexica_dashboard_*` keys (handled by a separate one-shot
  *   localStorage migration).
  */

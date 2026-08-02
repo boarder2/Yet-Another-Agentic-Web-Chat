@@ -8,13 +8,27 @@
 /* Make dark: variants depend on html.dark or [data-theme="dark"] */
 @custom-variant dark (&:where(.dark, .dark *, [data-theme='dark'], [data-theme='dark'] *));
 
-/* Theme tokens */
+/* Theme tokens
+ *
+ * The seven SEEDS (bg, fg, surface, accent, danger, success, warning) plus the
+ * four contrast-picked foregrounds are written onto :root by the theme layer
+ * (`src/lib/theme/`); the values below are the default dark theme's, used
+ * before the boot script runs and as the fallback if it can't.
+ *
+ * Everything else DERIVES from those seeds here, so a theme switch needs no
+ * re-render. Derivations mix toward var(--color-fg) rather than black/white,
+ * which makes them mode-agnostic — the same expression lightens on a dark
+ * theme and darkens on a light one. */
 @theme {
-  /* === SURFACE === (light by default) */
-  --color-bg: oklch(0.98 0 0); /* canvas/background */
-  --color-fg: oklch(0.21 0 0); /* text */
-  --color-surface: color-mix(in oklch, var(--color-bg), black 6%);
-  --color-surface-2: color-mix(in oklch, var(--color-bg), black 10%);
+  /* === SURFACE === (seeds: bg, fg, surface) */
+  --color-bg: #1c1c1c; /* canvas/background */
+  --color-fg: #f2f2f2; /* text */
+  --color-surface: #2e2e2e; /* panels, cards, raised chrome */
+  --color-surface-2: color-mix(
+    in oklch,
+    var(--color-surface),
+    var(--color-fg) 7%
+  );
   --color-well: color-mix(
     in oklch,
     var(--color-bg) 50%,
@@ -22,34 +36,34 @@
   ); /* recessed field fill, midway between bg and surface */
   --color-border: var(--color-surface-2);
   --color-border-strong: color-mix(in oklch, var(--color-fg), transparent 70%);
-  --color-overlay: oklch(0 0 0 / 0.5);
-  --color-overlay-strong: oklch(0 0 0 / 0.7);
+  --color-overlay: oklch(0 0 0 / 0.6);
+  --color-overlay-strong: oklch(0 0 0 / 0.8);
 
-  /* === BRAND === */
-  --color-accent-500: var(--color-blue-500);
-  --color-accent-600: var(--color-blue-600);
-  --color-accent-700: var(--color-blue-700);
-  --color-accent: var(--color-accent-600);
-  --color-accent-fg: oklch(0.99 0 0);
+  /* === BRAND === (seed: accent) */
+  --color-accent: #2563eb;
+  --color-accent-fg: #fcfcfc;
+  --color-accent-500: color-mix(in oklch, var(--color-accent), white 12%);
+  --color-accent-600: var(--color-accent);
+  --color-accent-700: color-mix(in oklch, var(--color-accent), black 12%);
 
-  /* === SEMANTIC STATUS === */
-  --color-danger: oklch(0.62 0.22 27);
-  --color-danger-700: oklch(0.54 0.22 27);
-  --color-danger-fg: oklch(0.99 0 0);
+  /* === SEMANTIC STATUS === (seeds: danger, success, warning) */
+  --color-danger: #ef4444;
+  --color-danger-fg: #fcfcfc;
+  --color-danger-700: color-mix(in oklch, var(--color-danger), black 12%);
   --color-danger-soft: color-mix(
     in oklch,
     var(--color-danger),
     transparent 88%
   );
-  --color-success: oklch(0.68 0.18 150);
-  --color-success-fg: oklch(0.16 0 0);
+  --color-success: #22c55e;
+  --color-success-fg: #1c1c1c;
   --color-success-soft: color-mix(
     in oklch,
     var(--color-success),
     transparent 88%
   );
-  --color-warning: oklch(0.78 0.16 75);
-  --color-warning-fg: oklch(0.16 0 0);
+  --color-warning: #eab308;
+  --color-warning-fg: #1c1c1c;
   --color-warning-soft: color-mix(
     in oklch,
     var(--color-warning),
@@ -88,25 +102,19 @@
   --weight-strong: 600;
 }
 
-:root {
-  color-scheme: light;
-}
-
+/* Only what genuinely can't derive from a seed varies by mode. The colour
+ * tokens are absent here on purpose: they follow the seeds the theme layer
+ * writes onto :root, in either mode. */
+:root,
 [data-theme='dark'] {
   color-scheme: dark;
-  --color-bg: oklch(0.16 0 0);
-  --color-fg: oklch(0.95 0 0);
-  --color-surface: color-mix(in oklch, var(--color-bg), white 8%);
-  --color-surface-2: color-mix(in oklch, var(--color-bg), white 12%);
-  --color-danger: oklch(0.7 0.2 27);
-  --color-danger-700: oklch(0.62 0.2 27);
-  --color-success: oklch(0.74 0.17 150);
-  --color-warning: oklch(0.82 0.16 80);
-  --color-overlay: oklch(0 0 0 / 0.6);
-  --color-overlay-strong: oklch(0 0 0 / 0.8);
 }
 
-/* Custom theme overrides are applied via CSS variables on :root by ThemeController */
+[data-theme='light'] {
+  color-scheme: light;
+  --color-overlay: oklch(0 0 0 / 0.5);
+  --color-overlay-strong: oklch(0 0 0 / 0.7);
+}
 
 @layer base {
   .overflow-hidden-scrollable {

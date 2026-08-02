@@ -50,9 +50,8 @@ export function resolveWidgetTheme(): WidgetTheme {
     return DEFAULT_WIDGET_THEME;
   }
   const root = document.documentElement;
-  const attr = root.getAttribute('data-theme');
   const mode: WidgetTheme['mode'] =
-    attr === 'light' || attr === 'custom' ? attr : 'dark';
+    root.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
 
   const probe = document.createElement('span');
   probe.style.position = 'absolute';
@@ -78,7 +77,7 @@ export function resolveWidgetTheme(): WidgetTheme {
 // template, the in-editor runtime help, and the builder assistant's system
 // prompt so they never drift. When the shape changes, update it here only.
 export const WIDGET_THEME_CONTRACT = `theme: {
-//     mode: 'light'|'dark'|'custom',
+//     mode: 'light'|'dark',
 //     colors: { background, foreground, surface, surface2, border, accent,
 //               accentForeground, danger, success, warning, info }
 //   }

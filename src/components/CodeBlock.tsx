@@ -2,11 +2,9 @@
 
 import { useState } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import {
-  oneDark,
-  oneLight,
-} from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import { CheckCheck, Copy as CopyIcon } from 'lucide-react';
+import { prismStyleFor } from '@/lib/theme/syntax';
+import { useActiveTheme } from '@/lib/theme/useActiveTheme';
 
 export const CodeBlock = ({
   className,
@@ -41,11 +39,8 @@ export const CodeBlock = ({
     setTimeout(() => setIsCopied(false), 2000);
   };
 
-  const root = document.documentElement;
-  const isDark = root.classList.contains('dark');
-
-  const syntaxStyle = isDark ? oneDark : oneLight;
-  const backgroundStyle = isDark ? '#1c1c1c' : '#fafafa';
+  const theme = useActiveTheme();
+  const syntax = prismStyleFor(theme.syntax, theme.mode);
 
   return (
     <div
@@ -70,12 +65,15 @@ export const CodeBlock = ({
       )}
       <SyntaxHighlighter
         language={language || 'text'}
-        style={syntaxStyle}
+        style={syntax.style}
         customStyle={{
           margin: 0,
           padding: '1rem',
           borderRadius: 0,
-          backgroundColor: backgroundStyle,
+          // The syntax style's own fill, so the fence reads as the code theme
+          // the user picked. Styles with no solid fill fall back to the app's
+          // surface rather than painting nothing.
+          backgroundColor: syntax.background ?? 'var(--color-surface)',
         }}
         wrapLines
         wrapLongLines

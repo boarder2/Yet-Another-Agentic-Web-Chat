@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import Sidebar from '@/components/Sidebar';
 import { Toaster } from 'sonner';
 import ThemeController from '@/components/theme/Controller';
+import { THEME_BOOT_SCRIPT } from '@/lib/theme/apply';
 import SettingsModalProvider from '@/components/settings/SettingsModalProvider';
 import EncryptionGate from '@/components/EncryptionGate';
 import Providers from './providers';
@@ -30,12 +31,16 @@ export default function RootLayout({
   return (
     <html className="h-full" lang="en" suppressHydrationWarning>
       <head>
+        <meta name="theme-color" content="#1c1c1c" />
         <link
           rel="search"
           type="application/opensearchdescription+xml"
           title="YAAWC Search"
           href="/api/opensearch"
         />
+        {/* Applies the stored theme before first paint, so there's no flash and
+            the app doesn't have to withhold rendering until React hydrates. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
       </head>
       <body className={cn('h-full bg-bg text-fg', montserrat.className)}>
         <Providers>

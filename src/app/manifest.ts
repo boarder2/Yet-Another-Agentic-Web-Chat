@@ -8,8 +8,8 @@ export default function manifest(): MetadataRoute.Manifest {
       'YAAWC is an AI powered chatbot that is connected to the internet.',
     start_url: '/',
     display: 'standalone',
-    background_color: '#0a0a0a',
-    theme_color: '#0a0a0a',
+    background_color: '#1c1c1c',
+    theme_color: '#1c1c1c',
     screenshots: [
       {
         src: '/screenshots/p1.png',

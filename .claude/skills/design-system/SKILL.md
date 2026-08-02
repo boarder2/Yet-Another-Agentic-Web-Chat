@@ -5,7 +5,18 @@ description: YAAWC design system rules and tokens. MUST be used whenever editing
 
 # YAAWC Design System
 
-Tokens live in `src/app/globals.css` under `@theme` (Tailwind v4 CSS-first). Tailwind auto-generates utilities from these tokens. Theming is driven by `src/components/theme/Controller.tsx` which writes CSS variables onto `:root` for light/dark/custom modes — **anything that doesn't read from a token will not theme correctly.**
+Tokens live in `src/app/globals.css` under `@theme` (Tailwind v4 CSS-first). Tailwind auto-generates utilities from these tokens. **Anything that doesn't read from a token will not theme correctly.**
+
+## Theming
+
+A theme is **seven seeds** — `bg`, `fg`, `surface`, `accent`, `danger`, `success`, `warning` — plus a mode (`light` | `dark`). `src/lib/theme/` owns it: `themes.ts` is the built-in catalogue (single source of truth), `derive.ts` is the pure colour maths, `apply.ts` writes the seeds onto `:root` and exports the render-blocking boot script used by `layout.tsx`. Built-in and custom themes are the same shape, but built-ins are immutable: the one custom slot is written only by an explicit, overwrite-confirmed action (the per-tile copy arrow, or Paste), and the seed pickers are disabled unless the custom theme is active. A theme also carries a `syntax` key naming its code style — `syntax.ts` maps it to a Prism style for `CodeBlock` and `FileViewer`, falling back to One Dark / One Light by mode. A fence is painted with the style's _own_ background, not `--color-surface`, so a code theme reads as itself; styles with no solid fill fall back to the surface token.
+
+Everything else **derives from the seeds in `globals.css`** via `color-mix`, so a theme switch needs no re-render. Derivations mix toward `var(--color-fg)` rather than black/white, which makes them mode-agnostic — one expression lightens on a dark theme and darkens on a light one. Only the contrast-dependent foregrounds (`accent-fg`, `danger-fg`, `success-fg`, `warning-fg`) are computed in TS.
+
+- **Adding a token**: if it derives proportionally from a seed, add it as `color-mix` in `@theme`. Only add a seed if it genuinely can't be derived — every seed is another picker in the UI and another value on all 23 built-in themes.
+- **Reading the active theme in a component**: `useActiveTheme()` (`src/lib/theme/useActiveTheme.ts`). Never read `document.documentElement` during render — it won't update when the theme changes.
+- **Mode-specific CSS** belongs in the `[data-theme='light']` block, and only for things that can't derive from a seed. `data-theme` is `light`/`dark` only — there is no `custom` mode.
+- Adding or changing a built-in palette: see `docs/THEMES.md`.
 
 ## Available tokens (semantic — use these names)
 

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import CodeMirror, { EditorView, type Extension } from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { languages } from '@codemirror/language-data';
+import { useActiveTheme } from '@/lib/theme/useActiveTheme';
 
 interface CodeEditorProps {
   value: string;
@@ -29,6 +30,7 @@ const CodeEditor = ({
   filename,
   ariaLabel,
 }: CodeEditorProps) => {
+  const { mode } = useActiveTheme();
   const [language, setLanguage] = useState<Extension>(() =>
     filename === undefined ? javascript() : [],
   );
@@ -54,7 +56,7 @@ const CodeEditor = ({
     <CodeMirror
       value={value}
       height={height}
-      theme="dark"
+      theme={mode}
       readOnly={readOnly}
       extensions={
         ariaLabel

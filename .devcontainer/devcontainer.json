@@ -22,7 +22,7 @@
   },
   "postCreateCommand": "npm ci --fetch-timeout=600000 && npx playwright install chromium || true",
   // Ensure persisted config dirs exist behind the volume mount; seed each tool's config on first use, never overwriting an existing one.
-  "postStartCommand": "mkdir -p /home/node/.persist/opencode-config /home/node/.persist/opencode-data /home/node/.persist/herdr; [ -f /home/node/.persist/opencode-config/opencode.json ] || printf '%s\\n' '{ \"$schema\": \"https://opencode.ai/config.json\", \"lsp\": true }' > /home/node/.persist/opencode-config/opencode.json; [ -f /home/node/.persist/herdr/config.toml ] || printf '%s\\n' '[terminal]' 'default_shell = \"/usr/bin/zsh\"' 'new_cwd = \"/workspaces/YAAWC\"' > /home/node/.persist/herdr/config.toml",
+  "postStartCommand": "mkdir -p /home/node/.persist/opencode-config /home/node/.persist/opencode-data /home/node/.persist/opencode-state /home/node/.persist/herdr; [ -f /home/node/.persist/opencode-config/opencode.json ] || printf '%s\\n' '{ \"$schema\": \"https://opencode.ai/config.json\", \"lsp\": true }' > /home/node/.persist/opencode-config/opencode.json; [ -f /home/node/.persist/herdr/config.toml ] || printf '%s\\n' '[terminal]' 'default_shell = \"/usr/bin/zsh\"' 'new_cwd = \"/workspaces/YAAWC\"' > /home/node/.persist/herdr/config.toml",
   "customizations": {
     "vscode": {
       "settings": {

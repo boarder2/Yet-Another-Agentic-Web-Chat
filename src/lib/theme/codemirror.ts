@@ -8,7 +8,7 @@
  * colour — so a style that deliberately leaves a token at base colour (Gruvbox
  * has no `class-name`) reproduces faithfully instead of being invented.
  *
- * Kept out of `syntax.ts` on purpose: that module reaches the chat bundle via
+ * Kept out of `syntax/` on purpose: that module reaches the chat bundle via
  * `CodeBlock`, and CodeMirror is loaded only by the editors, all of which are
  * `next/dynamic({ ssr: false })`.
  */

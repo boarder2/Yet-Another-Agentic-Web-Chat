@@ -18,6 +18,59 @@ value deviates from its spec, the reason is in a comment next to it — currentl
 only Solarized Light, whose spec body text (`base00`) falls below the 4.5:1
 floor for text on background, so `base01` ("emphasized content") is used.
 
+## Syntax styles
+
+A theme's `syntax` key names a code style bound to both renderers at once. Some
+come from `react-syntax-highlighter`; the rest are authored in
+`src/lib/theme/syntax/`, one file per family, because those projects ship no
+Prism port. Only the two stock themes (Dark, Light) have no style of their own —
+they use the One Dark / One Light fallback, and a unit test asserts every other
+theme names one.
+
+Palette specs rarely say how to colour a token, so the source for a syntax style
+is picked by this ladder:
+
+1. The project's own syntax-highlighter port, if it has one.
+2. Its own editor theme — VS Code or Neovim — where the project publishes one.
+   This is where syntax styles depart from the palette rule above: for several
+   families the editor theme _is_ the only spec there is.
+3. Its palette spec plus our inference, commented as such at each value.
+
+| Family      | Source                                                                                                 | Rung |
+| ----------- | ------------------------------------------------------------------------------------------------------ | ---- |
+| Catppuccin  | [catppuccin/highlightjs](https://github.com/catppuccin/highlightjs) role map + `@catppuccin/palette`   | 1    |
+| Rosé Pine   | [rose-pine/neovim](https://github.com/rose-pine/neovim) highlight groups + `@rose-pine/palette`        | 2    |
+| GitHub      | [primer/primitives](https://github.com/primer/primitives) `prettylights.syntax.*` tokens               | 1    |
+| Tokyo Night | [enkia/tokyo-night-vscode-theme](https://github.com/enkia/tokyo-night-vscode-theme) `tokenColors`      | 2    |
+| Yoncé       | [minamarkham/yonce-vscode](https://github.com/minamarkham/yonce-vscode) `tokenColors`                  | 2    |
+| Everforest  | [sainnhe/everforest](https://github.com/sainnhe/everforest) `colors/everforest.vim` groups             | 2    |
+| Kanagawa    | [rebelot/kanagawa.nvim](https://github.com/rebelot/kanagawa.nvim) `syn` table                          | 2    |
+| Ayu         | [ayu-theme/ayu-colors](https://github.com/ayu-theme/ayu-colors) — its spec names syntax roles directly | 1    |
+
+The Catppuccin and Rosé Pine palette tables are pinned to their npm packages by
+a unit test; both are devDependencies only, so neither reaches the bundle.
+
+Catppuccin ships each of its four flavours in all fourteen palette accents, as
+its ports do — in the theme catalogue and the syntax styles alike, generated
+from one shared table in `catppuccinPalette.ts`. The accent moves the theme's
+`accent` seed and, in the syntax style, replaces mauve — the port's colour for
+keywords, variables and tag names. Nothing else changes. That gives Catppuccin
+two axes, so both pickers group its accents under their flavour.
+
+Two deliberate deviations:
+
+- **Fill.** Upstream ports paint a fence with the palette's canvas. These use its
+  raised tone instead — the same one `themes.ts` picks for `surface` — so a fence
+  still reads as a slab when the theme and the style match.
+- **Font.** Authored styles name no font, and the bundled ones have theirs
+  stripped, so picking a style no longer changes the code font as a side effect
+  and fences match the editors, which never saw it.
+
+Where a Prism token has no upstream analogue (`atrule`, `entity`), the nearest
+one is used and the comment says it is our inference. Tokens a project leaves at
+the default foreground stay uncoloured — GitHub's punctuation and properties, for
+instance — rather than being given an invented colour.
+
 ## Attribution
 
 Colour values are facts and aren't themselves copyrightable, but the projects
@@ -61,9 +114,14 @@ Dark and Light (the two stock themes) are this project's own.
    Some palettes have no green: Rosé Pine maps "added" to foam.
 3. Use the palette's own raised/panel tone for `surface`. If the spec has no
    such token, say so in a comment.
-4. Run `npm run test:unit` — the invariants catch a mistyped hex.
-5. If the palette ships an official syntax style bundled with
-   `react-syntax-highlighter`, add it to `PRISM_STYLES` and `SYNTAX_LABELS` in
-   `syntax.ts` (the unit tests assert the two agree), then set `syntax`. The
-   CodeMirror binding is derived from the Prism style, so editors follow for
-   free.
+4. If it is one of several themes from the same palette, set `family` and
+   `variant` — the picker groups tiles by family, and a family needs at least two
+   members.
+5. Every theme needs a `syntax` style. If `react-syntax-highlighter` bundles the
+   palette's own, import it in `syntax/index.ts`. Otherwise author one: add a
+   family file under `syntax/` using `buildPrismStyle`, sourced by the ladder
+   above. Either way, register it in `PRISM_STYLES` and `SYNTAX_STYLES` (the unit
+   tests assert the two agree), then set `syntax`. The CodeMirror binding is
+   derived from the Prism style, so editors follow for free.
+6. Run `npm run test:unit` — the invariants catch a mistyped hex, a missing
+   syntax style, and a broken family.

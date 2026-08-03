@@ -29,10 +29,24 @@ export interface Theme extends ThemeSeeds {
   /** Canonical palette spec this was transcribed from. Absent on custom themes. */
   source?: string;
   /**
-   * Key into `SYNTAX_LABELS` for code rendering. Absent means "automatic" —
+   * Key into `SYNTAX_STYLES` for code rendering. Absent means "automatic" —
    * One Dark / One Light by mode. Editable on the custom theme.
    */
   syntax?: string;
+  /**
+   * The palette this theme belongs to, when it is one of several. The picker
+   * shows one tile per family per mode and offers the variants in a dropdown,
+   * so a family of forty-odd themes stays browsable. Absent means standalone:
+   * `name` is the whole story and the tile has no dropdown.
+   */
+  family?: string;
+  /** This theme's name within its family. Present exactly when `family` is. */
+  variant?: string;
+  /**
+   * A heading within the family's variant list, for a family whose variants
+   * have two axes. Only Catppuccin has one: flavour, then accent.
+   */
+  group?: string;
 }
 
 export const SEED_KEYS = [

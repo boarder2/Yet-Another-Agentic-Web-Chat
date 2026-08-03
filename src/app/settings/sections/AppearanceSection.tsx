@@ -6,7 +6,8 @@ import {
   ClipboardPaste,
   Copy,
   ArrowRight,
-  CornerRightUp,
+  ChevronDown,
+  Pencil,
   TriangleAlert,
 } from 'lucide-react';
 import SettingsSection from '../components/SettingsSection';
@@ -30,8 +31,12 @@ import {
   parseTheme,
   serializeTheme,
 } from '@/lib/theme/derive';
-import { SYNTAX_OPTIONS } from '@/lib/theme/syntax';
-import { resolveBuiltIn, themesByMode } from '@/lib/theme/themes';
+import { SYNTAX_FAMILIES, syntaxFamilyOf } from '@/lib/theme/syntax';
+import {
+  resolveBuiltIn,
+  themeFamiliesByMode,
+  type ThemeFamily,
+} from '@/lib/theme/themes';
 import { SEED_KEYS, SEED_LABELS, type Theme } from '@/lib/theme/types';
 
 const SAMPLE_CODE = `import { greet } from './greet';
@@ -42,11 +47,18 @@ export function main(names: string[] = []) {
   return total ? names.map(greet) : ['Hello, world!'];
 }`;
 
+/** Height of the swatch, shared with the chip overlay laid over it. */
+const SWATCH_H = 'h-14';
+
 /** Miniature of a theme: surface slab, accent chip and a text sample on bg. */
 function Swatch({ theme }: { theme: Theme }) {
   return (
     <div
-      className="flex h-10 items-center gap-1.5 rounded-control px-2"
+      // Marks sit on the top row so the variant chip owns the bottom one.
+      className={cn(
+        'flex items-start gap-1.5 rounded-control px-2 pt-1.5',
+        SWATCH_H,
+      )}
       style={{ backgroundColor: theme.bg }}
     >
       <span
@@ -58,7 +70,7 @@ function Swatch({ theme }: { theme: Theme }) {
         style={{ backgroundColor: theme.accent }}
       />
       <span
-        className="text-body font-medium leading-none"
+        className="pt-1 text-body font-medium leading-none"
         style={{ color: theme.fg }}
       >
         Aa
@@ -68,20 +80,26 @@ function Swatch({ theme }: { theme: Theme }) {
 }
 
 /**
- * A theme tile. Selecting and copying-into-Custom are two sibling buttons
- * rather than one nested in the other, which isn't valid HTML. `onCopy` is
- * omitted for the custom tile — it is already the copy destination.
+ * A theme tile. The variant chip holds a `<select>`, which can't be nested in
+ * the tile's own button — so it rides in an overlay sized to the swatch rather
+ * than inside it, and the select button's `after` stretches its hit area over
+ * the whole tile.
+ *
+ * The caption is the family name; `chip` names the variant on the swatch, so
+ * the accessible name stays the full theme name either way.
  */
 function ThemeTile({
   theme,
+  caption,
   active,
   onSelect,
-  onCopy,
+  chip,
 }: {
   theme: Theme;
+  caption?: string;
   active: boolean;
   onSelect: () => void;
-  onCopy?: () => void;
+  chip?: React.ReactNode;
 }) {
   return (
     <div
@@ -99,38 +117,156 @@ function ThemeTile({
         // would make the accessible name "Aa Nord".
         aria-label={theme.name}
         aria-pressed={active}
-        className="flex flex-col gap-1.5 text-left"
+        className="flex flex-col gap-1.5 text-left after:absolute after:inset-0"
       >
         <Swatch theme={theme} />
         <span
           title={theme.name}
           className="truncate px-0.5 text-caption text-fg/70"
         >
-          {theme.name}
+          {caption ?? theme.name}
         </span>
       </button>
-      {onCopy && (
-        <button
-          type="button"
-          onClick={onCopy}
-          aria-label={`Copy ${theme.name} into Custom`}
-          title={`Copy ${theme.name} into Custom`}
-          // Fill and icon both come from the app theme, not the previewed one,
-          // so the chip stays legible over any swatch.
-          className="absolute right-2 top-2 rounded-control bg-surface p-1 text-fg/70 opacity-80 transition-opacity duration-150 hover:opacity-100 focus-visible:opacity-100"
-        >
-          <CornerRightUp size={13} />
-        </button>
-      )}
+      <div
+        className={cn(
+          'pointer-events-none absolute inset-x-1.5 top-1.5',
+          SWATCH_H,
+        )}
+      >
+        {chip}
+      </div>
     </div>
+  );
+}
+
+/**
+ * The variant a tile is showing, as a chip on its swatch. `children` is a
+ * transparent native `<select>` laid over the very same chip, so what the tile
+ * shows and what the dropdown holds can't drift apart. Families with a single
+ * theme get no chip — the mode heading above already says "Dark" or "Light".
+ */
+function VariantChip({
+  label,
+  title,
+  children,
+}: {
+  label: string;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <span className="pointer-events-auto absolute bottom-1 right-1 flex max-w-[calc(100%-0.5rem)]">
+      {children}
+      <span
+        title={title}
+        className="flex min-w-0 items-center gap-0.5 rounded-control bg-surface px-1.5 py-0.5 text-caption text-fg/70 peer-focus-visible:ring-1 peer-focus-visible:ring-accent"
+      >
+        <span className="truncate">{label}</span>
+        <ChevronDown size={11} className="shrink-0" />
+      </span>
+    </span>
+  );
+}
+
+interface GroupedOption {
+  value: string;
+  label: string;
+  group?: string;
+}
+
+/**
+ * `<option>`s, wrapped in an `<optgroup>` wherever the list declares one. Both
+ * pickers need it: Catppuccin is two axes deep — flavour, then accent — so its
+ * variants list under their flavour instead of running to fifty-six flat rows.
+ * Runs are consecutive, which a caller guarantees by ordering; a list with no
+ * groups renders as bare options.
+ */
+function GroupedOptions({ options }: { options: GroupedOption[] }) {
+  const runs = options.reduce<[string | undefined, GroupedOption[]][]>(
+    (acc, option) => {
+      const last = acc.at(-1);
+      if (last && last[0] === option.group) last[1].push(option);
+      else acc.push([option.group, [option]]);
+      return acc;
+    },
+    [],
+  );
+  const render = (o: GroupedOption) => (
+    <option key={o.value} value={o.value}>
+      {o.label}
+    </option>
+  );
+  return runs.map(([group, run]) =>
+    group ? (
+      <optgroup key={group} label={group}>
+        {run.map(render)}
+      </optgroup>
+    ) : (
+      run.map(render)
+    ),
+  );
+}
+
+/**
+ * One family's tile for a mode. It shows the active variant when the family is
+ * the active one, the last one picked here otherwise, and its first as a
+ * fallback; picking from the dropdown applies immediately, like clicking any
+ * other tile. Resolving `shownId` against this family's own themes is what
+ * keeps a dark pick out of the same-named light tile.
+ */
+function FamilyTile({
+  family,
+  activeId,
+  shownId,
+  onSelect,
+}: {
+  family: ThemeFamily;
+  activeId: string;
+  shownId?: string;
+  onSelect: (id: string) => void;
+}) {
+  const shown =
+    family.themes.find((t) => t.id === activeId) ??
+    family.themes.find((t) => t.id === shownId) ??
+    family.themes[0];
+  const variant =
+    family.themes.length > 1 ? (shown.variant ?? shown.name) : undefined;
+  return (
+    <ThemeTile
+      theme={shown}
+      caption={family.name}
+      active={shown.id === activeId}
+      onSelect={() => onSelect(shown.id)}
+      chip={
+        variant && (
+          <VariantChip
+            label={shown.group ? `${shown.group} · ${variant}` : variant}
+            title={shown.name}
+          >
+            <Select
+              aria-label={`${family.name} variant`}
+              value={shown.id}
+              onChange={(e) => onSelect(e.target.value)}
+              className="peer absolute inset-0 h-full w-full cursor-pointer appearance-none border-0 bg-transparent p-0 opacity-0"
+            >
+              <GroupedOptions
+                options={family.themes.map((t) => ({
+                  value: t.id,
+                  label: t.variant ?? t.name,
+                  group: t.group,
+                }))}
+              />
+            </Select>
+          </VariantChip>
+        )
+      }
+    />
   );
 }
 
 function ThemeGrid({ children }: { children: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-      {children}
-    </div>
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{children}</div>
   );
 }
 
@@ -143,6 +279,10 @@ export default function AppearanceSection() {
   const [importText, setImportText] = useState('');
   const [importError, setImportError] = useState('');
   const [copied, setCopied] = useState(false);
+  /** Last variant picked per family, so browsing away doesn't reset its tile. */
+  const [variantByFamily, setVariantByFamily] = useState<
+    Record<string, string>
+  >({});
 
   // Read the stored theme once the client has mounted; on the server there's no
   // localStorage, and the boot script has already applied it to the document.
@@ -168,6 +308,14 @@ export default function AppearanceSection() {
     selectTheme(id);
     setActiveId(id);
   }, []);
+
+  const handleFamilySelect = useCallback(
+    (name: string, id: string) => {
+      setVariantByFamily((v) => ({ ...v, [name]: id }));
+      handleSelect(id);
+    },
+    [handleSelect],
+  );
 
   const handleEdit = useCallback(
     (patch: Partial<Theme>) => custom && adopt({ ...custom, ...patch }),
@@ -198,14 +346,18 @@ export default function AppearanceSection() {
   const active = isCustom && custom ? custom : resolveBuiltIn(activeId);
   const warnings = contrastWarnings(active);
 
+  const syntaxFamily = syntaxFamilyOf(active.syntax);
+  const syntaxVariants = SYNTAX_FAMILIES.find(
+    (f) => f.family === syntaxFamily,
+  )?.variants;
+
   return (
     <div id="appearance" className="flex flex-col space-y-4">
       <SettingsSection title="Appearance">
         <p className="text-xs text-fg/60">
           Applies instantly and is saved to this device only. Built-in themes
-          are read-only — use{' '}
-          <CornerRightUp size={12} className="inline align-text-top" /> to copy
-          one into your custom theme, or Copy to move a theme to another device.
+          are read-only — Edit in Customize copies the selected theme into your
+          custom theme, or Copy to move a theme to another device.
         </p>
         {custom && (
           <div className="flex flex-col space-y-2">
@@ -227,13 +379,13 @@ export default function AppearanceSection() {
               {mode}
             </p>
             <ThemeGrid>
-              {themesByMode(mode).map((theme) => (
-                <ThemeTile
-                  key={theme.id}
-                  theme={theme}
-                  active={activeId === theme.id}
-                  onSelect={() => handleSelect(theme.id)}
-                  onCopy={() => requestAdopt(theme)}
+              {themeFamiliesByMode(mode).map((family) => (
+                <FamilyTile
+                  key={family.name}
+                  family={family}
+                  activeId={activeId}
+                  shownId={variantByFamily[family.name]}
+                  onSelect={(id) => handleFamilySelect(family.name, id)}
                 />
               ))}
             </ThemeGrid>
@@ -245,6 +397,20 @@ export default function AppearanceSection() {
         title="Customize"
         headerAction={
           <div className="flex items-center gap-2">
+            {!isCustom && (
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={Pencil}
+                // The visible label is one word; the full semantic — which
+                // theme, and that it lands in the custom slot — rides here.
+                aria-label={`Edit ${active.name} as your custom theme`}
+                title={`Edit ${active.name} as your custom theme`}
+                onClick={() => requestAdopt(active)}
+              >
+                Edit
+              </Button>
+            )}
             <Button
               size="sm"
               variant="ghost"
@@ -267,7 +433,7 @@ export default function AppearanceSection() {
         <p className="text-xs text-fg/60">
           {isCustom
             ? 'Editing your custom theme.'
-            : `Showing ${active.name}. Copy it into your custom theme to edit these.`}
+            : `Showing ${active.name}. Edit to copy it into your custom theme and unlock these controls.`}
         </p>
 
         {importOpen && (
@@ -355,25 +521,51 @@ export default function AppearanceSection() {
           })}
         </div>
 
-        <Field
-          label="Syntax style"
-          hint="Used for code blocks in chat and workspace files."
-        >
-          <Select
-            value={active.syntax ?? ''}
-            disabled={!isCustom}
-            onChange={(e) =>
-              handleEdit({ syntax: e.target.value || undefined })
-            }
-            options={[
-              {
-                value: '',
-                label: `Automatic (One ${active.mode === 'dark' ? 'Dark' : 'Light'})`,
-              },
-              ...SYNTAX_OPTIONS,
-            ]}
-          />
-        </Field>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field
+            label="Syntax style"
+            hint="Used for code blocks in chat and workspace files, and for the code editors."
+          >
+            <Select
+              value={syntaxFamily ?? ''}
+              disabled={!isCustom}
+              // Switching family lands on its first variant; there is no
+              // meaningful way to carry "Blue" across to a family without one.
+              onChange={(e) =>
+                handleEdit({
+                  syntax: SYNTAX_FAMILIES.find(
+                    (f) => f.family === e.target.value,
+                  )?.variants[0].value,
+                })
+              }
+              options={[
+                {
+                  value: '',
+                  label: `Automatic (One ${active.mode === 'dark' ? 'Dark' : 'Light'})`,
+                },
+                ...SYNTAX_FAMILIES.map((f) => ({
+                  value: f.family,
+                  label: f.family,
+                })),
+              ]}
+            />
+          </Field>
+          <Field label="Variant">
+            <Select
+              aria-label="Syntax variant"
+              value={active.syntax ?? ''}
+              // Nothing to choose without a family, or with a family of one.
+              disabled={!isCustom || (syntaxVariants?.length ?? 0) < 2}
+              onChange={(e) => handleEdit({ syntax: e.target.value })}
+            >
+              {syntaxVariants?.length ? (
+                <GroupedOptions options={syntaxVariants} />
+              ) : (
+                <option value="">—</option>
+              )}
+            </Select>
+          </Field>
+        </div>
         <div className="overflow-hidden rounded-control border border-surface-2">
           <CodeBlock className="language-typescript" hideChrome>
             {SAMPLE_CODE}

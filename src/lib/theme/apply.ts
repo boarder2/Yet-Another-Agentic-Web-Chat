@@ -64,6 +64,11 @@ export function applyTheme(theme: Theme): void {
   }
   root.setAttribute('data-theme', theme.mode);
   root.setAttribute('data-theme-id', theme.id);
+  // The syntax style is the one part of a theme that isn't a CSS var — its
+  // consumers read it through React, so it needs a home on the root for
+  // `useActiveTheme` to see it change.
+  if (theme.syntax) root.setAttribute('data-theme-syntax', theme.syntax);
+  else root.removeAttribute('data-theme-syntax');
   root.classList.toggle('dark', theme.mode === 'dark');
 
   document
@@ -73,7 +78,12 @@ export function applyTheme(theme: Theme): void {
   try {
     localStorage.setItem(
       THEME_CACHE_KEY,
-      JSON.stringify({ id: theme.id, mode: theme.mode, vars }),
+      JSON.stringify({
+        id: theme.id,
+        mode: theme.mode,
+        syntax: theme.syntax,
+        vars,
+      }),
     );
   } catch {
     /* a missing cache only costs a one-frame flash on the next load */
@@ -112,6 +122,7 @@ var r=document.documentElement;
 for(var k in c.vars)r.style.setProperty(k,c.vars[k]);
 r.setAttribute('data-theme',c.mode);
 if(c.id)r.setAttribute('data-theme-id',c.id);
+if(c.syntax)r.setAttribute('data-theme-syntax',c.syntax);
 r.classList.toggle('dark',c.mode==='dark');
 var m=document.querySelector('meta[name="theme-color"]');
 if(m&&c.vars['--color-bg'])m.setAttribute('content',c.vars['--color-bg']);

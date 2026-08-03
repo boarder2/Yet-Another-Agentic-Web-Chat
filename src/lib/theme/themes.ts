@@ -15,8 +15,48 @@
  *   why e.g. Rosé Pine's `success` is foam — that palette has no green.
  * - `accent` is the palette's primary UI/link colour.
  */
+import {
+  ACCENTS,
+  accentName,
+  DEFAULT_ACCENT,
+  FLAVOR_NAMES,
+  FLAVORS,
+  type Accent,
+} from './catppuccinPalette';
 import { luminance } from './derive';
+import { catppuccinSyntaxKey } from './syntax/catppuccin';
 import type { Theme, ThemeMode } from './types';
+
+/**
+ * Catppuccin, generated rather than listed: four flavours in each of the
+ * palette's fourteen accents. The accent is the one seed that moves — every
+ * other seed is the flavour's, exactly as in the hand-written entries this
+ * replaced. Its `syntax` style is the matching flavour/accent pair, so the two
+ * pickers stay in step.
+ */
+const CATPPUCCIN_THEMES: Theme[] = Object.entries(FLAVORS).flatMap(
+  ([flavor, p]) =>
+    ACCENTS.map((accent) => ({
+      id:
+        accent === DEFAULT_ACCENT
+          ? `catppuccin-${flavor}`
+          : `catppuccin-${flavor}-${accent}`,
+      name: `Catppuccin ${FLAVOR_NAMES[flavor]} (${accentName(accent)})`,
+      mode: (flavor === 'latte' ? 'light' : 'dark') as ThemeMode,
+      family: 'Catppuccin',
+      group: FLAVOR_NAMES[flavor],
+      variant: accentName(accent),
+      source: 'https://github.com/catppuccin/palette/blob/main/palette.json',
+      syntax: catppuccinSyntaxKey(flavor, accent as Accent),
+      bg: p.base,
+      fg: p.text,
+      surface: p.surface0,
+      accent: p[accent],
+      danger: p.red,
+      success: p.green,
+      warning: p.yellow,
+    })),
+);
 
 export const THEMES: Theme[] = [
   // ── Dark ──────────────────────────────────────────────────────────────────
@@ -64,6 +104,8 @@ export const THEMES: Theme[] = [
     id: 'gruvbox-dark',
     name: 'Gruvbox Dark',
     mode: 'dark',
+    family: 'Gruvbox',
+    variant: 'Dark',
     source: 'https://github.com/morhetz/gruvbox/blob/master/colors/gruvbox.vim',
     syntax: 'gruvboxDark',
     bg: '#282828', // dark0
@@ -78,6 +120,8 @@ export const THEMES: Theme[] = [
     id: 'solarized-dark',
     name: 'Solarized Dark',
     mode: 'dark',
+    family: 'Solarized',
+    variant: 'Dark',
     source: 'https://ethanschoonover.com/solarized/',
     syntax: 'solarizedDarkAtom',
     bg: '#002b36', // base03 — spec's dark background
@@ -89,50 +133,14 @@ export const THEMES: Theme[] = [
     warning: '#b58900', // yellow
   },
   {
-    id: 'catppuccin-mocha',
-    name: 'Catppuccin Mocha',
-    mode: 'dark',
-    source: 'https://github.com/catppuccin/palette/blob/main/palette.json',
-    bg: '#1e1e2e', // base
-    fg: '#cdd6f4', // text
-    surface: '#313244', // surface0
-    accent: '#cba6f7', // mauve — Catppuccin's primary accent
-    danger: '#f38ba8', // red
-    success: '#a6e3a1', // green
-    warning: '#f9e2af', // yellow
-  },
-  {
-    id: 'catppuccin-macchiato',
-    name: 'Catppuccin Macchiato',
-    mode: 'dark',
-    source: 'https://github.com/catppuccin/palette/blob/main/palette.json',
-    bg: '#24273a', // base
-    fg: '#cad3f5', // text
-    surface: '#363a4f', // surface0
-    accent: '#c6a0f6', // mauve
-    danger: '#ed8796', // red
-    success: '#a6da95', // green
-    warning: '#eed49f', // yellow
-  },
-  {
-    id: 'catppuccin-frappe',
-    name: 'Catppuccin Frappé',
-    mode: 'dark',
-    source: 'https://github.com/catppuccin/palette/blob/main/palette.json',
-    bg: '#303446', // base
-    fg: '#c6d0f5', // text
-    surface: '#414559', // surface0
-    accent: '#ca9ee6', // mauve
-    danger: '#e78284', // red
-    success: '#a6d189', // green
-    warning: '#e5c890', // yellow
-  },
-  {
     id: 'tokyo-night',
     name: 'Tokyo Night',
     mode: 'dark',
+    family: 'Tokyo Night',
+    variant: 'Night',
     source:
       'https://github.com/enkia/tokyo-night-vscode-theme/blob/master/themes/tokyo-night-color-theme.json',
+    syntax: 'tokyoNight',
     bg: '#1a1b26', // editor.background
     fg: '#c0caf5', // editorCursor.foreground — the palette's bright fg
     surface: '#292e42', // diffEditor.diagonalFill (bg_highlight)
@@ -145,8 +153,11 @@ export const THEMES: Theme[] = [
     id: 'tokyo-night-storm',
     name: 'Tokyo Night Storm',
     mode: 'dark',
+    family: 'Tokyo Night',
+    variant: 'Storm',
     source:
       'https://github.com/enkia/tokyo-night-vscode-theme/blob/master/themes/tokyo-night-storm-color-theme.json',
+    syntax: 'tokyoNightStorm',
     bg: '#24283b', // editor.background
     fg: '#c0caf5', // editorCursor.foreground
     surface: '#2c324a', // diffEditor.diagonalFill
@@ -176,7 +187,10 @@ export const THEMES: Theme[] = [
     id: 'rose-pine',
     name: 'Rosé Pine',
     mode: 'dark',
+    family: 'Rosé Pine',
+    variant: 'Main',
     source: 'https://github.com/rose-pine/palette/blob/main/palette.json',
+    syntax: 'rosePine',
     bg: '#191724', // base
     fg: '#e0def4', // text
     surface: '#1f1d2e', // surface
@@ -189,7 +203,10 @@ export const THEMES: Theme[] = [
     id: 'rose-pine-moon',
     name: 'Rosé Pine Moon',
     mode: 'dark',
+    family: 'Rosé Pine',
+    variant: 'Moon',
     source: 'https://github.com/rose-pine/palette/blob/main/palette.json',
+    syntax: 'rosePineMoon',
     bg: '#232136', // base
     fg: '#e0def4', // text
     surface: '#2a273f', // surface
@@ -202,7 +219,10 @@ export const THEMES: Theme[] = [
     id: 'everforest-dark',
     name: 'Everforest Dark',
     mode: 'dark',
+    family: 'Everforest',
+    variant: 'Dark',
     source: 'https://github.com/sainnhe/everforest/blob/master/palette.md',
+    syntax: 'everforestDark',
     bg: '#2d353b', // bg0, medium contrast
     fg: '#d3c6aa', // fg
     surface: '#343f44', // bg1, medium contrast
@@ -215,8 +235,11 @@ export const THEMES: Theme[] = [
     id: 'github-dark-high-contrast',
     name: 'GitHub Dark High Contrast',
     mode: 'dark',
+    family: 'GitHub',
+    variant: 'Dark High Contrast',
     source:
       'https://github.com/primer/primitives/blob/main/src/tokens/base/color/dark/dark.high-contrast.json5',
+    syntax: 'githubDarkHighContrast',
     bg: '#010409', // base.black
     fg: '#ffffff', // base.white
     // The high-contrast file overrides only the accent hues; its neutrals come
@@ -233,6 +256,7 @@ export const THEMES: Theme[] = [
     mode: 'dark',
     source:
       'https://github.com/ayu-theme/ayu-colors/blob/master/themes/dark.yaml',
+    syntax: 'ayuDark',
     bg: '#0d1017', // surface.base
     fg: '#bfbdb6', // editor.fg
     surface: '#141821', // ui.panel.bg
@@ -266,6 +290,7 @@ export const THEMES: Theme[] = [
     mode: 'dark',
     source:
       'https://github.com/rebelot/kanagawa.nvim/blob/master/lua/kanagawa/colors.lua',
+    syntax: 'kanagawaDragon',
     bg: '#181616', // dragonBlack3
     fg: '#c5c9c5', // dragonWhite
     surface: '#282727', // dragonBlack4
@@ -282,6 +307,8 @@ export const THEMES: Theme[] = [
     id: 'material-ocean',
     name: 'Material Ocean',
     mode: 'dark',
+    family: 'Material',
+    variant: 'Ocean',
     source:
       'https://github.com/Dramaga11/vsc-material-theme/blob/main/scripts/generator/settings/specific/ocean.ts',
     syntax: 'materialOceanic',
@@ -297,6 +324,8 @@ export const THEMES: Theme[] = [
     id: 'material-palenight',
     name: 'Material Palenight',
     mode: 'dark',
+    family: 'Material',
+    variant: 'Palenight',
     source:
       'https://github.com/Dramaga11/vsc-material-theme/blob/main/scripts/generator/settings/specific/palenight.ts',
     syntax: 'materialOceanic',
@@ -312,6 +341,8 @@ export const THEMES: Theme[] = [
     id: 'material-darker',
     name: 'Material Darker',
     mode: 'dark',
+    family: 'Material',
+    variant: 'Darker',
     source:
       'https://github.com/Dramaga11/vsc-material-theme/blob/main/scripts/generator/settings/specific/darker.ts',
     syntax: 'materialDark',
@@ -397,6 +428,7 @@ export const THEMES: Theme[] = [
     mode: 'dark',
     source:
       'https://github.com/minamarkham/yonce-vscode/blob/master/themes/Yonc%C3%A9-color-theme.json',
+    syntax: 'yonce',
     bg: '#1c1c1c', // editor.background
     fg: '#d4d4d4', // editor.foreground
     surface: '#272727', // editorWidget.background
@@ -410,8 +442,11 @@ export const THEMES: Theme[] = [
     id: 'github-dark',
     name: 'GitHub Dark',
     mode: 'dark',
+    family: 'GitHub',
+    variant: 'Dark',
     source:
       'https://github.com/primer/primitives/blob/main/src/tokens/base/color/dark/dark.json5',
+    syntax: 'githubDark',
     bg: '#0d1117', // scale.neutral.1
     fg: '#f0f6fc', // scale.neutral.12
     surface: '#151b23', // scale.neutral.2
@@ -438,6 +473,8 @@ export const THEMES: Theme[] = [
     id: 'solarized-light',
     name: 'Solarized Light',
     mode: 'light',
+    family: 'Solarized',
+    variant: 'Light',
     source: 'https://ethanschoonover.com/solarized/',
     syntax: 'solarizedlight',
     bg: '#fdf6e3', // base3  — spec's light background
@@ -452,22 +489,11 @@ export const THEMES: Theme[] = [
     warning: '#b58900', // yellow
   },
   {
-    id: 'catppuccin-latte',
-    name: 'Catppuccin Latte',
-    mode: 'light',
-    source: 'https://github.com/catppuccin/palette/blob/main/palette.json',
-    bg: '#eff1f5', // base
-    fg: '#4c4f69', // text
-    surface: '#ccd0da', // surface0
-    accent: '#8839ef', // mauve
-    danger: '#d20f39', // red
-    success: '#40a02b', // green
-    warning: '#df8e1d', // yellow
-  },
-  {
     id: 'gruvbox-light',
     name: 'Gruvbox Light',
     mode: 'light',
+    family: 'Gruvbox',
+    variant: 'Light',
     source: 'https://github.com/morhetz/gruvbox/blob/master/colors/gruvbox.vim',
     syntax: 'gruvboxLight',
     bg: '#fbf1c7', // light0
@@ -482,7 +508,10 @@ export const THEMES: Theme[] = [
     id: 'rose-pine-dawn',
     name: 'Rosé Pine Dawn',
     mode: 'light',
+    family: 'Rosé Pine',
+    variant: 'Dawn',
     source: 'https://github.com/rose-pine/palette/blob/main/palette.json',
+    syntax: 'rosePineDawn',
     bg: '#faf4ed', // base
     fg: '#575279', // text
     surface: '#fffaf3', // surface
@@ -495,8 +524,11 @@ export const THEMES: Theme[] = [
     id: 'github-light',
     name: 'GitHub Light',
     mode: 'light',
+    family: 'GitHub',
+    variant: 'Light',
     source:
       'https://github.com/primer/primitives/blob/main/src/tokens/base/color/light/light.json5',
+    syntax: 'githubLight',
     bg: '#ffffff', // base.white
     fg: '#1f2328', // base.black
     surface: '#f6f8fa', // scale.neutral.1
@@ -509,8 +541,11 @@ export const THEMES: Theme[] = [
     id: 'tokyo-night-day',
     name: 'Tokyo Night Day',
     mode: 'light',
+    family: 'Tokyo Night',
+    variant: 'Day',
     source:
       'https://github.com/enkia/tokyo-night-vscode-theme/blob/master/themes/tokyo-night-light-color-theme.json',
+    syntax: 'tokyoNightDay',
     bg: '#e6e7ed', // editor.background
     fg: '#343b59', // editor.foreground
     surface: '#d6d8df', // editorWidget.background
@@ -523,7 +558,10 @@ export const THEMES: Theme[] = [
     id: 'everforest-light',
     name: 'Everforest Light',
     mode: 'light',
+    family: 'Everforest',
+    variant: 'Light',
     source: 'https://github.com/sainnhe/everforest/blob/master/palette.md',
+    syntax: 'everforestLight',
     bg: '#fdf6e3', // bg0, medium contrast
     fg: '#5c6a72', // fg
     surface: '#f4f0d9', // bg1, medium contrast
@@ -532,6 +570,10 @@ export const THEMES: Theme[] = [
     success: '#8da101', // green
     warning: '#dfa000', // yellow
   },
+
+  // ── Generated ─────────────────────────────────────────────────────────────
+  // Listed last because they span both modes; `themesByMode` sorts anyway.
+  ...CATPPUCCIN_THEMES,
 ];
 
 export const DEFAULT_THEME_ID = 'dark';
@@ -550,6 +592,30 @@ export function themesByMode(mode: ThemeMode): Theme[] {
   return THEMES.filter((t) => t.mode === mode).sort(
     (a, b) => luminance(b.bg) - luminance(a.bg) || a.name.localeCompare(b.name),
   );
+}
+
+/** One picker tile: a family's themes of a given mode, or a lone standalone theme. */
+export interface ThemeFamily {
+  /** The family's name, or the theme's own when it belongs to no family. */
+  name: string;
+  /** Members in `themesByMode` order; more than one only for real families. */
+  themes: Theme[];
+}
+
+/**
+ * The tiles for one mode. A family straddling both modes (Catppuccin, GitHub,
+ * Rosé Pine…) appears in each with only that mode's variants, so the Dark/Light
+ * split stays meaningful and the grid stays short.
+ */
+export function themeFamiliesByMode(mode: ThemeMode): ThemeFamily[] {
+  const families: ThemeFamily[] = [];
+  for (const theme of themesByMode(mode)) {
+    const name = theme.family ?? theme.name;
+    const found = families.find((f) => f.name === name);
+    if (found) found.themes.push(theme);
+    else families.push({ name, themes: [theme] });
+  }
+  return families;
 }
 
 export function getTheme(id: string | null | undefined): Theme | undefined {

@@ -18,11 +18,15 @@ function subscribe(onChange: () => void) {
 // each call, which would make useSyncExternalStore loop forever.
 function getSnapshot(): string {
   const root = document.documentElement;
-  return `${root.getAttribute('data-theme-id') ?? ''}|${root.getAttribute('data-theme') ?? ''}`;
+  // Editing the custom theme leaves the id and mode alone, so the syntax style
+  // has to be in the key or a style change would notify nobody.
+  return ['data-theme-id', 'data-theme', 'data-theme-syntax']
+    .map((name) => root.getAttribute(name) ?? '')
+    .join('|');
 }
 
 function getServerSnapshot(): string {
-  return `${DEFAULT_THEME_ID}|dark`;
+  return `${DEFAULT_THEME_ID}|dark|`;
 }
 
 /**

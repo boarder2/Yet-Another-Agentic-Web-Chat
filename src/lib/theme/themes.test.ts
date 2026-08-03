@@ -22,6 +22,7 @@ import {
   getTheme,
   resolveBuiltIn,
   THEMES,
+  themeFamiliesByMode,
   themesByMode,
 } from './themes';
 import { SEED_KEYS } from './types';
@@ -121,12 +122,112 @@ describe('theme catalogue', () => {
   });
 
   it('labels every syntax style, and only real ones', async () => {
-    // The picker is built from the labels, so a missing one hides a style and a
-    // stray one offers a key that resolves to nothing.
-    const { PRISM_STYLES, SYNTAX_LABELS } = await import('./syntax');
-    expect(Object.keys(SYNTAX_LABELS).sort()).toEqual(
+    // The picker is built from the metadata, so a missing entry hides a style
+    // and a stray one offers a key that resolves to nothing.
+    const { PRISM_STYLES, SYNTAX_STYLES } = await import('./syntax');
+    expect(Object.keys(SYNTAX_STYLES).sort()).toEqual(
       Object.keys(PRISM_STYLES).sort(),
     );
+  });
+
+  it('gives every theme but the two stock ones a syntax style', async () => {
+    // Dark and Light are ours and have no upstream syntax spec, so they use the
+    // One Dark / One Light fallback on purpose. Anything else falling back means
+    // a theme shipped without its own style.
+    const { PRISM_STYLES } = await import('./syntax');
+    expect(Object.keys(PRISM_STYLES).length).toBeGreaterThan(0);
+    for (const theme of THEMES) {
+      if (theme.id === 'dark' || theme.id === 'light') continue;
+      expect(theme.syntax, `${theme.id} has no syntax style`).toBeTruthy();
+    }
+  });
+
+  it('offers every style through the family/variant pair', async () => {
+    // The picker reaches a style only through its family, so a style missing
+    // from the families list is unreachable however well it renders.
+    const { SYNTAX_FAMILIES, SYNTAX_STYLES, syntaxFamilyOf } =
+      await import('./syntax');
+    const listed = SYNTAX_FAMILIES.flatMap((f) =>
+      f.variants.map((v) => v.value),
+    );
+    expect(listed.sort()).toEqual(Object.keys(SYNTAX_STYLES).sort());
+    for (const family of SYNTAX_FAMILIES)
+      for (const variant of family.variants)
+        expect(syntaxFamilyOf(variant.value)).toBe(family.family);
+  });
+
+  it('lists families alphabetically and keeps variants grouped together', async () => {
+    const { SYNTAX_FAMILIES } = await import('./syntax');
+    const names = SYNTAX_FAMILIES.map((f) => f.family);
+    expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
+    // A family's optgroups must be contiguous, or the picker splits a flavour
+    // across two headings.
+    for (const { family, variants } of SYNTAX_FAMILIES) {
+      const runs = variants
+        .map((v) => v.group)
+        .filter((g, i, all) => i === 0 || g !== all[i - 1]);
+      expect(new Set(runs).size, `${family}`).toBe(runs.length);
+    }
+  });
+});
+
+describe('theme families', () => {
+  const families = new Map<string, typeof THEMES>();
+  for (const theme of THEMES) {
+    if (!theme.family) continue;
+    families.set(theme.family, [...(families.get(theme.family) ?? []), theme]);
+  }
+
+  it('pairs family with variant, never one without the other', () => {
+    for (const theme of THEMES) {
+      expect(!!theme.family, `${theme.id}`).toBe(!!theme.variant);
+    }
+  });
+
+  it('only declares a family that has more than one member', () => {
+    // A family of one would render as a tile with a single-option dropdown.
+    expect(families.size).toBeGreaterThan(0);
+    for (const [name, members] of families) {
+      expect(members.length, `${name} has one member`).toBeGreaterThan(1);
+    }
+  });
+
+  it('keeps variant names unique within a family, or within its group', () => {
+    // Catppuccin repeats every accent across its four flavours, so uniqueness
+    // is per group there; a family without groups is one group of undefined.
+    for (const [name, members] of families) {
+      const keys = members.map((t) => `${t.group ?? ''}/${t.variant}`);
+      expect(new Set(keys).size, `${name}`).toBe(members.length);
+    }
+  });
+
+  it('groups a family’s tile options contiguously', () => {
+    // The tile dropdown builds optgroups from consecutive runs, so a flavour
+    // split in two would render as two headings with the same name.
+    for (const mode of ['dark', 'light'] as const) {
+      for (const { name, themes } of themeFamiliesByMode(mode)) {
+        const runs = themes
+          .map((t) => t.group)
+          .filter((g, i, all) => i === 0 || g !== all[i - 1]);
+        expect(new Set(runs).size, `${name} in ${mode}`).toBe(runs.length);
+      }
+    }
+  });
+
+  it('lists every theme exactly once across the mode tiles', () => {
+    const listed = (['dark', 'light'] as const).flatMap((mode) =>
+      themeFamiliesByMode(mode).flatMap((f) => f.themes),
+    );
+    expect(listed).toHaveLength(THEMES.length);
+    expect(new Set(listed.map((t) => t.id)).size).toBe(THEMES.length);
+  });
+
+  it('keeps a family tile to a single mode', () => {
+    for (const mode of ['dark', 'light'] as const) {
+      for (const family of themeFamiliesByMode(mode)) {
+        for (const theme of family.themes) expect(theme.mode).toBe(mode);
+      }
+    }
   });
 
   it('cites a canonical source for every third-party palette', () => {

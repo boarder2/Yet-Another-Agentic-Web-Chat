@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import CodeMirror, { EditorView, type Extension } from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { languages } from '@codemirror/language-data';
+import { codeMirrorTheme } from '@/lib/theme/codemirror';
 import { useActiveTheme } from '@/lib/theme/useActiveTheme';
 
 interface CodeEditorProps {
@@ -30,7 +31,8 @@ const CodeEditor = ({
   filename,
   ariaLabel,
 }: CodeEditorProps) => {
-  const { mode } = useActiveTheme();
+  const { syntax, mode } = useActiveTheme();
+  const theme = useMemo(() => codeMirrorTheme(syntax, mode), [syntax, mode]);
   const [language, setLanguage] = useState<Extension>(() =>
     filename === undefined ? javascript() : [],
   );
@@ -56,7 +58,7 @@ const CodeEditor = ({
     <CodeMirror
       value={value}
       height={height}
-      theme={mode}
+      theme={theme}
       readOnly={readOnly}
       extensions={
         ariaLabel

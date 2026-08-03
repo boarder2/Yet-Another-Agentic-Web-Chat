@@ -1,5 +1,6 @@
 import { test, expect } from '../fixtures';
 import { SettingsPage } from '../pages/SettingsPage';
+import { seedWorkspace, seedWorkspaceFile } from '../utils/seed';
 
 /**
  * Theme state is device-local (localStorage), so each Playwright context starts
@@ -171,6 +172,37 @@ test.describe('appearance', () => {
     await page.reload();
     await openAppearance(page);
     await expect(page.getByLabel('Syntax style')).toHaveValue('dracula');
+  });
+
+  test('the syntax style reaches the code editor, not just the fences', async ({
+    page,
+    request,
+  }) => {
+    const wsId = await seedWorkspace(request);
+    await seedWorkspaceFile(request, wsId, {
+      name: 'widget.js',
+      content: 'const x = 1;',
+    });
+
+    // A light app theme with a dark code style: the editor must follow the
+    // *style*, which is exactly what the old `theme={mode}` could not do.
+    await openAppearance(page);
+    await page.getByRole('button', { name: 'Light', exact: true }).click();
+    await copyIntoCustom(page, 'Light');
+    await page.getByLabel('Syntax style').selectOption('dracula');
+
+    await page.goto(`/workspaces/${wsId}`);
+    const sidebar = page.locator('aside');
+    await sidebar.getByRole('button', { name: 'Files' }).click();
+    await sidebar.getByRole('button', { name: 'Edit' }).click();
+
+    const editor = page.getByRole('dialog').locator('.cm-editor');
+    // Dracula's own fill and keyword colour, straight from the upstream style.
+    await expect(editor).toHaveCSS('background-color', 'rgb(40, 42, 54)');
+    await expect(editor.locator('span', { hasText: /^const$/ })).toHaveCSS(
+      'color',
+      'rgb(139, 233, 253)',
+    );
   });
 
   test('a theme copied on one device can be pasted on another', async ({

@@ -23,7 +23,7 @@ ENCRYPTION_PASSPHRASE = ""
 
 [TOOLS.CODE_EXECUTION]
 ENABLED = false
-DOCKER_IMAGE = "node:slim"
+DOCKER_IMAGE = "node:24-alpine"
 DOCKER_HOST = "unix:///var/run/docker.sock"
 TIMEOUT_SECONDS = 30
 MEMORY_MB = 128

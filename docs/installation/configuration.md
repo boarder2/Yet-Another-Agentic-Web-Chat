@@ -33,7 +33,7 @@ General application settings.
 Configuration for the sandboxed code execution tool (requires Docker).
 
 - **ENABLED**: Boolean, default `false`
-- **DOCKER_IMAGE**: String, default `"node:slim"`
+- **DOCKER_IMAGE**: String, default `"node:24-alpine"` — any tag or digest of the official `node` image (e.g. `node:24-alpine@sha256:...`)
 - **DOCKER_HOST**: String, default `"unix:///var/run/docker.sock"`
 - **TIMEOUT_SECONDS**: Number, default `30`
 - **MEMORY_MB**: Number, default `128`
@@ -61,7 +61,7 @@ ENCRYPTION_PASSPHRASE = ""
 
 [TOOLS.CODE_EXECUTION]
 ENABLED = false
-DOCKER_IMAGE = "node:slim"
+DOCKER_IMAGE = "node:24-alpine"
 DOCKER_HOST = "unix:///var/run/docker.sock"
 TIMEOUT_SECONDS = 30
 MEMORY_MB = 128

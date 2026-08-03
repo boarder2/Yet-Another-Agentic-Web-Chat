@@ -209,19 +209,22 @@ export const getCustomOpenaiModelName = () =>
 
 export const getLMStudioApiEndpoint = () => getLMStudioApiUrl();
 
-const ALLOWED_IMAGE_PATTERN = /^node:\d+(-slim|-alpine)?$/;
+// Any tag or digest of the official `node` image: the sandbox only ever runs
+// `node -e`, so the repository is the security boundary, not the variant.
+const ALLOWED_IMAGE_PATTERN =
+  /^node(:[A-Za-z0-9_][A-Za-z0-9._-]{0,127})?(@sha256:[a-f0-9]{64})?$/;
 const ALLOWED_DOCKER_HOST_PATTERN =
   /^(unix:\/\/\/var\/run\/docker\.sock|https?:\/\/[A-Za-z0-9.-]+(?::\d+)?)$/;
 
 export const getCodeExecutionConfig = () => {
   const config = loadConfig();
   const ce = config.TOOLS?.CODE_EXECUTION;
-  const dockerImage = ce?.DOCKER_IMAGE ?? 'node:22-slim';
+  const dockerImage = ce?.DOCKER_IMAGE ?? 'node:24-alpine';
   const dockerHost = ce?.DOCKER_HOST ?? 'unix:///var/run/docker.sock';
 
   const disabledConfig = {
     enabled: false,
-    dockerImage: 'node:22-slim',
+    dockerImage: 'node:24-alpine',
     dockerHost: 'unix:///var/run/docker.sock',
     timeoutSeconds: 30,
     memoryMb: 128,
@@ -234,7 +237,7 @@ export const getCodeExecutionConfig = () => {
     );
     return {
       ...disabledConfig,
-      validationError: `Invalid DOCKER_IMAGE "${dockerImage}". Must match pattern: node:<version>[-slim|-alpine]`,
+      validationError: `Invalid DOCKER_IMAGE "${dockerImage}". Must be the official node image: node[:<tag>][@sha256:<digest>]`,
     };
   }
 

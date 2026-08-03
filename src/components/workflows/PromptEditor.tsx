@@ -7,6 +7,9 @@ import CodeMirror, {
   ViewPlugin,
   type ViewUpdate,
 } from '@uiw/react-codemirror';
+import { useMemo } from 'react';
+import { codeMirrorTheme } from '@/lib/theme/codemirror';
+import { useActiveTheme } from '@/lib/theme/useActiveTheme';
 import {
   parseWorkflowTemplate,
   splitFrontmatter,
@@ -93,15 +96,20 @@ function highlighter(build: (doc: string) => ReturnType<typeof buildMarks>) {
 const placeholderHighlighter = highlighter(buildMarks);
 const frontmatterHighlighter = highlighter(buildFrontmatterLines);
 
-// Only the `{{placeholder}}` token colors — everything else comes from the
-// built-in `dark` theme, so the editor matches the code-widget editor.
+// Only the `{{placeholder}}` marks — everything else comes from the syntax
+// theme, so the editor matches the code-widget editor. Valid/error keep the app
+// accent and danger hues: they're affordances, not code tokens. The frontmatter
+// tint mixes off `currentColor` (the syntax theme's foreground) instead of an
+// app surface, which would read as a broken patch over a code background.
 const tokenTheme = EditorView.theme({
   '.cm-ph-token': { color: 'var(--color-accent)' },
   '.cm-ph-error': {
     color: 'var(--color-danger)',
     textDecoration: 'underline wavy',
   },
-  '.cm-ph-frontmatter': { backgroundColor: 'var(--color-surface-2)' },
+  '.cm-ph-frontmatter': {
+    backgroundColor: 'color-mix(in srgb, currentColor 8%, transparent)',
+  },
 });
 
 const extensions = [
@@ -126,12 +134,15 @@ export default function PromptEditor({
   onChange: (v: string) => void;
   minHeight?: string;
 }) {
+  const { syntax, mode } = useActiveTheme();
+  const theme = useMemo(() => codeMirrorTheme(syntax, mode), [syntax, mode]);
+
   return (
     <CodeMirror
       value={value}
       onChange={onChange}
       minHeight={minHeight}
-      theme="dark"
+      theme={theme}
       extensions={extensions}
       basicSetup={{ lineNumbers: false, foldGutter: false }}
       className="text-sm border border-surface-2 rounded-control overflow-hidden"

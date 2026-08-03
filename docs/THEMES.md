@@ -64,4 +64,6 @@ Dark and Light (the two stock themes) are this project's own.
 4. Run `npm run test:unit` — the invariants catch a mistyped hex.
 5. If the palette ships an official syntax style bundled with
    `react-syntax-highlighter`, add it to `PRISM_STYLES` and `SYNTAX_LABELS` in
-   `syntax.ts` (the unit tests assert the two agree), then set `syntax`.
+   `syntax.ts` (the unit tests assert the two agree), then set `syntax`. The
+   CodeMirror binding is derived from the Prism style, so editors follow for
+   free.

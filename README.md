@@ -181,7 +181,7 @@ YAAWC can run JavaScript code in isolated Docker containers with strict security
    ```toml
    [TOOLS.CODE_EXECUTION]
    ENABLED = true
-   DOCKER_IMAGE = "node:22-slim"
+   DOCKER_IMAGE = "node:24-alpine"
    DOCKER_HOST = "unix:///var/run/docker.sock"
    TIMEOUT_SECONDS = 30
    MEMORY_MB = 128

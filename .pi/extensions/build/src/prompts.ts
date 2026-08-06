@@ -14,10 +14,21 @@ Do not plan or design yet.`,
 
   grill: `PHASE: GRILLING.
 Interrogate the ask until you could implement it without guessing. One question at a time — never a
-batch. Push on: the problem behind the request, what is explicitly out of scope, concrete acceptance
-criteria, the ugly cases (empty, concurrent, failed, stale, huge, hostile), what existing behaviour
-breaks, and why the cheaper alternative is wrong. Challenge weak answers instead of recording them.
-Stop when you can restate the ask, its boundary, and its acceptance criteria and the user agrees.`,
+batch. End the turn on the question and wait: the user's answer is the only thing that can move this
+forward, so do not answer for them, do not proceed on an assumption, and never ask a question and
+call a tool in the same turn. Push on: the problem behind the request, what is explicitly out of
+scope, concrete acceptance criteria, the ugly cases (empty, concurrent, failed, stale, huge,
+hostile), what existing behaviour breaks, and why the cheaper alternative is wrong. Challenge weak
+answers instead of recording them; a vague answer is a reason for the next question, not a fact.
+
+Grilling ends by agreement, not by your judgement that you have enough. One answer is never enough —
+a complex ask that survived triage has more than one thing you are still guessing about, and it is
+your job to find them before you stop. Before you reach for workflow_end_grilling, ask yourself what
+you would still have to invent while writing the plan; if anything comes to mind, that is your next
+question. When nothing does, say so in prose — restate the ask, its boundary, and its acceptance
+criteria, and ask the user outright whether that is right and whether anything is left. Only after
+they have agreed in their own words do you call workflow_end_grilling, and its dialog is then a
+confirmation of an agreement you already have, not the place where you go looking for one.`,
 
   plan: `PHASE: PLANNING.
 Read the real code first: name actual files, functions and types, never placeholders. Ask any

@@ -56,3 +56,4 @@ workspace-files/
 # claude-alt session registry (ephemeral)
 .claude/claude-alt/
 .claude/worktrees/
+.pi/build.json

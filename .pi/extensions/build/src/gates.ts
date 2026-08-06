@@ -118,7 +118,8 @@ export function registerGates(pi: ExtensionAPI, controller: Controller): void {
 
         return say(
           complexity === 'complex'
-            ? `Triaged as complex. Grill the ask now — one question at a time — then call workflow_end_grilling.`
+            ? `Triaged as complex. Grill the ask now — one question at a time, waiting for each answer. ` +
+              `Call workflow_end_grilling only once the user has agreed in conversation that nothing is left open.`
             : `Triaged as simple. Go straight to planning and call workflow_write_plan.`,
         );
       },
@@ -130,7 +131,7 @@ export function registerGates(pi: ExtensionAPI, controller: Controller): void {
       name: 'workflow_end_grilling',
       label: 'End Grilling',
       description:
-        'Propose that grilling is done. Show your restatement of the ask; the user decides whether understanding is shared.',
+        'Confirm an agreement the user has already voiced that grilling is done. Ask them in conversation first; this dialog records the agreement, it does not solicit one.',
       parameters: Type.Object({
         understanding: Type.String({
           description:
@@ -153,7 +154,7 @@ export function registerGates(pi: ExtensionAPI, controller: Controller): void {
           : true;
         if (!agreed) {
           return say(
-            'Not agreed. Keep grilling — find what is still unresolved and ask about it.',
+            'Not agreed. Ask what is still wrong or missing and keep grilling from there — do not re-propose the same understanding.',
           );
         }
 

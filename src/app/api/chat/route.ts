@@ -39,6 +39,7 @@ import { resolveSkillsForChat, getByName } from '@/lib/skills/resolve';
 import { SKILL_TOKEN_SCAN_REGEX } from '@/lib/skills/validation';
 import { persistToolContextRow } from '@/lib/utils/persistToolContext';
 import { computeSanitizedContent } from '@/lib/db/sanitizedContent';
+import { deleteVersionsForMessages as deleteArtifactVersionsForMessages } from '@/lib/artifacts/service';
 import {
   startRun,
   getRun,
@@ -141,7 +142,7 @@ const handleHistorySave = async (
     // Edit equals nuke-and-rebuild from that point. Drops the edited user
     // row, any newer assistant/system rows, and any compaction checkpoints
     // whose summarized region the edit invalidates.
-    await db
+    const dropped = await db
       .delete(messagesSchema)
       .where(
         and(
@@ -149,7 +150,10 @@ const handleHistorySave = async (
           gte(messagesSchema.id, messageExists.id),
         ),
       )
-      .execute();
+      .returning({ messageId: messagesSchema.messageId });
+    // Artifact versions are anchored to the message that produced them, so the
+    // rewind rolls each artifact back to its newest surviving snapshot.
+    deleteArtifactVersionsForMessages(dropped.map((r) => r.messageId));
   }
 
   await db

@@ -142,6 +142,10 @@ export async function runSchedule(
       chatId,
       false, // interactiveSession
       methodologyInstructions,
+      false, // isPrivate
+      '', // workspaceSuffix
+      undefined, // workspaceId
+      aiMessageId,
     );
 
     let receivedMessage = '';

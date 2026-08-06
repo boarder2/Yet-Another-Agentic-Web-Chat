@@ -1,6 +1,7 @@
 import { formatDateForLLM } from '@/lib/utils';
 import { formattingAndCitationsLocal } from '@/lib/prompts/templates';
 import { buildChartingGuidance } from './chartingGuidance';
+import { artifactGuidance } from './artifactGuidance';
 
 /**
  * Build the Local Research mode system prompt for SimplifiedAgent
@@ -11,6 +12,7 @@ export function buildLocalResearchPrompt(
   date: Date = new Date(),
   methodologyInstructions?: string,
   codeExecutionEnabled: boolean = false,
+  artifactsEnabled: boolean = false,
 ): string {
   const defaultStrategy = `# Research Strategy
 1. **Plan**: Determine the best document analysis approach based on the user's query
@@ -68,6 +70,8 @@ These rules always apply regardless of research strategy:
 ${researchStrategy}
 
 ${buildChartingGuidance(codeExecutionEnabled)}
+
+${artifactsEnabled ? artifactGuidance : ''}
 
 ## Current Context
 - Today's Date: ${formatDateForLLM(date)}

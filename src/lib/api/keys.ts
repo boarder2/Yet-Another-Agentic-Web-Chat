@@ -6,6 +6,7 @@ type ChatsSearchFilter = Omit<ChatsFilter, 'pinned' | 'scheduled'>;
 // invalidations share a single source of truth.
 const SKILLS_NS = ['skills'] as const;
 const MEMORIES_NS = ['memories'] as const;
+const ARTIFACTS_NS = ['artifacts'] as const;
 
 export const qk = {
   config: ['config'] as const,
@@ -47,4 +48,11 @@ export const qk = {
     ['chats', 'search', 'llm', query, filter] as const,
   message: (id: string) => ['messages', id] as const,
   activeRuns: ['active-runs'] as const,
+  artifactsRoot: ARTIFACTS_NS,
+  artifacts: (chatId: string) => [...ARTIFACTS_NS, { chatId }] as const,
+  workspaceArtifacts: (workspaceId: string) =>
+    [...ARTIFACTS_NS, { workspaceId }] as const,
+  artifact: (id: string) => [...ARTIFACTS_NS, id] as const,
+  artifactSource: (id: string, version?: number) =>
+    [...ARTIFACTS_NS, id, 'source', version] as const,
 };

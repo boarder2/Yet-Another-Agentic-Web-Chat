@@ -563,3 +563,56 @@ export const skills = sqliteTable(
     ),
   }),
 );
+
+// Agent-authored HTML documents. App-level cascades (no DB FKs), matching the
+// other tables here. `workspaceId` decides the owner: when set, the document
+// belongs to the workspace and any of its chats may read and edit it, so
+// `chatId` is only provenance (and goes NULL if that chat is deleted). When
+// null, the document is chat-scoped and dies with the chat, as before.
+export const artifacts = sqliteTable(
+  'artifacts',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    chatId: text('chat_id'),
+    workspaceId: text('workspace_id'),
+    title: text('title').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer('updated_at', { mode: 'timestamp' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => ({
+    byChat: index('artifacts_chat_idx').on(t.chatId),
+    byWorkspace: index('artifacts_workspace_idx').on(t.workspaceId),
+  }),
+);
+
+// One immutable full snapshot per successful agent write, anchored to the
+// assistant message whose tool call produced it so a rewind can drop it.
+export const artifactVersions = sqliteTable(
+  'artifact_versions',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    artifactId: text('artifact_id').notNull(),
+    messageId: text('message_id').notNull(),
+    // 1-based and dense, so the switcher can show "v3 of 7" without counting.
+    version: integer('version').notNull(),
+    content: text('content').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => ({
+    uniqVersion: uniqueIndex('uniq_artifact_version').on(
+      t.artifactId,
+      t.version,
+    ),
+    byMessage: index('artifact_versions_message_idx').on(t.messageId),
+  }),
+);

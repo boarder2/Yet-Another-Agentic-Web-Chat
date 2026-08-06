@@ -45,6 +45,10 @@ import {
   type PanelSelection,
 } from '@/lib/panel/panelSelection';
 import { ChartSpecContext } from '@/lib/chart/ChartSpecContext';
+import { ArtifactViewerContext } from '@/lib/artifacts/ArtifactViewerContext';
+import { useArtifactBridge } from '@/lib/artifacts/ArtifactBridgeContext';
+import ArtifactPanel from './Artifacts/ArtifactPanel';
+import { useArtifactPanel } from './Artifacts/useArtifactPanel';
 import { ChartSpec, ChartSpecSchema } from '@/lib/chart/chartSpec';
 import ChatActions from './ChatActions';
 import Chat from './Chat';
@@ -437,6 +441,8 @@ const ChatWindow = ({
 
   const [loading, setLoading] = useState(false);
   const [scrollTrigger, setScrollTrigger] = useState(0);
+  // Declared ahead of `runEffect`, which opens the panel on `openArtifact`.
+  const artifactPanel = useArtifactPanel();
 
   // Consolidated stream state: one reducer transition per wire event, shared by
   // the live-send and reconnect/attach paths. `streamStateRef` is the
@@ -734,6 +740,17 @@ const ChatWindow = ({
         break;
       case 'refreshSkills':
         queryClient.invalidateQueries({ queryKey: qk.skillsRoot });
+        break;
+      case 'openArtifact':
+        artifactPanel.open(effect.artifactId, effect.version);
+        break;
+      case 'invalidateArtifacts':
+        // The chat's list and the written artifact's version list both went
+        // stale; both hang off `qk.artifactsRoot`, so one prefix invalidation
+        // covers both.
+        if (effect.chatId === chatId) {
+          queryClient.invalidateQueries({ queryKey: qk.artifactsRoot });
+        }
         break;
       case 'fetchSuggestions':
         void fetchSuggestions(effect.messageId);
@@ -1577,6 +1594,20 @@ const ChatWindow = ({
     [flatChartSpecs],
   );
 
+  const artifactViewerContextValue = useMemo(
+    () => ({ openArtifact: artifactPanel.open }),
+    [artifactPanel.open],
+  );
+
+  // Lets the workspace sidebar, which renders outside this tree, open a
+  // document in this chat's panel rather than a new tab.
+  const artifactBridge = useArtifactBridge();
+  const registerOpen = artifactBridge?.registerOpen;
+  useEffect(
+    () => registerOpen?.(artifactPanel.open),
+    [registerOpen, artifactPanel.open],
+  );
+
   if (hasError) {
     return (
       <div className="relative">
@@ -1715,330 +1746,373 @@ const ChatWindow = ({
 
   return (
     <ChartSpecContext.Provider value={chartSpecContextValue}>
-      {isReady ? (
-        notFound ? (
-          <NextError statusCode={404} />
-        ) : (
-          <div>
-            {messages.length > 0 ? (
-              <>
-                <ChatActions
-                  chatId={chatId!}
-                  messages={messages}
-                  title={title}
-                  onTitleChange={setTitle}
-                  isPrivateSession={isPrivateSession}
-                  pinned={pinned}
-                  setPinned={setPinned}
-                  workspaceId={selectedWorkspaceId ?? workspaceId}
-                />
-                <Chat
-                  workspaceId={selectedWorkspaceId ?? workspaceId}
-                  loading={loading}
-                  messages={messages}
-                  skillNames={enabledUserSkillNames}
+      <ArtifactViewerContext.Provider value={artifactViewerContextValue}>
+        {isReady ? (
+          notFound ? (
+            <NextError statusCode={404} />
+          ) : (
+            <>
+              {messages.length > 0 ? (
+                <>
+                  <ChatActions
+                    chatId={chatId!}
+                    messages={messages}
+                    title={title}
+                    onTitleChange={setTitle}
+                    isPrivateSession={isPrivateSession}
+                    pinned={pinned}
+                    setPinned={setPinned}
+                    workspaceId={selectedWorkspaceId ?? workspaceId}
+                  />
+                  <Chat
+                    workspaceId={selectedWorkspaceId ?? workspaceId}
+                    loading={loading}
+                    messages={messages}
+                    skillNames={enabledUserSkillNames}
+                    sendMessage={sendMessage}
+                    scrollTrigger={scrollTrigger}
+                    rewrite={rewrite}
+                    fileIds={fileIds}
+                    setFileIds={setFileIds}
+                    files={files}
+                    setFiles={setFiles}
+                    focusMode={focusMode}
+                    setFocusMode={setFocusMode}
+                    handleEditMessage={handleEditMessage}
+                    systemPromptIds={systemPromptIds}
+                    setSystemPromptIds={setSystemPromptIds}
+                    selectedMethodologyId={selectedMethodologyId}
+                    setSelectedMethodologyId={setSelectedMethodologyId}
+                    onThinkBoxToggle={handleThinkBoxToggle}
+                    gatheringSources={gatheringSources}
+                    sendLocation={sendLocation}
+                    setSendLocation={setSendLocation}
+                    sendPersonalization={sendPersonalization}
+                    setSendPersonalization={setSendPersonalization}
+                    personalizationLocation={personalizationLocation}
+                    personalizationAbout={personalizationAbout}
+                    todoItems={todoItems}
+                    pendingExecutions={pendingExecutions}
+                    onExecutionAction={(
+                      executionId: string,
+                      approved: boolean,
+                    ) => {
+                      setPendingExecutions((prev) => {
+                        const updated: Record<string, PendingExecution[]> = {};
+                        for (const [msgId, executions] of Object.entries(
+                          prev,
+                        )) {
+                          updated[msgId] = executions.map((e) =>
+                            e.executionId === executionId
+                              ? {
+                                  ...e,
+                                  status: approved
+                                    ? ('approved' as const)
+                                    : ('denied' as const),
+                                }
+                              : e,
+                          );
+                        }
+                        return updated;
+                      });
+                    }}
+                    pendingQuestions={pendingQuestions}
+                    onQuestionAnswer={async (
+                      questionId: string,
+                      response: {
+                        selectedOptions?: string[];
+                        freeformText?: string;
+                      },
+                    ) => {
+                      setPendingQuestions((prev) => {
+                        const updated: Record<string, PendingQuestion[]> = {};
+                        for (const [msgId, questions] of Object.entries(prev)) {
+                          updated[msgId] = questions.map((q) =>
+                            q.questionId === questionId
+                              ? {
+                                  ...q,
+                                  status: 'answered' as const,
+                                  response,
+                                }
+                              : q,
+                          );
+                        }
+                        return updated;
+                      });
+                      try {
+                        const res = await fetch('/api/chat/runs/resume', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            approvalId: questionId,
+                            response,
+                          }),
+                        });
+                        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                        reattachToActiveRun();
+                      } catch {
+                        toast.error(
+                          'Failed to send answer. The agent will continue on its own.',
+                        );
+                      }
+                    }}
+                    onQuestionSkip={async (questionId: string) => {
+                      setPendingQuestions((prev) => {
+                        const updated: Record<string, PendingQuestion[]> = {};
+                        for (const [msgId, questions] of Object.entries(prev)) {
+                          updated[msgId] = questions.map((q) =>
+                            q.questionId === questionId
+                              ? { ...q, status: 'skipped' as const }
+                              : q,
+                          );
+                        }
+                        return updated;
+                      });
+                      try {
+                        const res = await fetch('/api/chat/runs/resume', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            approvalId: questionId,
+                            response: { skipped: true },
+                          }),
+                        });
+                        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                        reattachToActiveRun();
+                      } catch {
+                        toast.error(
+                          'Failed to skip question. The agent will continue on its own.',
+                        );
+                      }
+                    }}
+                    pendingEditApprovals={pendingEditApprovals}
+                    onEditDecide={async (
+                      approvalId: string,
+                      decision:
+                        'accept' | 'accept_always' | 'reject' | 'always_prompt',
+                      freeformText?: string,
+                    ) => {
+                      setPendingEditApprovals((prev) => {
+                        const updated: Record<string, PendingEditApproval[]> =
+                          {};
+                        for (const [msgId, approvals] of Object.entries(prev)) {
+                          updated[msgId] = approvals.map((a) =>
+                            a.approvalId === approvalId
+                              ? {
+                                  ...a,
+                                  status: (decision === 'reject' ||
+                                  decision === 'always_prompt'
+                                    ? 'rejected'
+                                    : 'accepted') as 'accepted' | 'rejected',
+                                }
+                              : a,
+                          );
+                        }
+                        return updated;
+                      });
+                      try {
+                        const res = await fetch('/api/chat/runs/resume', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            approvalId,
+                            response: { decision, freeformText },
+                          }),
+                        });
+                        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                        reattachToActiveRun();
+                      } catch {
+                        toast.error(
+                          'Failed to send edit decision. The agent will continue on its own.',
+                        );
+                      }
+                    }}
+                    pendingSkillEditApprovals={pendingSkillEditApprovals}
+                    onSkillEditDecide={async (
+                      approvalId: string,
+                      decision: 'accept' | 'reject',
+                      freeformText?: string,
+                    ) => {
+                      setPendingSkillEditApprovals((prev) => {
+                        const updated: Record<
+                          string,
+                          PendingSkillEditApproval[]
+                        > = {};
+                        for (const [msgId, approvals] of Object.entries(prev)) {
+                          updated[msgId] = approvals.map((a) =>
+                            a.approvalId === approvalId
+                              ? {
+                                  ...a,
+                                  status: (decision === 'reject'
+                                    ? 'rejected'
+                                    : 'accepted') as 'accepted' | 'rejected',
+                                }
+                              : a,
+                          );
+                        }
+                        return updated;
+                      });
+                      try {
+                        const res = await fetch('/api/chat/runs/resume', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            approvalId,
+                            response: { decision, freeformText },
+                          }),
+                        });
+                        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                        reattachToActiveRun();
+                      } catch {
+                        toast.error(
+                          'Failed to send skill edit decision. The agent will continue on its own.',
+                        );
+                      }
+                    }}
+                    pendingMcpApprovals={pendingMcpApprovals}
+                    onMcpToolDecide={async (
+                      approvalId: string,
+                      approved: boolean,
+                      opts?: { alwaysAllow?: boolean },
+                    ) => {
+                      // Capture the target tool before we mutate state, so the
+                      // "Always allow" write-through knows which server/tool to flip.
+                      const target = Object.values(pendingMcpApprovals)
+                        .flat()
+                        .find((a) => a.approvalId === approvalId);
+                      setPendingMcpApprovals((prev) => {
+                        const updated: Record<string, PendingMcpApproval[]> =
+                          {};
+                        for (const [msgId, approvals] of Object.entries(prev)) {
+                          updated[msgId] = approvals.map((a) =>
+                            a.approvalId === approvalId
+                              ? {
+                                  ...a,
+                                  status: (approved ? 'approved' : 'denied') as
+                                    'approved' | 'denied',
+                                }
+                              : a,
+                          );
+                        }
+                        return updated;
+                      });
+                      // Persist auto-run for this tool (best-effort, non-blocking).
+                      if (
+                        opts?.alwaysAllow &&
+                        approved &&
+                        target?.serverId &&
+                        target.toolName
+                      ) {
+                        void persistMcpAlwaysAllow(
+                          target.serverId,
+                          target.toolName,
+                        );
+                      }
+                      try {
+                        const res = await fetch('/api/chat/runs/resume', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            approvalId,
+                            response: { approved },
+                          }),
+                        });
+                        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                        reattachToActiveRun();
+                      } catch {
+                        toast.error(
+                          'Failed to send MCP tool decision. The agent will continue on its own.',
+                        );
+                      }
+                    }}
+                    pendingImages={pendingImages}
+                    setPendingImages={setPendingImages}
+                    imageCapable={imageCapable}
+                    isPrivateSession={isPrivateSession}
+                    searchCapabilities={
+                      isPrivateSession
+                        ? searchCapabilitiesPrivate
+                        : searchCapabilitiesRegular
+                    }
+                    estimatedUsage={contextUsage}
+                    messageCount={messages.length}
+                    onCompact={handleCompact}
+                    compacting={compacting}
+                    enabledSkills={enabledSkills}
+                  />
+                </>
+              ) : (
+                <EmptyChat
                   sendMessage={sendMessage}
-                  scrollTrigger={scrollTrigger}
-                  rewrite={rewrite}
-                  fileIds={fileIds}
-                  setFileIds={setFileIds}
-                  files={files}
-                  setFiles={setFiles}
                   focusMode={focusMode}
                   setFocusMode={setFocusMode}
-                  handleEditMessage={handleEditMessage}
                   systemPromptIds={systemPromptIds}
                   setSystemPromptIds={setSystemPromptIds}
                   selectedMethodologyId={selectedMethodologyId}
                   setSelectedMethodologyId={setSelectedMethodologyId}
-                  onThinkBoxToggle={handleThinkBoxToggle}
-                  gatheringSources={gatheringSources}
+                  fileIds={fileIds}
+                  setFileIds={setFileIds}
+                  files={files}
+                  setFiles={setFiles}
                   sendLocation={sendLocation}
                   setSendLocation={setSendLocation}
                   sendPersonalization={sendPersonalization}
                   setSendPersonalization={setSendPersonalization}
                   personalizationLocation={personalizationLocation}
                   personalizationAbout={personalizationAbout}
-                  todoItems={todoItems}
-                  pendingExecutions={pendingExecutions}
-                  onExecutionAction={(
-                    executionId: string,
-                    approved: boolean,
-                  ) => {
-                    setPendingExecutions((prev) => {
-                      const updated: Record<string, PendingExecution[]> = {};
-                      for (const [msgId, executions] of Object.entries(prev)) {
-                        updated[msgId] = executions.map((e) =>
-                          e.executionId === executionId
-                            ? {
-                                ...e,
-                                status: approved
-                                  ? ('approved' as const)
-                                  : ('denied' as const),
-                              }
-                            : e,
-                        );
-                      }
-                      return updated;
-                    });
-                  }}
-                  pendingQuestions={pendingQuestions}
-                  onQuestionAnswer={async (
-                    questionId: string,
-                    response: {
-                      selectedOptions?: string[];
-                      freeformText?: string;
-                    },
-                  ) => {
-                    setPendingQuestions((prev) => {
-                      const updated: Record<string, PendingQuestion[]> = {};
-                      for (const [msgId, questions] of Object.entries(prev)) {
-                        updated[msgId] = questions.map((q) =>
-                          q.questionId === questionId
-                            ? { ...q, status: 'answered' as const, response }
-                            : q,
-                        );
-                      }
-                      return updated;
-                    });
-                    try {
-                      const res = await fetch('/api/chat/runs/resume', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          approvalId: questionId,
-                          response,
-                        }),
-                      });
-                      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                      reattachToActiveRun();
-                    } catch {
-                      toast.error(
-                        'Failed to send answer. The agent will continue on its own.',
-                      );
-                    }
-                  }}
-                  onQuestionSkip={async (questionId: string) => {
-                    setPendingQuestions((prev) => {
-                      const updated: Record<string, PendingQuestion[]> = {};
-                      for (const [msgId, questions] of Object.entries(prev)) {
-                        updated[msgId] = questions.map((q) =>
-                          q.questionId === questionId
-                            ? { ...q, status: 'skipped' as const }
-                            : q,
-                        );
-                      }
-                      return updated;
-                    });
-                    try {
-                      const res = await fetch('/api/chat/runs/resume', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          approvalId: questionId,
-                          response: { skipped: true },
-                        }),
-                      });
-                      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                      reattachToActiveRun();
-                    } catch {
-                      toast.error(
-                        'Failed to skip question. The agent will continue on its own.',
-                      );
-                    }
-                  }}
-                  pendingEditApprovals={pendingEditApprovals}
-                  onEditDecide={async (
-                    approvalId: string,
-                    decision:
-                      'accept' | 'accept_always' | 'reject' | 'always_prompt',
-                    freeformText?: string,
-                  ) => {
-                    setPendingEditApprovals((prev) => {
-                      const updated: Record<string, PendingEditApproval[]> = {};
-                      for (const [msgId, approvals] of Object.entries(prev)) {
-                        updated[msgId] = approvals.map((a) =>
-                          a.approvalId === approvalId
-                            ? {
-                                ...a,
-                                status: (decision === 'reject' ||
-                                decision === 'always_prompt'
-                                  ? 'rejected'
-                                  : 'accepted') as 'accepted' | 'rejected',
-                              }
-                            : a,
-                        );
-                      }
-                      return updated;
-                    });
-                    try {
-                      const res = await fetch('/api/chat/runs/resume', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          approvalId,
-                          response: { decision, freeformText },
-                        }),
-                      });
-                      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                      reattachToActiveRun();
-                    } catch {
-                      toast.error(
-                        'Failed to send edit decision. The agent will continue on its own.',
-                      );
-                    }
-                  }}
-                  pendingSkillEditApprovals={pendingSkillEditApprovals}
-                  onSkillEditDecide={async (
-                    approvalId: string,
-                    decision: 'accept' | 'reject',
-                    freeformText?: string,
-                  ) => {
-                    setPendingSkillEditApprovals((prev) => {
-                      const updated: Record<
-                        string,
-                        PendingSkillEditApproval[]
-                      > = {};
-                      for (const [msgId, approvals] of Object.entries(prev)) {
-                        updated[msgId] = approvals.map((a) =>
-                          a.approvalId === approvalId
-                            ? {
-                                ...a,
-                                status: (decision === 'reject'
-                                  ? 'rejected'
-                                  : 'accepted') as 'accepted' | 'rejected',
-                              }
-                            : a,
-                        );
-                      }
-                      return updated;
-                    });
-                    try {
-                      const res = await fetch('/api/chat/runs/resume', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          approvalId,
-                          response: { decision, freeformText },
-                        }),
-                      });
-                      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                      reattachToActiveRun();
-                    } catch {
-                      toast.error(
-                        'Failed to send skill edit decision. The agent will continue on its own.',
-                      );
-                    }
-                  }}
-                  pendingMcpApprovals={pendingMcpApprovals}
-                  onMcpToolDecide={async (
-                    approvalId: string,
-                    approved: boolean,
-                    opts?: { alwaysAllow?: boolean },
-                  ) => {
-                    // Capture the target tool before we mutate state, so the
-                    // "Always allow" write-through knows which server/tool to flip.
-                    const target = Object.values(pendingMcpApprovals)
-                      .flat()
-                      .find((a) => a.approvalId === approvalId);
-                    setPendingMcpApprovals((prev) => {
-                      const updated: Record<string, PendingMcpApproval[]> = {};
-                      for (const [msgId, approvals] of Object.entries(prev)) {
-                        updated[msgId] = approvals.map((a) =>
-                          a.approvalId === approvalId
-                            ? {
-                                ...a,
-                                status: (approved ? 'approved' : 'denied') as
-                                  'approved' | 'denied',
-                              }
-                            : a,
-                        );
-                      }
-                      return updated;
-                    });
-                    // Persist auto-run for this tool (best-effort, non-blocking).
-                    if (
-                      opts?.alwaysAllow &&
-                      approved &&
-                      target?.serverId &&
-                      target.toolName
-                    ) {
-                      void persistMcpAlwaysAllow(
-                        target.serverId,
-                        target.toolName,
-                      );
-                    }
-                    try {
-                      const res = await fetch('/api/chat/runs/resume', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          approvalId,
-                          response: { approved },
-                        }),
-                      });
-                      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                      reattachToActiveRun();
-                    } catch {
-                      toast.error(
-                        'Failed to send MCP tool decision. The agent will continue on its own.',
-                      );
-                    }
-                  }}
                   pendingImages={pendingImages}
                   setPendingImages={setPendingImages}
                   imageCapable={imageCapable}
                   isPrivateSession={isPrivateSession}
-                  searchCapabilities={
-                    isPrivateSession
-                      ? searchCapabilitiesPrivate
-                      : searchCapabilitiesRegular
+                  workspaceId={workspaceId}
+                  selectedWorkspaceId={selectedWorkspaceId}
+                  setSelectedWorkspaceId={
+                    workspaceId ? undefined : setSelectedWorkspaceId
                   }
-                  estimatedUsage={contextUsage}
-                  messageCount={messages.length}
-                  onCompact={handleCompact}
-                  compacting={compacting}
                   enabledSkills={enabledSkills}
                 />
-              </>
-            ) : (
-              <EmptyChat
-                sendMessage={sendMessage}
-                focusMode={focusMode}
-                setFocusMode={setFocusMode}
-                systemPromptIds={systemPromptIds}
-                setSystemPromptIds={setSystemPromptIds}
-                selectedMethodologyId={selectedMethodologyId}
-                setSelectedMethodologyId={setSelectedMethodologyId}
-                fileIds={fileIds}
-                setFileIds={setFileIds}
-                files={files}
-                setFiles={setFiles}
-                sendLocation={sendLocation}
-                setSendLocation={setSendLocation}
-                sendPersonalization={sendPersonalization}
-                setSendPersonalization={setSendPersonalization}
-                personalizationLocation={personalizationLocation}
-                personalizationAbout={personalizationAbout}
-                pendingImages={pendingImages}
-                setPendingImages={setPendingImages}
-                imageCapable={imageCapable}
-                isPrivateSession={isPrivateSession}
-                workspaceId={workspaceId}
-                selectedWorkspaceId={selectedWorkspaceId}
-                setSelectedWorkspaceId={
-                  workspaceId ? undefined : setSelectedWorkspaceId
-                }
-                enabledSkills={enabledSkills}
-              />
-            )}
+              )}
+              {artifactPanel.artifactId && (
+                <>
+                  <div
+                    role="separator"
+                    aria-orientation="vertical"
+                    aria-label="Resize artifact panel"
+                    onPointerDown={artifactPanel.startResize}
+                    className={`hidden w-1 cursor-col-resize transition-colors duration-150 hover:bg-accent md:fixed md:top-0 md:right-(--artifact-inset) md:z-40 md:block md:h-dvh ${
+                      artifactPanel.isResizing ? 'bg-accent' : 'bg-surface-2'
+                    }`}
+                  />
+                  <div
+                    // Docked to the viewport's right edge, out of flow: the
+                    // room it takes is reserved by `<main>`'s padding, off the
+                    // same custom property. Below the split breakpoint the
+                    // width is ignored and it covers the chat entirely.
+                    className={`fixed inset-0 z-40 h-dvh w-full md:left-auto md:w-(--artifact-inset) ${
+                      artifactPanel.isResizing ? 'pointer-events-none' : ''
+                    }`}
+                  >
+                    <ArtifactPanel
+                      // Remount per artifact so no view state carries across.
+                      key={artifactPanel.artifactId}
+                      chatId={chatId!}
+                      workspaceId={selectedWorkspaceId ?? workspaceId}
+                      artifactId={artifactPanel.artifactId}
+                      version={artifactPanel.version}
+                      onSelectArtifact={artifactPanel.open}
+                      onClose={artifactPanel.close}
+                    />
+                  </div>
+                </>
+              )}
+            </>
+          )
+        ) : (
+          <div className="flex flex-row items-center justify-center min-h-screen">
+            <LoaderCircle size={32} className="animate-spin text-accent" />
           </div>
-        )
-      ) : (
-        <div className="flex flex-row items-center justify-center min-h-screen">
-          <LoaderCircle size={32} className="animate-spin text-accent" />
-        </div>
-      )}
+        )}
+      </ArtifactViewerContext.Provider>
     </ChartSpecContext.Provider>
   );
 };

@@ -76,6 +76,7 @@ description: Use when adding, modifying, or debugging API endpoints, request/res
 {"type":"mcp_tool_answered","data":{...},"messageId":"..."}
 {"type":"context_grew","kind":"...","tokens":...,"totalEstimated":...,"messageId":"..."}
 {"type":"workspace_file_changed","data":{...},"messageId":"..."}
+{"type":"artifact_saved","data":{"artifactId":"...","title":"...","version":1,"action":"create"|"edit"},"messageId":"..."}
 {"type":"progress","data":"...","messageId":"..."}
 {"type":"stats","data":{"modelName":"...","usageChat":{...},"usageSystem":{...},...},"messageId":"..."}
 {"type":"memory_updated","data":{"saved":...,"updated":...,"memoryIds":[...]},"messageId":"..."}
@@ -160,6 +161,22 @@ Writing a file is a compare-and-swap: `PUT` **requires** `expectedSha` (the sha 
 edit was based on; `400` without it). If the row has moved on, the write is rejected
 with `409` and `{ error, currentSha }` rather than clobbering the newer version — the
 editor renders a conflict banner and the agent maps it onto its `stale_state` error.
+
+## Artifacts
+
+| Endpoint                  | Method | Purpose                                                                                                                     |
+| ------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------- |
+| `/api/artifacts`          | GET    | List artifacts (metadata only). Requires `chatId` **or** `workspaceId`                                                      |
+| `/api/artifacts/[id]`     | GET    | One artifact plus its version list (no content)                                                                             |
+| `/api/artifacts/[id]`     | DELETE | Delete a **workspace** document and its versions. `400` for a chat-scoped artifact                                          |
+| `/api/artifacts/[id]/raw` | GET    | Serve one version's HTML. Params: `version` (default latest), `download=1`. The only route emitting `text/html` — see below |
+
+`raw` is the security boundary: it responds with a CSP carrying `sandbox` (no
+`allow-same-origin`) and `default-src 'none'` with no `connect-src`, so the document
+gets an opaque origin and no network at all. The sandbox rides the response rather
+than only the viewer's iframe because the same bytes are reachable top-level.
+`download=1` injects the network half as a `<meta>` tag so the exported file stays
+inert. A chat-scoped artifact has no standalone DELETE — it dies with its chat. Only a workspace document, which outlives every chat that touched it, can be deleted on its own.
 
 ## Memories
 

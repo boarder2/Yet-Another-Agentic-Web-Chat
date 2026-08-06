@@ -534,3 +534,90 @@ describe('chatTitle', () => {
     expect(state.messages).toEqual(before);
   });
 });
+
+describe('artifact_saved', () => {
+  const saved = (over: Record<string, unknown> = {}) =>
+    ev({
+      type: 'artifact_saved',
+      messageId: AI,
+      data: {
+        artifactId: 'art-1',
+        title: 'Quarterly Report',
+        version: 1,
+        action: 'create',
+        ...over,
+      },
+    });
+
+  it('writes an artifact card into the assistant row', () => {
+    const { state } = reduceStreamEvent(liveStart(), saved());
+    expect(rowContent(state)).toContain('yaawc:artifact');
+    expect(rowContent(state)).toContain('"title":"Quarterly Report"');
+  });
+
+  it('opens the panel at the saved version and refreshes the artifact list', () => {
+    const { effects } = reduceStreamEvent(liveStart(), saved({ version: 2 }));
+    expect(effects).toContainEqual({
+      kind: 'openArtifact',
+      artifactId: 'art-1',
+      version: 2,
+    });
+    expect(effects).toContainEqual({
+      kind: 'invalidateArtifacts',
+      chatId: 'c1',
+    });
+  });
+
+  it('keeps one card per artifact across repeated saves in a turn', () => {
+    const { state } = run(liveStart(), [
+      saved(),
+      saved({ version: 2, action: 'edit' }),
+      saved({ version: 3, action: 'edit' }),
+    ]);
+    expect(rowContent(state)?.match(/yaawc:artifact/g)).toHaveLength(1);
+    expect(rowContent(state)).toContain('"version":3');
+    expect(rowContent(state)).not.toContain('"version":1');
+  });
+
+  it('gives each artifact its own card', () => {
+    const { state } = run(liveStart(), [
+      saved(),
+      saved({ artifactId: 'art-2', title: 'Appendix' }),
+    ]);
+    expect(rowContent(state)?.match(/yaawc:artifact/g)).toHaveLength(2);
+  });
+
+  it('still writes the card during replay, so the transcript matches a live run', () => {
+    const { state } = reduceStreamEvent(attachStart('seed'), saved());
+    expect(rowContent(state)).toContain('yaawc:artifact');
+  });
+
+  it('does not pop the panel when replaying a finished run', () => {
+    const { effects } = reduceStreamEvent(attachStart('seed'), saved());
+    expect(effects.map((e) => e.kind)).not.toContain('openArtifact');
+    expect(effects.map((e) => e.kind)).not.toContain('invalidateArtifacts');
+  });
+
+  it('resumes opening the panel once replay completes', () => {
+    let s = attachStart('seed');
+    s = reduceStreamEvent(
+      s,
+      ev({ type: 'replay_complete', content: 'seed' }),
+    ).state;
+    const { effects } = reduceStreamEvent(s, saved());
+    expect(effects).toContainEqual({
+      kind: 'openArtifact',
+      artifactId: 'art-1',
+      version: 1,
+    });
+  });
+
+  it('preserves prose already streamed into the row', () => {
+    const { state } = run(liveStart(), [
+      ev({ type: 'response', data: 'Here is the report.' }),
+      saved(),
+    ]);
+    expect(rowContent(state)).toContain('Here is the report.');
+    expect(rowContent(state)).toContain('yaawc:artifact');
+  });
+});

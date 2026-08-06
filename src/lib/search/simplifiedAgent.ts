@@ -2,6 +2,8 @@ import { buildChatPrompt } from '@/lib/prompts/simplifiedAgent/chat';
 import { buildFirefoxAIPrompt } from '@/lib/prompts/simplifiedAgent/firefoxAI';
 import { buildLocalResearchPrompt } from '@/lib/prompts/simplifiedAgent/localResearch';
 import { buildWebSearchPrompt } from '@/lib/prompts/simplifiedAgent/webSearch';
+import { buildArtifactRoster } from '@/lib/prompts/simplifiedAgent/artifactGuidance';
+import { listChatRoster } from '@/lib/artifacts/roster';
 import { formattingAndCitationsWeb } from '@/lib/prompts/templates';
 import { SimplifiedAgentState } from '@/lib/state/chatAgentState';
 import {
@@ -14,6 +16,7 @@ import {
   getLocalResearchTools,
   isCodeExecutionEnabled,
 } from '@/lib/tools/agents';
+import { ARTIFACT_TOOL_NAMES } from '@/lib/tools/agents/artifactTools';
 // import {
 //   getLangfuseCallbacks,
 //   getLangfuseHandler,
@@ -417,6 +420,12 @@ export class SimplifiedAgent {
       tools = [...tools, ...memoryTools];
     }
 
+    // Artifacts are durable DB rows, which a private chat must never leave
+    // behind — so the tools are withheld rather than failing at call time.
+    if (this.isPrivate) {
+      tools = tools.filter((t) => !ARTIFACT_TOOL_NAMES.includes(t.name));
+    }
+
     return tools;
   }
 
@@ -435,6 +444,9 @@ export class SimplifiedAgent {
 
     let basePrompt: string;
     const codeExecutionEnabled = isCodeExecutionEnabled();
+    // Tracks the modes that receive the artifact tools, so the roster below is
+    // appended only where the agent can actually act on it.
+    let artifactsEnabled = false;
 
     if (firefoxAIDetected) {
       basePrompt = buildFirefoxAIPrompt(
@@ -453,6 +465,7 @@ export class SimplifiedAgent {
           );
           break;
         case 'webSearch':
+          artifactsEnabled = !this.isPrivate;
           basePrompt = buildWebSearchPrompt(
             personaInstructions,
             personalizationSection,
@@ -462,21 +475,25 @@ export class SimplifiedAgent {
             new Date(),
             this.methodologyInstructions,
             codeExecutionEnabled,
+            artifactsEnabled,
           );
           break;
         case 'localResearch':
+          artifactsEnabled = !this.isPrivate;
           basePrompt = buildLocalResearchPrompt(
             personaInstructions,
             personalizationSection,
             new Date(),
             this.methodologyInstructions,
             codeExecutionEnabled,
+            artifactsEnabled,
           );
           break;
         default:
           console.warn(
             `SimplifiedAgent: Unknown focus mode "${focusMode}", using webSearch prompt`,
           );
+          artifactsEnabled = !this.isPrivate;
           basePrompt = buildWebSearchPrompt(
             personaInstructions,
             personalizationSection,
@@ -486,6 +503,7 @@ export class SimplifiedAgent {
             new Date(),
             this.methodologyInstructions,
             codeExecutionEnabled,
+            artifactsEnabled,
           );
           break;
       }
@@ -509,6 +527,18 @@ export class SimplifiedAgent {
     // Append workspace context if present
     if (this.workspaceSuffix) {
       basePrompt += this.workspaceSuffix;
+    }
+
+    // The ids in tool results age out of context; this keeps the documents the
+    // chat created or the user mentioned addressable in later turns.
+    if (artifactsEnabled && this.chatId) {
+      basePrompt += buildArtifactRoster(
+        listChatRoster({
+          chatId: this.chatId,
+          workspaceId: this.workspaceId ?? null,
+        }),
+        new Date(),
+      );
     }
 
     // Append skills section if skills are available. Exclude slash-only skills
@@ -641,6 +671,7 @@ export class SimplifiedAgent {
           emitter: this.emitter,
           // Pass through message and retrieval controls for tools
           messageId: this.messageId,
+          assistantMessageId: this.aiMessageId,
           runId,
           retrievalSignal: this.retrievalSignal,
           userLocation: this.userLocation,

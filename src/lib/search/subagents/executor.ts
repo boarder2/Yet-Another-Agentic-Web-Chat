@@ -14,6 +14,7 @@ import { SimplifiedAgent } from '@/lib/search/simplifiedAgent';
 import { SubagentDefinition } from './definitions';
 import { CachedEmbeddings } from '@/lib/utils/cachedEmbeddings';
 import { allAgentTools } from '@/lib/tools/agents';
+import { ARTIFACT_TOOL_NAMES } from '@/lib/tools/agents/artifactTools';
 import { removeThinkingBlocks } from '@/lib/utils/contentUtils';
 import {
   emitStreamEvent,
@@ -230,8 +231,11 @@ export class SubagentExecutor {
    * Filter available tools based on subagent's allowed tools list
    */
   private getFilteredTools(): typeof allAgentTools {
-    // Get all available tools
-    const availableTools = [...allAgentTools];
+    // Artifacts are chat-scoped rows anchored to the parent turn's assistant
+    // message; a subagent run has neither, so the tools would only dead-end.
+    const availableTools = allAgentTools.filter(
+      (tool) => !ARTIFACT_TOOL_NAMES.includes(tool.name),
+    );
 
     // Filter by allowed tools whitelist
     if (this.definition.allowedTools.length > 0) {

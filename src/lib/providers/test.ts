@@ -180,6 +180,51 @@ class FakeChatModel extends BaseChatModel {
       return;
     }
 
+    // Artifact flows, scripted by the prompt. `artifact-multi` creates on the
+    // first call and edits what it just created on the second, which is how a
+    // spec exercises repeated writes landing on one card.
+    if (this.modelName.includes('artifact')) {
+      const parts = lastHumanText(messages).split('|');
+      // Each branch fires once and only once: a scripted model that re-emitted
+      // its call after seeing the result would loop to the recursion limit
+      // whenever the tool reports a failure.
+      const isEdit =
+        (this.modelName.includes('artifact-edit') && !hasToolResult) ||
+        (this.modelName.includes('artifact-multi') && toolResultCount === 1);
+
+      if (this.modelName.includes('artifact-read') && !hasToolResult) {
+        // "<id>" reads the current version; "<id>|<n>" reads version n.
+        const version = Number((parts[1] ?? '').trim());
+        yield artifactToolChunk('read_artifact', {
+          artifactId: (parts[0] ?? '').trim(),
+          ...(Number.isFinite(version) && version > 0 ? { version } : {}),
+        });
+        return;
+      }
+      if (isEdit) {
+        const [id, oldStr, newStr] = this.modelName.includes('artifact-multi')
+          ? [
+              lastToolResultField(messages, 'artifactId'),
+              parts[1] ?? '',
+              parts[2] ?? '',
+            ]
+          : [(parts[0] ?? '').trim(), parts[1] ?? '', parts[2] ?? ''];
+        yield artifactToolChunk('edit_artifact', {
+          artifactId: id,
+          oldStr,
+          newStr,
+        });
+        return;
+      }
+      if (!hasToolResult) {
+        yield artifactToolChunk('create_artifact', {
+          title: (parts[0] ?? '').trim(),
+          content: parts[1] ?? '',
+        });
+        return;
+      }
+    }
+
     if (this.modelName.includes('ask-user') && !hasToolResult) {
       yield new ChatGenerationChunk({
         text: '',
@@ -298,8 +343,18 @@ class FakeChatModel extends BaseChatModel {
       answer = this.modelName.includes('notitle')
         ? ''
         : 'Deterministic Test Title';
+    } else if (this.modelName.includes('prompt-echo')) {
+      // Echo the system prompt so specs can assert which sections were
+      // injected. Checked after the title branch so auto-titling still works.
+      answer = systemText(messages);
     } else if (this.modelName.includes('chart')) {
-      answer = `${CHART_ANSWER_PREFIX} [1].\n\n<Chart id="${lastChartId(messages)}"/>\n\nDone.`;
+      answer = `${CHART_ANSWER_PREFIX} [1].\n\n<Chart id="${lastToolResultField(messages, 'chartId')}"/>\n\nDone.`;
+    } else if (this.modelName.includes('artifact-read')) {
+      // Echo what read_artifact returned so specs can assert on the version
+      // and content it resolved, or on its error text.
+      answer = lastToolResultText(messages);
+    } else if (this.modelName.includes('artifact')) {
+      answer = 'The document is ready beside the conversation.';
     } else if (this.modelName.includes('ask-user')) {
       answer = 'Thanks for your answer — resuming now.';
     } else if (this.modelName.includes('tool-multi')) {
@@ -412,19 +467,74 @@ function hashVector(text: string, dims: number): number[] {
   return vec;
 }
 
-/** The chart id `create_chart` handed back, read out of its tool result. */
-function lastChartId(messages: BaseMessage[]): string {
+/** One scripted artifact tool call, with the usage every other branch reports. */
+function artifactToolChunk(
+  name: string,
+  args: Record<string, unknown>,
+): ChatGenerationChunk {
+  return new ChatGenerationChunk({
+    text: '',
+    message: new AIMessageChunk({
+      content: '',
+      tool_calls: [
+        {
+          name,
+          args,
+          id: `test-${name.replace(/_/g, '-')}-call-1`,
+          type: 'tool_call',
+        },
+      ],
+      usage_metadata: {
+        input_tokens: 12,
+        output_tokens: 4,
+        total_tokens: 16,
+      },
+    }),
+  });
+}
+
+/**
+ * Read a field back out of the most recent JSON tool result that carries it —
+ * how a scripted model picks up an id a tool just handed it (`create_chart`'s
+ * `chartId`, `create_artifact`'s `artifactId`).
+ */
+function lastToolResultField(messages: BaseMessage[], field: string): string {
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
     if (m.getType() !== 'tool' || typeof m.content !== 'string') continue;
     try {
-      const { chartId } = JSON.parse(m.content);
-      if (typeof chartId === 'string') return chartId;
+      const value = JSON.parse(m.content)?.[field];
+      if (typeof value === 'string') return value;
     } catch {
-      // not a create_chart result
+      // not a JSON tool result
     }
   }
   return '';
+}
+
+/** Raw text of the last tool result — JSON payload or plain error string. */
+function lastToolResultText(messages: BaseMessage[]): string {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.getType() === 'tool' && typeof m.content === 'string')
+      return m.content;
+  }
+  return '';
+}
+
+/** The system prompt, so specs can assert on what the agent was actually told. */
+function systemText(messages: BaseMessage[]): string {
+  const content = messages.find((x) => x.getType() === 'system')?.content;
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  // createAgent delivers the system prompt as text content blocks.
+  return content
+    .map((b) =>
+      typeof b === 'object' && b !== null && 'text' in b
+        ? String((b as { text: unknown }).text)
+        : '',
+    )
+    .join('');
 }
 
 function lastHumanText(messages: BaseMessage[]): string {
@@ -512,6 +622,36 @@ export async function loadTestChatModels(): Promise<Record<string, ChatModel>> {
       displayName: 'Test (skill edit)',
       model: new FakeChatModel({
         modelName: 'test-skill-edit',
+      }) as unknown as BaseChatModel,
+    },
+    'test-artifact': {
+      displayName: 'Test (create artifact)',
+      model: new FakeChatModel({
+        modelName: 'test-artifact',
+      }) as unknown as BaseChatModel,
+    },
+    'test-artifact-edit': {
+      displayName: 'Test (edit artifact)',
+      model: new FakeChatModel({
+        modelName: 'test-artifact-edit',
+      }) as unknown as BaseChatModel,
+    },
+    'test-artifact-read': {
+      displayName: 'Test (read artifact)',
+      model: new FakeChatModel({
+        modelName: 'test-artifact-read',
+      }) as unknown as BaseChatModel,
+    },
+    'test-artifact-multi': {
+      displayName: 'Test (create then edit artifact)',
+      model: new FakeChatModel({
+        modelName: 'test-artifact-multi',
+      }) as unknown as BaseChatModel,
+    },
+    'test-prompt-echo': {
+      displayName: 'Test (echo system prompt)',
+      model: new FakeChatModel({
+        modelName: 'test-prompt-echo',
       }) as unknown as BaseChatModel,
     },
     'test-notitle': {

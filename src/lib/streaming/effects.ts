@@ -11,4 +11,6 @@ export type StreamEffect =
   | { kind: 'invalidateWorkspace'; workspaceId: string }
   | { kind: 'fetchSuggestions'; messageId: string }
   | { kind: 'refreshSkills' }
-  | { kind: 'setChatTitle'; chatId: string; title: string };
+  | { kind: 'setChatTitle'; chatId: string; title: string }
+  | { kind: 'openArtifact'; artifactId: string; version: number }
+  | { kind: 'invalidateArtifacts'; chatId: string };

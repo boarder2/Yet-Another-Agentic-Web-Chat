@@ -25,6 +25,7 @@ YAAWC (**Pronounced: "yawck"** — as in the sound you make when yet another AI 
 - [Deep Research (Sub-Agents)](#deep-research-sub-agents)
 - [Dashboard Widgets](#dashboard-widgets)
 - [Workspaces](#workspaces)
+- [Artifacts](#artifacts)
 - [LLM Providers](#llm-providers)
   - [Chat Models](#chat-models)
   - [Embedding Models](#embedding-models)
@@ -65,38 +66,39 @@ Want to know more about the architecture? See [docs/architecture/README.md](docs
 
 ## Features at a Glance
 
-| Category                    | Highlights                                                                                                                                                                                           |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Agentic Search**          | LangGraph React agent with tool use, research planning, and multi-step reasoning                                                                                                                     |
-| **Deep Research**           | Spawns focused sub-agents that search → read → refine → search again                                                                                                                                 |
-| **Background Chats**        | Conversations keep running server-side after you navigate away, with live progress, resumption, and unread badges                                                                                    |
-| **18 Agent Tools**          | Web search, URL summarization, image search/analysis/generation, PDF loading, file search, deep research, sandboxed code execution, charts, chat-history search, skills, todo lists, memory          |
-| **Skills**                  | On-demand instruction sets (global or per-workspace) the agent loads automatically or you invoke with `/slash` commands                                                                              |
-| **Charts**                  | Interactive bar, line, area, and pie/donut charts rendered inline in the conversation                                                                                                                |
-| **Chat History Search**     | The agent can search and quote your past conversations to answer follow-ups                                                                                                                          |
-| **9 LLM Providers**         | OpenAI, Anthropic, Groq, Gemini, DeepSeek, LM Studio, OpenRouter, AI/ML API, Custom OpenAI                                                                                                           |
-| **5 Embedding Providers**   | OpenAI, Gemini, Xenova Transformers (local), AI/ML API, LM Studio                                                                                                                                    |
-| **Dashboard Widgets**       | LLM- and code-based widgets on the dashboard and home screen, with auto-refresh, drag-and-drop layout, and export/import                                                                             |
-| **Personas**                | Custom system prompts with built-in templates (scholarly, conversational, etc.)                                                                                                                      |
-| **Research Methodologies**  | Per-message selectable research playbooks (Comparative Analysis, Literature Review, Fact-Check) with custom methodology authoring                                                                    |
-| **Scheduled Tasks**         | Cron-scheduled recurring agent runs with presets, per-task models/tools, run history, and unread-result badges                                                                                       |
-| **Chat Retention**          | Configurable auto-delete policies for old chats and scheduled-task run history, with pinning to exempt individual chats                                                                              |
-| **Search Providers**        | Pluggable backends — SearXNG, Brave Search, and Mojeek                                                                                                                                               |
-| **Personalization**         | Per-message location and profile context injection                                                                                                                                                   |
-| **Memory**                  | Long-term memory with semantic retrieval, automatic extraction, deduplication, and a full management UI                                                                                              |
-| **Private Sessions**        | Temporary conversations with auto-expiry — no personalization, no memory, no trace left behind                                                                                                       |
-| **Workspaces**              | Project-centric containers with per-workspace chats, files, instructions, agent tools, and isolated memory                                                                                           |
-| **Privacy**                 | Self-hosted SearXNG — no tracking, no data brokering, no "we updated our privacy policy" emails                                                                                                      |
-| **Browser Integration**     | OpenSearch XML, autocomplete, `?q=` URL queries with saved preferences                                                                                                                               |
-| **Read Aloud (TTS)**        | Local neural voices (Kokoro) or your device's built-in speech, with play/pause/resume, live speed control, an LLM "narrate" mode that describes tables and charts, and optional auto-read of replies |
-| **Streaming UI**            | Real-time tool calls, sub-agent progress, todo widgets, thinking/reasoning display                                                                                                                   |
-| **Image & Video Search**    | Dedicated search with gallery views and video embeds                                                                                                                                                 |
-| **File Research**           | Upload documents and research them with cited excerpts                                                                                                                                               |
-| **Respond Now**             | Interrupt ongoing retrieval and get an immediate answer from what's been gathered so far                                                                                                             |
-| **Interactive Questions**   | The agent can pause mid-research to ask clarifying questions with single/multi-select options or freeform input                                                                                      |
-| **Model Visibility**        | Admins can hide models from the UI to prevent accidental usage                                                                                                                                       |
-| **Dual Model Architecture** | Separate Chat and System models, linkable or independent                                                                                                                                             |
-| **Model Presets**           | Save named bundles of chat/system models, vision, and context window, then switch between them from the chat input or Settings                                                                       |
+| Category                    | Highlights                                                                                                                                                                                             |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Agentic Search**          | LangGraph React agent with tool use, research planning, and multi-step reasoning                                                                                                                       |
+| **Deep Research**           | Spawns focused sub-agents that search → read → refine → search again                                                                                                                                   |
+| **Background Chats**        | Conversations keep running server-side after you navigate away, with live progress, resumption, and unread badges                                                                                      |
+| **21 Agent Tools**          | Web search, URL summarization, image search/analysis/generation, PDF loading, file search, deep research, sandboxed code execution, charts, chat-history search, skills, todo lists, memory, artifacts |
+| **Artifacts**               | Agent-authored, self-contained HTML documents rendered in a panel beside the chat, with version history, source view, download, and `@` mentions across chats                                          |
+| **Skills**                  | On-demand instruction sets (global or per-workspace) the agent loads automatically or you invoke with `/slash` commands                                                                                |
+| **Charts**                  | Interactive bar, line, area, and pie/donut charts rendered inline in the conversation                                                                                                                  |
+| **Chat History Search**     | The agent can search and quote your past conversations to answer follow-ups                                                                                                                            |
+| **9 LLM Providers**         | OpenAI, Anthropic, Groq, Gemini, DeepSeek, LM Studio, OpenRouter, AI/ML API, Custom OpenAI                                                                                                             |
+| **5 Embedding Providers**   | OpenAI, Gemini, Xenova Transformers (local), AI/ML API, LM Studio                                                                                                                                      |
+| **Dashboard Widgets**       | LLM- and code-based widgets on the dashboard and home screen, with auto-refresh, drag-and-drop layout, and export/import                                                                               |
+| **Personas**                | Custom system prompts with built-in templates (scholarly, conversational, etc.)                                                                                                                        |
+| **Research Methodologies**  | Per-message selectable research playbooks (Comparative Analysis, Literature Review, Fact-Check) with custom methodology authoring                                                                      |
+| **Scheduled Tasks**         | Cron-scheduled recurring agent runs with presets, per-task models/tools, run history, and unread-result badges                                                                                         |
+| **Chat Retention**          | Configurable auto-delete policies for old chats and scheduled-task run history, with pinning to exempt individual chats                                                                                |
+| **Search Providers**        | Pluggable backends — SearXNG, Brave Search, and Mojeek                                                                                                                                                 |
+| **Personalization**         | Per-message location and profile context injection                                                                                                                                                     |
+| **Memory**                  | Long-term memory with semantic retrieval, automatic extraction, deduplication, and a full management UI                                                                                                |
+| **Private Sessions**        | Temporary conversations with auto-expiry — no personalization, no memory, no trace left behind                                                                                                         |
+| **Workspaces**              | Project-centric containers with per-workspace chats, files, instructions, agent tools, and isolated memory                                                                                             |
+| **Privacy**                 | Self-hosted SearXNG — no tracking, no data brokering, no "we updated our privacy policy" emails                                                                                                        |
+| **Browser Integration**     | OpenSearch XML, autocomplete, `?q=` URL queries with saved preferences                                                                                                                                 |
+| **Read Aloud (TTS)**        | Local neural voices (Kokoro) or your device's built-in speech, with play/pause/resume, live speed control, an LLM "narrate" mode that describes tables and charts, and optional auto-read of replies   |
+| **Streaming UI**            | Real-time tool calls, sub-agent progress, todo widgets, thinking/reasoning display                                                                                                                     |
+| **Image & Video Search**    | Dedicated search with gallery views and video embeds                                                                                                                                                   |
+| **File Research**           | Upload documents and research them with cited excerpts                                                                                                                                                 |
+| **Respond Now**             | Interrupt ongoing retrieval and get an immediate answer from what's been gathered so far                                                                                                               |
+| **Interactive Questions**   | The agent can pause mid-research to ask clarifying questions with single/multi-select options or freeform input                                                                                        |
+| **Model Visibility**        | Admins can hide models from the UI to prevent accidental usage                                                                                                                                         |
+| **Dual Model Architecture** | Separate Chat and System models, linkable or independent                                                                                                                                               |
+| **Model Presets**           | Save named bundles of chat/system models, vision, and context window, then switch between them from the chat input or Settings                                                                         |
 
 ## Focus Modes
 
@@ -149,26 +151,27 @@ Every assistant response has a **Read aloud** button with play/pause/resume, sto
 
 The LangGraph agent has access to the following tools (individually toggleable per conversation):
 
-| Tool                    | What It Does                                                                                                                                                                 |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Web Search**          | Queries SearXNG, retrieves top results, re-ranks by embedding similarity. Supports `site:` filters.                                                                          |
-| **URL Summarization**   | Fetches a URL's content (via Readability/Cheerio/Playwright) and summarizes it or uses it directly.                                                                          |
-| **Image Search**        | Searches for images via SearXNG (Bing Images, Google Images).                                                                                                                |
-| **Image Analysis**      | Fetches an image and analyzes it using a vision-capable LLM (PNG, JPEG, GIF, WebP up to 10 MB).                                                                              |
-| **Image Generation**    | Generates images from text prompts via OpenRouter's image-capable models. Configurable aspect ratio, resolution, and model selection.                                        |
-| **PDF Loader**          | Extracts and returns content from a PDF URL.                                                                                                                                 |
-| **File Search**         | Semantic similarity search across uploaded documents with configurable threshold.                                                                                            |
-| **Deep Research**       | Spawns a focused sub-agent for comprehensive multi-source investigation (see below).                                                                                         |
-| **Code Execution**      | Runs user-approved JavaScript in a sandboxed Docker container (see below). Denials can include feedback so the agent can adjust.                                             |
-| **Create Chart**        | Renders an interactive bar, line, area, or pie/donut chart inline in the response.                                                                                           |
-| **Chat History Search** | Searches the user's past conversations by keyword and date for relevant context.                                                                                             |
-| **Get Message**         | Retrieves the full text of a specific past message found via chat-history search.                                                                                            |
-| **Read / Edit Skill**   | Loads a skill's instructions on demand, or proposes creating/updating/deleting a skill (edits require user approval).                                                        |
-| **Ask User**            | Pauses the agent to ask the user a clarifying question — supports single/multi-select options and optional freeform input; shows queue position and has a 15-minute timeout. |
-| **Todo List**           | Manages a visible research plan (up to 10 tasks) with live progress in the UI.                                                                                               |
-| **Save Memory**         | Stores a fact or preference to long-term memory with automatic categorization.                                                                                               |
-| **Delete Memory**       | Removes a memory by ID or fuzzy content match.                                                                                                                               |
-| **List Memories**       | Lists all stored memories grouped by category.                                                                                                                               |
+| Tool                              | What It Does                                                                                                                                                                 |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Web Search**                    | Queries SearXNG, retrieves top results, re-ranks by embedding similarity. Supports `site:` filters.                                                                          |
+| **URL Summarization**             | Fetches a URL's content (via Readability/Cheerio/Playwright) and summarizes it or uses it directly.                                                                          |
+| **Image Search**                  | Searches for images via SearXNG (Bing Images, Google Images).                                                                                                                |
+| **Image Analysis**                | Fetches an image and analyzes it using a vision-capable LLM (PNG, JPEG, GIF, WebP up to 10 MB).                                                                              |
+| **Image Generation**              | Generates images from text prompts via OpenRouter's image-capable models. Configurable aspect ratio, resolution, and model selection.                                        |
+| **PDF Loader**                    | Extracts and returns content from a PDF URL.                                                                                                                                 |
+| **File Search**                   | Semantic similarity search across uploaded documents with configurable threshold.                                                                                            |
+| **Deep Research**                 | Spawns a focused sub-agent for comprehensive multi-source investigation (see below).                                                                                         |
+| **Code Execution**                | Runs user-approved JavaScript in a sandboxed Docker container (see below). Denials can include feedback so the agent can adjust.                                             |
+| **Create Chart**                  | Renders an interactive bar, line, area, or pie/donut chart inline in the response.                                                                                           |
+| **Chat History Search**           | Searches the user's past conversations by keyword and date for relevant context.                                                                                             |
+| **Get Message**                   | Retrieves the full text of a specific past message found via chat-history search.                                                                                            |
+| **Read / Edit Skill**             | Loads a skill's instructions on demand, or proposes creating/updating/deleting a skill (edits require user approval).                                                        |
+| **Ask User**                      | Pauses the agent to ask the user a clarifying question — supports single/multi-select options and optional freeform input; shows queue position and has a 15-minute timeout. |
+| **Todo List**                     | Manages a visible research plan (up to 10 tasks) with live progress in the UI.                                                                                               |
+| **Save Memory**                   | Stores a fact or preference to long-term memory with automatic categorization.                                                                                               |
+| **Delete Memory**                 | Removes a memory by ID or fuzzy content match.                                                                                                                               |
+| **List Memories**                 | Lists all stored memories grouped by category.                                                                                                                               |
+| **Create / Edit / Read Artifact** | Writes, revises, and re-reads a self-contained HTML document shown beside the chat (see [Artifacts](#artifacts)).                                                            |
 
 ## Code Execution (Sandbox)
 
@@ -296,6 +299,19 @@ Workspaces are project-centric containers that keep chats, uploaded files, instr
 - **Quick switching** — Hop between workspaces (or no workspace) from any chat using the workspace picker in the message input.
 
 Configure workspaces from `/workspaces`, or pick one inline while chatting.
+
+## Artifacts
+
+Artifacts are self-contained HTML documents the agent writes for you — reports, dashboards, mini apps, visualizations — rendered in a panel beside the conversation instead of dumped into the chat as a wall of code.
+
+- **Agent-authored** — the agent creates and revises them with the `create_artifact` / `edit_artifact` / `read_artifact` tools; each write drops a card in the transcript that opens the document.
+- **Version history** — every save is a full snapshot; step through versions in the viewer. History is browsable, not revertible.
+- **Preview or source** — toggle between the rendered document and its HTML, and download or open it in a new tab.
+- **Workspace documents** — artifacts created in a workspace chat belong to the workspace: every chat in it can read and edit them, they're listed under the workspace's **Documents** tab, and each has its own page. Artifacts from a chat outside a workspace live and die with that chat.
+- **Mention across chats** — reference an existing document with the composer's `@` popover (or from the sidebar) to pull it into a new conversation.
+- **Sandboxed** — artifact HTML is served under a strict Content-Security-Policy: no network access at all and no same-origin privileges, so a document can't call out or touch your YAAWC session. Anything it needs must be inlined.
+
+Artifacts are unavailable in private sessions, since they're stored durably.
 
 ## LLM Providers
 

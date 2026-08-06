@@ -1,7 +1,6 @@
 'use client';
 
 import { useSelectedLayoutSegments } from 'next/navigation';
-import { useEffect } from 'react';
 import {
   useLocalStorageBoolean,
   writeLocalStorage,
@@ -26,16 +25,9 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   // useSelectedLayoutSegments never sees the change. Treat segments.length === 0
   // (home page) as a chat route so the wide-width setting works from the start.
   const isChat = segments[0] === 'c' || segments.length === 0;
-  const isWorkspaceChat =
-    segments[0] === 'workspaces' && segments.includes('c');
   const isWorkspaceDetail = segments[0] === 'workspaces' && segments.length > 1;
   const wide = useWideWidth();
   const wideActive = isChat && wide;
-
-  useEffect(() => {
-    if (!isChat && !isWorkspaceChat) return;
-    window.dispatchEvent(new Event('resize'));
-  }, [wide, isChat, isWorkspaceChat]);
 
   const containerClass = isDashboard
     ? 'mx-4'
@@ -43,10 +35,14 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       ? ''
       : wideActive
         ? 'mx-4'
-        : 'max-w-screen-lg lg:mx-auto mx-4';
+        : // `--chat-ml` is `auto` until the artifact panel opens, which pins the
+          // column beside the sidebar instead so its text doesn't slide sideways
+          // as the panel is dragged.
+          'max-w-screen-lg mx-4 lg:ml-(--chat-ml) lg:mr-auto';
 
   return (
-    <main className="lg:pl-20 bg-bg min-h-screen">
+    // `--artifact-inset` reserves the docked artifact panel's width.
+    <main className="lg:pl-20 md:pr-(--artifact-inset) bg-bg min-h-screen">
       <div className={containerClass}>{children}</div>
     </main>
   );

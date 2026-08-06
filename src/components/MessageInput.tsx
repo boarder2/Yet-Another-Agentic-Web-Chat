@@ -33,6 +33,11 @@ import SystemPromptSelector from './MessageInputActions/SystemPromptSelector'; /
 import MethodologySelector from './MessageInputActions/MethodologySelector';
 import AutoReadToggle from './MessageInputActions/AutoReadToggle';
 import PersonalizationPicker from './PersonalizationPicker';
+import TokenPopover from './TokenPopover';
+import { useTokenAutocomplete } from '@/lib/hooks/useTokenAutocomplete';
+import { useWorkspaceArtifacts } from '@/lib/hooks/api/useArtifacts';
+import { buildArtifactMention } from '@/lib/artifacts/mention';
+import { useArtifactBridge } from '@/lib/artifacts/ArtifactBridgeContext';
 
 /** Shallow order-sensitive equality for the persona prompt ID list. */
 const arraysEqual = (a: string[], b: string[]): boolean =>
@@ -140,12 +145,6 @@ const MessageInput = ({
     SELECTION_KEYS.contextWindowSize,
     String(DEFAULT_CONTEXT_WINDOW),
   );
-  const [skillSuggestions, setSkillSuggestions] = useState<
-    Array<{ name: string; description: string }>
-  >([]);
-  const [skillPopoverActive, setSkillPopoverActive] = useState(false);
-  const [skillPopoverIndex, setSkillPopoverIndex] = useState(0);
-
   const uploadImageFiles = async (imageFiles: globalThis.File[]) => {
     if (imageFiles.length === 0) return;
     setIsUploadingImage(true);
@@ -283,78 +282,75 @@ const MessageInput = ({
     };
   }, []);
 
-  // Detect slash token at caret position and update skill suggestions
-  const detectSlashToken = (
-    text: string,
-    cursorPos: number,
-    skills: Array<{ name: string; description: string }>,
-  ) => {
-    // Find start of current token by scanning backwards from cursor
-    const before = text.slice(0, cursorPos);
-    const slashIdx = before.lastIndexOf('/');
-    if (slashIdx === -1) {
-      setSkillPopoverActive(false);
-      return;
-    }
-    // Check that the char before '/' is start, whitespace, or newline
-    const charBefore = slashIdx > 0 ? before[slashIdx - 1] : null;
-    const validBefore =
-      charBefore === null || charBefore === ' ' || charBefore === '\n';
-    if (!validBefore) {
-      setSkillPopoverActive(false);
-      return;
-    }
-    // Make sure cursor is still inside the token (no space after slash)
-    const tokenPart = before.slice(slashIdx + 1);
-    if (/\s/.test(tokenPart)) {
-      setSkillPopoverActive(false);
-      return;
-    }
-    const token = tokenPart.toLowerCase();
-    const matches = skills.filter((s) => s.name.startsWith(token));
-    if (matches.length > 0) {
-      setSkillSuggestions(matches);
-      setSkillPopoverActive(true);
-      setSkillPopoverIndex(0);
-    } else {
-      setSkillPopoverActive(false);
-    }
-  };
+  const skills = useTokenAutocomplete({
+    trigger: '/',
+    items: enabledSkills ?? [],
+    enabled: !!enabledSkills?.length,
+    match: (s, q) => s.name.startsWith(q),
+    describe: (s) => ({
+      key: s.name,
+      primary: `/${s.name}`,
+      secondary: s.description,
+    }),
+    insertion: (s) => `/${s.name} `,
+    message,
+    setMessage,
+    inputRef,
+  });
+
+  // Documents are only mentionable where they're durable: a workspace, and not
+  // a private chat, where the artifact tools are withheld entirely.
+  const mentionsEnabled = !!workspaceId && !isPrivateSession;
+  const { data: workspaceArtifacts } = useWorkspaceArtifacts(
+    mentionsEnabled ? workspaceId : null,
+  );
+  const mentions = useTokenAutocomplete({
+    trigger: '@',
+    items: workspaceArtifacts ?? [],
+    enabled: mentionsEnabled,
+    allowSpaces: true,
+    match: (a, q) => a.title.toLowerCase().includes(q),
+    describe: (a) => ({
+      key: a.id,
+      primary: a.title,
+      secondary: `v${a.latestVersion}`,
+    }),
+    insertion: (a) => `${buildArtifactMention(a.id, a.title)} `,
+    message,
+    setMessage,
+    inputRef,
+  });
+
+  // The sidebar's insert button drops a mention at the caret, exactly as the
+  // popover would. Registered from here because the composer owns the text.
+  const bridge = useArtifactBridge();
+  const registerInsert = bridge?.registerInsert;
+  useEffect(() => {
+    if (!mentionsEnabled || !registerInsert) return;
+    // Registration must not depend on the draft text: re-registering per
+    // keystroke would set provider state and re-render the workspace on every
+    // character. The current text comes from the setter instead.
+    return registerInsert((artifactId, title) => {
+      const caret = inputRef.current?.selectionStart;
+      const token = `${buildArtifactMention(artifactId, title)} `;
+      setMessage((cur) => {
+        const at = caret ?? cur.length;
+        setTimeout(() => {
+          const pos = at + token.length;
+          inputRef.current?.focus();
+          inputRef.current?.setSelectionRange(pos, pos);
+        }, 0);
+        return cur.slice(0, at) + token + cur.slice(at);
+      });
+    });
+  }, [mentionsEnabled, registerInsert]);
 
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setMessage(val);
-    if (enabledSkills && enabledSkills.length > 0) {
-      detectSlashToken(
-        val,
-        e.target.selectionStart ?? val.length,
-        enabledSkills,
-      );
-    }
-  };
-
-  const applySkillCompletion = (skillName: string) => {
-    // Replace the current /token with /skillName followed by a space
-    const before = message.slice(
-      0,
-      inputRef.current?.selectionStart ?? message.length,
-    );
-    const slashIdx = before.lastIndexOf('/');
-    const after = message.slice(
-      inputRef.current?.selectionStart ?? message.length,
-    );
-    const newMessage =
-      message.slice(0, slashIdx) + '/' + skillName + ' ' + after;
-    setMessage(newMessage);
-    setSkillPopoverActive(false);
-    // Restore focus
-    setTimeout(() => {
-      if (inputRef.current) {
-        const pos = slashIdx + skillName.length + 2; // +2 for '/' and ' '
-        inputRef.current.focus();
-        inputRef.current.setSelectionRange(pos, pos);
-      }
-    }, 0);
+    const caret = e.target.selectionStart ?? val.length;
+    skills.onTextChange(val, caret);
+    mentions.onTextChange(val, caret);
   };
 
   // Function to handle message submission
@@ -370,7 +366,8 @@ const MessageInput = ({
 
     sendMessage(message);
     setMessage('');
-    setSkillPopoverActive(false);
+    skills.close();
+    mentions.close();
   };
 
   return (
@@ -380,30 +377,11 @@ const MessageInput = ({
         handleSubmitMessage();
       }}
       onKeyDown={(e) => {
-        if (skillPopoverActive && skillSuggestions.length > 0) {
-          if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            setSkillPopoverIndex((i) => (i + 1) % skillSuggestions.length);
-            return;
-          }
-          if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            setSkillPopoverIndex(
-              (i) =>
-                (i - 1 + skillSuggestions.length) % skillSuggestions.length,
-            );
-            return;
-          }
-          if (e.key === 'Tab' || e.key === 'Enter') {
-            e.preventDefault();
-            applySkillCompletion(skillSuggestions[skillPopoverIndex].name);
-            return;
-          }
-          if (e.key === 'Escape') {
-            e.preventDefault();
-            setSkillPopoverActive(false);
-            return;
-          }
+        // An open popover owns the arrows, Tab/Enter and Escape, so neither
+        // submit nor cancel-edit fires while the user is picking a completion.
+        if (skills.onKeyDown(e) || mentions.onKeyDown(e)) {
+          e.preventDefault();
+          return;
         }
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
@@ -455,26 +433,18 @@ const MessageInput = ({
             )}
           </div>
         )}
-        {/* Skill autocomplete popover */}
-        {skillPopoverActive && skillSuggestions.length > 0 && (
-          <div className="absolute bottom-full left-0 right-0 mb-1 border border-surface-2 rounded-control bg-surface shadow-raised overflow-hidden z-50">
-            {skillSuggestions.slice(0, 6).map((skill, idx) => (
-              <button
-                key={skill.name}
-                type="button"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  applySkillCompletion(skill.name);
-                }}
-                className={`w-full text-left px-3 py-2 text-sm flex flex-col gap-0.5 hover:bg-surface-2 transition-colors ${
-                  idx === skillPopoverIndex ? 'bg-surface-2' : ''
-                }`}
-              >
-                <span className="font-mono text-accent">/{skill.name}</span>
-                <span className="text-xs text-fg/50">{skill.description}</span>
-              </button>
-            ))}
-          </div>
+        {skills.open && (
+          <TokenPopover
+            choices={skills.choices}
+            activeIndex={skills.index}
+            monospace
+          />
+        )}
+        {mentions.open && (
+          <TokenPopover
+            choices={mentions.choices}
+            activeIndex={mentions.index}
+          />
         )}
         <div className="flex flex-row space-x-2 mb-2">
           <TextareaAutosize

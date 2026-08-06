@@ -66,7 +66,7 @@ User Query → SimplifiedAgent (with all tools including deep_research)
 
 - **SubagentExecutor** (`src/lib/search/subagents/executor.ts`)
   - Wraps SimplifiedAgent with subagent-specific configuration
-  - Enforces tool restrictions via allowedTools whitelist
+  - Enforces tool restrictions via allowedTools whitelist, on a pool that already drops the artifact tools — those anchor to the parent turn's chat and assistant message, which a subagent run has neither of
   - Provides isolated event streaming with subagent context
   - Passes empty `personaInstructions` to SimplifiedAgent — subagent behavior is controlled entirely by `customSystemPrompt` from the subagent definition, NOT by persona/formatting instructions
   - Forwards `userLocation`/`userProfile` from the parent agent for location-aware research

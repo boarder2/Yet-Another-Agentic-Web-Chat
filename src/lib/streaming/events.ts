@@ -151,6 +151,12 @@ export type WidgetProposalData = {
   proposed: unknown;
   rationale: string;
 };
+export type ArtifactSavedData = {
+  artifactId: string;
+  title: string;
+  version: number;
+  action: 'create' | 'edit';
+};
 // ── Agent-emit vocabulary (producer → run host) ──────────────────────────────
 
 export type AgentEmitEvent =
@@ -169,6 +175,7 @@ export type AgentEmitEvent =
   | { type: 'code_execution_result'; data: CodeExecutionResultData }
   | { type: 'workspace_file_changed'; data: WorkspaceFileChangedData }
   | { type: 'widget_proposal'; data: WidgetProposalData }
+  | { type: 'artifact_saved'; data: ArtifactSavedData }
   | {
       type: 'context_grew';
       kind: string;
@@ -262,6 +269,7 @@ export type StreamEvent =
       data: WorkspaceFileChangedData;
     } & WithMessageId)
   | ({ type: 'widget_proposal'; data: WidgetProposalData } & WithMessageId)
+  | ({ type: 'artifact_saved'; data: ArtifactSavedData } & WithMessageId)
   | ({
       type: 'context_grew';
       kind: string;

@@ -1,6 +1,7 @@
 import { formatDateForLLM } from '@/lib/utils';
 import { formattingAndCitationsWeb } from '@/lib/prompts/templates';
 import { buildChartingGuidance } from './chartingGuidance';
+import { artifactGuidance } from './artifactGuidance';
 
 /**
  * Build the Web Search mode system prompt for SimplifiedAgent
@@ -14,6 +15,7 @@ export function buildWebSearchPrompt(
   date: Date = new Date(),
   methodologyInstructions?: string,
   codeExecutionEnabled: boolean = false,
+  artifactsEnabled: boolean = false,
 ): string {
   // Detect explicit URLs in the user query
   const urlRegex = /https?:\/\/[^\s)>'"`]+/gi;
@@ -80,6 +82,8 @@ ${fileIds.length > 0 ? `- **file_search**: Search ${fileIds.length} uploaded fil
 ${researchStrategy}
 
 ${buildChartingGuidance(codeExecutionEnabled)}
+
+${artifactsEnabled ? artifactGuidance : ''}
 
 **Context**: Today's Date - use for time sensitive queries: ${formatDateForLLM(date)}
 `;

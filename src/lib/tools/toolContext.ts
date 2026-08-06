@@ -15,6 +15,8 @@ export const toolContextSchema = z.object({
   emitter: z.custom<EventEmitter>(),
   retrievalSignal: z.custom<AbortSignal>().optional(),
   messageId: z.string().optional(),
+  /** The assistant row this turn is writing into; what durable rows anchor to. */
+  assistantMessageId: z.string().optional(),
   systemLlm: z.custom<BaseChatModel>(),
   workspaceId: z.string().nullable().optional(),
   embeddings: z.custom<CachedEmbeddings>(),

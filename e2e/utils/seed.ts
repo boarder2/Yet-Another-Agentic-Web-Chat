@@ -1,7 +1,7 @@
 import { expect, type APIRequestContext } from '@playwright/test';
 import type { WorkspaceModelOverride } from '../../src/lib/workspaces/types';
 import { uid, uniq, baseURL } from './helpers';
-import { streamChatUntil, type ChatEvent } from './sse';
+import { streamChatUntil, collectSseEvents, type ChatEvent } from './sse';
 
 async function postJson(
   request: APIRequestContext,
@@ -494,4 +494,82 @@ export async function seedScheduledChat(
   });
   const body = await postJson(request, `/api/schedules/${scheduleId}/run`, {});
   return (body as { chatId: string }).chatId;
+}
+
+export interface SeededArtifact {
+  chatId: string;
+  artifactId: string;
+  messageId: string;
+}
+
+/**
+ * Run one artifact-tool turn against the mocked provider. The scripted models
+ * read their arguments from the prompt: `test-artifact` takes `title|content`,
+ * `test-artifact-edit` takes `artifactId|oldStr|newStr`, `test-artifact-read`
+ * takes `artifactId`, and `test-artifact-multi` takes `title|oldStr|newStr`
+ * (creating, then editing what it just created).
+ */
+export async function runArtifactTurn(
+  request: APIRequestContext,
+  prompt: string,
+  overrides?: Partial<{
+    chatId: string;
+    chatModel: string;
+    isPrivate: boolean;
+    focusMode: string;
+    workspaceId: string;
+  }>,
+): Promise<{ chatId: string; messageId: string; events: ChatEvent[] }> {
+  const chatId = overrides?.chatId ?? uid();
+  const messageId = uid();
+  const res = await request.post('/api/chat', {
+    data: {
+      message: { messageId, chatId, content: prompt },
+      focusMode: overrides?.focusMode ?? 'webSearch',
+      files: [],
+      chatModel: {
+        provider: 'test',
+        name: overrides?.chatModel ?? 'test-artifact',
+      },
+      systemModel: { provider: 'test', name: 'test-direct' },
+      selectedSystemPromptIds: [],
+      ...(overrides?.isPrivate ? { isPrivate: true } : {}),
+      ...(overrides?.workspaceId ? { workspaceId: overrides.workspaceId } : {}),
+    },
+  });
+  if (!res.ok()) {
+    const text = await res.text();
+    throw new Error(
+      `POST /api/chat returned ${res.status()}: ${text.slice(0, 500)}`,
+    );
+  }
+  const events = await collectSseEvents(res);
+  return { chatId, messageId, events };
+}
+
+/** Create one artifact via the agent and return its ids. */
+export async function seedArtifact(
+  request: APIRequestContext,
+  overrides?: Partial<{
+    chatId: string;
+    title: string;
+    content: string;
+    workspaceId: string;
+  }>,
+): Promise<SeededArtifact> {
+  const title = overrides?.title ?? uniq('Report');
+  const content =
+    overrides?.content ??
+    '<!doctype html><html><head><title>T</title></head><body><h1>Seed</h1></body></html>';
+  const { chatId, messageId, events } = await runArtifactTurn(
+    request,
+    `${title}|${content}`,
+    { chatId: overrides?.chatId, workspaceId: overrides?.workspaceId },
+  );
+  const saved = events.find((e) => e.type === 'artifact_saved');
+  if (!saved) {
+    throw new Error('No artifact_saved event was emitted for the seeded turn');
+  }
+  const { artifactId } = saved.data as { artifactId: string };
+  return { chatId, artifactId, messageId };
 }

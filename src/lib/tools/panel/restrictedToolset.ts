@@ -21,6 +21,12 @@ export const PANEL_EXECUTOR_EXCLUDED_TOOLS: string[] = [
   'ask_user',
   'edit_skill',
   'deep_research',
+  // Artifacts are chat-scoped rows written by the turn's own agent; an
+  // executor has no chatId to own them, and authoring belongs to the
+  // synthesizing model, not the fan-out.
+  'create_artifact',
+  'edit_artifact',
+  'read_artifact',
 ];
 
 const EXCLUDED = new Set(PANEL_EXECUTOR_EXCLUDED_TOOLS);

@@ -25,6 +25,7 @@ import {
   startPanelColumn,
   appendPanelColumnToken,
   setPanelColumnStatus,
+  upsertArtifactWidget,
   type ToolCallPayload,
   type SubagentPayload,
 } from '@/lib/widgets/envelope';
@@ -708,6 +709,32 @@ function reduceStreamAction(
         workspaceId: action.data.workspaceId,
       });
       return { state, effects };
+
+    case 'artifact_saved': {
+      const msgId = msgIdFor(state, action);
+      const { artifactId, title, version, action: verb } = action.data;
+      const current = state.messages.find(
+        (m) => m.messageId === msgId,
+      )?.content;
+      // The card is written even in replay so the transcript matches a live
+      // run; only the panel-opening side effects are withheld, since
+      // reconnecting to a finished run must not pop the viewer.
+      const receivedMessage = upsertArtifactWidget(
+        current ?? state.receivedMessage,
+        { id: artifactId, title, version, action: verb },
+      );
+      const messages = upsertAssistant(state, msgId, receivedMessage);
+      if (!state.inReplay) {
+        effects.push({ kind: 'openArtifact', artifactId, version });
+        if (state.chatId)
+          effects.push({ kind: 'invalidateArtifacts', chatId: state.chatId });
+      }
+      scroll();
+      return {
+        state: { ...state, receivedMessage, rowAdded: true, messages },
+        effects,
+      };
+    }
 
     // ── approval lifecycle ─────────────────────────────────────────────────────
     case 'code_execution_pending':

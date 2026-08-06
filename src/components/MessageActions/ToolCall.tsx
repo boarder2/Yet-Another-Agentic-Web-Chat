@@ -187,6 +187,12 @@ export const ToolCall = ({
         return <History size={16} className="text-accent" />;
       case 'get_message':
         return <MessageSquare size={16} className="text-accent" />;
+      case 'create_artifact':
+        return <FilePlus size={16} className="text-accent" />;
+      case 'edit_artifact':
+        return <FilePen size={16} className="text-accent" />;
+      case 'read_artifact':
+        return <FileCode size={16} className="text-accent" />;
       default:
         return <Settings size={16} className="text-fg/70" />;
     }
@@ -559,6 +565,25 @@ export const ToolCall = ({
             <BookOpen size={16} />
           </span>
           <span>Edit skill</span>
+        </>
+      );
+    }
+
+    if (
+      type === 'create_artifact' ||
+      type === 'edit_artifact' ||
+      type === 'read_artifact'
+    ) {
+      const label =
+        type === 'create_artifact'
+          ? 'Writing document'
+          : type === 'edit_artifact'
+            ? 'Updating document'
+            : 'Reading document';
+      return (
+        <>
+          <span className="mr-2">{getIcon(type)}</span>
+          <span>{label}</span>
         </>
       );
     }

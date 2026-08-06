@@ -116,6 +116,15 @@
   --color-overlay-strong: oklch(0 0 0 / 0.7);
 }
 
+/* Layout geometry the artifact panel writes at runtime (`useArtifactPanel`).
+ * The values below are the no-panel state: nothing reserved on the right, chat
+ * column centred. `--chat-ml` carries a margin keyword rather than a length so
+ * pinning the column beside the panel costs no re-render. */
+:root {
+  --artifact-inset: 0px;
+  --chat-ml: auto;
+}
+
 @layer base {
   .overflow-hidden-scrollable {
     -ms-overflow-style: none;

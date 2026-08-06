@@ -10,20 +10,25 @@ Tests assert **correct** behavior — what the feature is _supposed_ to do, deri
 
 `src/lib/providers/test.ts` is scriptable by model id — select the behavior a spec needs by choosing the model rather than special-casing a spec against real provider output. Extend it with new variants as scenarios require.
 
-| Model id              | Behavior                                                                                                                                                            |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `test-direct`         | Answers immediately with fixed text, no tools.                                                                                                                      |
-| `test-tool`           | Emits one `file_search` tool call, then a fixed answer.                                                                                                             |
-| `test-tool-multi`     | Emits two sequential `file_search` tool calls (each after the prior result), then a fixed answer.                                                                   |
-| `test-ask-user`       | Emits an `ask_user` tool call (triggers a real LangGraph interrupt — the run pauses `awaiting_user`); on resume, answers with fixed text.                           |
-| `test-structured`     | If tools are bound (`withStructuredOutput`), returns a matching tool call with deterministic args; otherwise answers with `<suggestions>` XML.                      |
-| `test-long`           | Answers with a fixed multi-paragraph block taller than any test viewport, for scroll-position specs.                                                                |
-| `test-tool-long`      | `test-tool`'s `file_search` call followed by the `test-long` answer — an answer that opens with a widget and runs past the viewport.                                |
-| `test-slow`           | Paces token delivery (300ms/token) so a spec can observe a run mid-stream.                                                                                          |
-| `test-spoof`          | Streams text containing a forged `yaawc:` widget fence, so a spec can assert it is neutralized before persistence.                                                  |
-| `test-workspace-edit` | Emits one `workspace_edit` tool call whose args are scripted by the prompt (`<file>\|<oldString>\|<newString>`).                                                    |
-| `test-skill-edit`     | Emits one `edit_skill` update whose args are scripted by the prompt (`<name>\|<scope>\|<newScope>\|<content>\|<disableModelInvocation>`); empty fields are omitted. |
-| `test-embed`          | Deterministic fixed-vector embeddings.                                                                                                                              |
+| Model id              | Behavior                                                                                                                                                              |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `test-direct`         | Answers immediately with fixed text, no tools.                                                                                                                        |
+| `test-tool`           | Emits one `file_search` tool call, then a fixed answer.                                                                                                               |
+| `test-tool-multi`     | Emits two sequential `file_search` tool calls (each after the prior result), then a fixed answer.                                                                     |
+| `test-ask-user`       | Emits an `ask_user` tool call (triggers a real LangGraph interrupt — the run pauses `awaiting_user`); on resume, answers with fixed text.                             |
+| `test-structured`     | If tools are bound (`withStructuredOutput`), returns a matching tool call with deterministic args; otherwise answers with `<suggestions>` XML.                        |
+| `test-long`           | Answers with a fixed multi-paragraph block taller than any test viewport, for scroll-position specs.                                                                  |
+| `test-tool-long`      | `test-tool`'s `file_search` call followed by the `test-long` answer — an answer that opens with a widget and runs past the viewport.                                  |
+| `test-slow`           | Paces token delivery (300ms/token) so a spec can observe a run mid-stream.                                                                                            |
+| `test-spoof`          | Streams text containing a forged `yaawc:` widget fence, so a spec can assert it is neutralized before persistence.                                                    |
+| `test-workspace-edit` | Emits one `workspace_edit` tool call whose args are scripted by the prompt (`<file>\|<oldString>\|<newString>`).                                                      |
+| `test-skill-edit`     | Emits one `edit_skill` update whose args are scripted by the prompt (`<name>\|<scope>\|<newScope>\|<content>\|<disableModelInvocation>`); empty fields are omitted.   |
+| `test-artifact`       | Emits one `create_artifact` call scripted by the prompt (`<title>\|<content>`), then a fixed answer.                                                                  |
+| `test-artifact-edit`  | Emits one `edit_artifact` call scripted by the prompt (`<artifactId>\|<oldStr>\|<newStr>`); fires once, so an edit failure ends the turn instead of looping.          |
+| `test-artifact-read`  | Emits one `read_artifact` call scripted by the prompt (`<artifactId>` or `<artifactId>\|<version>`), then answers with the raw tool result so specs can assert on it. |
+| `test-artifact-multi` | Creates from `<title>\|<oldStr>\|<newStr>`, then edits what it just created — two writes in one turn, landing on one card.                                            |
+| `test-prompt-echo`    | Answers with the system prompt it was given, so specs can assert which sections were injected.                                                                        |
+| `test-embed`          | Deterministic fixed-vector embeddings.                                                                                                                                |
 
 ## Setup
 
@@ -82,7 +87,7 @@ Extend `e2e/fixtures/index.ts`. Do not import from `@playwright/test` directly i
 
 ## Seed & SSE Helpers
 
-`e2e/utils/seed.ts` — API-based data factories, reused across API and UI specs to set up state without going through the UI: `seedWorkspace`, `seedChat`, `seedMemory`, `seedSkill`, `seedSystemPrompt`, `seedWorkflow`, `seedSchedule`, `seedWorkspaceFile`, `seedScheduledChat`. Each returns the created id. `seedAwaitingApproval` starts a `test-ask-user` run and returns once it pauses at the interrupt (`chatId`/`messageId`/`approvalId`/`question`); pair it with `cancelAwaitingRun` when a spec doesn't resolve the approval via `runs/resume` itself, so no unresolved approval leaks into other specs. `seedAwaitingWorkspaceEdit` does the same for a `workspace_edit` run, parking it at the edit-approval interrupt so a spec can set up UI state before letting the edit land; `seedAwaitingSkillEdit` parks an `edit_skill` update at its approval. `fileSha` reads a workspace file's current sha — the CAS token every write needs.
+`e2e/utils/seed.ts` — API-based data factories, reused across API and UI specs to set up state without going through the UI: `seedWorkspace`, `seedChat`, `seedMemory`, `seedSkill`, `seedSystemPrompt`, `seedWorkflow`, `seedSchedule`, `seedWorkspaceFile`, `seedScheduledChat`, `seedArtifact` (one agent-authored artifact, returning `chatId`/`artifactId`/`messageId`) and `runArtifactTurn` (one scripted artifact turn, returning its parsed SSE events). Each returns the created id. `seedAwaitingApproval` starts a `test-ask-user` run and returns once it pauses at the interrupt (`chatId`/`messageId`/`approvalId`/`question`); pair it with `cancelAwaitingRun` when a spec doesn't resolve the approval via `runs/resume` itself, so no unresolved approval leaks into other specs. `seedAwaitingWorkspaceEdit` does the same for a `workspace_edit` run, parking it at the edit-approval interrupt so a spec can set up UI state before letting the edit land; `seedAwaitingSkillEdit` parks an `edit_skill` update at its approval. `fileSha` reads a workspace file's current sha — the CAS token every write needs.
 
 `e2e/utils/sse.ts` — parses the chat SSE stream: `collectSseEvents` (from a raw string or a Playwright `APIResponse`), `eventsOfType`, `joinResponseText`, `extractSources`. `streamChatUntil` reads `/api/chat` via raw `fetch` and stops as soon as a predicate matches — needed for a paused (`awaiting_user`) run, whose connection otherwise stays open indefinitely and would hang the Playwright `request` fixture.
 

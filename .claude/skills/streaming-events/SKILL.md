@@ -13,7 +13,7 @@ One module owns the whole vocabulary and the single agent→UI channel:
 
 - **`events.ts`** — two discriminated unions plus the transport. `AgentEmitEvent` is what producers emit; `StreamEvent` is the NDJSON wire form the client reads. Both carry structured data only — no pre-rendered markup. Producers call `emitStreamEvent(emitter, event)` / consumers `onStreamEvent(emitter, handler)` on ONE channel (`STREAM_EVENT_CHANNEL = 'stream_event'`) — no more per-type channels. `isAgentControlEvent` separates control events (`model_stats`, `interrupt`, `agent_end`, `agent_error`) from wire-bound ones. `parseStreamEvent` (wire line → typed) and `normalizeStreamEvent` (legacy type aliases → canonical, e.g. `user_question_pending` → `ask_user_pending`) bridge the client.
 - **`reducer.ts`** — `reduceStreamEvent(state, event) → { state, effects }`, one pure transition per event, shared by the live-send and reconnect/attach paths. Mode differences fold into rules: bucket key is `event.messageId ?? activeAiMessageId` (live events carry the assistant id, which the reducer adopts so id-less `*_answered`/`*_stale`/`*_cancelled` bucket right); replay-gating is the `inReplay` state field (attach only, until `replay_complete`); idempotency guards and the rich `messageEnd` finalization apply in both modes. Widget events (`tool_call_*`, `subagent_*`, `panel_executor_*`) serialize into the assistant message content via the codec in `src/lib/widgets/envelope.ts`.
-- **`effects.ts`** — `StreamEffect`, the data the reducer returns for side effects (`toastError`, `setLoading`, `bumpScroll`, `invalidateActiveRuns`, `invalidateWorkspace`, `fetchSuggestions`, `refreshSkills`, `setChatTitle`). `ChatWindow` interprets them; the reducer never performs them.
+- **`effects.ts`** — `StreamEffect`, the data the reducer returns for side effects (`toastError`, `setLoading`, `bumpScroll`, `invalidateActiveRuns`, `invalidateWorkspace`, `fetchSuggestions`, `refreshSkills`, `setChatTitle`, `openArtifact`, `invalidateArtifacts`). `ChatWindow` interprets them; the reducer never performs them.
 
 `reducer.ts` and `events.ts` are pure — unit-tested (`*.test.ts`, `npm run test:unit`), the narrow exception to the e2e-only policy.
 
@@ -21,9 +21,9 @@ One module owns the whole vocabulary and the single agent→UI channel:
 
 Tool-call, subagent, and agent-panel widgets are **not** markup on the wire — events carry structured payloads (`toolCallId`/`toolType`/`attrs`, etc., see tables below). The two writers (`reducer.ts` on the client, `runHost.ts` on the server) turn those payloads into the persisted assistant message's widget representation using one isomorphic codec, `src/lib/widgets/envelope.ts`:
 
-- A widget is a markdown code fence with a reserved `yaawc:<kind>` info string and a compact single-line JSON payload, e.g. ` ```yaawc:tool_call\n{"id":"call_abc","type":"web_search","status":"running"}\n``` `. Kinds: `tool_call`, `subagent`, `panel`.
-- `appendWidget`/`updateWidget`/`findWidget` are the mutation primitives (idempotent on the payload's `id`); `parseWidgetFence` is the render-side decode; `stripWidgets` removes widget fences for LLM context/clipboard; `neutralizeSpoofedFences` downgrades any `yaawc:`-prefixed fence a model streams in its own answer text, so a model can never forge a widget — all legitimate envelopes are writer-appended, never model tokens.
-- `MarkdownRenderer.tsx`'s `code` override dispatches a fenced block whose info string is a known `yaawc:*` kind to the matching widget component (`ToolCall`, `SubagentExecution`, `PanelColumns`) with typed props; an unknown/invalid `yaawc:*` fence falls back to a plain code block.
+- A widget is a markdown code fence with a reserved `yaawc:<kind>` info string and a compact single-line JSON payload, e.g. ` ```yaawc:tool_call\n{"id":"call_abc","type":"web_search","status":"running"}\n``` `. Kinds: `tool_call`, `subagent`, `panel`, `artifact`.
+- `appendWidget`/`updateWidget`/`findWidget` are the mutation primitives (idempotent on the payload's `id`); `upsertArtifactWidget` composes them into the one-card-per-artifact rule both writers share; `parseWidgetFence` is the render-side decode; `stripWidgets` removes widget fences for LLM context/clipboard; `neutralizeSpoofedFences` downgrades any `yaawc:`-prefixed fence a model streams in its own answer text, so a model can never forge a widget — all legitimate envelopes are writer-appended, never model tokens.
+- `MarkdownRenderer.tsx`'s `code` override dispatches a fenced block whose info string is a known `yaawc:*` kind to the matching widget component (`ToolCall`, `SubagentExecution`, `PanelColumns`, `ArtifactCard`) with typed props; an unknown/invalid `yaawc:*` fence falls back to a plain code block.
 - Pre-migration messages (no data migration) render via a frozen, read-only legacy path for the old `<ToolCall>`/`<SubagentExecution>`/`<PanelColumns>` tag markup — nothing writes that format anymore.
 - Codec unit-tested (`src/lib/widgets/envelope.test.ts`), the same pure-module exception as the reducer — including markdown-to-jsx parse-shape tests asserting widgets stay atomic next to prose (the regression net for the nested-widget-spillage bug this format fixes).
 
@@ -54,6 +54,17 @@ The `todo_list` tool emits `todo_update` events for research progress tracking. 
 - Expanded: shows all items with status icons (pending/in_progress/completed)
 - Transient: the widget clears when the response completes (not persisted in message content)
 - Only used for thorough/complex research, not simple queries
+
+## Artifact Events
+
+The artifact tools (`create_artifact`, `edit_artifact`) emit one event per successful write. They also emit the ordinary `tool_call_*` lifecycle, which is what draws the "Writing document…" / "Updating document…" progress card.
+
+| Event Type       | When Emitted                          | Payload                                                                | UI Behavior                                                                              |
+| ---------------- | ------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `artifact_saved` | After a create/edit commits to the DB | `{ data: { artifactId, title, version, action: 'create' \| 'edit' } }` | Upserts a `yaawc:artifact` card; opens the viewer panel at that version (live runs only) |
+
+- **One card per artifact per message**, no matter how many edits a turn makes: both writers call `upsertArtifactWidget`, which bumps the existing card's version rather than stacking new ones.
+- **The card is written in replay too**, so a reconnected transcript matches a live one. Only the `openArtifact`/`invalidateArtifacts` effects are `inReplay`-gated — reattaching to a finished run must not pop the panel, and the card is the re-entry point.
 
 ## Subagent Events
 

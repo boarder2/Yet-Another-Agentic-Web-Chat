@@ -20,7 +20,9 @@ export default function Page() {
   }, [chatId]);
 
   return (
-    <div className={cn(!wide && 'max-w-5xl lg:mx-auto mx-4')}>
+    // `--chat-ml` pins the column instead of centring it while an artifact
+    // panel is docked, so its text doesn't slide as the panel is dragged.
+    <div className={cn(!wide && 'max-w-5xl mx-4 lg:ml-(--chat-ml) lg:mr-auto')}>
       <ChatWindow key={chatId} id={chatId} workspaceId={id} />
     </div>
   );

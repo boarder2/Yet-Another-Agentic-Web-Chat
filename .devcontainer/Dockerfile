@@ -18,6 +18,8 @@ RUN apt-get update \
   jq \
   zsh \
   unzip \
+  fd-find \
+  ripgrep \
   sudo \
   libsecret-1-0 libsecret-1-dev libsecret-common gnome-keyring gnome-keyring-pkcs11 seahorse \
   && apt-get clean && rm -rf /var/lib/apt/lists/* \
@@ -58,9 +60,10 @@ claude "$@"
 )
 }
 EOF
-RUN curl -s https://ohmyposh.dev/install.sh | bash -s && echo 'eval "$(oh-my-posh init zsh --config /home/node/.omp/config/negligible-mine.omp.json)"' >> /home/node/.zshrc
-RUN curl -fsSL https://opencode.ai/install | bash
-RUN curl -fsSL https://herdr.dev/install.sh | sh
+RUN curl -s https://ohmyposh.dev/install.sh | bash -s && echo 'eval "$(oh-my-posh init zsh --config /home/node/.omp/config/negligible-mine.omp.json)"' >> /home/node/.zshrc && \
+  curl -fsSL https://opencode.ai/install | bash && \
+  curl -fsSL https://herdr.dev/install.sh | sh && \
+  curl -fsSL https://pi.dev/install.sh | sh
 
 RUN mkdir -p /home/node/.persist/.claude /home/node/.persist/opencode-config /home/node/.persist/opencode-data /home/node/.persist/opencode-state /home/node/.persist/herdr /home/node/.config /home/node/.local/share /home/node/.local/state \
   && touch /home/node/.persist/.claude.json /home/node/.persist/.zsh_history \

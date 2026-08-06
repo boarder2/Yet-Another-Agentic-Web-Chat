@@ -4,6 +4,7 @@ import {
   ChevronDown,
   ChevronRight,
   FileText,
+  FileCode2,
   BookOpen,
   Brain,
   Settings as SettingsIcon,
@@ -16,6 +17,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import FilesTab from './FilesTab';
+import DocumentsTab from './DocumentsTab';
 import InstructionsTab from './InstructionsTab';
 import WorkspaceMemoryTab from './WorkspaceMemoryTab';
 import SettingsTab from './SettingsTab';
@@ -24,10 +26,11 @@ import Modal from '@/components/ui/Modal';
 import { Card } from '@/components/ui/Card';
 import { useWorkspace } from '@/lib/hooks/api/useWorkspaces';
 import { useWorkspaceFiles } from '@/lib/hooks/api/useWorkspaceFiles';
+import { useWorkspaceArtifacts } from '@/lib/hooks/api/useArtifacts';
 import { useWorkspaceMemory } from '@/lib/hooks/api/useWorkspaceMemory';
 import { useWorkspaceSystemPrompts } from '@/lib/hooks/api/useWorkspaceSystemPrompts';
 
-type SectionKey = 'files' | 'instructions' | 'memory';
+type SectionKey = 'files' | 'documents' | 'instructions' | 'memory';
 
 function CollapsibleSection({
   icon: Icon,
@@ -82,11 +85,13 @@ export default function WorkspaceSidebar({
 }) {
   const { data: workspace } = useWorkspace(workspaceId);
   const { data: files } = useWorkspaceFiles(workspaceId);
+  const { data: documents } = useWorkspaceArtifacts(workspaceId);
   const { data: memories } = useWorkspaceMemory(workspaceId);
   const { data: linkedPromptIds } = useWorkspaceSystemPrompts(workspaceId);
 
   const [open, setOpen] = useState<Record<SectionKey, boolean>>({
     files: false,
+    documents: false,
     instructions: false,
     memory: false,
   });
@@ -102,12 +107,15 @@ export default function WorkspaceSidebar({
   }
 
   const fileCount = files?.length ?? null;
+  const docCount = documents?.length ?? null;
   const memoryCount = memories?.length ?? null;
   const instructionsLength = workspace?.instructions?.length ?? null;
   const linkedCount = linkedPromptIds?.length ?? null;
 
   const filesSummary =
     fileCount === null ? '…' : `${fileCount} file${fileCount === 1 ? '' : 's'}`;
+  const documentsSummary =
+    docCount === null ? '…' : `${docCount} doc${docCount === 1 ? '' : 's'}`;
   const memorySummary =
     memoryCount === null
       ? '…'
@@ -149,14 +157,17 @@ export default function WorkspaceSidebar({
           )}
         >
           <div className="pt-3 flex flex-col items-center gap-1.5">
-            <button
-              type="button"
-              onClick={onToggleCollapse}
-              className="p-1.5 rounded-control hover:bg-surface-2 transition text-fg/60"
-              title="Expand sidebar"
-            >
-              <PanelRightOpen size={16} />
-            </button>
+            {/* Absent when the caller has no room to expand into. */}
+            {onToggleCollapse && (
+              <button
+                type="button"
+                onClick={onToggleCollapse}
+                className="p-1.5 rounded-control hover:bg-surface-2 transition text-fg/60"
+                title="Expand sidebar"
+              >
+                <PanelRightOpen size={16} />
+              </button>
+            )}
             <Link
               href={`/workspaces/${workspaceId}/c/new`}
               className="p-1.5 rounded-control bg-accent hover:bg-accent-700 transition-colors duration-150 text-accent-fg"
@@ -226,6 +237,16 @@ export default function WorkspaceSidebar({
                 compact
                 onOpenFile={(id, edit) => setOpenFile({ id, edit: !!edit })}
               />
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              icon={FileCode2}
+              title="Documents"
+              summary={documentsSummary}
+              open={open.documents}
+              onToggle={() => toggle('documents')}
+            >
+              <DocumentsTab workspaceId={workspaceId} />
             </CollapsibleSection>
 
             <CollapsibleSection

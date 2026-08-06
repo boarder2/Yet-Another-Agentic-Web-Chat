@@ -365,15 +365,18 @@ const Chat = ({
       }
     };
 
-    // Initial calculation
     updateInputStyle();
 
-    // Update on resize
-    window.addEventListener('resize', updateInputStyle);
+    // Observe boxes, not the window: docking the artifact panel resizes and
+    // moves the column without firing a resize event. `<main>` is the second
+    // target because on a wide screen the column keeps its max width and only
+    // shifts, which `containerRef` alone wouldn't report.
+    const observer = new ResizeObserver(updateInputStyle);
+    if (containerRef.current) observer.observe(containerRef.current);
+    const main = document.querySelector('main');
+    if (main) observer.observe(main);
 
-    return () => {
-      window.removeEventListener('resize', updateInputStyle);
-    };
+    return () => observer.disconnect();
   }, []);
 
   // Cancel handler
@@ -450,7 +453,11 @@ const Chat = ({
           </Fragment>
         );
       })}
-      <div className="fixed bottom-16 lg:bottom-0 z-40" style={inputStyle}>
+      <div
+        data-testid="chat-input-bar"
+        className="fixed bottom-16 lg:bottom-0 z-40"
+        style={inputStyle}
+      >
         {/* Scroll to bottom button - appears above the MessageInput when user has scrolled up */}
         {manuallyScrolledUp && !isAtBottom && (
           <div className="absolute -top-14 right-2 z-10">

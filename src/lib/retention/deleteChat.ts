@@ -3,6 +3,7 @@ import { chats, messages, memories, schedules } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { evictByChatId, getRunByChatId } from '@/lib/runs/runHub';
 import { deleteCheckpoint } from '@/lib/runs/checkpointer';
+import { deleteForChat as deleteArtifactsForChat } from '@/lib/artifacts/service';
 
 /**
  * Delete a chat and clean up references atomically.
@@ -10,6 +11,7 @@ import { deleteCheckpoint } from '@/lib/runs/checkpointer';
  * - NULLs memories.sourceChatId pointing at it.
  * - NULLs schedules.lastRunChatId pointing at it.
  * - Deletes the chat row.
+ * - Deletes the chat's artifacts and their versions.
  */
 export function deleteChatWithOrphanCleanup(chatId: string): void {
   // If a run is in flight, cancel it before deleting so subscribers see the cancel event
@@ -44,6 +46,8 @@ export function deleteChatWithOrphanCleanup(chatId: string): void {
     // approval_requests + run_events cascade via ON DELETE CASCADE.
     tx.delete(chats).where(eq(chats.id, chatId)).run();
   });
+
+  deleteArtifactsForChat(chatId);
 
   if (threadId) {
     deleteCheckpoint(threadId).catch((e: unknown) =>

@@ -7,6 +7,7 @@ import {
   appendPanelColumnToken,
   setPanelColumnStatus,
   neutralizeSpoofedFences,
+  upsertArtifactWidget,
   type ToolCallPayload,
   type SubagentPayload,
 } from '@/lib/widgets/envelope';
@@ -1139,6 +1140,17 @@ export async function attachRunHost(params: {
         event.data.toolCallId,
         { status: event.data.status, error: event.data.error },
       );
+      scheduleFlush(true);
+    } else if (event.type === 'artifact_saved') {
+      pushEvent(run, { ...event, messageId: aiMessageId });
+      // Same upsert the client reducer runs, so the persisted copy and the
+      // live one carry byte-identical cards.
+      recievedMessage = upsertArtifactWidget(recievedMessage, {
+        id: event.data.artifactId,
+        title: event.data.title,
+        version: event.data.version,
+        action: event.data.action,
+      });
       scheduleFlush(true);
     } else if (
       event.type === 'subagent_started' ||

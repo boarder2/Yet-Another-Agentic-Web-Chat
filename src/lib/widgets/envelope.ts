@@ -16,12 +16,13 @@
  * run host, and the renderer. Pure functions only — no DOM, no network.
  */
 
-export type WidgetKind = 'tool_call' | 'subagent' | 'panel';
+export type WidgetKind = 'tool_call' | 'subagent' | 'panel' | 'artifact';
 
 const WIDGET_KINDS: ReadonlySet<string> = new Set([
   'tool_call',
   'subagent',
   'panel',
+  'artifact',
 ]);
 
 /** Former `<ToolCall>` attributes as plain JSON fields (base64 dropped). */
@@ -84,12 +85,22 @@ export interface PanelPayload {
 /** All panel executors for a message live in one envelope; there's only ever one. */
 export const PANEL_WIDGET_ID = 'panel';
 
-export type WidgetPayload = ToolCallPayload | SubagentPayload | PanelPayload;
+/** Re-entry point for an agent-authored artifact. `id` is the artifact id. */
+export interface ArtifactPayload {
+  id: string;
+  title: string;
+  version: number;
+  action: 'create' | 'edit';
+}
+
+export type WidgetPayload =
+  ToolCallPayload | SubagentPayload | PanelPayload | ArtifactPayload;
 
 export type ParsedWidget =
   | { kind: 'tool_call'; payload: ToolCallPayload }
   | { kind: 'subagent'; payload: SubagentPayload }
-  | { kind: 'panel'; payload: PanelPayload };
+  | { kind: 'panel'; payload: PanelPayload }
+  | { kind: 'artifact'; payload: ArtifactPayload };
 
 type WithId = { id: string };
 
@@ -333,6 +344,22 @@ export function setPanelColumnStatus(
       return { ...current, columns };
     },
   );
+}
+
+/**
+ * Add or refresh an artifact's card. A message gets one card per artifact no
+ * matter how many times the agent edits it during the turn, so repeated saves
+ * bump the existing card's version rather than stacking new ones. Shared by
+ * both writers (the live client reducer and the persisted server copy) so the
+ * two stay byte-identical.
+ */
+export function upsertArtifactWidget(
+  content: string,
+  payload: ArtifactPayload,
+): string {
+  return findWidget<ArtifactPayload>(content, 'artifact', payload.id)
+    ? updateWidget<ArtifactPayload>(content, 'artifact', payload.id, payload)
+    : appendWidget<ArtifactPayload>(content, 'artifact', payload);
 }
 
 /** Remove all `yaawc:*` widget fences from `content` (LLM context, clipboard). */

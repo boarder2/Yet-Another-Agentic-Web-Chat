@@ -30,7 +30,7 @@ Phase 1 runs only on a **new** message; **resume never re-runs Phase 1** (it reu
 
 ## Executor tool restrictions
 
-`src/lib/tools/panel/restrictedToolset.ts` — `filterExecutorTools()` removes `PANEL_EXECUTOR_EXCLUDED_TOOLS`: `code_execution`, `workspace_edit`, `workspace_create_file`, `ask_user`, `edit_skill`, `deep_research`. Exclusion list (not a whitelist), so executors inherit the full focus-mode set minus the prompting/approval-gated/mutating/recursive tools. Read-only workspace tools (ls/grep/read) intentionally stay — they never interrupt.
+`src/lib/tools/panel/restrictedToolset.ts` — `filterExecutorTools()` removes `PANEL_EXECUTOR_EXCLUDED_TOOLS`: `code_execution`, `workspace_edit`, `workspace_create_file`, `ask_user`, `edit_skill`, `deep_research`, and the three artifact tools (`create_artifact`, `edit_artifact`, `read_artifact` — chat-scoped rows an executor has no chat to own; authoring belongs to the synthesizing model). Exclusion list (not a whitelist), so executors inherit the full focus-mode set minus the prompting/approval-gated/mutating/recursive tools. Read-only workspace tools (ls/grep/read) intentionally stay — they never interrupt.
 
 ## Streaming events
 

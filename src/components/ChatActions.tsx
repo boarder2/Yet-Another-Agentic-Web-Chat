@@ -106,7 +106,10 @@ const ChatActions = ({
 
   return (
     <div
-      className={`fixed top-3 z-40 right-4 sm:right-6 lg:right-8 flex items-center gap-2`}
+      data-testid="chat-actions"
+      // The margin shifts the whole cluster clear of a docked artifact panel
+      // without disturbing the right-inset ladder.
+      className={`fixed top-3 z-40 right-4 sm:right-6 lg:right-8 md:mr-(--artifact-inset) flex items-center gap-2`}
     >
       {isPrivateSession && (
         <div className="flex items-center gap-1.5 px-3 py-1 rounded-pill bg-warning-soft border border-warning text-warning dark:text-warning text-xs font-medium shrink-0">

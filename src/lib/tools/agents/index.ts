@@ -26,6 +26,7 @@ import { getChatMessagesTool } from './getChatMessagesTool';
 import { createChartTool } from './createChartTool';
 import { readSkillTool } from './readSkillTool';
 import { editSkillTool } from './editSkillTool';
+import { artifactTools } from './artifactTools';
 
 export { simpleWebSearchTool };
 export { urlFetchTool };
@@ -45,6 +46,7 @@ export { getChatMessagesTool };
 export { createChartTool };
 export { readSkillTool };
 export { editSkillTool };
+export { artifactTools };
 
 // Base tool arrays (non-interactive, used by subagents)
 export const allAgentTools = [
@@ -62,6 +64,7 @@ export const allAgentTools = [
   chatHistorySearchTool,
   getChatMessagesTool,
   readSkillTool,
+  ...artifactTools,
 ];
 
 export const webSearchTools = [
@@ -77,6 +80,7 @@ export const webSearchTools = [
   chatHistorySearchTool,
   getChatMessagesTool,
   readSkillTool,
+  ...artifactTools,
 ];
 
 export const fileSearchTools = [fileSearchTool];
@@ -112,6 +116,6 @@ export const getAllAgentTools = () => withInteractiveTools([...allAgentTools]);
 export const getWebSearchTools = () =>
   withInteractiveTools([...webSearchTools]);
 export const getCoreTools = () => withInteractiveTools([...coreTools]);
-// Local research includes core tools plus chart support (no web search)
+// Local research includes core tools plus chart + artifact support (no web search)
 export const getLocalResearchTools = () =>
-  withInteractiveTools([...coreTools, createChartTool]);
+  withInteractiveTools([...coreTools, createChartTool, ...artifactTools]);

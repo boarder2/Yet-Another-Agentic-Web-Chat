@@ -11,6 +11,9 @@ import { decodeBase64 } from '@/lib/utils/html';
 import { ToolCall } from './MessageActions/ToolCall';
 import { SubagentExecution } from './MessageActions/SubagentExecution';
 import { PanelColumns } from './MessageActions/PanelColumns';
+import ArtifactCard from './Artifacts/ArtifactCard';
+import ArtifactMention from './Artifacts/ArtifactMention';
+import { parseArtifactHref } from '@/lib/artifacts/mention';
 import ChartElement, { spaceChartTags } from './ChartElement';
 import {
   maskWidgets,
@@ -251,6 +254,8 @@ const WidgetOrCodeBlock = ({
       if (parsed.kind === 'tool_call') return <ToolCall {...parsed.payload} />;
       if (parsed.kind === 'subagent')
         return <SubagentExecution {...parsed.payload} />;
+      if (parsed.kind === 'artifact')
+        return <ArtifactCard {...parsed.payload} />;
       return <PanelColumns columns={parsed.payload.columns} />;
     }
   }
@@ -293,6 +298,16 @@ const MarkdownAnchor = ({
   sources?: Document[];
   'data-citation'?: string;
 }) => {
+  // `@[Title](artifact:<id>)` — a user mention of a document, not a link.
+  const mentionedArtifact = parseArtifactHref(props.href ?? '');
+  if (mentionedArtifact) {
+    return (
+      <ArtifactMention artifactId={mentionedArtifact}>
+        {props.children}
+      </ArtifactMention>
+    );
+  }
+
   // Check if this is a citation link with data-citation attribute
   const citationNumber = props['data-citation'];
 

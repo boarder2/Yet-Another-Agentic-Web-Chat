@@ -65,13 +65,14 @@ RUN curl -s https://ohmyposh.dev/install.sh | bash -s && echo 'eval "$(oh-my-pos
   curl -fsSL https://herdr.dev/install.sh | sh && \
   curl -fsSL https://pi.dev/install.sh | sh
 
-RUN mkdir -p /home/node/.persist/.claude /home/node/.persist/opencode-config /home/node/.persist/opencode-data /home/node/.persist/opencode-state /home/node/.persist/herdr /home/node/.config /home/node/.local/share /home/node/.local/state \
+RUN mkdir -p /home/node/.persist/.claude /home/node/.persist/opencode-config /home/node/.persist/opencode-data /home/node/.persist/opencode-state /home/node/.persist/herdr /home/node/.persist/pi /home/node/.config /home/node/.local/share /home/node/.local/state \
   && touch /home/node/.persist/.claude.json /home/node/.persist/.zsh_history \
   && if [ -d /home/node/.claude ] && [ ! -L /home/node/.claude ]; then cp -a /home/node/.claude/. /home/node/.persist/.claude/ && rm -rf /home/node/.claude; fi \
   && if [ -d /home/node/.config/opencode ] && [ ! -L /home/node/.config/opencode ]; then cp -a /home/node/.config/opencode/. /home/node/.persist/opencode-config/ && rm -rf /home/node/.config/opencode; fi \
   && if [ -d /home/node/.local/share/opencode ] && [ ! -L /home/node/.local/share/opencode ]; then cp -a /home/node/.local/share/opencode/. /home/node/.persist/opencode-data/ && rm -rf /home/node/.local/share/opencode; fi \
   && if [ -d /home/node/.local/state/opencode ] && [ ! -L /home/node/.local/state/opencode ]; then cp -a /home/node/.local/state/opencode/. /home/node/.persist/opencode-state/ && rm -rf /home/node/.local/state/opencode; fi \
   && if [ -d /home/node/.config/herdr ] && [ ! -L /home/node/.config/herdr ]; then cp -a /home/node/.config/herdr/. /home/node/.persist/herdr/ && rm -rf /home/node/.config/herdr; fi \
+  && if [ -d /home/node/.pi ] && [ ! -L /home/node/.pi ]; then cp -a /home/node/.pi/. /home/node/.persist/pi/ && rm -rf /home/node/.pi; fi \
   && if [ -f /home/node/.claude.json ] && [ ! -L /home/node/.claude.json ]; then cp /home/node/.claude.json /home/node/.persist/.claude.json && rm -f /home/node/.claude.json; fi \
   && if [ -f /home/node/.zsh_history ] && [ ! -L /home/node/.zsh_history ]; then cp /home/node/.zsh_history /home/node/.persist/.zsh_history && rm -f /home/node/.zsh_history; fi \
   && ln -sfn /home/node/.persist/.claude /home/node/.claude \
@@ -79,5 +80,6 @@ RUN mkdir -p /home/node/.persist/.claude /home/node/.persist/opencode-config /ho
   && ln -sfn /home/node/.persist/opencode-data /home/node/.local/share/opencode \
   && ln -sfn /home/node/.persist/opencode-state /home/node/.local/state/opencode \
   && ln -sfn /home/node/.persist/herdr /home/node/.config/herdr \
+  && ln -sfn /home/node/.persist/pi /home/node/.pi \
   && ln -sfn /home/node/.persist/.claude.json /home/node/.claude.json \
   && ln -sfn /home/node/.persist/.zsh_history /home/node/.zsh_history

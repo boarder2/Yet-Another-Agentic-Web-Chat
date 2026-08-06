@@ -1,0 +1,22 @@
+{
+  "name": "yaawc-build-workflow",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "pi extension: phase-gated build workflow (triage, plan, tasks, coder/tester/reviewer loop)",
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.83.0",
+    "typebox": "^1.3.10",
+    "typescript": "^5",
+    "vitest": "^4.1.9"
+  }
+}

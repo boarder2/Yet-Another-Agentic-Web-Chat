@@ -15,6 +15,15 @@ export interface ArtifactSummary {
   versionCount: number;
 }
 
+/** Every artifact, with its owning chat's title for provenance. */
+export interface ArtifactListSummary extends ArtifactSummary {
+  chatTitle: string | null;
+}
+
+export interface ArgsWorkspaceFilter {
+  workspaceIds?: string[];
+}
+
 export interface ArtifactVersionMeta {
   version: number;
   messageId: string;
@@ -55,6 +64,22 @@ export function useWorkspaceArtifacts(workspaceId: string | null | undefined) {
     queryFn: () =>
       apiFetch<ArtifactSummary[]>(`/api/artifacts?workspaceId=${workspaceId}`),
     enabled: !!workspaceId,
+  });
+}
+
+/** Every artifact across all chats and workspaces, optionally scope-filtered. */
+export function useAllArtifacts(filter: ArgsWorkspaceFilter = {}) {
+  return useQuery({
+    queryKey: qk.allArtifacts(filter),
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (filter.workspaceIds?.length)
+        params.set('workspaceIds', filter.workspaceIds.join(','));
+      const qs = params.toString();
+      return apiFetch<ArtifactListSummary[]>(
+        `/api/artifacts${qs ? `?${qs}` : ''}`,
+      );
+    },
   });
 }
 

@@ -1,5 +1,5 @@
 import db from '@/lib/db';
-import { artifacts, artifactVersions } from '@/lib/db/schema';
+import { artifacts, artifactVersions, chats } from '@/lib/db/schema';
 import {
   and,
   desc,
@@ -9,6 +9,7 @@ import {
   isNull,
   or,
   sql,
+  type SQL,
 } from 'drizzle-orm';
 import { applyExactEdit, type ExactEditResult } from './applyExactEdit';
 
@@ -24,6 +25,11 @@ export interface ArtifactSummary {
   updatedAt: Date;
   latestVersion: number;
   versionCount: number;
+}
+
+/** Every artifact, joined to its owning chat's title as provenance. */
+export interface ArtifactListSummary extends ArtifactSummary {
+  chatTitle: string | null;
 }
 
 export interface VersionMeta {
@@ -245,6 +251,40 @@ export function listWorkspaceArtifacts(workspaceId: string): ArtifactSummary[] {
     .from(artifacts)
     .leftJoin(artifactVersions, eq(artifactVersions.artifactId, artifacts.id))
     .where(eq(artifacts.workspaceId, workspaceId))
+    .groupBy(artifacts.id)
+    .orderBy(desc(artifacts.updatedAt))
+    .all();
+}
+
+/**
+ * Every artifact across all chats and workspaces, most recently updated
+ * first, joined to its owning chat's title when the chat still exists.
+ * `workspaceIds` mirrors `buildWorkspaceCondition`: ids select those
+ * workspaces' documents, the literal `none` selects chat-scoped documents
+ * (`workspaceId IS NULL`), both are the OR, and absent means all.
+ */
+export function listAllArtifacts(filter: {
+  workspaceIds?: string[];
+}): ArtifactListSummary[] {
+  const realIds = (filter.workspaceIds ?? []).filter((id) => id !== 'none');
+  const includeNone = (filter.workspaceIds ?? []).includes('none');
+  let where: SQL | undefined;
+  if (realIds.length > 0 && includeNone) {
+    where = or(
+      inArray(artifacts.workspaceId, realIds),
+      isNull(artifacts.workspaceId),
+    );
+  } else if (realIds.length > 0) {
+    where = inArray(artifacts.workspaceId, realIds);
+  } else if (includeNone) {
+    where = isNull(artifacts.workspaceId);
+  }
+  return db
+    .select({ ...summarySelect, chatTitle: chats.title })
+    .from(artifacts)
+    .leftJoin(artifactVersions, eq(artifactVersions.artifactId, artifacts.id))
+    .leftJoin(chats, eq(chats.id, artifacts.chatId))
+    .where(where)
     .groupBy(artifacts.id)
     .orderBy(desc(artifacts.updatedAt))
     .all();

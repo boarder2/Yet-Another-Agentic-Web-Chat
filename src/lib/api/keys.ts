@@ -52,6 +52,8 @@ export const qk = {
   artifacts: (chatId: string) => [...ARTIFACTS_NS, { chatId }] as const,
   workspaceArtifacts: (workspaceId: string) =>
     [...ARTIFACTS_NS, { workspaceId }] as const,
+  allArtifacts: (filter: { workspaceIds?: string[] }) =>
+    [...ARTIFACTS_NS, { all: true, filter }] as const,
   artifact: (id: string) => [...ARTIFACTS_NS, id] as const,
   artifactSource: (id: string, version?: number) =>
     [...ARTIFACTS_NS, id, 'source', version] as const,

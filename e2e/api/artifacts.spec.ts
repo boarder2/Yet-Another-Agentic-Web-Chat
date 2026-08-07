@@ -256,9 +256,15 @@ test.describe('artifact roster injected into the agent prompt', () => {
 });
 
 test.describe('list and detail routes', () => {
-  test('list requires a chatId', async ({ request }) => {
+  test('no chatId/workspaceId selects list-all mode instead of a 400', async ({
+    request,
+  }) => {
     const res = await request.get('/api/artifacts');
-    expect(res.status()).toBe(400);
+    expect(res.status()).toBe(200);
+    const list = await res.json();
+    expect(Array.isArray(list)).toBe(true);
+    // The list-all projection joins the owning chat's title.
+    for (const row of list) expect(row).toHaveProperty('chatTitle');
   });
 
   test('list is scoped to its chat and carries no content', async ({

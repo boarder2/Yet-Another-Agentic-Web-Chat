@@ -444,6 +444,14 @@ const ChatWindow = ({
   // Declared ahead of `runEffect`, which opens the panel on `openArtifact`.
   const artifactPanel = useArtifactPanel();
 
+  // History's Artifacts tab links here with ?artifact=<id>; open the panel on
+  // mount (ChatWindow is keyed per chat, so this fires on navigation with it).
+  useEffect(() => {
+    const id = searchParams.get('artifact');
+    if (id) artifactPanel.open(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Consolidated stream state: one reducer transition per wire event, shared by
   // the live-send and reconnect/attach paths. `streamStateRef` is the
   // synchronous source of truth (the async stream loop reads it between

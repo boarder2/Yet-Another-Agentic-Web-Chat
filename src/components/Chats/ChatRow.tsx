@@ -5,19 +5,21 @@ import WorkspaceChip from '@/components/Workspaces/WorkspaceChip';
 import { cn, formatTimeDifference } from '@/lib/utils';
 import { Input } from '@/components/ui/Input';
 import {
+  ListRow,
+  ListRowAction,
+  listRowInteractive,
+} from '@/components/ui/List';
+import {
   AlertCircle,
   CalendarClock,
-  ClockIcon,
   EyeOff,
   Hand,
   LoaderCircle,
-  MessageSquare,
   OctagonX,
   Pencil,
   Pin,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { useCancelRun, useMarkChatSeen } from '@/lib/hooks/api/useActiveRuns';
 import { useInlineRename } from '@/lib/hooks/useInlineRename';
@@ -99,7 +101,6 @@ function ElapsedTimer({ startedAt }: { startedAt: number }) {
 
 interface ChatRowProps {
   chat: Chat;
-  isLast: boolean;
   isSearchMode: boolean;
   searchTerms: string[];
   /** When set, hides the per-row workspace chip (we're already scoped). */
@@ -120,7 +121,6 @@ function getPrivateExpiresIn(createdAt: number, durationMs: number): string {
 
 const ChatRow = ({
   chat,
-  isLast,
   isSearchMode,
   searchTerms,
   hideWorkspaceChip,
@@ -129,7 +129,6 @@ const ChatRow = ({
   privateSessionDurationMs,
   onDelete,
 }: ChatRowProps) => {
-  const router = useRouter();
   const chatUrl = scopedWorkspaceId
     ? `/workspaces/${scopedWorkspaceId}/c/${chat.id}`
     : `/c/${chat.id}`;
@@ -153,10 +152,12 @@ const ChatRow = ({
     chat.lastRunViewed === 0 &&
     chat.lastRunStatus != null;
 
-  const startedAt = chat.activeRunStartedAt ?? 0;
+  const expiresIn =
+    chat.isPrivate === 1
+      ? getPrivateExpiresIn(chat.createdAt, privateSessionDurationMs)
+      : undefined;
 
-  const handleStop = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleStop = () => {
     if (!chat.activeRunMessageId || stopClickedRef.current) return;
     stopClickedRef.current = true;
     cancelRun.mutate(chat.activeRunMessageId, {
@@ -168,191 +169,141 @@ const ChatRow = ({
     });
   };
 
+  const status = isAwaitingUser ? (
+    <span className="flex items-center gap-1.5 text-warning">
+      <Hand size={13} className="animate-pulse" />
+      Needs input
+    </span>
+  ) : isInProgress ? (
+    <span className="flex items-center gap-1.5">
+      <LoaderCircle size={13} className="animate-spin text-accent" />
+      Working… <ElapsedTimer startedAt={chat.activeRunStartedAt ?? 0} />
+    </span>
+  ) : isUnviewed &&
+    (chat.lastRunStatus === 'errored' ||
+      chat.lastRunStatus === 'interrupted') ? (
+    <span className="flex items-center gap-1.5 text-danger">
+      <AlertCircle size={13} />
+      {chat.lastRunStatus === 'interrupted' ? 'Interrupted' : 'Error'}
+    </span>
+  ) : isUnviewed && chat.lastRunStatus === 'cancelled' ? (
+    <span className="flex items-center gap-1.5">
+      <OctagonX size={13} />
+      Stopped
+    </span>
+  ) : null;
+
   return (
-    <div
-      role="link"
-      tabIndex={0}
-      onClick={() => router.push(chatUrl)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') router.push(chatUrl);
-      }}
-      className={cn(
-        'flex flex-col space-y-4 py-6 relative group cursor-pointer',
-        !isLast ? 'border-b border-surface-2' : '',
-      )}
-    >
-      <div className="flex items-center gap-2">
-        {isUnviewed && (
-          <span className="shrink-0 w-2.5 h-2.5 rounded-pill bg-accent" />
-        )}
-        {isEditing ? (
+    <ListRow
+      href={isEditing ? undefined : chatUrl}
+      leading={
+        <>
+          {isUnviewed && (
+            <span className="h-2.5 w-2.5 shrink-0 rounded-pill bg-accent" />
+          )}
+          {chat.pinned === 1 && (
+            <Pin size={12} className="shrink-0 fill-current text-fg/50" />
+          )}
+        </>
+      }
+      title={
+        isEditing ? (
           <Input
             type="text"
             aria-label="Chat title"
             maxLength={200}
             value={draftTitle}
             autoFocus
-            onClick={(e) => e.stopPropagation()}
             onChange={(e) => setDraftTitle(e.target.value)}
             onKeyDown={(e) => {
-              e.stopPropagation();
               if (e.key === 'Enter') saveTitle();
               if (e.key === 'Escape') cancel();
             }}
             onBlur={cancel}
-            className="w-auto lg:text-xl font-medium bg-surface-2 rounded-surface px-2 py-0.5 min-w-0 flex-1"
+            className="w-full min-w-0 rounded-surface bg-surface-2 px-2 py-0.5 text-base font-medium"
           />
         ) : (
-          <span className="lg:text-xl font-medium truncate transition duration-200 group-hover:text-accent">
-            {chat.title}
+          chat.title
+        )
+      }
+      body={
+        isSearchMode && chat.matchExcerpt ? (
+          <p className="line-clamp-2 text-sm text-fg/60">
+            <HighlightedExcerpt text={chat.matchExcerpt} terms={searchTerms} />
+          </p>
+        ) : undefined
+      }
+      meta={
+        <>
+          {status}
+          <span>
+            {expiresIn
+              ? `Expires in ${expiresIn}`
+              : `${formatTimeDifference(new Date(), new Date(chat.createdAt))} ago`}
           </span>
-        )}
-        {chat.pinned === 1 && (
-          <Pin size={12} className="fill-current text-fg/50 shrink-0" />
-        )}
-        {chat.isPrivate === 1 && (
-          <span className="flex items-center gap-1 px-2 py-0.5 rounded-pill bg-warning-soft border border-warning text-warning dark:text-warning text-xs font-medium whitespace-nowrap">
-            <EyeOff size={11} />
-            Private
-          </span>
-        )}
-      </div>
-      {isSearchMode && chat.matchExcerpt && (
-        <p className="text-sm text-fg/60 line-clamp-2 -mt-1">
-          <HighlightedExcerpt text={chat.matchExcerpt} terms={searchTerms} />
-        </p>
-      )}
-      <div className="flex flex-row items-center justify-between w-full">
-        <div className="flex flex-row items-center gap-2 flex-wrap">
-          {isAwaitingUser ? (
-            <div className="flex items-center gap-2 text-warning">
-              <Hand size={14} className="animate-pulse" />
-              <span className="text-xs">Needs input</span>
-            </div>
-          ) : isInProgress ? (
-            <div className="flex items-center gap-2 text-fg/70">
-              <LoaderCircle size={14} className="animate-spin text-accent" />
-              <span className="text-xs">
-                Working… <ElapsedTimer startedAt={startedAt} />
-              </span>
-            </div>
-          ) : isUnviewed &&
-            (chat.lastRunStatus === 'errored' ||
-              chat.lastRunStatus === 'interrupted') ? (
-            <div className="flex items-center gap-1.5 text-danger text-xs">
-              <AlertCircle size={14} />
-              <span>
-                {chat.lastRunStatus === 'interrupted' ? 'Interrupted' : 'Error'}
-              </span>
-            </div>
-          ) : isUnviewed && chat.lastRunStatus === 'cancelled' ? (
-            <span className="flex items-center gap-1 px-2 py-0.5 rounded-pill bg-surface-2 text-fg/50 text-xs font-medium">
-              <OctagonX size={11} />
-              Stopped
+          {typeof chat.messageCount === 'number' && (
+            <span>
+              {chat.messageCount} message{chat.messageCount === 1 ? '' : 's'}
             </span>
-          ) : (
-            <div className="flex flex-row items-center space-x-1 lg:space-x-1.5 opacity-70">
-              {chat.isPrivate === 1 ? (
-                <>
-                  <ClockIcon size={15} />
-                  <p className="text-xs">
-                    Expires in{' '}
-                    {getPrivateExpiresIn(
-                      chat.createdAt,
-                      privateSessionDurationMs,
-                    )}
-                  </p>
-                </>
-              ) : (
-                <>
-                  <ClockIcon size={15} />
-                  <p className="text-xs">
-                    {formatTimeDifference(new Date(), new Date(chat.createdAt))}{' '}
-                    Ago
-                  </p>
-                </>
-              )}
-              {typeof chat.messageCount === 'number' && (
-                <>
-                  <span className="mx-1.5 text-fg/30">·</span>
-                  <MessageSquare size={13} />
-                  <p className="text-xs">
-                    {chat.messageCount} message
-                    {chat.messageCount === 1 ? '' : 's'}
-                  </p>
-                </>
-              )}
-            </div>
+          )}
+          {chat.isPrivate === 1 && (
+            <span className="flex items-center gap-1 whitespace-nowrap rounded-pill border border-warning bg-warning-soft px-2 py-0.5 font-medium text-warning">
+              <EyeOff size={11} />
+              Private
+            </span>
           )}
           {chat.scheduleId && (
             <Link
               href={`/automations/schedules/${chat.scheduleId}`}
-              className="flex items-center gap-1 px-2 py-0.5 rounded-pill bg-info-soft border border-info text-info dark:text-info text-xs font-medium whitespace-nowrap hover:opacity-80 transition-opacity"
-              onClick={(e) => e.stopPropagation()}
+              className={cn(
+                'flex items-center gap-1 whitespace-nowrap rounded-pill border border-info bg-info-soft px-2 py-0.5 font-medium text-info transition-opacity hover:opacity-80',
+                listRowInteractive,
+              )}
             >
               <CalendarClock size={11} />
               Scheduled
             </Link>
           )}
           {!hideWorkspaceChip && chat.workspaceId && workspace && (
-            <WorkspaceChip
-              id={chat.workspaceId}
-              name={workspace.name}
-              icon={workspace.icon}
-              color={workspace.color}
-              muted={workspace.archived}
+            <span className={listRowInteractive}>
+              <WorkspaceChip
+                id={chat.workspaceId}
+                name={workspace.name}
+                icon={workspace.icon}
+                color={workspace.color}
+                muted={workspace.archived}
+                inert
+              />
+            </span>
+          )}
+        </>
+      }
+      actions={
+        <>
+          {(isInProgress || isAwaitingUser) && (
+            <ListRowAction
+              icon={OctagonX}
+              label="Stop run"
+              danger
+              loading={cancelRun.isPending}
+              onClick={handleStop}
             />
           )}
-        </div>
-        <div
-          className="flex items-center gap-2"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {(isInProgress || isAwaitingUser) && (
-            <button
-              type="button"
-              onClick={handleStop}
-              disabled={cancelRun.isPending}
-              className={cn(
-                'flex items-center gap-1 px-2 py-1 rounded-control text-xs font-medium border transition-colors duration-150',
-                'bg-danger-soft border-danger text-danger hover:bg-danger hover:text-danger-fg',
-                'disabled:opacity-50 disabled:cursor-not-allowed',
-              )}
-              aria-label="Stop run"
-            >
-              {cancelRun.isPending ? (
-                <LoaderCircle size={12} className="animate-spin" />
-              ) : (
-                <OctagonX size={12} />
-              )}
-              Stop
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              beginEdit();
-            }}
-            aria-label="Rename chat"
-            className="p-1.5 rounded-control text-fg/60 hover:text-fg hover:bg-surface-2 transition-colors"
-          >
-            <Pencil size={15} />
-          </button>
+          <ListRowAction
+            icon={Pencil}
+            label="Rename chat"
+            onClick={beginEdit}
+          />
           <DeleteChat
             chatId={chat.id}
             chats={[chat] as Chat[]}
             setChats={() => onDelete(chat.id)}
             isPrivate={chat.isPrivate === 1}
-            expiresIn={
-              chat.isPrivate === 1
-                ? getPrivateExpiresIn(chat.createdAt, privateSessionDurationMs)
-                : undefined
-            }
+            expiresIn={expiresIn}
           />
-        </div>
-      </div>
-    </div>
+        </>
+      }
+    />
   );
 };
 

@@ -2,6 +2,19 @@ import { test, expect } from '../fixtures';
 import { seedArtifact, seedWorkspace } from '../utils/seed';
 import { uniq } from '../utils/helpers';
 
+/**
+ * The list row whose title matches, scoping assertions to one artifact. Matched
+ * exactly: the shared test DB accumulates artifacts across specs, and a row's
+ * meta carries the chat title, which repeats the artifact title.
+ */
+function artifactRow(page: import('@playwright/test').Page, title: string) {
+  return page.locator('[data-list-row]').filter({
+    has: page.locator('[data-list-row-title]', {
+      hasText: new RegExp(`^${title}$`),
+    }),
+  });
+}
+
 /** Wait for both the artifact list and workspace list queries to finish. */
 async function waitForDataLoaded(page: import('@playwright/test').Page) {
   // Artifact loading spinner.
@@ -56,71 +69,55 @@ test.describe('history: artifact tab', () => {
   }) => {
     const wsName = uniq('Provenance WS');
     const ws = await seedWorkspace(request, { name: wsName });
-    await seedArtifact(request, {
-      title: 'Workspace Doc',
-      workspaceId: ws,
-    });
-    await seedArtifact(request, { title: 'Scoped Doc' });
+    const wsDoc = uniq('Workspace Doc');
+    const scopedDoc = uniq('Scoped Doc');
+    await seedArtifact(request, { title: wsDoc, workspaceId: ws });
+    await seedArtifact(request, { title: scopedDoc });
 
     await page.goto('/history?tab=artifacts');
     await waitForDataLoaded(page);
 
-    // Role-based locator with regex matches the title <button> uniquely even
-    // though its accessible name includes the full meta + chatTitle text.
-    await expect(
-      page.getByRole('button', { name: /Workspace Doc/ }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole('button', { name: /Scoped Doc/ }),
-    ).toBeVisible();
+    await expect(artifactRow(page, wsDoc)).toBeVisible();
+    await expect(artifactRow(page, scopedDoc)).toBeVisible();
 
-    // Workspace chip renders for the owned artifact. The filter-chip button at
-    // the top also matches the same text, so use getByTitle (the row chip has
-    // title={ws.name}) to uniquely target the artifact-row chip.
-    await expect(page.getByTitle(wsName)).toBeVisible();
+    // Workspace chip renders for the owned artifact. The filter chip at the top
+    // carries the same text, so scope the assertion to the artifact's own row.
+    await expect(
+      artifactRow(page, wsDoc).getByRole('link', { name: wsName }),
+    ).toBeVisible();
   });
 
   test('workspace filter chips filter the list', async ({ page, request }) => {
     const ws = await seedWorkspace(request, { name: uniq('Filter WS') });
-    await seedArtifact(request, {
-      title: 'Filtered Doc',
-      workspaceId: ws,
-    });
-    await seedArtifact(request, { title: 'Unfiltered Doc' });
+    const filtered = uniq('Filtered Doc');
+    const unfiltered = uniq('Unfiltered Doc');
+    await seedArtifact(request, { title: filtered, workspaceId: ws });
+    await seedArtifact(request, { title: unfiltered });
 
     await page.goto('/history?tab=artifacts');
     await waitForDataLoaded(page);
 
     // Both visible before filtering.
-    await expect(
-      page.getByRole('button', { name: /Filtered Doc/ }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole('button', { name: /Unfiltered Doc/ }),
-    ).toBeVisible();
+    await expect(artifactRow(page, filtered)).toBeVisible();
+    await expect(artifactRow(page, unfiltered)).toBeVisible();
 
     // Filter to "No workspace" only (chat-scoped).
     await page.getByRole('button', { name: 'No workspace' }).click();
-    await expect(
-      page.getByRole('button', { name: /Unfiltered Doc/ }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole('button', { name: /Filtered Doc/ }),
-    ).toBeHidden();
+    await expect(artifactRow(page, unfiltered)).toBeVisible();
+    await expect(artifactRow(page, filtered)).toBeHidden();
   });
 
   test('clicking a row navigates to the chat with ?artifact=', async ({
     page,
     request,
   }) => {
-    const { chatId, artifactId } = await seedArtifact(request, {
-      title: 'Navigate Me',
-    });
+    const title = uniq('Navigate Me');
+    const { chatId, artifactId } = await seedArtifact(request, { title });
 
     await page.goto('/history?tab=artifacts');
     await waitForDataLoaded(page);
 
-    await page.getByRole('button', { name: /Navigate Me/ }).click();
+    await artifactRow(page, title).locator('[data-list-row-title]').click();
     await expect(page).toHaveURL(
       new RegExp(`/c/${chatId}\\?artifact=${artifactId}`),
     );
@@ -134,20 +131,19 @@ test.describe('history: artifact tab', () => {
     page,
     request,
   }) => {
-    const { artifactId } = await seedArtifact(request, {
-      title: 'Open Me Tab',
-    });
+    const title = uniq('Open Me Tab');
+    const { artifactId } = await seedArtifact(request, { title });
 
     await page.goto('/history?tab=artifacts');
     await waitForDataLoaded(page);
 
     const newTabPromise = page.waitForEvent('popup');
 
-    // Scope the click to the seeded artifact's row by traversing up from the
-    // title button, so we never hit a different row's affordance.
-    const titleBtn = page.getByRole('button', { name: /Open Me Tab/ });
-    const row = titleBtn.locator('xpath=..');
-    await row.getByRole('button', { name: 'Open in a new tab' }).click();
+    // Scope the click to the seeded artifact's row so we never hit a different
+    // row's affordance.
+    await artifactRow(page, title)
+      .getByRole('button', { name: 'Open in a new tab' })
+      .click();
 
     const newTab = await newTabPromise;
     await expect(newTab).toHaveURL(`/api/artifacts/${artifactId}/raw`);

@@ -39,7 +39,7 @@ test.describe('smoke: public routes render', () => {
     ).toBeVisible();
 
     // With seeded data, at least one chat row should be visible
-    await expect(page.locator('[role="link"]').first()).toBeVisible({
+    await expect(page.locator('[data-list-row]').first()).toBeVisible({
       timeout: 10000,
     });
   });

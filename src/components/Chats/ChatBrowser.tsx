@@ -4,8 +4,8 @@
 import ChatRow, { WorkspaceMeta } from './ChatRow';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/Input';
-import { workspaceColorClasses } from '@/lib/workspaces/appearance';
-import WorkspaceIcon from '@/components/Workspaces/WorkspaceIcon';
+import { ListCount, ListEmptyState, ListLoading } from '@/components/ui/List';
+import WorkspaceFilterChips from '@/components/Workspaces/WorkspaceFilterChips';
 import {
   CalendarClock,
   LoaderCircle,
@@ -265,67 +265,13 @@ const ChatBrowser = ({ workspaceId }: Props) => {
     qc.invalidateQueries({ queryKey: qk.chatSearchRoot });
   };
 
-  const toggleWorkspaceFilter = (id: string) => {
-    setSelectedWorkspaceFilters((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
-  };
-
   return (
     <div>
-      {/* Workspace filter chips (unscoped mode only) */}
-      {!scoped && activeWorkspaces.length > 0 && (
-        <div className="flex items-center gap-2 mb-3 overflow-x-auto pb-1">
-          <button
-            type="button"
-            onClick={() => setSelectedWorkspaceFilters([])}
-            className={cn(
-              'flex items-center gap-1 px-2.5 py-1 rounded-pill text-xs font-medium border transition-colors whitespace-nowrap',
-              selectedWorkspaceFilters.length === 0
-                ? 'bg-accent/10 border-accent/30 text-accent'
-                : 'bg-surface border-surface-2 text-fg/60 hover:text-fg hover:border-fg/30',
-            )}
-          >
-            All
-          </button>
-          {activeWorkspaces.map((ws) => {
-            const c = workspaceColorClasses(ws.color);
-            const selected = selectedWorkspaceFilters.includes(ws.id);
-            return (
-              <button
-                type="button"
-                key={ws.id}
-                onClick={() => toggleWorkspaceFilter(ws.id)}
-                className={cn(
-                  'flex items-center gap-1 px-2.5 py-1 rounded-pill text-xs font-medium border transition-colors whitespace-nowrap',
-                  selected
-                    ? cn(c.bgTint, c.border, c.text)
-                    : 'bg-surface border-surface-2 text-fg/60 hover:text-fg hover:border-fg/30',
-                )}
-              >
-                <WorkspaceIcon
-                  name={ws.icon}
-                  color={ws.color}
-                  size={11}
-                  applyColor={selected}
-                />
-                {ws.name}
-              </button>
-            );
-          })}
-          <button
-            type="button"
-            onClick={() => toggleWorkspaceFilter('none')}
-            className={cn(
-              'flex items-center gap-1 px-2.5 py-1 rounded-pill text-xs font-medium border transition-colors whitespace-nowrap',
-              selectedWorkspaceFilters.includes('none')
-                ? 'bg-accent/10 border-accent/30 text-accent'
-                : 'bg-surface border-surface-2 text-fg/60 hover:text-fg hover:border-fg/30',
-            )}
-          >
-            No workspace
-          </button>
-        </div>
+      {!scoped && (
+        <WorkspaceFilterChips
+          selected={selectedWorkspaceFilters}
+          onChange={setSelectedWorkspaceFilters}
+        />
       )}
 
       {/* Header (search bar) */}
@@ -413,14 +359,15 @@ const ChatBrowser = ({ workspaceId }: Props) => {
           <CalendarClock size={11} />
           {scheduledFilter === 'unscheduled' ? 'Unscheduled' : 'Scheduled'}
         </button>
-        {!isSearchMode && totalConversations > 0 && (
-          <span className="text-xs text-fg/50">
-            {totalMessages} message{totalMessages === 1 ? '' : 's'} in{' '}
-            {totalConversations} conversation
-            {totalConversations === 1 ? '' : 's'}
-          </span>
-        )}
       </div>
+
+      {!isSearchMode && totalConversations > 0 && (
+        <ListCount>
+          {totalMessages} message{totalMessages === 1 ? '' : 's'} in{' '}
+          {totalConversations} conversation
+          {totalConversations === 1 ? '' : 's'}
+        </ListCount>
+      )}
 
       {/* Search status */}
       {isSearchMode && (
@@ -454,29 +401,21 @@ const ChatBrowser = ({ workspaceId }: Props) => {
         </div>
       )}
 
-      {loading && browseChats.length === 0 && (
-        <div className="flex flex-row items-center justify-center min-h-[30vh]">
-          <LoaderCircle size={32} className="animate-spin text-accent" />
-        </div>
-      )}
+      {loading && browseChats.length === 0 && <ListLoading />}
 
       {!loading && !isSearchMode && browseChats.length === 0 && (
-        <div className="flex flex-row items-center justify-center min-h-[30vh]">
-          <p className="text-fg/70 text-sm">
-            {scoped ? 'No chats in this workspace yet.' : 'No chats found.'}
-          </p>
-        </div>
+        <ListEmptyState>
+          {scoped ? 'No chats in this workspace yet.' : 'No chats yet.'}
+        </ListEmptyState>
       )}
 
       {isSearchMode && !isSearching && searchResults.length === 0 && (
-        <div className="flex flex-row items-center justify-center min-h-[30vh]">
-          <p className="text-fg/70 text-sm">No matching conversations found.</p>
-        </div>
+        <ListEmptyState>No conversations match your search.</ListEmptyState>
       )}
 
       {displayedChats.length > 0 && (
         <div className="flex flex-col pb-20 lg:pb-2">
-          {displayedChats.map((chat, i) => {
+          {displayedChats.map((chat) => {
             const activeRun = activeRunMap.get(chat.id);
             // Merge in-progress state from the shared poll into the row.
             const enrichedChat = activeRun
@@ -491,7 +430,6 @@ const ChatBrowser = ({ workspaceId }: Props) => {
               <ChatRow
                 key={chat.id}
                 chat={enrichedChat}
-                isLast={i === displayedChats.length - 1}
                 isSearchMode={isSearchMode}
                 searchTerms={
                   searchTerms.length > 0 ? searchTerms : [debouncedQuery]

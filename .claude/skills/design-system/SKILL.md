@@ -67,6 +67,20 @@ Use `animate-spin` from Tailwind for continuous rotation (spinners).
 
 `src/components/ui/ApprovalPanel.tsx` is the shell for every in-message approval/prompt (code execution, MCP tool, workspace + skill edits, agent questions). It owns the header bar, the `shadow-raised` floating card, the height cap with a scrolling body, and the `justify-end` footer — pass `icon`, `title`, optional `chips` (`ApprovalChip` for a monospace identifier), `queuePosition`/`queueTotal`, `onDismiss`, `footer` and the body as children.
 
+## Lists
+
+`src/components/ui/List.tsx` is the shared browse-list vocabulary — **use it for every page-level list of records** (History conversations, History artifacts, Scheduled Tasks). It exists because three lists had grown four title sizes, four row paddings, three hover idioms and three empty-state spellings for one role.
+
+- `ListRow` slots: `leading` (unread dot, pin) · `title` · `body` (a search excerpt) · `meta` · `actions`. Row is `py-3` with `border-b border-surface-2` between rows; title is `text-base font-medium truncate` and owns its line; meta is `text-xs text-fg/60`.
+- **Navigation is a real `<a>`**: pass `href` and the title link stretches over the row via `after:absolute after:inset-0`, so cmd/middle-click and open-in-new-tab work. Never navigate a row with `router.push` on a `role="link"` div. A row with no `href` gets no overlay and no hover fill.
+- Anything else clickable inside the row — a nested chip `<Link>`, the action cluster — must lift above that overlay with the exported `listRowInteractive` class.
+- Chips (workspace, private, scheduled) are **meta segments**, not title-line decorations. Meta segments are separated by `gap-x-3`, never by interpuncts, and carry an icon only when it means something (status, not decoration).
+- `ListRowAction` is the icon-button in the trailing cluster (`listRowActionClasses()` for a `<Link>` trigger). Actions stay **always visible** — hover-reveal is unreachable on touch. Its hover fill is `bg-surface`, the inverse of the row's `bg-surface-2`, so it stays visible on a hovered row.
+- Destructive actions open a `Modal`; never swap the cluster for inline Confirm/Cancel buttons, which makes the row reflow.
+- Rows never stack responsively — the meta row wraps instead.
+- `ListLoading` (`min-h-[30vh]`, spinner 32), `ListEmptyState` (one centred `text-sm text-fg/70` line, may contain an inline accent link) and `ListCount` (`text-xs text-fg/50` above the list) are the chrome. Card grids (Workflows, Workspaces) keep their richer icon + CTA empty states.
+- Rows expose `data-list-row` and titles `data-list-row-title` as e2e hooks; `data-*` props pass through.
+
 ## Modals
 
 `src/components/ui/Modal.tsx` is the **only** dialog shell — never hand-roll a `fixed inset-0` scrim, and never reach for headlessui's `Dialog`/`DialogPanel` directly. It supplies the focus trap, `role="dialog"`, Escape, background inerting and the fade/scale transition.
@@ -112,6 +126,7 @@ Use `animate-spin` from Tailwind for continuous rotation (spinners).
 - **ALWAYS** default body text to `text-sm` at normal weight (`400`); use `font-medium` (`500`) for emphasis and `font-semibold` (`600`) for headings.
 - **ALWAYS** pair `transition-colors` with `duration-150` (or `100`/`200`) for hover/focus states.
 - **ALWAYS** use the `Card` primitive (`src/components/ui/Card.tsx`) for a bordered content surface, and `ApprovalPanel` for an in-message approval — never retype the `bg-surface border border-surface-2 rounded-*` recipe.
+- **ALWAYS** use `ListRow` and its chrome (`src/components/ui/List.tsx`) for a page-level browse list.
 - **ALWAYS** use the `Modal` primitive (`src/components/ui/Modal.tsx`) for any dialog — it already owns the `bg-overlay` scrim, panel chrome, sizing and accessibility.
 - **ALWAYS** use `bg-overlay` (or `bg-overlay-strong`) for popover scrims and backdrops outside `Modal` — it's a theme-aware dark scrim.
 - **ALWAYS** add new tokens to `@theme` in `src/app/globals.css` if a needed semantic doesn't yet exist — extend the system rather than reach for a raw value.
@@ -123,6 +138,7 @@ Use `animate-spin` from Tailwind for continuous rotation (spinners).
 - **NEVER** use `text-white`, `bg-white`, `text-black`, `bg-black` directly — they don't flip with theme. Use `text-fg` / `bg-bg`, or `text-accent-fg` on accent fills, or `bg-overlay` for scrims.
 - **NEVER** use `bg-fg/30` (or any `bg-fg/*`) for a modal scrim — `fg` is light on dark themes, so the backdrop reads bright. Use `bg-overlay` instead.
 - **NEVER** hand-roll a card surface (`<div className="bg-surface border border-surface-2 rounded-surface …">`) — that is what produced 21 spellings of one role, drifting on radius and shadow. Use `Card`.
+- **NEVER** hand-roll a browse-list row (`py-6` + `border-b` + `router.push` on a `role="link"` div) — that is what produced four title sizes and three hover idioms for one role, and it breaks cmd-click. Use `ListRow`.
 - **NEVER** introduce new shadow utilities outside `shadow-resting` / `shadow-raised` / `shadow-floating`.
 - **NEVER** hand-roll a labeled action button (`<button className="px-3 py-2 rounded-control bg-accent …">`) — that is what produced 46 spellings of one role. Use `Button`, or `buttonClasses()` for a non-`<button>` trigger.
 - **NEVER** hand-roll a form control (`<input className="px-3 py-2 rounded-control bg-surface …">`) — that is what produced four fills, two radii, and two focus idioms for one role. Use `Input` / `Textarea` / `Field` / `Select`.
@@ -147,4 +163,5 @@ Use `animate-spin` from Tailwind for continuous rotation (spinners).
 - `src/components/ui/Select.tsx` — the shared select primitive (canonical recipe, `options`/`children` API, 1px accent border flip).
 - `src/components/ui/Input.tsx` — the shared text input primitive (canonical recipe + `controlClasses`, 1px accent border flip).
 - `src/components/ui/Textarea.tsx` — the shared textarea primitive (canonical recipe + `resize-y`).
+- `src/components/ui/List.tsx` — the browse-list primitives (`ListRow`, `ListRowAction`, `ListLoading`, `ListEmptyState`, `ListCount`, `listRowInteractive`).
 - `src/components/ui/Field.tsx` — the label/control wrapper (wrapping `<label>`, `hint`/`error`, `FieldContext` aria wiring).

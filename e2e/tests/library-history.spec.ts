@@ -43,6 +43,12 @@ test.describe('history: library', () => {
     expect(counts).not.toBeNull();
     expect(counts!.conversations).toBeGreaterThanOrEqual(seedContents.length);
     expect(counts!.messages).toBeGreaterThanOrEqual(seedContents.length);
+
+    // Rows navigate via a real anchor, so they honour cmd/middle-click and
+    // "open in new tab" rather than only a JS click handler.
+    await expect(
+      historyPage.chatRowWithTitle(seedContents[0]).getByRole('link').first(),
+    ).toHaveAttribute('href', /\/c\//);
   });
 
   test('text search finds matching chats and excludes non-matching', async ({
@@ -94,7 +100,7 @@ test.describe('history: library', () => {
 
     // The empty-search message is shown.
     await expect(
-      page.getByText('No matching conversations found.'),
+      page.getByText('No conversations match your search.'),
     ).toBeVisible();
 
     // No chat rows are rendered.

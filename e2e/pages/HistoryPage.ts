@@ -8,7 +8,7 @@ export class HistoryPage extends BasePage {
   });
 
   /** All chat rows in the browse list. */
-  private readonly chatRows = this.page.locator('[role="link"]');
+  private readonly chatRows = this.page.locator('[data-list-row]');
 
   /** The summary line: "N message(s) in N conversation(s)". Matched by text,
    * not its (shared) utility classes — chat rows render status pill badges
@@ -33,9 +33,7 @@ export class HistoryPage extends BasePage {
     const titles: string[] = [];
     const count = await this.chatRows.count();
     for (let i = 0; i < count; i++) {
-      const el = this.chatRows
-        .nth(i)
-        .locator('.lg\\:text-xl.font-medium.truncate');
+      const el = this.chatRows.nth(i).locator('[data-list-row-title]');
       if ((await el.count()) > 0) {
         titles.push((await el.textContent()) ?? '');
       }
@@ -63,9 +61,7 @@ export class HistoryPage extends BasePage {
   /** Locator for a chat row whose title matches the given text. */
   chatRowWithTitle(title: string): Locator {
     return this.chatRows.filter({
-      has: this.page.locator('.lg\\:text-xl.font-medium.truncate', {
-        hasText: title,
-      }),
+      has: this.page.locator('[data-list-row-title]', { hasText: title }),
     });
   }
 }

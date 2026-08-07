@@ -1,9 +1,10 @@
-import { ShieldAlert, Trash } from 'lucide-react';
+import { Trash } from 'lucide-react';
 import { Description } from '@headlessui/react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { Chat } from '@/components/Chats/ChatRow';
 import { Button } from '@/components/ui/Button';
+import { ListRowAction } from '@/components/ui/List';
 import Modal from '@/components/ui/Modal';
 
 const DeleteChat = ({
@@ -67,26 +68,13 @@ const DeleteChat = ({
           <Trash size={17} className="shrink-0" />
           Delete chat
         </button>
-      ) : isPrivate ? (
-        <button
-          type="button"
-          onClick={() => setConfirmationDialogOpen(true)}
-          className="flex items-center gap-1.5 px-2 py-1 rounded-surface bg-danger-soft border border-danger text-danger hover:bg-danger-soft transition duration-200 text-xs"
-        >
-          <ShieldAlert size={14} />
-          <span>Delete</span>
-          {expiresIn && <span className="opacity-60">· {expiresIn}</span>}
-        </button>
       ) : (
-        <button
-          type="button"
-          onClick={() => {
-            setConfirmationDialogOpen(true);
-          }}
-          className="bg-transparent text-danger hover:scale-105 transition duration-200"
-        >
-          <Trash size={17} />
-        </button>
+        <ListRowAction
+          icon={Trash}
+          label="Delete chat"
+          danger
+          onClick={() => setConfirmationDialogOpen(true)}
+        />
       )}
       <Modal
         open={confirmationDialogOpen}
@@ -106,6 +94,9 @@ const DeleteChat = ({
       >
         <Description className="text-sm">
           Are you sure you want to delete this chat?
+          {isPrivate && expiresIn
+            ? ` It is a private chat and would expire on its own in ${expiresIn}.`
+            : ''}
         </Description>
       </Modal>
     </>

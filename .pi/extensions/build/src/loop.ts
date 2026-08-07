@@ -42,6 +42,9 @@ function readDocument(cwd: string, relative: string | null): string {
   }
 }
 
+const sections = (...parts: string[]): string =>
+  parts.filter(Boolean).join('\n\n');
+
 function chunkText(chunk: TaskChunk): string {
   return [
     `## Chunk ${chunk.number} — ${chunk.title}`,
@@ -51,7 +54,11 @@ function chunkText(chunk: TaskChunk): string {
 
 // Every task carries the plan and the chunk, so a reseeded agent with no history
 // still has what it needs — the reseed costs continuity, not context.
-function briefFor(role: AgentRole, brief: ChunkBrief, feedback: string): string {
+function briefFor(
+  role: AgentRole,
+  brief: ChunkBrief,
+  feedback: string,
+): string {
   const done = brief.completed.length
     ? `\n\nAlready merged: ${brief.completed.join(', ')}.`
     : '';
@@ -81,7 +88,8 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
 
       async execute(_id, _params, signal, onUpdate, ctx) {
         const state = controller.current();
-        if (!state) throw new Error('No active workflow. Start one with /build.');
+        if (!state)
+          throw new Error('No active workflow. Start one with /build.');
         if (state.phase !== 'execute') {
           throw new Error(
             `workflow_run_chunk is not available in the ${state.phase} phase.`,
@@ -99,13 +107,16 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
             'The task list changed since the last chunk.',
             'Run the next unfinished chunk from the edited file?',
           );
-          if (!proceed) return say('Stopped: the task list changed and was not confirmed.');
+          if (!proceed)
+            return say('Stopped: the task list changed and was not confirmed.');
         }
 
         const chunk = nextChunk(parseTasks(original));
         if (!chunk) {
           controller.update(advance(state, 'close', new Date()));
-          return say('Every chunk is complete. Close the workflow with workflow_close.');
+          return say(
+            'Every chunk is complete. Close the workflow with workflow_close.',
+          );
         }
 
         const brief: ChunkBrief = {
@@ -122,7 +133,8 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
           onUpdate?.(say(activity.slice(-12).join('\n')));
         };
 
-        const contextWindow = ctx.model?.contextWindow ?? DEFAULT_CONTEXT_WINDOW;
+        const contextWindow =
+          ctx.model?.contextWindow ?? DEFAULT_CONTEXT_WINDOW;
         let working = state;
 
         const runRole = async (role: AgentRole, feedback: string) => {
@@ -166,20 +178,25 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
           return result;
         };
 
-        let feedback = '';
+        let testFeedback = '';
+        let reviewFeedback = '';
         const problems: string[] = [];
 
         for (let round = 1; round <= config.maxRounds; round++) {
           note(`--- round ${round} of ${config.maxRounds} ---`);
 
-          const coder = await runRole('coder', feedback);
+          const coder = await runRole(
+            'coder',
+            sections(testFeedback, reviewFeedback),
+          );
           if (coder.exitCode !== 0) {
             throw new Error(
               `The coder agent failed (exit ${coder.exitCode}).\n${coder.stderr.slice(0, 500)}`,
             );
           }
 
-          const tester = await runRole('tester', feedback);
+          // The tester sees only test failures — review findings are the coder's to fix.
+          const tester = await runRole('tester', testFeedback);
           const tests = decodeTestResult(tester.toolCalls);
           const reviewer = await runRole('reviewer', '');
           const verdict = decodeVerdict(reviewer.toolCalls);
@@ -196,7 +213,9 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
             };
             // Advance here when this was the last chunk, so close does not need a
             // further run_chunk call just to discover there is nothing left.
-            const remaining = nextChunk(parseTasks(readFileSync(taskFile, 'utf-8')));
+            const remaining = nextChunk(
+              parseTasks(readFileSync(taskFile, 'utf-8')),
+            );
             controller.update(
               remaining ? finished : advance(finished, 'close', new Date()),
             );
@@ -210,21 +229,30 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
           }
 
           // Fail-closed: an undecodable signal is a failure with its reason, not a pass.
-          const why = [
-            tests.ok
-              ? isGreen(tests.value)
-                ? null
-                : `Tests: ${tests.value.failed} failing.\n${tests.value.output.slice(0, 2000)}`
-              : `Tests: ${tests.reason}`,
-            verdict.ok
-              ? verdict.value.verdict === 'pass'
-                ? null
-                : `Reviewer blocking:\n- ${verdict.value.blocking.join('\n- ')}`
-              : `Reviewer: ${verdict.reason}`,
-          ].filter((line): line is string => Boolean(line));
+          testFeedback = tests.ok
+            ? isGreen(tests.value)
+              ? ''
+              : `Tests: ${tests.value.failed} failing.\n${tests.value.output.slice(0, 2000)}`
+            : `Tests: ${tests.reason}`;
 
-          feedback = why.join('\n\n');
-          problems.push(`Round ${round}:\n${feedback}`);
+          // The blocking list is only the headline; the prose carries the reasoning behind
+          // each finding, and is the whole review when the verdict itself does not decode.
+          const report = reviewer.text.trim();
+          reviewFeedback = verdict.ok
+            ? verdict.value.verdict === 'pass'
+              ? ''
+              : sections(
+                  `Reviewer blocking:\n- ${verdict.value.blocking.join('\n- ')}`,
+                  report,
+                )
+            : sections(
+                `Reviewer: ${verdict.reason}`,
+                report && `Reviewer report:\n${report}`,
+              );
+
+          problems.push(
+            `Round ${round}:\n${sections(testFeedback, reviewFeedback)}`,
+          );
           note(`round ${round} failed`);
         }
 

@@ -1,6 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
+import { Tabs } from '@/components/ui/Tabs';
 import { SectionKey, SETTINGS_SECTIONS } from '../types';
 
 export function MobileSettingsNav({
@@ -12,23 +13,14 @@ export function MobileSettingsNav({
 }) {
   return (
     <div className="lg:hidden overflow-x-auto overflow-hidden-scrollable -mx-4 px-4 mb-4">
-      <div className="flex flex-nowrap gap-2 pb-2">
-        {SETTINGS_SECTIONS.map((section) => (
-          <button
-            type="button"
-            key={section.key}
-            onClick={() => onSelect(section.key)}
-            className={cn(
-              'whitespace-nowrap px-3 py-1.5 rounded-pill text-sm border transition-colors',
-              activeSection === section.key
-                ? 'bg-accent text-accent-fg border-accent'
-                : 'bg-surface border-surface-2 text-fg/70 hover:text-fg',
-            )}
-          >
-            {section.label}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        activeKey={activeSection}
+        items={SETTINGS_SECTIONS.map((section) => ({
+          key: section.key,
+          label: section.label,
+          onClick: () => onSelect(section.key),
+        }))}
+      />
     </div>
   );
 }

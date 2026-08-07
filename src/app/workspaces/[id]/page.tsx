@@ -8,21 +8,22 @@ import {
   Settings,
   LoaderCircle,
   BookOpen,
+  type LucideIcon,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
-import { cn } from '@/lib/utils';
 import FilesTab from '@/components/Workspaces/FilesTab';
 import ChatsTab from '@/components/Workspaces/ChatsTab';
 import InstructionsTab from '@/components/Workspaces/InstructionsTab';
 import SettingsTab from '@/components/Workspaces/SettingsTab';
 import WorkspaceMemoryTab from '@/components/Workspaces/WorkspaceMemoryTab';
+import { Tabs } from '@/components/ui/Tabs';
 import { useWorkspace } from '@/lib/hooks/api/useWorkspaces';
 
 type TabId = 'chats' | 'files' | 'instructions' | 'memory' | 'settings';
 
-const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
+const TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
   { id: 'chats', label: 'Chats', icon: MessageSquare },
   { id: 'files', label: 'Files', icon: FileText },
   { id: 'instructions', label: 'Instructions', icon: BookOpen },
@@ -66,24 +67,16 @@ const WorkspaceDetailPage = () => {
       <div className="lg:hidden flex flex-col flex-1">
         <div className="border-b border-surface-2 bg-surface">
           <div className="max-w-screen-lg mx-auto px-4 sm:px-8">
-            <div className="flex gap-1 overflow-x-auto">
-              {TABS.map((tab) => (
-                <button
-                  type="button"
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={cn(
-                    'flex items-center gap-1.5 px-4 py-2.5 text-sm border-b-2 transition-colors whitespace-nowrap',
-                    activeTab === tab.id
-                      ? 'border-accent text-fg font-medium'
-                      : 'border-transparent text-fg/50 hover:text-fg',
-                  )}
-                >
-                  <tab.icon size={14} />
-                  {tab.label}
-                </button>
-              ))}
-            </div>
+            <Tabs
+              className="overflow-x-auto py-2"
+              activeKey={activeTab}
+              items={TABS.map((tab) => ({
+                key: tab.id,
+                label: tab.label,
+                icon: tab.icon,
+                onClick: () => setActiveTab(tab.id),
+              }))}
+            />
           </div>
         </div>
         <div className="max-w-screen-lg mx-auto px-4 sm:px-8 py-6 w-full flex-1 overflow-auto">

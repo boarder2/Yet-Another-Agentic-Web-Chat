@@ -10,4 +10,7 @@ export default defineConfig({
   dbCredentials: {
     url: path.join(DATA_DIR, 'db.sqlite'),
   },
+  // Owned by LangGraph's SqliteSaver, not schema.ts — without this, push drops
+  // them and any in-flight run's checkpoint with them.
+  tablesFilter: ['!checkpoints', '!writes'],
 });

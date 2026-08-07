@@ -182,23 +182,33 @@ export async function runRetentionCleanup(): Promise<RetentionSummary> {
   }
 
   try {
-    const pinnedRows = sqlite
+    // The saver creates its tables lazily at boot, so on a DB that has never
+    // initialized one there is nothing to collect.
+    const hasCheckpoints = sqlite
       .prepare(
-        `SELECT active_run_thread_id AS t FROM chats WHERE active_run_thread_id IS NOT NULL`,
+        `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'checkpoints'`,
       )
-      .all() as Array<{ t: string }>;
-    const pinned = new Set(pinnedRows.map((r) => r.t));
-    const threadRows = sqlite
-      .prepare(`SELECT DISTINCT thread_id AS t FROM checkpoints`)
-      .all() as Array<{ t: string }>;
-    let gc = 0;
-    for (const { t } of threadRows) {
-      if (!pinned.has(t)) {
-        await deleteCheckpoint(t).catch(() => {});
-        gc += 1;
+      .get();
+    if (hasCheckpoints) {
+      const pinnedRows = sqlite
+        .prepare(
+          `SELECT active_run_thread_id AS t FROM chats WHERE active_run_thread_id IS NOT NULL`,
+        )
+        .all() as Array<{ t: string }>;
+      const pinned = new Set(pinnedRows.map((r) => r.t));
+      const threadRows = sqlite
+        .prepare(`SELECT DISTINCT thread_id AS t FROM checkpoints`)
+        .all() as Array<{ t: string }>;
+      let gc = 0;
+      for (const { t } of threadRows) {
+        if (!pinned.has(t)) {
+          await deleteCheckpoint(t).catch(() => {});
+          gc += 1;
+        }
       }
+      if (gc > 0)
+        console.log(`[retention] checkpoints: deleted ${gc} unpinned`);
     }
-    if (gc > 0) console.log(`[retention] checkpoints: deleted ${gc} unpinned`);
   } catch (err) {
     console.warn('[retention] checkpoint GC failed:', err);
   }

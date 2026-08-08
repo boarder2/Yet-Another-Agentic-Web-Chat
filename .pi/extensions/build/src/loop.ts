@@ -43,8 +43,12 @@ const DEFAULT_CONTEXT_WINDOW = 200_000;
 
 interface ChunkBrief {
   chunk: TaskChunk;
+  ask: string;
   plan: string;
-  completed: string[];
+  planPath: string | null;
+  taskPath: string;
+  /** Every chunk with its state, so an agent sees where its chunk sits in the whole. */
+  outline: string;
 }
 
 function readDocument(cwd: string, relative: string | null): string {
@@ -66,30 +70,69 @@ function chunkText(chunk: TaskChunk): string {
   ].join('\n');
 }
 
-// Every task carries the plan, the chunk, and what is already merged, so an agent
-// with no history still has what it needs. That is what makes a per-chunk reset
-// affordable: it costs continuity, not the brief.
+function outlineOf(chunks: TaskChunk[], current: TaskChunk): string {
+  return chunks
+    .map(
+      (chunk) =>
+        `- [${chunk.complete ? 'x' : ' '}] Chunk ${chunk.number} — ${chunk.title}` +
+        (chunk.id === current.id ? '   <- this chunk' : ''),
+    )
+    .join('\n');
+}
+
+// A first brief carries the ask, the plan, the whole task list and the chunk, plus
+// the paths both documents live at, so an agent with no history can both act and go
+// read for itself. That is what makes a per-chunk reset affordable: it costs
+// continuity, not the brief.
+function firstBrief(role: AgentRole, brief: ChunkBrief): string {
+  const where = sections(
+    `Ask: ${brief.ask}`,
+    brief.planPath
+      ? `The plan is at ${brief.planPath} and the task list at ${brief.taskPath} — read them whenever you need more than this brief carries.`
+      : `The task list is at ${brief.taskPath} — read it whenever you need more than this brief carries.`,
+    `--- TASK LIST ---\n${brief.outline}`,
+  );
+  const preamble = sections(
+    where,
+    `--- THIS CHUNK ---\n${chunkText(brief.chunk)}`,
+    brief.plan ? `--- PLAN ---\n${brief.plan}` : '',
+  );
+
+  if (role === 'coder') {
+    return sections(
+      'Implement exactly this chunk and nothing else, then report with submit_completion.',
+      preamble,
+    );
+  }
+  if (role === 'tester') {
+    return sections(
+      'Write and run tests for the chunk just implemented, then report with submit_test_result.',
+      preamble,
+    );
+  }
+  return sections(
+    'Review the code and tests for this chunk against it, then report with submit_verdict.',
+    preamble,
+  );
+}
+
+// A later round in the same session: the agent still holds the brief it was given,
+// so it gets the feedback and nothing else.
 function briefFor(
   role: AgentRole,
   brief: ChunkBrief,
   feedback: string,
+  fresh: boolean,
 ): string {
-  const done = brief.completed.length
-    ? `\n\nAlready merged: ${brief.completed.join(', ')}.`
-    : '';
-  const preamble = `${chunkText(brief.chunk)}\n\n--- PLAN ---\n${brief.plan}${done}`;
+  if (fresh) return firstBrief(role, brief);
 
   if (role === 'coder') {
-    return `Implement exactly this chunk and nothing else, then report with submit_completion.\n\n${preamble}${
-      feedback ? `\n\n--- FIX THESE ---\n${feedback}` : ''
-    }`;
+    return `Chunk ${brief.chunk.number} did not pass. Fix exactly this, then report again with submit_completion.\n\n--- FIX THESE ---\n${feedback}`;
   }
-  if (role === 'tester') {
-    return `Write and run tests for the chunk just implemented, then report with submit_test_result.\n\n${preamble}${
-      feedback ? `\n\n--- PREVIOUS FAILURES ---\n${feedback}` : ''
-    }`;
-  }
-  return `Review the code and tests for this chunk against it, then report with submit_verdict.\n\n${preamble}`;
+  return sections(
+    `The coder has changed the code for chunk ${brief.chunk.number}. Re-run the tests, extend them where the fix needs it, then report again with submit_test_result.`,
+    feedback ? `--- PREVIOUS FAILURES ---\n${feedback}` : '',
+  );
 }
 
 export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
@@ -143,10 +186,11 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
 
         const brief: ChunkBrief = {
           chunk,
+          ask: state.ask,
           plan: readDocument(ctx.cwd, state.planPath),
-          completed: parseTasks(original)
-            .chunks.filter((candidate) => candidate.complete)
-            .map((candidate) => `Chunk ${candidate.number}`),
+          planPath: state.planPath,
+          taskPath: state.taskPath,
+          outline: outlineOf(parseTasks(original).chunks, chunk),
         };
 
         const activity: string[] = [];
@@ -192,6 +236,10 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
         // record of the layout to fall out of step with what is on screen.
         let crew: Crew = {};
 
+        // Roles whose current session has already had the full brief this call. The
+        // reviewer is never in it: it is retired every round, so it is always new.
+        const briefed = new Set<AgentRole>();
+
         const runOne = async (role: AgentRole, feedback: string) => {
           // A reseed only takes effect once the old agent is gone, since the new one
           // is adopted under the same name.
@@ -199,10 +247,13 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
             const name = role;
             const used = sessionTokens(ctx.cwd, chunkSessionId(name));
             if (used > contextWindow * config.contextBudget) {
-              note(`${role}: context budget reached within the chunk, reseeding`);
+              note(
+                `${role}: context budget reached within the chunk, reseeding`,
+              );
               working = reseedAgent(working, name, new Date());
               controller.update(working);
               await retireRole(crewContext(), role);
+              briefed.delete(role);
             }
           }
 
@@ -210,16 +261,23 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
           // a reviewer that has never seen this code.
           if (role === 'reviewer') {
             await retireRole(crewContext(), 'reviewer');
+            briefed.delete('reviewer');
           }
 
           crew = await ensureCrew(crewContext());
+
+          // A session that has not been briefed yet gets the whole thing; one that
+          // has gets only what changed. Feedback the agent cannot act on without the
+          // brief — a coder round with nothing to fix — falls back to the full text.
+          const fresh = !briefed.has(role) || (role === 'coder' && !feedback);
+          briefed.add(role);
 
           note(`${role}: working`);
           return runRole(
             crewContext(),
             crew,
             role,
-            briefFor(role, brief, feedback),
+            briefFor(role, brief, feedback, fresh),
             (blocked) => {
               note(`${blocked}: blocked — asking for input in its pane`);
               ctx.ui.notify(

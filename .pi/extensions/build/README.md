@@ -10,24 +10,24 @@ start outside a herdr session — there is nowhere to put them.
 
 ## Commands
 
-| Command | Effect |
-|---|---|
-| `/build <ask>` | Start a workflow in this session. Refuses if one is already active here. |
-| `/build:pause` | Restore normal tools, keep state. |
-| `/build:resume <slug>` | Re-attach a paused workflow and re-gate tools. |
-| `/build:abort` | Discard phase state. Plan and task files are kept. |
-| `/build:list` | Every workflow in the project with phase, status, and last attachment. |
+| Command                | Effect                                                                   |
+| ---------------------- | ------------------------------------------------------------------------ |
+| `/build <ask>`         | Start a workflow in this session. Refuses if one is already active here. |
+| `/build:pause`         | Restore normal tools, keep state.                                        |
+| `/build:resume <slug>` | Re-attach a paused workflow and re-gate tools.                           |
+| `/build:abort`         | Discard phase state. Plan and task files are kept.                       |
+| `/build:list`          | Every workflow in the project with phase, status, and last attachment.   |
 
 ## Phases and their tools
 
-| Phase | Advances via | Gate |
-|---|---|---|
-| triage | `workflow_triage` | You pick simple/complex; dismissal means complex |
-| grill | `workflow_end_grilling` | You confirm the restatement of the ask |
-| plan | `workflow_write_plan` | Structural validation, then your approval |
-| tasks | `workflow_write_tasks` | Parse validation, then your approval |
-| execute | `workflow_run_chunk` | No arguments — the harness picks the chunk |
-| close | `workflow_close` | Runs configured checks, reports real exit codes |
+| Phase   | Advances via            | Gate                                             |
+| ------- | ----------------------- | ------------------------------------------------ |
+| triage  | `workflow_triage`       | You pick simple/complex; dismissal means complex |
+| grill   | `workflow_end_grilling` | You confirm the restatement of the ask           |
+| plan    | `workflow_write_plan`   | Structural validation, then your approval        |
+| tasks   | `workflow_write_tasks`  | Parse validation, then your approval             |
+| execute | `workflow_run_chunk`    | No arguments — the harness picks the chunk       |
+| close   | `workflow_close`        | Runs configured checks, reports real exit codes  |
 
 A tool called in the wrong phase throws; the model cannot advance by asserting that it has.
 
@@ -35,7 +35,7 @@ A tool called in the wrong phase throws; the model cannot advance by asserting t
 
 1. **Tool gating.** `edit` and `write` are withheld for the whole workflow — all mutation goes
    through subagents. Re-applied on attach, `session_start`, `resources_discover`, and every
-   `before_agent_start`, because `session_start` fires *before* the tool set is rebuilt.
+   `before_agent_start`, because `session_start` fires _before_ the tool set is rebuilt.
 2. **Per-turn prompt injection.** The active phase's rules replace the system prompt every turn,
    so adherence does not decay over a long run.
 3. **Gated tools.** Each transition validates in TypeScript and then asks you. You answer the
@@ -46,7 +46,7 @@ A tool called in the wrong phase throws; the model cannot advance by asserting t
 ## The chunk loop
 
 Per chunk: coder → tester → reviewer, up to `maxRounds` rounds. A chunk completes only when the
-coder reports `completed`, the tester reports **zero failures with at least one pass**, *and* the
+coder reports `completed`, the tester reports **zero failures with at least one pass**, _and_ the
 reviewer reports `pass`. All three arrive as typed arguments to `submit_completion` /
 `submit_test_result` / `submit_verdict`, from an extension injected into each agent via `pi -e`. A
 missing or unreadable signal is a failure, never a pass.
@@ -60,8 +60,14 @@ as `(override: …)`.
 **Every chunk gets a clean crew.** All three agents are retired and restarted when a new chunk
 starts: coder and tester move to a per-chunk session (`wf-<slug>-coder-chunk-3`) and the reviewer to
 a fresh one. Context earned on an earlier chunk is a liability on the next — it is where stale
-assumptions about code that has since changed come from — and every task restates the plan, the
-chunk, and what is already merged, so a fresh agent loses continuity, not the brief.
+assumptions about code that has since changed come from — and a fresh agent's first task restates the
+ask, the plan, the whole task list with its chunk marked, and the paths both documents live at, so it
+loses continuity, not the brief, and can go read for itself when the brief is not enough.
+
+**Later rounds carry only what changed.** The coder and tester keep their session across the rounds of
+a chunk, so a second round hands them the failures and review findings alone rather than the brief they
+are still holding. The reviewer is the exception: it is retired and restarted every round by design, so
+it is always briefed in full.
 
 The reset is keyed on the chunk, so re-running a chunk that failed reattaches to the sessions already
 working on it instead of throwing their work away. Within a chunk, an agent that passes
@@ -90,7 +96,7 @@ next chunk — costing that agent's context, not the layout. Because the agents 
 their results come back through a file named by `YAAWC_BUILD_RESULT` rather than through stdout.
 
 A freshly split pane is not immediately usable: `agent start` needs the shell at its prompt, so the
-loop waits for the pane's foreground process group to *be* the shell before starting anything there.
+loop waits for the pane's foreground process group to _be_ the shell before starting anything there.
 
 ## Files
 
@@ -122,7 +128,7 @@ against the model catalogue. Which model plans and which one grinds chunks is a 
 decision, and a harness that guessed at it would quietly plan on the cheap model. Specs are
 `provider/id`, `provider/id:thinking`, or a bare `id`.
 
-`models.plan` is applied to *your* session for triage, grilling, planning and chunking; entering
+`models.plan` is applied to _your_ session for triage, grilling, planning and chunking; entering
 execution restores whatever model you were on, as do pause, abort and close. It is set only when the
 phase changes, so a manual `/model` inside a phase stands.
 

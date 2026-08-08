@@ -5,10 +5,8 @@ import { ToolMessage } from '@langchain/core/messages';
 import { isSoftStop } from '@/lib/utils/runControl';
 import { getOpenrouterApiKey } from '@/lib/config';
 import { getImageGenerationConfig } from '@/lib/settings/server';
-import path from 'path';
-import fs from 'fs';
-import crypto from 'crypto';
-import { UPLOADS_DIR } from '@/lib/dataDir';
+import { TEST_IMAGE_GENERATION_FIXTURE } from '@/lib/providers/test';
+import { createGeneratedImage } from '@/lib/generatedImages/service';
 import { defineTool } from '@/lib/tools/defineTool';
 
 // ─── Backend interface (extensible to OpenAI etc.) ────────────────────────
@@ -36,6 +34,19 @@ interface ImageGenerationBackend {
     params: ImageGenParams,
     signal?: AbortSignal,
   ): Promise<ImageGenResult>;
+}
+
+class TestImageGenerationBackend implements ImageGenerationBackend {
+  async generate(
+    _params: ImageGenParams,
+    signal?: AbortSignal,
+  ): Promise<ImageGenResult> {
+    if (signal?.aborted) throw new Error('Image generation was cancelled.');
+    return {
+      imageBuffer: Buffer.from(TEST_IMAGE_GENERATION_FIXTURE.base64, 'base64'),
+      mimeType: TEST_IMAGE_GENERATION_FIXTURE.mimeType,
+    };
+  }
 }
 
 // ─── OpenRouter backend ───────────────────────────────────────────────────
@@ -134,6 +145,11 @@ class OpenRouterImageBackend implements ImageGenerationBackend {
 // ─── Provider resolution ──────────────────────────────────────────────────
 
 function getImageGenerationBackend(): ImageGenerationBackend | null {
+  // E2E and local test runs must never reach a real image provider.
+  if (process.env.YAAWC_TEST_MODE === 'true') {
+    return new TestImageGenerationBackend();
+  }
+
   const config = getImageGenerationConfig();
   if (!config || !config.enabled || !config.model) return null;
 
@@ -145,28 +161,6 @@ function getImageGenerationBackend(): ImageGenerationBackend | null {
 
   // Future providers (openai, etc.) added here
   return null;
-}
-
-// ─── Image storage ────────────────────────────────────────────────────────
-
-function saveGeneratedImage(
-  buffer: Buffer,
-  mimeType: string,
-): { imageId: string; ext: string } {
-  const mimeToExt: Record<string, string> = {
-    'image/png': 'png',
-    'image/jpeg': 'jpg',
-    'image/gif': 'gif',
-    'image/webp': 'webp',
-  };
-  const ext = mimeToExt[mimeType] || 'png';
-  const imageId = crypto.randomBytes(16).toString('hex');
-  const filename = `${imageId}.${ext}`;
-  const filePath = path.join(UPLOADS_DIR, filename);
-
-  fs.writeFileSync(filePath, new Uint8Array(buffer));
-
-  return { imageId, ext };
 }
 
 // ─── Tool schema ──────────────────────────────────────────────────────────
@@ -186,7 +180,28 @@ export const imageGenerationTool = defineTool(
   async (input: z.infer<typeof ImageGenerationToolSchema>, runtime) => {
     try {
       const { query, aspectRatio, imageSize } = input;
-      const { messageId, retrievalSignal, tracker } = runtime.context;
+      const {
+        messageId,
+        retrievalSignal,
+        tracker,
+        chatId,
+        assistantMessageId,
+        workspaceId,
+      } = runtime.context;
+
+      if (!chatId || !assistantMessageId) {
+        return new Command({
+          update: {
+            messages: [
+              new ToolMessage({
+                content:
+                  'Image generation requires a durable chat turn and is unavailable in subagents or background contexts.',
+                tool_call_id: runtime.toolCallId,
+              }),
+            ],
+          },
+        });
+      }
 
       const backend = getImageGenerationBackend();
       if (!backend) {
@@ -252,9 +267,15 @@ export const imageGenerationTool = defineTool(
         });
       }
 
-      const { imageId, ext } = saveGeneratedImage(imageBuffer, mimeType);
-
-      const imageUrl = `/api/uploads/images/${imageId}`;
+      const image = createGeneratedImage({
+        buffer: imageBuffer,
+        mimeType,
+        prompt: query,
+        assistantMessageId,
+        chatId,
+        workspaceId: workspaceId ?? null,
+      });
+      const { id: imageId, extension: ext, imageUrl } = image;
       const currentState = getCurrentTaskInput() as SimplifiedAgentStateType;
       const currentDocCount = currentState.relevantDocuments?.length ?? 0;
 

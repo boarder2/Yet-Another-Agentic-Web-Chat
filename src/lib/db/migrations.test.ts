@@ -33,6 +33,21 @@ describe('drizzle migrations', () => {
     expect(tables.map((t) => t.name)).toContain('chats');
   });
 
+  it('creates the generated image indexes', () => {
+    const sqlite = replayOntoEmptyDb();
+    const indexes = sqlite
+      .prepare("PRAGMA index_list('generated_images')")
+      .all() as { name: string }[];
+
+    expect(indexes.map((index) => index.name)).toEqual(
+      expect.arrayContaining([
+        'generated_images_chat_idx',
+        'generated_images_workspace_idx',
+        'generated_images_message_idx',
+      ]),
+    );
+  });
+
   it('land on the schema the newest snapshot describes', () => {
     const sqlite = replayOntoEmptyDb();
     const journal = JSON.parse(

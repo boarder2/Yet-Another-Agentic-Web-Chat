@@ -22,6 +22,13 @@ const STRUCTURED_TOOL_ARGS: Record<string, Record<string, unknown>> = {
 /** Leading text of the chart model's answer; e2e asserts on it. */
 export const CHART_ANSWER_PREFIX = 'Charted the deterministic findings';
 
+/** A valid local 1×1 PNG used by the test-only image-generation backend. */
+export const TEST_IMAGE_GENERATION_FIXTURE = {
+  mimeType: 'image/png',
+  base64:
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+} as const;
+
 const STRUCTURED_SUGGESTIONS_ANSWER = [
   '<suggestions>',
   'What else should I know about this topic?',
@@ -85,6 +92,37 @@ class FakeChatModel extends BaseChatModel {
     const toolResultCount = messages.filter(
       (m) => m.getType() === 'tool',
     ).length;
+
+    if (
+      this.modelName.includes('image') &&
+      !hasToolResult &&
+      !lastHumanText(messages).includes('short, concise title')
+    ) {
+      yield new ChatGenerationChunk({
+        text: '',
+        message: new AIMessageChunk({
+          content: '',
+          tool_calls: [
+            {
+              name: 'image_generation',
+              args: {
+                query: lastHumanText(messages),
+                aspectRatio: '1:1',
+                imageSize: '1K',
+              },
+              id: 'test-image-generation-call-1',
+              type: 'tool_call',
+            },
+          ],
+          usage_metadata: {
+            input_tokens: 12,
+            output_tokens: 4,
+            total_tokens: 16,
+          },
+        }),
+      });
+      return;
+    }
 
     // withStructuredOutput binds exactly one schema-derived tool and forces
     // it — answer with a matching tool_call instead of introspecting intent.
@@ -349,6 +387,8 @@ class FakeChatModel extends BaseChatModel {
       answer = systemText(messages);
     } else if (this.modelName.includes('chart')) {
       answer = `${CHART_ANSWER_PREFIX} [1].\n\n<Chart id="${lastToolResultField(messages, 'chartId')}"/>\n\nDone.`;
+    } else if (this.modelName.includes('image')) {
+      answer = 'The deterministic image is ready.';
     } else if (this.modelName.includes('artifact-read')) {
       // Echo what read_artifact returned so specs can assert on the version
       // and content it resolved, or on its error text.
@@ -568,6 +608,12 @@ export async function loadTestChatModels(): Promise<Record<string, ChatModel>> {
       displayName: 'Test (chart answer)',
       model: new FakeChatModel({
         modelName: 'test-chart',
+      }) as unknown as BaseChatModel,
+    },
+    'test-image': {
+      displayName: 'Test (image generation)',
+      model: new FakeChatModel({
+        modelName: 'test-image',
       }) as unknown as BaseChatModel,
     },
     'test-tool-multi': {

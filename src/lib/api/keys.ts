@@ -1,4 +1,5 @@
 import type { ChatsFilter } from '@/lib/hooks/api/useChats';
+import type { HistoryType } from '@/lib/history/service';
 
 type ChatsSearchFilter = Omit<ChatsFilter, 'pinned' | 'scheduled'>;
 
@@ -52,7 +53,7 @@ export const qk = {
   artifacts: (chatId: string) => [...ARTIFACTS_NS, { chatId }] as const,
   workspaceArtifacts: (workspaceId: string) =>
     [...ARTIFACTS_NS, { workspaceId }] as const,
-  allArtifacts: (filter: { workspaceIds?: string[] }) =>
+  allArtifacts: (filter: { workspaceIds?: string[]; type?: HistoryType }) =>
     [...ARTIFACTS_NS, { all: true, filter }] as const,
   artifact: (id: string) => [...ARTIFACTS_NS, id] as const,
   artifactSource: (id: string, version?: number) =>

@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch, ApiError } from '@/lib/api/client';
 import { qk } from '@/lib/api/keys';
+import type { HistoryType } from '@/lib/history/service';
 
 export interface ArtifactSummary {
   id: string;
@@ -20,8 +21,33 @@ export interface ArtifactListSummary extends ArtifactSummary {
   chatTitle: string | null;
 }
 
+export type HistoryPageItem = ArtifactListSummary & {
+  type: 'page';
+};
+
+export interface HistoryImageItem {
+  type: 'image';
+  id: string;
+  extension: string;
+  mimeType: string;
+  prompt: string;
+  assistantMessageId: string;
+  chatId: string | null;
+  workspaceId: string | null;
+  createdAt: string;
+  imageUrl: string;
+  chatTitle: string | null;
+  title: string;
+  updatedAt: string;
+  latestVersion: number;
+  versionCount: number;
+}
+
+export type HistoryItem = HistoryPageItem | HistoryImageItem;
+
 export interface ArgsWorkspaceFilter {
   workspaceIds?: string[];
+  type?: HistoryType;
 }
 
 export interface ArtifactVersionMeta {
@@ -67,18 +93,18 @@ export function useWorkspaceArtifacts(workspaceId: string | null | undefined) {
   });
 }
 
-/** Every artifact across all chats and workspaces, optionally scope-filtered. */
+/** Every artifact across all chats and workspaces, optionally filtered by scope and type. */
 export function useAllArtifacts(filter: ArgsWorkspaceFilter = {}) {
+  const type = filter.type ?? 'all';
+  const queryFilter = { ...filter, type };
+
   return useQuery({
-    queryKey: qk.allArtifacts(filter),
+    queryKey: qk.allArtifacts(queryFilter),
     queryFn: () => {
-      const params = new URLSearchParams();
+      const params = new URLSearchParams({ type });
       if (filter.workspaceIds?.length)
         params.set('workspaceIds', filter.workspaceIds.join(','));
-      const qs = params.toString();
-      return apiFetch<ArtifactListSummary[]>(
-        `/api/artifacts${qs ? `?${qs}` : ''}`,
-      );
+      return apiFetch<HistoryItem[]>(`/api/artifacts?${params}`);
     },
   });
 }

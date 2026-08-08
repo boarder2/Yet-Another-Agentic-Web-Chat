@@ -1,7 +1,14 @@
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import Database from 'better-sqlite3';
 import { expect, type APIRequestContext } from '@playwright/test';
 import type { WorkspaceModelOverride } from '../../src/lib/workspaces/types';
 import { uid, uniq, baseURL } from './helpers';
 import { streamChatUntil, collectSseEvents, type ChatEvent } from './sse';
+
+const E2E_DB_PATH = path.resolve('e2e/.test-data/db.sqlite');
+const E2E_UPLOADS_DIR = path.resolve('e2e/.test-data/uploads');
 
 async function postJson(
   request: APIRequestContext,
@@ -88,6 +95,112 @@ export async function seedChat(
   // Consume it so the connection is released.
   await res.body();
   return chatId;
+}
+
+export interface SeededGeneratedImage {
+  id: string;
+  chatId: string;
+  workspaceId: string | null;
+  assistantMessageId: string;
+  prompt: string;
+  mimeType: string;
+  extension: string;
+  createdAt: Date;
+}
+
+/**
+ * Seed the durable generated-image row and blob used by history API tests.
+ * The image-generation tool is provider-backed, so this fixture writes the
+ * same metadata/blob contract directly after creating its owning chat through
+ * the API. User uploads deliberately use a separate route and never call this.
+ */
+export async function seedGeneratedImage(
+  request: APIRequestContext,
+  overrides?: Partial<{
+    chatId: string;
+    workspaceId: string | null;
+    prompt: string;
+    assistantMessageId: string;
+    mimeType: string;
+    extension: string;
+    createdAt: Date;
+  }>,
+): Promise<SeededGeneratedImage> {
+  const workspaceId = overrides?.workspaceId ?? null;
+  const chatId =
+    overrides?.chatId ??
+    (await seedChat(request, {
+      content: overrides?.prompt ?? 'Generated image history fixture',
+      ...(workspaceId ? { workspaceId } : {}),
+    }));
+  const prompt = overrides?.prompt ?? 'Generated image history fixture';
+  const mimeType = overrides?.mimeType ?? 'image/png';
+  const extension = overrides?.extension ?? 'png';
+  const assistantMessageId = overrides?.assistantMessageId ?? uid();
+  const createdAt = overrides?.createdAt ?? new Date();
+  // Drizzle's SQLite timestamp mode stores Unix seconds, so mirror the
+  // production representation when this fixture writes directly to the test DB.
+  const persistedCreatedAt = new Date(
+    Math.floor(createdAt.getTime() / 1000) * 1000,
+  );
+  const id = crypto.randomBytes(16).toString('hex');
+
+  fs.mkdirSync(E2E_UPLOADS_DIR, { recursive: true });
+  fs.writeFileSync(
+    path.join(E2E_UPLOADS_DIR, `${id}.${extension}`),
+    Buffer.from('deterministic generated image bytes'),
+  );
+
+  const sqlite = new Database(E2E_DB_PATH);
+  try {
+    sqlite.pragma('busy_timeout = 5000');
+    sqlite
+      .prepare(
+        `INSERT INTO generated_images
+          (id, extension, mime_type, prompt, assistant_message_id, chat_id, workspace_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        id,
+        extension,
+        mimeType,
+        prompt,
+        assistantMessageId,
+        chatId,
+        workspaceId,
+        persistedCreatedAt.getTime() / 1000,
+      );
+  } finally {
+    sqlite.close();
+  }
+
+  return {
+    id,
+    chatId,
+    workspaceId,
+    assistantMessageId,
+    prompt,
+    mimeType,
+    extension,
+    createdAt: persistedCreatedAt,
+  };
+}
+
+/** Seed an uploads/ image with no generated_images row, representing a legacy file. */
+export function seedLegacyImage(
+  extension: 'png' | 'jpg' | 'gif' | 'webp' = 'png',
+): { imageId: string; extension: string; imageUrl: string } {
+  const imageId = crypto.randomBytes(16).toString('hex');
+  fs.mkdirSync(E2E_UPLOADS_DIR, { recursive: true });
+  fs.writeFileSync(
+    path.join(E2E_UPLOADS_DIR, `${imageId}.${extension}`),
+    Buffer.from('legacy generated image bytes'),
+  );
+  return {
+    imageId,
+    extension,
+    imageUrl: `/api/uploads/images/${imageId}`,
+  };
 }
 
 /**
@@ -214,6 +327,7 @@ export async function seedWorkflow(
     description: string;
     icon: string;
     focusMode: string;
+    chatModel: string;
   }>,
 ): Promise<string> {
   const body = await postJson(
@@ -229,7 +343,10 @@ export async function seedWorkflow(
       ...(overrides?.focusMode !== undefined
         ? { focusMode: overrides.focusMode }
         : {}),
-      chatModel: { provider: 'test', name: 'test-direct' },
+      chatModel: {
+        provider: 'test',
+        name: overrides?.chatModel ?? 'test-direct',
+      },
     },
     201,
   );
@@ -500,6 +617,44 @@ export interface SeededArtifact {
   chatId: string;
   artifactId: string;
   messageId: string;
+}
+
+/**
+ * Run one deterministic image-generation turn. The test-image model invokes
+ * image_generation once, then answers with its fixed text after the tool
+ * result, so callers can assert both the tool/UI stream and persisted history.
+ */
+export async function runImageGenerationTurn(
+  request: APIRequestContext,
+  prompt: string,
+  overrides?: Partial<{
+    chatId: string;
+    messageId: string;
+    workspaceId: string;
+    isPrivate: boolean;
+  }>,
+): Promise<{ chatId: string; messageId: string; events: ChatEvent[] }> {
+  const chatId = overrides?.chatId ?? uid();
+  const messageId = overrides?.messageId ?? uid();
+  const res = await request.post('/api/chat', {
+    data: {
+      message: { messageId, chatId, content: prompt },
+      focusMode: 'chat',
+      files: [],
+      chatModel: { provider: 'test', name: 'test-image' },
+      systemModel: { provider: 'test', name: 'test-direct' },
+      selectedSystemPromptIds: [],
+      ...(overrides?.isPrivate ? { isPrivate: true } : {}),
+      ...(overrides?.workspaceId ? { workspaceId: overrides.workspaceId } : {}),
+    },
+  });
+  if (!res.ok()) {
+    const text = await res.text();
+    throw new Error(
+      `POST /api/chat returned ${res.status()}: ${text.slice(0, 500)}`,
+    );
+  }
+  return { chatId, messageId, events: await collectSseEvents(res) };
 }
 
 /**

@@ -1709,6 +1709,7 @@ ${url ? `<url>${url}</url>` : ''}
           fileIds,
           emitter: this.emitter,
           messageId: this.messageId,
+          assistantMessageId: this.aiMessageId,
           runId,
           retrievalSignal: this.retrievalSignal,
           userLocation: this.userLocation,

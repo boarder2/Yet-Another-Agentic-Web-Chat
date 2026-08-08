@@ -9,7 +9,7 @@ import {
 } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { workspaceDir } from './paths';
-import { deleteForWorkspace as deleteArtifactsForWorkspace } from '@/lib/artifacts/service';
+import { deleteForWorkspace as deleteHistoryForWorkspace } from '@/lib/history/service';
 import fs from 'node:fs/promises';
 
 export async function deleteWorkspace(workspaceId: string): Promise<void> {
@@ -28,7 +28,7 @@ export async function deleteWorkspace(workspaceId: string): Promise<void> {
 
   // Documents the workspace owns go with it — unlike the chats below, they have
   // no life outside it.
-  deleteArtifactsForWorkspace(workspaceId);
+  deleteHistoryForWorkspace(workspaceId);
 
   // Detach chats from workspace (don't delete the chats themselves)
   await db

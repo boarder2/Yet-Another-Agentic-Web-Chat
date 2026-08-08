@@ -24,6 +24,10 @@ import {
 } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { computeSanitizedContent } from '@/lib/db/sanitizedContent';
+import {
+  insertPartialAssistantRow,
+  updateAssistantRow,
+} from '@/lib/db/queries';
 import { resolveChatAndEmbedding } from '@/lib/providers/resolveModels';
 import {
   getPersonaInstructionsOnly,
@@ -65,6 +69,7 @@ export async function runSchedule(
   const chatId = crypto.randomUUID();
   const userMessageId = crypto.randomBytes(7).toString('hex');
   const aiMessageId = crypto.randomBytes(7).toString('hex');
+  let assistantRowReady = false;
 
   try {
     const run = resolveWorkflowRun(
@@ -117,6 +122,13 @@ export async function runSchedule(
         metadata: JSON.stringify({ createdAt: new Date() }),
       })
       .execute();
+
+    // Image generation validates the durable assistant provenance before saving.
+    await insertPartialAssistantRow(aiMessageId, chatId, {
+      createdAt: new Date(),
+      runStatus: 'running',
+    });
+    assistantRowReady = true;
 
     const abortController = new AbortController();
     const emitter = new EventEmitter();
@@ -212,23 +224,16 @@ export async function runSchedule(
       modelStats = { ...modelStats, responseTime: Date.now() - startTime };
     }
 
-    await db
-      .insert(messagesSchema)
-      .values({
-        content: receivedMessage,
-        sanitizedContent: computeSanitizedContent(receivedMessage),
-        chatId,
-        messageId: aiMessageId,
-        role: 'assistant',
-        metadata: JSON.stringify({
-          createdAt: new Date(),
-          ...(sources.length > 0 && { sources }),
-          ...(searchQuery && { searchQuery }),
-          ...(searchUrl && { searchUrl }),
-          ...(modelStats && { modelStats }),
-        }),
-      })
-      .execute();
+    await updateAssistantRow(aiMessageId, {
+      content: receivedMessage,
+      metadata: {
+        createdAt: new Date(),
+        ...(sources.length > 0 && { sources }),
+        ...(searchQuery && { searchQuery }),
+        ...(searchUrl && { searchUrl }),
+        ...(modelStats && { modelStats }),
+      },
+    });
 
     // Mirror runHost's terminate: stamp the chat-level run state so the run
     // shows up as an ordinary unread run in History (headless, so never viewed).
@@ -261,19 +266,25 @@ export async function runSchedule(
       err instanceof Error ? err.message : 'Unknown error during scheduled run';
 
     try {
-      await db
-        .insert(messagesSchema)
-        .values({
-          content: `**Scheduled run failed:** ${errorMsg}`,
-          sanitizedContent: computeSanitizedContent(
-            `**Scheduled run failed:** ${errorMsg}`,
-          ),
-          chatId,
-          messageId: aiMessageId,
-          role: 'assistant',
-          metadata: JSON.stringify({ createdAt: new Date() }),
-        })
-        .execute();
+      const failureContent = `**Scheduled run failed:** ${errorMsg}`;
+      if (assistantRowReady) {
+        await updateAssistantRow(aiMessageId, {
+          content: failureContent,
+          metadata: { createdAt: new Date() },
+        });
+      } else {
+        await db
+          .insert(messagesSchema)
+          .values({
+            content: failureContent,
+            sanitizedContent: computeSanitizedContent(failureContent),
+            chatId,
+            messageId: aiMessageId,
+            role: 'assistant',
+            metadata: JSON.stringify({ createdAt: new Date() }),
+          })
+          .execute();
+      }
     } catch {
       // Best-effort
     }

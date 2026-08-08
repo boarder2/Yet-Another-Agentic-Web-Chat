@@ -39,7 +39,7 @@ import { resolveSkillsForChat, getByName } from '@/lib/skills/resolve';
 import { SKILL_TOKEN_SCAN_REGEX } from '@/lib/skills/validation';
 import { persistToolContextRow } from '@/lib/utils/persistToolContext';
 import { computeSanitizedContent } from '@/lib/db/sanitizedContent';
-import { deleteVersionsForMessages as deleteArtifactVersionsForMessages } from '@/lib/artifacts/service';
+import { deleteForMessages as deleteHistoryForMessages } from '@/lib/history/service';
 import {
   startRun,
   getRun,
@@ -151,9 +151,9 @@ const handleHistorySave = async (
         ),
       )
       .returning({ messageId: messagesSchema.messageId });
-    // Artifact versions are anchored to the message that produced them, so the
-    // rewind rolls each artifact back to its newest surviving snapshot.
-    deleteArtifactVersionsForMessages(dropped.map((r) => r.messageId));
+    // Durable history is anchored to the assistant message that produced it,
+    // so the rewind removes discarded chat-scoped items.
+    deleteHistoryForMessages(dropped.map((r) => r.messageId));
   }
 
   await db

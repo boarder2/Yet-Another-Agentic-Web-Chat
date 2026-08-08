@@ -616,3 +616,27 @@ export const artifactVersions = sqliteTable(
     byMessage: index('artifact_versions_message_idx').on(t.messageId),
   }),
 );
+
+// Generated images are durable only when created by a top-level chat turn.
+// Existing files in uploads/ have no rows here by design, so they are never
+// eligible for history or lifecycle cleanup.
+export const generatedImages = sqliteTable(
+  'generated_images',
+  {
+    id: text('id').primaryKey(),
+    extension: text('extension').notNull(),
+    mimeType: text('mime_type').notNull(),
+    prompt: text('prompt').notNull(),
+    assistantMessageId: text('assistant_message_id').notNull(),
+    chatId: text('chat_id'),
+    workspaceId: text('workspace_id'),
+    createdAt: integer('created_at', { mode: 'timestamp' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => ({
+    byChat: index('generated_images_chat_idx').on(t.chatId),
+    byWorkspace: index('generated_images_workspace_idx').on(t.workspaceId),
+    byMessage: index('generated_images_message_idx').on(t.assistantMessageId),
+  }),
+);

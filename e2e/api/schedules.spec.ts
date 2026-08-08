@@ -193,6 +193,49 @@ test.describe('POST /api/schedules/[id]/run', () => {
     expect(assistantMsg.content).toBe('This is a deterministic test answer.');
   });
 
+  test('scheduled image runs persist the image and assistant provenance', async ({
+    request,
+  }) => {
+    const prompt = `Scheduled image ${uniq('prompt')}`;
+    const workflowId = await seedWorkflow(request, {
+      prompt,
+      focusMode: 'chat',
+      chatModel: 'test-image',
+    });
+    const scheduleId = await seedSchedule(request, workflowId);
+
+    const res = await request.post(`/api/schedules/${scheduleId}/run`);
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe('success');
+
+    const chatBody = await (
+      await request.get(`/api/chats/${body.chatId}`)
+    ).json();
+    const assistantMsg = chatBody.messages.find(
+      (m: { role: string }) => m.role === 'assistant',
+    );
+    expect(assistantMsg).toBeTruthy();
+    expect(assistantMsg.content).toContain('The deterministic image is ready.');
+
+    const images = await (
+      await request.get('/api/artifacts?type=images')
+    ).json();
+    const image = images.find(
+      (row: { chatId: string | null; prompt: string }) =>
+        row.chatId === body.chatId && row.prompt === prompt,
+    );
+    expect(image).toMatchObject({
+      type: 'image',
+      prompt,
+      chatId: body.chatId,
+      workspaceId: null,
+      mimeType: 'image/png',
+      assistantMessageId: assistantMsg.messageId,
+    });
+    expect((await request.get(image.imageUrl)).status()).toBe(200);
+  });
+
   test('schedule reflects last run status after a run', async ({ request }) => {
     const workflowId = await seedWorkflow(request);
     const scheduleId = await seedSchedule(request, workflowId);

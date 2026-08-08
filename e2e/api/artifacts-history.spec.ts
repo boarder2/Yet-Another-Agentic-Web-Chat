@@ -1,5 +1,11 @@
 import { test, expect } from '../fixtures/api';
-import { seedArtifact, seedWorkspace, runArtifactTurn } from '../utils/seed';
+import {
+  seedArtifact,
+  seedGeneratedImage,
+  seedLegacyImage,
+  seedWorkspace,
+  runArtifactTurn,
+} from '../utils/seed';
 import { uniq } from '../utils/helpers';
 
 test.describe('artifact list-all (history tab) endpoint', () => {
@@ -197,5 +203,201 @@ test.describe('artifact list-all (history tab) endpoint', () => {
     expect(res.status()).toBe(200);
     const body = await res.json();
     expect(Array.isArray(body)).toBe(true);
+  });
+});
+
+test.describe('generated image history contract', () => {
+  test('returns typed image provenance and orders it with pages by activity', async ({
+    request,
+  }) => {
+    const page = await seedArtifact(request, { title: uniq('MixedPage') });
+    const pageList = await (
+      await request.get(`/api/artifacts?chatId=${page.chatId}`)
+    ).json();
+    const pageRow = pageList.find(
+      (row: { id: string }) => row.id === page.artifactId,
+    ) as { updatedAt: string };
+    const image = await seedGeneratedImage(request, {
+      prompt: 'A full provenance prompt for a lighthouse at dusk',
+      assistantMessageId: uniq('assistant'),
+      createdAt: new Date(Date.parse(pageRow.updatedAt) + 1000),
+    });
+
+    const res = await request.get('/api/artifacts?type=all');
+    expect(res.status()).toBe(200);
+    const rows = (await res.json()) as Array<{
+      id: string;
+      type: 'page' | 'image';
+      prompt?: string;
+      assistantMessageId?: string;
+      chatId: string | null;
+      workspaceId: string | null;
+      chatTitle: string | null;
+      mimeType?: string;
+      extension?: string;
+      imageUrl?: string;
+      createdAt: string;
+    }>;
+    const ours = rows.filter((row) =>
+      [page.artifactId, image.id].includes(row.id),
+    );
+
+    expect(ours.map((row) => row.id)).toEqual([image.id, page.artifactId]);
+    const imageRow = ours.find((row) => row.id === image.id);
+    expect(imageRow).toMatchObject({
+      type: 'image',
+      prompt: image.prompt,
+      assistantMessageId: image.assistantMessageId,
+      chatId: image.chatId,
+      workspaceId: null,
+      mimeType: 'image/png',
+      extension: 'png',
+      imageUrl: `/api/uploads/images/${image.id}`,
+    });
+    expect(imageRow?.chatTitle).toBeTruthy();
+    expect(new Date(imageRow!.createdAt).getTime()).toBeGreaterThan(
+      new Date(pageRow.updatedAt).getTime(),
+    );
+  });
+
+  test('filters pages and images and rejects an unknown type', async ({
+    request,
+  }) => {
+    const page = await seedArtifact(request, { title: uniq('PagesOnly') });
+    const image = await seedGeneratedImage(request, {
+      prompt: uniq('ImagesOnly prompt'),
+    });
+
+    const pages = await (await request.get('/api/artifacts?type=pages')).json();
+    expect(
+      pages.filter((row: { id: string }) => row.id === page.artifactId),
+    ).toHaveLength(1);
+    expect(
+      pages.filter((row: { id: string }) => row.id === image.id),
+    ).toHaveLength(0);
+    expect(pages.every((row: { type: string }) => row.type === 'page')).toBe(
+      true,
+    );
+
+    const images = await (
+      await request.get('/api/artifacts?type=images')
+    ).json();
+    expect(
+      images.filter((row: { id: string }) => row.id === image.id),
+    ).toHaveLength(1);
+    expect(
+      images.filter((row: { id: string }) => row.id === page.artifactId),
+    ).toHaveLength(0);
+    expect(images.every((row: { type: string }) => row.type === 'image')).toBe(
+      true,
+    );
+
+    const invalid = await request.get('/api/artifacts?type=uploads');
+    expect(invalid.status()).toBe(400);
+    expect(await invalid.json()).toEqual({
+      error: 'type must be one of: all, pages, images',
+    });
+  });
+
+  test('composes workspace and none filters across pages and images', async ({
+    request,
+  }) => {
+    const workspaceOne = await seedWorkspace(request, {
+      name: uniq('history-image-ws-one'),
+    });
+    const workspaceTwo = await seedWorkspace(request, {
+      name: uniq('history-image-ws-two'),
+    });
+    const pageNone = await seedArtifact(request, { title: uniq('NonePage') });
+    const pageOne = await seedArtifact(request, {
+      title: uniq('OnePage'),
+      workspaceId: workspaceOne,
+    });
+    const pageTwo = await seedArtifact(request, {
+      title: uniq('TwoPage'),
+      workspaceId: workspaceTwo,
+    });
+    const imageNone = await seedGeneratedImage(request, {
+      prompt: uniq('NoneImage'),
+    });
+    const imageOne = await seedGeneratedImage(request, {
+      prompt: uniq('OneImage'),
+      workspaceId: workspaceOne,
+    });
+    const imageTwo = await seedGeneratedImage(request, {
+      prompt: uniq('TwoImage'),
+      workspaceId: workspaceTwo,
+    });
+
+    const ids = async (workspaceIds: string) => {
+      const body = await (
+        await request.get(
+          `/api/artifacts?type=all&workspaceIds=${workspaceIds}`,
+        )
+      ).json();
+      return (body as Array<{ id: string; workspaceId: string | null }>).filter(
+        (row) =>
+          [
+            pageNone.artifactId,
+            pageOne.artifactId,
+            pageTwo.artifactId,
+            imageNone.id,
+            imageOne.id,
+            imageTwo.id,
+          ].includes(row.id),
+      );
+    };
+
+    const one = await ids(workspaceOne);
+    expect(one.map((row) => row.id).sort()).toEqual(
+      [pageOne.artifactId, imageOne.id].sort(),
+    );
+    expect(one.every((row) => row.workspaceId === workspaceOne)).toBe(true);
+
+    const none = await ids('none');
+    expect(none.map((row) => row.id).sort()).toEqual(
+      [pageNone.artifactId, imageNone.id].sort(),
+    );
+    expect(none.every((row) => row.workspaceId === null)).toBe(true);
+
+    const union = await ids(`${workspaceOne},none`);
+    expect(union.map((row) => row.id).sort()).toEqual(
+      [
+        pageNone.artifactId,
+        pageOne.artifactId,
+        imageNone.id,
+        imageOne.id,
+      ].sort(),
+    );
+    expect(union.map((row) => row.id)).not.toContain(pageTwo.artifactId);
+    expect(union.map((row) => row.id)).not.toContain(imageTwo.id);
+  });
+
+  test('does not list a legacy or user-uploaded image without generated metadata', async ({
+    request,
+  }) => {
+    const upload = await request.post('/api/uploads/images', {
+      multipart: {
+        images: {
+          name: `${uniq('legacy')}.png`,
+          mimeType: 'image/png',
+          buffer: Buffer.from('legacy upload bytes'),
+        },
+      },
+    });
+    expect(upload.status()).toBe(200);
+    const [{ imageId: uploadedImageId }] = (await upload.json()).images;
+    const legacy = seedLegacyImage();
+    expect((await request.get(legacy.imageUrl)).status()).toBe(200);
+
+    const generated = await seedGeneratedImage(request, {
+      prompt: uniq('Durable generated image'),
+    });
+    const rows = await (await request.get('/api/artifacts?type=images')).json();
+    const ids = (rows as Array<{ id: string }>).map((row) => row.id);
+
+    expect(ids).toContain(generated.id);
+    expect(ids).not.toContain(uploadedImageId);
+    expect(ids).not.toContain(legacy.imageId);
   });
 });

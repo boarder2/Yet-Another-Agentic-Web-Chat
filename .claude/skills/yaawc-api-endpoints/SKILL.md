@@ -97,11 +97,11 @@ File PUT is a compare-and-swap: `expectedSha` required (`400` without); a stale 
 
 ## Artifacts
 
-| Endpoint                  | Method     | Purpose                                                                         |
-| ------------------------- | ---------- | ------------------------------------------------------------------------------- |
-| `/api/artifacts`          | GET        | List metadata. Requires `chatId` **or** `workspaceId`                           |
-| `/api/artifacts/[id]`     | GET/DELETE | One + versions (no content). DELETE workspace docs only — `400` for chat-scoped |
-| `/api/artifacts/[id]/raw` | GET        | Serve one version's HTML. `version`, `download=1`                               |
+| Endpoint                  | Method     | Purpose                                                                                                                                                                                                                                                                        |
+| ------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `/api/artifacts`          | GET        | List-all Artifact History as typed `page`/`image` items. Supports `type=all`, `type=pages`, or `type=images`, plus optional comma-separated `workspaceIds` (`none` selects chat-scoped items). `chatId` or singular `workspaceId` preserves the existing page-only list modes. |
+| `/api/artifacts/[id]`     | GET/DELETE | One + versions (no content). DELETE workspace docs only — `400` for chat-scoped                                                                                                                                                                                                |
+| `/api/artifacts/[id]/raw` | GET        | Serve one version's HTML. `version`, `download=1`                                                                                                                                                                                                                              |
 
 `raw` is the security boundary — the only route emitting `text/html`; its response CSP carries `sandbox` (no `allow-same-origin`) and `default-src 'none'` (no network), because the same bytes are reachable top-level where an iframe attribute wouldn't apply. `download=1` injects the network half as a `<meta>` tag.
 

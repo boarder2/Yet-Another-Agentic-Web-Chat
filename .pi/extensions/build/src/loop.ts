@@ -84,7 +84,12 @@ function outlineOf(chunks: TaskChunk[], current: TaskChunk): string {
 // the paths both documents live at, so an agent with no history can both act and go
 // read for itself. That is what makes a per-chunk reset affordable: it costs
 // continuity, not the brief.
-function firstBrief(role: AgentRole, brief: ChunkBrief): string {
+function firstBrief(
+  role: AgentRole,
+  brief: ChunkBrief,
+  round: number,
+  priorReview: string,
+): string {
   const where = sections(
     `Ask: ${brief.ask}`,
     brief.planPath
@@ -110,9 +115,20 @@ function firstBrief(role: AgentRole, brief: ChunkBrief): string {
       preamble,
     );
   }
+  // The reviewer is new every round, so the round it is in has to be told to it.
+  // Without it, each round is a first review by a reviewer with a slightly
+  // different taste, and the standard only ever ratchets up.
   return sections(
     'Review the code and tests for this chunk against it, then report with submit_verdict.',
     preamble,
+    round === 1
+      ? ''
+      : sections(
+          `This is round ${round} for this chunk; earlier rounds were reviewed by an agent like you whose findings the coder has already acted on.`,
+          priorReview
+            ? `Confirm these are fixed and that fixing them broke nothing else. Anything an earlier round saw and did not block on is settled — do not re-open it.\n\n--- PREVIOUS REVIEW ---\n${priorReview}`
+            : 'The previous round failed on its tests rather than its review, so the code has changed since a review passed it. Check the change, not the chunk from scratch.',
+        ),
   );
 }
 
@@ -123,8 +139,9 @@ function briefFor(
   brief: ChunkBrief,
   feedback: string,
   fresh: boolean,
+  round: number,
 ): string {
-  if (fresh) return firstBrief(role, brief);
+  if (fresh) return firstBrief(role, brief, round, feedback);
 
   if (role === 'coder') {
     return `Chunk ${brief.chunk.number} did not pass. Fix exactly this, then report again with submit_completion.\n\n--- FIX THESE ---\n${feedback}`;
@@ -240,7 +257,11 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
         // reviewer is never in it: it is retired every round, so it is always new.
         const briefed = new Set<AgentRole>();
 
-        const runOne = async (role: AgentRole, feedback: string) => {
+        const runOne = async (
+          role: AgentRole,
+          feedback: string,
+          round: number,
+        ) => {
           // A reseed only takes effect once the old agent is gone, since the new one
           // is adopted under the same name.
           if (role !== 'reviewer') {
@@ -277,7 +298,7 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
             crewContext(),
             crew,
             role,
-            briefFor(role, brief, feedback, fresh),
+            briefFor(role, brief, feedback, fresh, round),
             (blocked) => {
               note(`${blocked}: blocked — asking for input in its pane`);
               ctx.ui.notify(
@@ -299,6 +320,7 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
           const coderRun = await runOne(
             'coder',
             sections(testFeedback, reviewFeedback),
+            round,
           );
           const completion = decodeCompletion(coderRun.envelope);
           // A coder that gave up is not a round to test and review: stop and say
@@ -314,9 +336,11 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
           }
 
           // The tester sees only test failures — review findings are the coder's to fix.
-          const testerRun = await runOne('tester', testFeedback);
+          const testerRun = await runOne('tester', testFeedback, round);
           const tests = decodeTestResult(testerRun.envelope);
-          const reviewerRun = await runOne('reviewer', '');
+          // The reviewer carries its predecessor's findings so a later round checks
+          // the fixes instead of hunting the chunk from scratch at a higher bar.
+          const reviewerRun = await runOne('reviewer', reviewFeedback, round);
           const verdict = decodeVerdict(reviewerRun.envelope);
 
           const testsGreen = tests.ok && isGreen(tests.value);

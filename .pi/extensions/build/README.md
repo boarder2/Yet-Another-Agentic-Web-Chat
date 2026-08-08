@@ -67,7 +67,10 @@ loses continuity, not the brief, and can go read for itself when the brief is no
 **Later rounds carry only what changed.** The coder and tester keep their session across the rounds of
 a chunk, so a second round hands them the failures and review findings alone rather than the brief they
 are still holding. The reviewer is the exception: it is retired and restarted every round by design, so
-it is always briefed in full.
+it is always briefed in full — but its brief names the round and carries the previous reviewer's
+findings, so a later round verifies the fixes instead of reviewing the chunk from scratch at a higher
+bar. A fresh reviewer every round is otherwise a standard that only ratchets up, and a chunk that can
+never pass.
 
 The reset is keyed on the chunk, so re-running a chunk that failed reattaches to the sessions already
 working on it instead of throwing their work away. Within a chunk, an agent that passes

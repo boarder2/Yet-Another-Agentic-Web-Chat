@@ -9,7 +9,7 @@ import {
 } from './service';
 
 /**
- * The documents this chat knows about: the ones it created, plus the ones the
+ * The artifacts this chat knows about: the ones it created, plus the ones the
  * user mentioned in it. Mentions are read back out of the persisted user
  * messages rather than tracked separately, so the set can never drift from the
  * transcript — and `listRosterArtifacts` drops any id the scope can't reach,

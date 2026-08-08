@@ -10,11 +10,11 @@ import {
 import type { ToolContext } from '@/lib/tools/toolContext';
 
 /**
- * The contract the agent must satisfy for the document to work at all: the
+ * The contract the agent must satisfy for the artifact to work at all: the
  * sandbox grants no network, so anything not inlined simply never loads.
  */
 const SELF_CONTAINED_CONTRACT = [
-  'The document must be completely self-contained: a full HTML document with all CSS in <style> and all JavaScript in <script>, inline.',
+  'The artifact must be completely self-contained: a full HTML document with all CSS in <style> and all JavaScript in <script>, inline.',
   'It is rendered under a strict Content-Security-Policy that blocks every network request — external scripts, stylesheets, fonts, images, fetch/XHR/WebSocket all fail.',
   'Never reference a CDN or any URL. Embed images and fonts as data: URIs.',
 ].join(' ');
@@ -76,12 +76,12 @@ export const createArtifactTool = defineTool(
     return JSON.stringify({
       artifactId,
       version,
-      note: 'The document is now open beside the conversation for the user. Use this artifactId with edit_artifact to refine it — do not repeat its content in your reply; summarize what you made instead.',
+      note: 'The artifact is now open beside the conversation for the user. Use this artifactId with edit_artifact to refine it — do not repeat its content in your reply; summarize what you made instead.',
     });
   },
   {
     name: 'create_artifact',
-    description: `Create a rich, self-contained HTML document that renders beside the conversation — an interactive report, dashboard, visualization, or reference page the user will keep and iterate on. ${SELF_CONTAINED_CONTRACT} Inline JavaScript, CSS, SVG and canvas all work, so build genuinely interactive pages. Use this for substantial deliverables, not for ordinary answers, which belong in your reply. Returns an artifactId; refine the document with edit_artifact rather than recreating it.`,
+    description: `Create a rich, self-contained HTML page that renders beside the conversation — an interactive report, dashboard, visualization, or reference page the user will keep and iterate on. ${SELF_CONTAINED_CONTRACT} Inline JavaScript, CSS, SVG and canvas all work, so build genuinely interactive pages. Use this for substantial deliverables, not for ordinary answers, which belong in your reply. Returns an artifactId; refine the artifact with edit_artifact rather than recreating it.`,
     schema: z.object({
       title: z
         .string()
@@ -128,7 +128,7 @@ export const editArtifactTool = defineTool(
   },
   {
     name: 'edit_artifact',
-    description: `Replace an exact string in an existing artifact, saving the result as a new version. oldStr must appear exactly once in the current content — include surrounding context to disambiguate. Prefer several targeted edits over rewriting the whole document. If you are not certain of the current content (a resumed chat, after compaction, or after a failed edit), call read_artifact first and copy oldStr from what it returns. ${SELF_CONTAINED_CONTRACT}`,
+    description: `Replace an exact string in an existing artifact, saving the result as a new version. oldStr must appear exactly once in the current content — include surrounding context to disambiguate. Prefer several targeted edits over rewriting the whole artifact. If you are not certain of the current content (a resumed chat, after compaction, or after a failed edit), call read_artifact first and copy oldStr from what it returns. ${SELF_CONTAINED_CONTRACT}`,
     schema: z.object({
       artifactId: z
         .string()
@@ -153,7 +153,7 @@ export const readArtifactTool = defineTool(
 
     // `readArtifact` applies the scope itself, so an artifact belonging to
     // another chat or workspace is indistinguishable from a missing one and the
-    // agent learns nothing about documents it cannot reach.
+    // agent learns nothing about artifacts it cannot reach.
     const result = readArtifact(input.artifactId, gate.scope, input.version);
     if (!result.ok) {
       if (result.reason === 'no_such_version') {
@@ -172,7 +172,7 @@ export const readArtifactTool = defineTool(
   {
     name: 'read_artifact',
     description:
-      "Return an artifact's title, version number, and full content. Call this before edit_artifact whenever the current content is not reliably in your context — a resumed conversation, after compaction, after an edit failed to match, or any time the document belongs to a workspace, where another conversation may have changed it since. Reads the current version unless `version` is given; versions run 1..N with no gaps. Note that edit_artifact always writes against the current version, so an older version can be consulted but not restored by editing.",
+      "Return an artifact's title, version number, and full content. Call this before edit_artifact whenever the current content is not reliably in your context — a resumed conversation, after compaction, after an edit failed to match, or any time the artifact belongs to a workspace, where another conversation may have changed it since. Reads the current version unless `version` is given; versions run 1..N with no gaps. Note that edit_artifact always writes against the current version, so an older version can be consulted but not restored by editing.",
     schema: z.object({
       artifactId: z.string().describe('The artifact to read.'),
       version: z

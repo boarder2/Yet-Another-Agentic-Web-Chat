@@ -22,7 +22,7 @@ test.describe('artifact panel during a live run', () => {
     });
   }
 
-  test('the panel opens by itself as soon as the agent writes the document', async ({
+  test('the panel opens by itself as soon as the agent writes the artifact', async ({
     page,
     request,
   }) => {

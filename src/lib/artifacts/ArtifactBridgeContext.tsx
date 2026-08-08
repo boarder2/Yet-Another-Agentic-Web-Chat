@@ -29,7 +29,7 @@ const ArtifactBridgeContext = createContext<ArtifactBridgeValue | null>(null);
  *
  * The handlers are state rather than refs so the sidebar re-renders when a chat
  * mounts, and their presence doubles as a surface test: on the workspace detail
- * page nothing registers, so the sidebar opens the document's own page instead.
+ * page nothing registers, so the sidebar opens the artifact's own page instead.
  */
 export function ArtifactBridgeProvider({
   children,

@@ -242,7 +242,7 @@ test.describe('artifact viewer', () => {
     expect(await widthOf()).toBe(dragged);
   });
 
-  test('the source view shows the document HTML read-only', async ({
+  test('the source view shows the artifact HTML read-only', async ({
     page,
     request,
   }) => {

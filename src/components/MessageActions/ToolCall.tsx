@@ -576,10 +576,10 @@ export const ToolCall = ({
     ) {
       const label =
         type === 'create_artifact'
-          ? 'Writing document'
+          ? 'Writing artifact'
           : type === 'edit_artifact'
-            ? 'Updating document'
-            : 'Reading document';
+            ? 'Updating artifact'
+            : 'Reading artifact';
       return (
         <>
           <span className="mr-2">{getIcon(type)}</span>

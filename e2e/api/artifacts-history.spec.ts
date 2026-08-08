@@ -10,7 +10,7 @@ test.describe('artifact list-all (history tab) endpoint', () => {
 
     // A chat-scoped artifact (chat has no workspace).
     const scoped = await seedArtifact(request, { title: uniq('Scoped') });
-    // A workspace-owned document (chat inside the workspace).
+    // A workspace-owned artifact (chat inside the workspace).
     const owned = await seedArtifact(request, {
       title: uniq('Owned'),
       workspaceId: ws,
@@ -72,7 +72,7 @@ test.describe('artifact list-all (history tab) endpoint', () => {
     expect([...stamps]).toEqual([...stamps].sort((x, y) => y - x));
   });
 
-  test('workspaceIds=<id> returns only that workspace as documents', async ({
+  test('workspaceIds=<id> returns only that workspace as artifacts', async ({
     request,
   }) => {
     const ws1 = await seedWorkspace(request, { name: uniq('ws1') });
@@ -137,7 +137,7 @@ test.describe('artifact list-all (history tab) endpoint', () => {
     expect(ids).not.toContain(owned2.artifactId);
   });
 
-  test('a workspace document whose chat is gone returns chatTitle null', async ({
+  test('a workspace artifact whose chat is gone returns chatTitle null', async ({
     request,
   }) => {
     const ws = await seedWorkspace(request, { name: uniq('orphan-ws') });
@@ -146,7 +146,7 @@ test.describe('artifact list-all (history tab) endpoint', () => {
       workspaceId: ws,
     });
 
-    // Deleting the owning chat must not delete the workspace document; it only
+    // Deleting the owning chat must not delete the workspace artifact; it only
     // loses its provenance pointer, so chatTitle comes back null.
     expect((await request.delete(`/api/chats/${chatId}`)).status()).toBe(200);
 
@@ -181,7 +181,7 @@ test.describe('artifact list-all (history tab) endpoint', () => {
     expect(byChat[0]).toMatchObject({ id: scoped.artifactId });
     expect(byChat[0]).not.toHaveProperty('chatTitle');
 
-    // workspaceId mode: only that workspace's documents.
+    // workspaceId mode: only that workspace's artifacts.
     const byWs: { id: string }[] = await (
       await request.get(`/api/artifacts?workspaceId=${ws}`)
     ).json();

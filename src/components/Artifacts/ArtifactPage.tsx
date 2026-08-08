@@ -46,7 +46,7 @@ export default function ArtifactPage({
           <Button
             size="sm"
             variant="ghost"
-            aria-label="Delete document"
+            aria-label="Delete artifact"
             onClick={() => setConfirming(true)}
           >
             <Trash2 size={16} />
@@ -57,7 +57,7 @@ export default function ArtifactPage({
       <Modal
         open={confirming}
         onClose={() => setConfirming(false)}
-        title="Delete document"
+        title="Delete artifact"
         size="sm"
       >
         <div className="space-y-4">

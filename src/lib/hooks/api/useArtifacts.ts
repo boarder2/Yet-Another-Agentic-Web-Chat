@@ -57,7 +57,7 @@ export function useArtifacts(chatId: string | null | undefined) {
   });
 }
 
-/** Every document the workspace owns — the sidebar's list. */
+/** Every artifact the workspace owns — the sidebar's list. */
 export function useWorkspaceArtifacts(workspaceId: string | null | undefined) {
   return useQuery({
     queryKey: qk.workspaceArtifacts(workspaceId ?? ''),
@@ -83,7 +83,7 @@ export function useAllArtifacts(filter: ArgsWorkspaceFilter = {}) {
   });
 }
 
-/** Workspace documents only; the API rejects a chat-scoped id. */
+/** Workspace artifacts only; the API rejects a chat-scoped id. */
 export function useDeleteArtifact() {
   const qc = useQueryClient();
   return useMutation({

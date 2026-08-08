@@ -40,7 +40,7 @@ export interface VersionMeta {
 }
 
 /**
- * Who is asking. A workspace chat reaches every document in its workspace; an
+ * Who is asking. A workspace chat reaches every artifact in its workspace; an
  * unscoped chat reaches only its own. `workspaceId` is the *chat's* workspace,
  * not the artifact's.
  */
@@ -88,8 +88,8 @@ const summarySelect = {
 };
 
 /**
- * A new document. `workspaceId` comes from the creating chat: when set, the
- * workspace owns the document and `chatId` is only provenance.
+ * A new artifact. `workspaceId` comes from the creating chat: when set, the
+ * workspace owns the artifact and `chatId` is only provenance.
  */
 export function createArtifact(
   scope: ArtifactScope,
@@ -143,7 +143,7 @@ export function editArtifact(
       return {
         ok: false as const,
         reason: 'not_found' as const,
-        message: `No artifact with id "${artifactId}" is available here. Documents belong to a chat, or to its workspace; create one with create_artifact.`,
+        message: `No artifact with id "${artifactId}" is available here. Artifacts belong to a chat, or to its workspace; create one with create_artifact.`,
       };
     }
 
@@ -244,7 +244,7 @@ export function listArtifacts(chatId: string): ArtifactSummary[] {
     .all();
 }
 
-/** Every document the workspace owns — the sidebar's list. */
+/** Every artifact the workspace owns — the sidebar's list. */
 export function listWorkspaceArtifacts(workspaceId: string): ArtifactSummary[] {
   return db
     .select(summarySelect)
@@ -260,7 +260,7 @@ export function listWorkspaceArtifacts(workspaceId: string): ArtifactSummary[] {
  * Every artifact across all chats and workspaces, most recently updated
  * first, joined to its owning chat's title when the chat still exists.
  * `workspaceIds` mirrors `buildWorkspaceCondition`: ids select those
- * workspaces' documents, the literal `none` selects chat-scoped documents
+ * workspaces' artifacts, the literal `none` selects chat-scoped artifacts
  * (`workspaceId IS NULL`), both are the OR, and absent means all.
  */
 export function listAllArtifacts(filter: {
@@ -291,7 +291,7 @@ export function listAllArtifacts(filter: {
 }
 
 /**
- * What the agent is told exists: documents this chat created, plus those the
+ * What the agent is told exists: artifacts this chat created, plus those the
  * user mentioned in it. A mentioned id the scope can't reach simply doesn't
  * come back, so an id arriving from anywhere else drops out silently.
  */
@@ -373,7 +373,7 @@ function dropArtifacts(tx: Tx, ids: string[]): void {
 }
 
 /**
- * Chat deletion. Chat-scoped documents die with the chat; workspace-scoped ones
+ * Chat deletion. Chat-scoped artifacts die with the chat; workspace-scoped ones
  * belong to the workspace and survive, keeping their versions and losing only
  * the provenance pointer to the chat that is going away.
  */
@@ -393,7 +393,7 @@ export function deleteForChat(chatId: string): void {
   });
 }
 
-/** Workspace deletion takes its documents with it. */
+/** Workspace deletion takes its artifacts with it. */
 export function deleteForWorkspace(workspaceId: string): void {
   db.transaction((tx) => {
     const ids = tx
@@ -407,7 +407,7 @@ export function deleteForWorkspace(workspaceId: string): void {
 }
 
 /**
- * The only standalone delete, and only for workspace-scoped documents: a
+ * The only standalone delete, and only for workspace-scoped artifacts: a
  * chat-scoped artifact is part of its transcript and dies with it. Returns
  * false when the id is missing or not the workspace's to delete.
  */
@@ -434,8 +434,8 @@ export function deleteWorkspaceArtifact(
 
 /**
  * Rewind cleanup: drop the versions those messages produced, then drop any
- * artifact left with no versions at all. Workspace-scoped documents are exempt —
- * once a document belongs to the workspace its history is shared, and rewinding
+ * artifact left with no versions at all. Workspace-scoped artifacts are exempt —
+ * once an artifact belongs to the workspace its history is shared, and rewinding
  * one chat's turn must not roll back work another chat built on top of.
  */
 export function deleteVersionsForMessages(messageIds: string[]): void {

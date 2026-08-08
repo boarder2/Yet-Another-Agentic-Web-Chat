@@ -27,7 +27,7 @@ export default function ArtifactMention({
     return (
       <span
         className={cn(base, 'bg-surface-2 text-fg/40 line-through')}
-        title="This document no longer exists"
+        title="This artifact no longer exists"
       >
         <FileText size={12} className="self-center shrink-0" />
         {children}

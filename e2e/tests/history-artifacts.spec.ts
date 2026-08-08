@@ -127,7 +127,7 @@ test.describe('history: artifact tab', () => {
     });
   });
 
-  test('"open in new tab" affordance opens the raw document', async ({
+  test('"open in new tab" affordance opens the raw artifact', async ({
     page,
     request,
   }) => {

@@ -298,7 +298,7 @@ const MessageInput = ({
     inputRef,
   });
 
-  // Documents are only mentionable where they're durable: a workspace, and not
+  // Artifacts are only mentionable where they're durable: a workspace, and not
   // a private chat, where the artifact tools are withheld entirely.
   const mentionsEnabled = !!workspaceId && !isPrivateSession;
   const { data: workspaceArtifacts } = useWorkspaceArtifacts(

@@ -9,7 +9,7 @@ export interface TokenPopoverChoice {
   onSelect: () => void;
 }
 
-/** The completion list shared by the composer's `/skill` and `@document` triggers. */
+/** The completion list shared by the composer's `/skill` and `@artifact` triggers. */
 export default function TokenPopover({
   choices,
   activeIndex,

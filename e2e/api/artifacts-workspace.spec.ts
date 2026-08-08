@@ -36,7 +36,7 @@ test.describe('workspace-scoped artifacts', () => {
     expect(detail).toMatchObject({ chatId, workspaceId: null });
   });
 
-  test('a second chat in the same workspace can edit the document', async ({
+  test('a second chat in the same workspace can edit the artifact', async ({
     request,
   }) => {
     const workspaceId = await seedWorkspace(request);
@@ -45,7 +45,7 @@ test.describe('workspace-scoped artifacts', () => {
       content: DOC,
     });
 
-    // A brand-new chat that never saw the document being created.
+    // A brand-new chat that never saw the artifact being created.
     const { events } = await runArtifactTurn(
       request,
       `${artifactId}|Revenue was flat.|Revenue grew 4%.`,
@@ -59,7 +59,7 @@ test.describe('workspace-scoped artifacts', () => {
     expect(await raw.text()).toContain('Revenue grew 4%.');
   });
 
-  test('a chat in another workspace cannot reach the document', async ({
+  test('a chat in another workspace cannot reach the artifact', async ({
     request,
   }) => {
     const workspaceId = await seedWorkspace(request);
@@ -86,7 +86,7 @@ test.describe('workspace-scoped artifacts', () => {
     expect(detail.latestVersion).toBe(1);
   });
 
-  test('an unscoped chat cannot reach a workspace document', async ({
+  test('an unscoped chat cannot reach a workspace artifact', async ({
     request,
   }) => {
     const workspaceId = await seedWorkspace(request);
@@ -104,7 +104,7 @@ test.describe('workspace-scoped artifacts', () => {
   });
 });
 
-test.describe('mentions put a document on a fresh chat’s roster', () => {
+test.describe('mentions put a artifact on a fresh chat’s roster', () => {
   const echoPrompt = async (
     request: Parameters<typeof runArtifactTurn>[0],
     prompt: string,
@@ -117,7 +117,7 @@ test.describe('mentions put a document on a fresh chat’s roster', () => {
     return joinResponseText(events);
   };
 
-  test('a mentioned document appears in a chat that never created it', async ({
+  test('a mentioned artifact appears in a chat that never created it', async ({
     request,
   }) => {
     const workspaceId = await seedWorkspace(request);
@@ -131,13 +131,13 @@ test.describe('mentions put a document on a fresh chat’s roster', () => {
       `Update ${buildArtifactMention(artifactId, 'Mentioned Doc')} please`,
       { chatId: uid(), workspaceId },
     );
-    expect(prompt).toContain('## Documents available in this chat');
+    expect(prompt).toContain('## Artifacts available in this chat');
     expect(prompt).toContain(artifactId);
     expect(prompt).toContain('"Mentioned Doc"');
-    expect(prompt).toContain('(workspace document)');
+    expect(prompt).toContain('(workspace artifact)');
   });
 
-  test('an unmentioned workspace document stays off the roster', async ({
+  test('an unmentioned workspace artifact stays off the roster', async ({
     request,
   }) => {
     const workspaceId = await seedWorkspace(request);
@@ -153,7 +153,7 @@ test.describe('mentions put a document on a fresh chat’s roster', () => {
     expect(prompt).not.toContain(artifactId);
   });
 
-  test('mentioning a document from another workspace resolves to nothing', async ({
+  test('mentioning a artifact from another workspace resolves to nothing', async ({
     request,
   }) => {
     const workspaceId = await seedWorkspace(request);
@@ -169,12 +169,12 @@ test.describe('mentions put a document on a fresh chat’s roster', () => {
       { chatId: uid(), workspaceId: otherWorkspaceId },
     );
     expect(prompt).not.toContain(artifactId);
-    expect(prompt).not.toContain('## Documents available in this chat');
+    expect(prompt).not.toContain('## Artifacts available in this chat');
   });
 });
 
-test.describe('workspace document lifecycle', () => {
-  test('deleting the creating chat leaves the document, detached', async ({
+test.describe('workspace artifact lifecycle', () => {
+  test('deleting the creating chat leaves the artifact, detached', async ({
     request,
   }) => {
     const workspaceId = await seedWorkspace(request);
@@ -187,7 +187,7 @@ test.describe('workspace document lifecycle', () => {
 
     const detail = await request.get(`/api/artifacts/${artifactId}`);
     expect(detail.status()).toBe(200);
-    // Provenance is dropped, the document and its history are not.
+    // Provenance is dropped, the artifact and its history are not.
     expect(await detail.json()).toMatchObject({
       chatId: null,
       workspaceId,
@@ -205,7 +205,7 @@ test.describe('workspace document lifecycle', () => {
     );
   });
 
-  test('deleting the workspace takes its documents with it', async ({
+  test('deleting the workspace takes its artifacts with it', async ({
     request,
   }) => {
     const workspaceId = await seedWorkspace(request);
@@ -219,7 +219,7 @@ test.describe('workspace document lifecycle', () => {
     );
   });
 
-  test('rewinding a turn does not roll back a workspace document', async ({
+  test('rewinding a turn does not roll back a workspace artifact', async ({
     request,
   }) => {
     const workspaceId = await seedWorkspace(request);
@@ -235,7 +235,7 @@ test.describe('workspace document lifecycle', () => {
 
     // Re-sending the edit turn's user message rewinds the chat from there. For
     // a chat-scoped artifact that drops the version the turn produced; a
-    // workspace document is shared, so its history must survive — another chat
+    // workspace artifact is shared, so its history must survive — another chat
     // may already have built on it.
     const resend = await request.post('/api/chat', {
       data: {
@@ -261,7 +261,7 @@ test.describe('workspace document lifecycle', () => {
     expect(detail.versions).toHaveLength(2);
   });
 
-  test('a workspace document can be deleted on its own', async ({
+  test('a workspace artifact can be deleted on its own', async ({
     request,
   }) => {
     const workspaceId = await seedWorkspace(request);

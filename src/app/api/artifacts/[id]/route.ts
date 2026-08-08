@@ -18,7 +18,7 @@ export const GET = route(
 );
 
 /**
- * Only workspace documents can be deleted on their own. A chat-scoped artifact
+ * Only workspace artifacts can be deleted on their own. A chat-scoped artifact
  * is part of its transcript and goes when the chat does, so there is
  * deliberately no route that removes one.
  */
@@ -30,7 +30,7 @@ export const DELETE = route(
     if (!artifact) throw notFound('Artifact not found');
     if (!artifact.workspaceId) {
       throw badRequest(
-        'Only workspace documents can be deleted; a chat-scoped artifact is removed with its chat.',
+        'Only workspace artifacts can be deleted; a chat-scoped artifact is removed with its chat.',
       );
     }
     deleteWorkspaceArtifact(id, artifact.workspaceId);

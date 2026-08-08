@@ -17,7 +17,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import FilesTab from './FilesTab';
-import DocumentsTab from './DocumentsTab';
+import ArtifactsTab from './ArtifactsTab';
 import InstructionsTab from './InstructionsTab';
 import WorkspaceMemoryTab from './WorkspaceMemoryTab';
 import SettingsTab from './SettingsTab';
@@ -30,7 +30,7 @@ import { useWorkspaceArtifacts } from '@/lib/hooks/api/useArtifacts';
 import { useWorkspaceMemory } from '@/lib/hooks/api/useWorkspaceMemory';
 import { useWorkspaceSystemPrompts } from '@/lib/hooks/api/useWorkspaceSystemPrompts';
 
-type SectionKey = 'files' | 'documents' | 'instructions' | 'memory';
+type SectionKey = 'files' | 'artifacts' | 'instructions' | 'memory';
 
 function CollapsibleSection({
   icon: Icon,
@@ -85,13 +85,13 @@ export default function WorkspaceSidebar({
 }) {
   const { data: workspace } = useWorkspace(workspaceId);
   const { data: files } = useWorkspaceFiles(workspaceId);
-  const { data: documents } = useWorkspaceArtifacts(workspaceId);
+  const { data: artifacts } = useWorkspaceArtifacts(workspaceId);
   const { data: memories } = useWorkspaceMemory(workspaceId);
   const { data: linkedPromptIds } = useWorkspaceSystemPrompts(workspaceId);
 
   const [open, setOpen] = useState<Record<SectionKey, boolean>>({
     files: false,
-    documents: false,
+    artifacts: false,
     instructions: false,
     memory: false,
   });
@@ -107,15 +107,17 @@ export default function WorkspaceSidebar({
   }
 
   const fileCount = files?.length ?? null;
-  const docCount = documents?.length ?? null;
+  const artifactCount = artifacts?.length ?? null;
   const memoryCount = memories?.length ?? null;
   const instructionsLength = workspace?.instructions?.length ?? null;
   const linkedCount = linkedPromptIds?.length ?? null;
 
   const filesSummary =
     fileCount === null ? '…' : `${fileCount} file${fileCount === 1 ? '' : 's'}`;
-  const documentsSummary =
-    docCount === null ? '…' : `${docCount} doc${docCount === 1 ? '' : 's'}`;
+  const artifactsSummary =
+    artifactCount === null
+      ? '…'
+      : `${artifactCount} artifact${artifactCount === 1 ? '' : 's'}`;
   const memorySummary =
     memoryCount === null
       ? '…'
@@ -241,12 +243,12 @@ export default function WorkspaceSidebar({
 
             <CollapsibleSection
               icon={FileCode2}
-              title="Documents"
-              summary={documentsSummary}
-              open={open.documents}
-              onToggle={() => toggle('documents')}
+              title="Artifacts"
+              summary={artifactsSummary}
+              open={open.artifacts}
+              onToggle={() => toggle('artifacts')}
             >
-              <DocumentsTab workspaceId={workspaceId} />
+              <ArtifactsTab workspaceId={workspaceId} />
             </CollapsibleSection>
 
             <CollapsibleSection

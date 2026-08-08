@@ -222,7 +222,7 @@ test.describe('artifact roster injected into the agent prompt', () => {
     });
     const prompt = await echoPrompt(request, { chatId });
 
-    expect(prompt).toContain('## Documents available in this chat');
+    expect(prompt).toContain('## Artifacts available in this chat');
     expect(prompt).toContain(artifactId);
     expect(prompt).toContain('"Roster Report"');
     expect(prompt).toContain('v1, updated');
@@ -231,9 +231,9 @@ test.describe('artifact roster injected into the agent prompt', () => {
 
   test('is absent from a chat with no artifacts', async ({ request }) => {
     const prompt = await echoPrompt(request, { chatId: uid() });
-    expect(prompt).not.toContain('## Documents available in this chat');
+    expect(prompt).not.toContain('## Artifacts available in this chat');
     // The guidance still ships; only the roster is conditional.
-    expect(prompt).toContain('## Documents (Artifacts)');
+    expect(prompt).toContain('## Artifacts');
   });
 
   test('is withheld in chat mode, which has no artifact tools', async ({
@@ -241,7 +241,7 @@ test.describe('artifact roster injected into the agent prompt', () => {
   }) => {
     const { chatId } = await seedArtifact(request, { title: 'Hidden Report' });
     const prompt = await echoPrompt(request, { chatId, focusMode: 'chat' });
-    expect(prompt).not.toContain('## Documents available in this chat');
+    expect(prompt).not.toContain('## Artifacts available in this chat');
     expect(prompt).not.toContain('Hidden Report');
   });
 
@@ -250,7 +250,7 @@ test.describe('artifact roster injected into the agent prompt', () => {
   }) => {
     const { chatId } = await seedArtifact(request, { title: 'Private Report' });
     const prompt = await echoPrompt(request, { chatId, isPrivate: true });
-    expect(prompt).not.toContain('## Documents available in this chat');
+    expect(prompt).not.toContain('## Artifacts available in this chat');
     expect(prompt).not.toContain('Private Report');
   });
 });
@@ -335,7 +335,7 @@ test.describe('raw route', () => {
 
     const csp = headers['content-security-policy'];
     expect(csp).toContain("default-src 'none'");
-    // The response, not the embedder, is what strands the document on an
+    // The response, not the embedder, is what strands the artifact on an
     // opaque origin — this route is reachable top-level, where no iframe
     // sandbox attribute applies.
     expect(csp).toContain('sandbox allow-scripts allow-popups');
@@ -392,7 +392,7 @@ test.describe('raw route', () => {
     // Meaningless in a downloaded file, and dropped from the meta variant.
     const meta = /content="([^"]*)"/.exec(body)?.[1] ?? '';
     expect(meta).not.toContain('frame-ancestors');
-    // The document itself is untouched apart from the injected tag.
+    // The artifact itself is untouched apart from the injected tag.
     expect(body).toContain('<h1>Q3 Report</h1>');
   });
 
@@ -423,7 +423,7 @@ test.describe('deletion and cascades', () => {
     const { chatId, artifactId } = await seedArtifact(request);
 
     // A chat-scoped artifact is part of its transcript and dies with the chat.
-    // DELETE exists for workspace documents, so the refusal is a rejected
+    // DELETE exists for workspace artifacts, so the refusal is a rejected
     // request rather than a missing method.
     expect(
       (await request.delete(`/api/artifacts/${artifactId}`)).status(),

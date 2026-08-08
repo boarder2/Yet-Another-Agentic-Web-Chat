@@ -71,7 +71,7 @@ export default function WorkspaceShell({
   }
 
   return (
-    // The sidebar's Documents section drives the chat rendered beside it; the
+    // The sidebar's Artifacts section drives the chat rendered beside it; the
     // two are siblings here, so the bridge has to wrap both.
     <ArtifactBridgeProvider>
       <div className="bg-bg min-h-screen">

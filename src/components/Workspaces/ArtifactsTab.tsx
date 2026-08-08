@@ -13,11 +13,11 @@ import {
 import { useArtifactBridge } from '@/lib/artifacts/ArtifactBridgeContext';
 
 /**
- * The workspace's documents. Opening one prefers the chat's side panel and
- * falls back to the document's own page when no chat is mounted — see
+ * The workspace's artifacts. Opening one prefers the chat's side panel and
+ * falls back to the artifact's own page when no chat is mounted — see
  * `ArtifactBridgeProvider`.
  */
-export default function DocumentsTab({ workspaceId }: { workspaceId: string }) {
+export default function ArtifactsTab({ workspaceId }: { workspaceId: string }) {
   const { data: artifacts, isLoading } = useWorkspaceArtifacts(workspaceId);
   const bridge = useArtifactBridge();
   const del = useDeleteArtifact();
@@ -29,7 +29,7 @@ export default function DocumentsTab({ workspaceId }: { workspaceId: string }) {
   if (!artifacts?.length) {
     return (
       <p className="text-xs text-fg/50">
-        No documents yet. Ask a chat in this workspace to build one.
+        No artifacts yet. Ask a chat in this workspace to build one.
       </p>
     );
   }
@@ -87,7 +87,7 @@ export default function DocumentsTab({ workspaceId }: { workspaceId: string }) {
                 type="button"
                 onClick={() => setPendingDelete(a)}
                 className="p-1.5 rounded-control hover:bg-surface transition text-fg/60 hover:text-danger"
-                title="Delete document"
+                title="Delete artifact"
               >
                 <Trash2 size={14} />
               </button>
@@ -99,7 +99,7 @@ export default function DocumentsTab({ workspaceId }: { workspaceId: string }) {
       <Modal
         open={!!pendingDelete}
         onClose={() => setPendingDelete(null)}
-        title="Delete document"
+        title="Delete artifact"
         size="sm"
       >
         <div className="space-y-4">

@@ -4,7 +4,7 @@
  * Deliberately ordinary markdown — the composer inserts it, the renderer picks
  * it up from an `a` override keyed on the `artifact:` href, and the server
  * scans the persisted message text for it. Nothing else records that a chat
- * references a document, so the transcript stays the single source of truth:
+ * references an artifact, so the transcript stays the single source of truth:
  * rewinding past a mention removes the reference along with the message.
  */
 

@@ -41,13 +41,13 @@ describe('scanArtifactMentions', () => {
     expect(scanArtifactMentions(text)).toEqual([OTHER, ID]);
   });
 
-  it('deduplicates repeated mentions of the same document', () => {
+  it('deduplicates repeated mentions of the same artifact', () => {
     const token = buildArtifactMention(ID, 'A');
     expect(scanArtifactMentions(`${token} and again ${token}`)).toEqual([ID]);
   });
 
   it('returns nothing for text without mentions', () => {
-    expect(scanArtifactMentions('no documents here')).toEqual([]);
+    expect(scanArtifactMentions('no artifacts here')).toEqual([]);
     expect(scanArtifactMentions('](artifact:not-a-uuid)')).toEqual([]);
   });
 });

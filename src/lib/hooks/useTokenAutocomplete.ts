@@ -26,7 +26,7 @@ interface Options<T> {
 
 /**
  * Trigger-character autocomplete over a plain textarea, shared by the `/skill`
- * and `@document` popovers. Owns only the popover — the text is the caller's
+ * and `@artifact` popovers. Owns only the popover — the text is the caller's
  * state, and a completion is an ordinary edit to it, so nothing here has to be
  * kept in sync with what the user types afterwards.
  */

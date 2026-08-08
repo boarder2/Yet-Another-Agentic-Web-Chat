@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { errorCode, insideHerdr, isAvailableShell } from './herdr.ts';
+import { errorCode, HerdrError, insideHerdr, isPaneBusy } from './herdr.ts';
 
 describe('insideHerdr', () => {
   it('accepts only an explicit HERDR_ENV=1', () => {
@@ -26,23 +26,32 @@ describe('errorCode', () => {
   });
 });
 
-// `agent start` refuses a pane that is not at its shell prompt, which is what made
-// a freshly split pane fail: the shell had not taken the foreground yet.
-describe('isAvailableShell', () => {
-  it('is available when the shell itself is the foreground process group', () => {
+// A freshly split pane is not startable yet, and nothing observable says when it
+// will be, so this refusal is the signal to wait and try again.
+describe('isPaneBusy', () => {
+  const failure = (stderr: string) =>
+    new HerdrError(['agent', 'start'], 1, stderr);
+
+  it('recognises the refusal worth retrying', () => {
     expect(
-      isAvailableShell({ shell_pid: 86275, foreground_process_group_id: 86275 }),
+      isPaneBusy(
+        failure(
+          '{"error":{"code":"agent_pane_busy","message":"not an available shell"}}',
+        ),
+      ),
     ).toBe(true);
   });
 
-  it('is busy while any command holds the foreground', () => {
-    expect(
-      isAvailableShell({ shell_pid: 86275, foreground_process_group_id: 86521 }),
-    ).toBe(false);
+  it('does not retry a name collision or a missing pane', () => {
+    for (const code of ['agent_name_taken', 'pane_not_found']) {
+      expect(isPaneBusy(failure(`{"error":{"code":"${code}"}}`)), code).toBe(
+        false,
+      );
+    }
   });
 
-  it('is busy when the pane has no shell to report yet', () => {
-    expect(isAvailableShell({})).toBe(false);
-    expect(isAvailableShell({ foreground_process_group_id: 42 })).toBe(false);
+  it('does not retry a failure that is not herdr refusing a pane', () => {
+    expect(isPaneBusy(new Error('spawn herdr ENOENT'))).toBe(false);
+    expect(isPaneBusy(undefined)).toBe(false);
   });
 });

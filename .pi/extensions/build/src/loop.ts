@@ -19,6 +19,8 @@ import {
 import { sessionTokens } from './sessions.ts';
 import {
   advance,
+  agentSessionId,
+  beginChunk,
   recordOverride,
   reseedAgent,
   type AgentName,
@@ -64,8 +66,9 @@ function chunkText(chunk: TaskChunk): string {
   ].join('\n');
 }
 
-// Every task carries the plan and the chunk, so a reseeded agent with no history
-// still has what it needs — the reseed costs continuity, not context.
+// Every task carries the plan, the chunk, and what is already merged, so an agent
+// with no history still has what it needs. That is what makes a per-chunk reset
+// affordable: it costs continuity, not the brief.
 function briefFor(
   role: AgentRole,
   brief: ChunkBrief,
@@ -156,43 +159,57 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
           ctx.model?.contextWindow ?? DEFAULT_CONTEXT_WINDOW;
         let working = state;
 
+        const chunkSessionId = (name: AgentName): string =>
+          agentSessionId(working.slug, name, working.agents[name]);
+
+        // The reviewer is ephemeral by design: no session id means `--no-session`.
+        const sessionIdFor = (role: AgentRole): string | undefined =>
+          role === 'reviewer' ? undefined : chunkSessionId(role);
+
         const crewContext = (): CrewContext => ({
           cwd: ctx.cwd,
           date: working.date,
           slug: working.slug,
           config,
-          sessionIdFor: (role) =>
-            role === 'reviewer'
-              ? undefined
-              : working.agents[role as AgentName].sessionId,
+          sessionIdFor,
           note,
           signal,
         });
+
+        // Every chunk starts all three agents clean: the coder and tester move to a
+        // new session, and their panes are closed so the new session is what comes
+        // back up. Skipped when this chunk is being re-run, which reattaches to the
+        // sessions already working on it instead of discarding their work.
+        if (working.agents.coder.chunkId !== chunk.id) {
+          note(`chunk ${chunk.number}: fresh coder and tester`);
+          working = beginChunk(working, chunk.id, new Date());
+          controller.update(working);
+          await retireRole(crewContext(), 'coder');
+          await retireRole(crewContext(), 'tester');
+        }
 
         // Live agents are found by name in herdr on every pass, so the loop keeps no
         // record of the layout to fall out of step with what is on screen.
         let crew: Crew = {};
 
         const runOne = async (role: AgentRole, feedback: string) => {
-          crew = await ensureCrew(crewContext());
-
           // A reseed only takes effect once the old agent is gone, since the new one
-          // is adopted by the same name.
+          // is adopted under the same name.
           if (role !== 'reviewer') {
-            const name = role as AgentName;
-            const used = sessionTokens(ctx.cwd, working.agents[name].sessionId);
+            const name = role;
+            const used = sessionTokens(ctx.cwd, chunkSessionId(name));
             if (used > contextWindow * config.contextBudget) {
-              note(`${role}: context budget reached, reseeding`);
+              note(`${role}: context budget reached within the chunk, reseeding`);
               working = reseedAgent(working, name, new Date());
               controller.update(working);
-              crew = await retireRole(crewContext(), crew, role);
+              await retireRole(crewContext(), role);
             }
           }
 
           // Retired before the crew is brought back up, so ensureCrew rebuilds it as
           // a reviewer that has never seen this code.
           if (role === 'reviewer') {
-            crew = await retireRole(crewContext(), crew, 'reviewer');
+            await retireRole(crewContext(), 'reviewer');
           }
 
           crew = await ensureCrew(crewContext());

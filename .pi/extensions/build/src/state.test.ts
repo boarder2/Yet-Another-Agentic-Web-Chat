@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   advance,
   agentSessionId,
+  beginChunk,
   buildPaths,
   canTransition,
   createState,
@@ -64,14 +65,30 @@ describe('formatDate and buildPaths', () => {
 });
 
 describe('agentSessionId', () => {
-  it('keeps generation 0 addressable as a bare id', () => {
-    expect(agentSessionId('retry-guard', 'coder')).toBe('wf-retry-guard-coder');
+  it('names the chunk the session belongs to', () => {
+    expect(
+      agentSessionId('retry-guard', 'coder', { chunkId: 'chunk-2', generation: 0 }),
+    ).toBe('wf-retry-guard-coder-chunk-2');
   });
 
-  it('suffixes reseeded generations', () => {
-    expect(agentSessionId('retry-guard', 'coder', 2)).toBe(
-      'wf-retry-guard-coder-g2',
+  it('suffixes reseeded generations within a chunk', () => {
+    expect(
+      agentSessionId('retry-guard', 'coder', { chunkId: 'chunk-2', generation: 3 }),
+    ).toBe('wf-retry-guard-coder-chunk-2-g3');
+  });
+
+  it('has a stable id before any chunk has begun', () => {
+    expect(
+      agentSessionId('retry-guard', 'tester', { chunkId: null, generation: 0 }),
+    ).toBe('wf-retry-guard-tester');
+  });
+
+  // Two chunks must never share a session, or the reset is cosmetic.
+  it('gives every chunk a distinct session', () => {
+    const ids = ['chunk-1', 'chunk-2', 'chunk-10'].map((chunkId) =>
+      agentSessionId('retry-guard', 'coder', { chunkId, generation: 0 }),
     );
+    expect(new Set(ids).size).toBe(3);
   });
 });
 
@@ -140,14 +157,12 @@ describe('overrides and reseeding', () => {
     ]);
   });
 
-  it('gives a reseeded agent a fresh session id', () => {
-    const after = reseedAgent(state(), 'coder', LATER);
+  it('bumps only the reseeded agent, and only its generation', () => {
+    const started = beginChunk(state(), 'chunk-1', NOW);
+    const after = reseedAgent(started, 'coder', LATER);
 
-    expect(after.agents.coder).toEqual({
-      sessionId: 'wf-retry-guard-coder-g1',
-      generation: 1,
-    });
-    expect(after.agents.tester.sessionId).toBe('wf-retry-guard-tester');
+    expect(after.agents.coder).toEqual({ chunkId: 'chunk-1', generation: 1 });
+    expect(after.agents.tester).toEqual({ chunkId: 'chunk-1', generation: 0 });
   });
 
   // Where each agent lives is read from herdr by name, never stored, so state has
@@ -155,6 +170,40 @@ describe('overrides and reseeding', () => {
   it('records no pane layout at all', () => {
     expect(state()).not.toHaveProperty('panes');
     expect(reseedAgent(state(), 'coder', LATER)).not.toHaveProperty('panes');
+  });
+});
+
+describe('beginChunk', () => {
+  it('moves coder and tester onto the new chunk', () => {
+    const after = beginChunk(state(), 'chunk-1', LATER);
+
+    expect(after.agents.coder).toEqual({ chunkId: 'chunk-1', generation: 0 });
+    expect(after.agents.tester).toEqual({ chunkId: 'chunk-1', generation: 0 });
+  });
+
+  it('gives the next chunk different sessions, so nothing carries over', () => {
+    const first = beginChunk(state(), 'chunk-1', NOW);
+    const second = beginChunk(first, 'chunk-2', LATER);
+
+    expect(
+      agentSessionId(second.slug, 'coder', second.agents.coder),
+    ).not.toBe(agentSessionId(first.slug, 'coder', first.agents.coder));
+  });
+
+  it('drops a within-chunk reseed when the next chunk starts', () => {
+    const reseeded = reseedAgent(beginChunk(state(), 'chunk-1', NOW), 'coder', NOW);
+    expect(beginChunk(reseeded, 'chunk-2', LATER).agents.coder.generation).toBe(0);
+  });
+
+  // Re-running a failed chunk must reattach, not throw away work in progress.
+  it('is a no-op for the chunk already in progress', () => {
+    const started = beginChunk(state(), 'chunk-1', NOW);
+    expect(beginChunk(started, 'chunk-1', LATER)).toBe(started);
+  });
+
+  it('leaves a within-chunk reseed alone when the same chunk is re-run', () => {
+    const reseeded = reseedAgent(beginChunk(state(), 'chunk-1', NOW), 'coder', NOW);
+    expect(beginChunk(reseeded, 'chunk-1', LATER).agents.coder.generation).toBe(1);
   });
 });
 

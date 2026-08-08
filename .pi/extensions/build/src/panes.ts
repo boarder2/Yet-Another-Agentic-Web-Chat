@@ -19,13 +19,12 @@ import {
   agentPane,
   callerPaneId,
   closePane,
-  HerdrError,
+  isPaneBusy,
   promptAgent,
   renamePane,
   splitPane,
   startAgent,
   waitForAgent,
-  waitForShell,
   type AgentStatus,
 } from './herdr.ts';
 import { AGENT_ROLES, type AgentRole } from './models.ts';
@@ -115,14 +114,17 @@ interface Anchor {
   ratio: number;
 }
 
+/** The driver keeps the left third; the crew column takes the remaining two. */
+const DRIVER_SHARE = 1 / 3;
+
 /**
- * Driver on the left half, then coder, tester and reviewer stacked down the right
- * in equal thirds: the coder keeps a third of the column, and the remaining two
- * thirds are halved.
+ * Driver on the left third, then coder, tester and reviewer stacked down the right
+ * two thirds in equal parts: the coder keeps a third of the column, and what is left
+ * is halved.
  *
  * The driver is split only to open the column, and never again while any crew pane
- * survives — splitting it twice is what shrinks the user's own pane to a quarter of
- * the screen. Every later pane is carved out of the right column instead.
+ * survives — splitting it twice is what shrinks the user's own pane to a sliver.
+ * Every later pane is carved out of the right column instead.
  */
 export function anchorFor(
   role: AgentRole,
@@ -133,7 +135,9 @@ export function anchorFor(
     (pane): pane is CrewPane => Boolean(pane),
   );
   if (column.length === 0) {
-    return driver ? { paneId: driver, direction: 'right', ratio: 0.5 } : null;
+    return driver
+      ? { paneId: driver, direction: 'right', ratio: DRIVER_SHARE }
+      : null;
   }
 
   // Building the column in order: thirds fall out of keeping 1/3 for the coder and
@@ -177,14 +181,20 @@ async function createPane(
   return paneId;
 }
 
-/** How long a freshly split pane gets to reach its shell prompt. */
-const SHELL_READY_TIMEOUT_MS = 15_000;
-const START_ATTEMPTS = 3;
+/** How long a freshly split pane gets to become one herdr will start an agent in. */
+const PANE_READY_TIMEOUT_MS = 30_000;
+const RETRY_DELAY_MS = 750;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * Starts one role, waiting for the pane's shell before handing it to herdr. A
- * `agent_pane_busy` refusal means the shell was still coming up, so the attempt is
- * repeated rather than failing the chunk.
+ * Starts one role in its pane, retrying while herdr says the pane is busy.
+ *
+ * A pane is not startable the instant `pane split` returns, and no observable
+ * property of the pane says when it will be: its foreground process group reports
+ * the shell as ready within milliseconds, while herdr keeps refusing for about a
+ * second. So the retry asks the only authority there is, repeatedly. The refusal
+ * comes back immediately, which makes polling it cheap.
  */
 async function startRole(
   ctx: CrewContext,
@@ -201,13 +211,8 @@ async function startRole(
   );
   writeFileSync(systemPromptFile, loadAgent(ctx.cwd, role).systemPrompt, 'utf-8');
 
+  const deadline = Date.now() + PANE_READY_TIMEOUT_MS;
   for (let attempt = 1; ; attempt++) {
-    if (!(await waitForShell(paneId, SHELL_READY_TIMEOUT_MS, ctx.signal))) {
-      throw new Error(
-        `The ${role} pane never reached a shell prompt, so its agent cannot be started.`,
-      );
-    }
-
     try {
       await startAgent({
         name: agent,
@@ -217,10 +222,9 @@ async function startRole(
       });
       return;
     } catch (error) {
-      const busy =
-        error instanceof HerdrError && error.code === 'agent_pane_busy';
-      if (!busy || attempt >= START_ATTEMPTS) throw error;
-      ctx.note(`${role}: pane still busy, retrying (${attempt}/${START_ATTEMPTS})`);
+      if (!isPaneBusy(error) || Date.now() >= deadline) throw error;
+      if (attempt === 1) ctx.note(`${role}: waiting for the pane to be startable`);
+      await sleep(RETRY_DELAY_MS);
     }
   }
 }
@@ -339,16 +343,14 @@ export async function runRole(
  */
 export async function retireRole(
   ctx: CrewContext,
-  crew: Crew,
   role: AgentRole,
-): Promise<Crew> {
-  const pane = crew[role];
-  if (!pane) return crew;
+): Promise<void> {
+  const paneId = await agentPane(agentName(ctx.slug, role), ctx.signal);
+  if (!paneId) return;
 
   try {
-    await closePane(pane.paneId, ctx.signal);
+    await closePane(paneId, ctx.signal);
   } catch {
     // Already gone — the point was that it stops existing.
   }
-  return { ...crew, [role]: undefined };
 }

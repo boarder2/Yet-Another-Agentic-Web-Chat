@@ -24,8 +24,16 @@ const TRANSITIONS: Record<Phase, readonly Phase[]> = {
   close: [],
 };
 
+/**
+ * Coder and tester get a new session per chunk, so nothing rots across chunks. The
+ * session id is derived rather than stored: a stored id could disagree with the
+ * chunk it was minted for, and then a resumed workflow would talk to the wrong
+ * session while believing it had a fresh one.
+ */
 export interface AgentSession {
-  sessionId: string;
+  /** Chunk this session belongs to; null before the first chunk begins. */
+  chunkId: string | null;
+  /** Bumped when an agent outgrows its context budget *within* a chunk. */
   generation: number;
 }
 
@@ -118,15 +126,14 @@ export function buildPaths(date: string, slug: string): BuildPaths {
   };
 }
 
-// Generation 0 keeps the bare id so an unreseeded agent is addressable as
-// `pi --session wf-<slug>-coder`, which is what /build:attach prints.
 export function agentSessionId(
   slug: string,
   agent: AgentName,
-  generation = 0,
+  session: AgentSession,
 ): string {
-  const base = `wf-${slug}-${agent}`;
-  return generation === 0 ? base : `${base}-g${generation}`;
+  const chunk = session.chunkId ? `-${session.chunkId}` : '';
+  const generation = session.generation ? `-g${session.generation}` : '';
+  return `wf-${slug}-${agent}${chunk}${generation}`;
 }
 
 export function createState(
@@ -136,10 +143,7 @@ export function createState(
   now: Date,
 ): BuildState {
   const timestamp = now.toISOString();
-  const agent = (name: AgentName): AgentSession => ({
-    sessionId: agentSessionId(slug, name),
-    generation: 0,
-  });
+  const agent = (): AgentSession => ({ chunkId: null, generation: 0 });
 
   return {
     version: 1,
@@ -152,7 +156,7 @@ export function createState(
     planPath: null,
     taskPath: null,
     taskHash: null,
-    agents: { coder: agent('coder'), tester: agent('tester') },
+    agents: { coder: agent(), tester: agent() },
     rounds: {},
     overrides: [],
     lastAttachedAt: null,
@@ -201,40 +205,54 @@ export function recordOverride(
   };
 }
 
+/**
+ * Puts coder and tester on a new session for a new chunk. Context earned on an
+ * earlier chunk is a liability on the next one: the plan and the chunk are restated
+ * in every brief, so a fresh agent loses continuity, not the brief.
+ *
+ * Idempotent per chunk, so re-running the same chunk after a failure reattaches to
+ * the sessions already working on it rather than throwing their work away.
+ */
+export function beginChunk(
+  state: BuildState,
+  chunkId: string,
+  now: Date,
+): BuildState {
+  if (state.agents.coder.chunkId === chunkId) return state;
+
+  const fresh: AgentSession = { chunkId, generation: 0 };
+  return {
+    ...state,
+    agents: { coder: { ...fresh }, tester: { ...fresh } },
+    updatedAt: now.toISOString(),
+  };
+}
+
 export function reseedAgent(
   state: BuildState,
   agent: AgentName,
   now: Date,
 ): BuildState {
-  const generation = state.agents[agent].generation + 1;
   return {
     ...state,
     agents: {
       ...state.agents,
       [agent]: {
-        sessionId: agentSessionId(state.slug, agent, generation),
-        generation,
+        ...state.agents[agent],
+        generation: state.agents[agent].generation + 1,
       },
     },
     updatedAt: now.toISOString(),
   };
 }
 
-// Session ids embed the slug, so a rename has to re-derive them or the agents
-// would keep talking to sessions named after the old slug.
+// Session ids derive from the slug, so a rename re-points the agents by itself.
 export function renameSlug(
   state: BuildState,
   slug: string,
   now: Date,
 ): BuildState {
-  const agents = { ...state.agents };
-  for (const name of Object.keys(agents) as AgentName[]) {
-    agents[name] = {
-      ...agents[name],
-      sessionId: agentSessionId(slug, name, agents[name].generation),
-    };
-  }
-  return { ...state, slug, agents, updatedAt: now.toISOString() };
+  return { ...state, slug, updatedAt: now.toISOString() };
 }
 
 export function serializeState(state: BuildState): string {

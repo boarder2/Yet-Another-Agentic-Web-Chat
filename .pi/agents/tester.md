@@ -32,5 +32,5 @@ Finish by calling `submit_test_result` with `passed`, `failed`, and `output` tak
 you actually performed. A run that ends without calling it does not count. Never report a pass
 you did not observe: a failing suite is reported as failing, with the verbatim output.
 
-Your session is long-lived across the workflow, so you accumulate the suite's conventions and
-its past failures.
+Your session covers **one chunk**, so you carry nothing over from earlier ones. Read the existing
+specs to pick up the suite's conventions instead of relying on memory of having seen them.

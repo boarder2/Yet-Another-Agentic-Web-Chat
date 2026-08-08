@@ -44,6 +44,7 @@ there instead of testing and reviewing work you did not do.
 
 ## Continuity
 
-Your session is long-lived across the whole workflow, so you already remember the plan and your
-earlier chunks. Every task still restates the plan and the chunk, so if your context was reset
-you have lost continuity but not the brief — work from what you were given.
+Your session covers **one chunk**. You have no memory of earlier chunks, and you do not need one:
+every task restates the plan, the chunk, and which chunks are already merged. Work from what you
+were given rather than from assumptions about how earlier chunks were built — read the code if you
+need to know.

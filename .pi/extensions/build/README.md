@@ -57,16 +57,21 @@ work that was not done, so the loop stops and tells you what it needs decided.
 After the last round you get: stop, or override with a reason that is written into the task file
 as `(override: …)`.
 
-Coder and tester have long-lived sessions (`wf-<slug>-coder`) so they accumulate context; the
-reviewer's pane is closed and rebuilt every chunk, so it cannot anchor on work it already approved.
-When a long-lived agent passes `contextBudget` of its window — read from the session file pi
-writes — it is retired and reseeded. Every task restates the plan and chunk, so a reseed costs
-continuity, not the brief.
+**Every chunk gets a clean crew.** All three agents are retired and restarted when a new chunk
+starts: coder and tester move to a per-chunk session (`wf-<slug>-coder-chunk-3`) and the reviewer to
+a fresh one. Context earned on an earlier chunk is a liability on the next — it is where stale
+assumptions about code that has since changed come from — and every task restates the plan, the
+chunk, and what is already merged, so a fresh agent loses continuity, not the brief.
+
+The reset is keyed on the chunk, so re-running a chunk that failed reattaches to the sessions already
+working on it instead of throwing their work away. Within a chunk, an agent that passes
+`contextBudget` of its window — read from the session file pi writes — is still retired and reseeded,
+which is the backstop for a chunk that takes many rounds.
 
 ## The panes
 
-`workflow_run_chunk` lays the crew out on first use: the driver session keeps the left half, and
-coder, tester and reviewer are stacked in equal thirds down the right. Each is a real interactive
+`workflow_run_chunk` lays the crew out on first use: the driver session keeps the left third, and
+coder, tester and reviewer are stacked in equal thirds down the remaining two. Each is a real interactive
 `pi`, started with `herdr agent start --kind pi` and named for its role, so the herdr sidebar reads
 as the crew and shows which one is `working`, `idle`, or `blocked`.
 
@@ -122,7 +127,8 @@ execution restores whatever model you were on, as do pause, abort and close. It 
 phase changes, so a manual `/model` inside a phase stands.
 
 Everything else falls back to a default rather than leaving a workflow unrunnable: `maxRounds` (2),
-`contextBudget` (0.6), `turnTimeoutMs` (30m), `blockedTimeoutMs` (15m), `checks` (none).
+`contextBudget` (0.6, applied within a chunk), `turnTimeoutMs` (30m), `blockedTimeoutMs` (15m),
+`checks` (none).
 
 ## Agents
 
@@ -146,7 +152,8 @@ such that it cannot report. A leftover `model:` field is a hard error: models li
 - **Pane geometry is best-effort.** Splits are placed for equal thirds, but a pane you close and
   the workflow rebuilds is split off whichever sibling survived, so the layout drifts. Resize it
   yourself; nothing in the loop depends on the geometry. The one invariant is that your own pane is
-  split at most once — only to open the right column, and never again while any crew pane lives.
+  split at most once, keeping the left third — only to open the crew column, and never again while
+  any crew pane lives.
 - **Agent names are the identity, so they collide.** Two workflows whose slugs truncate to the same
   32 characters would adopt each other's agents. Slugs are unique per day, so this needs two
   same-day workflows with near-identical names to bite.

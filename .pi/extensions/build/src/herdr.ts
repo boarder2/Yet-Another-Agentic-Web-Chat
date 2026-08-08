@@ -36,6 +36,16 @@ export class HerdrError extends Error {
   }
 }
 
+/**
+ * `agent start` refuses a pane it does not yet consider an available shell. It is
+ * the only authority on that: a pane's foreground process group reports the shell as
+ * ready milliseconds after a split, while herdr still declines for a second or so.
+ * So the refusal is transient and worth retrying, never a reason to fail a chunk.
+ */
+export function isPaneBusy(error: unknown): boolean {
+  return error instanceof HerdrError && error.code === 'agent_pane_busy';
+}
+
 export function insideHerdr(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.HERDR_ENV === '1';
 }
@@ -163,54 +173,6 @@ export async function startAgent(options: StartAgentOptions): Promise<void> {
   ];
   if (options.timeoutMs) args.push('--timeout', String(options.timeoutMs));
   await run([...args, '--', ...options.agentArgs], options.signal);
-}
-
-export interface ProcessInfo {
-  shell_pid?: number;
-  foreground_process_group_id?: number;
-}
-
-/**
- * `agent start` needs a pane sitting at its shell prompt with nothing in the
- * foreground. That is exactly the case where the foreground process group *is* the
- * shell; anything else — including a pane whose shell has not finished starting —
- * makes herdr refuse with `agent_pane_busy`.
- */
-export function isAvailableShell(info: ProcessInfo): boolean {
-  return (
-    typeof info.shell_pid === 'number' &&
-    info.foreground_process_group_id === info.shell_pid
-  );
-}
-
-export async function paneProcessInfo(
-  pane: string,
-  signal?: AbortSignal,
-): Promise<ProcessInfo> {
-  const response = await run(
-    ['pane', 'process-info', '--pane', pane],
-    signal,
-  );
-  return (result(response).process_info as ProcessInfo) ?? {};
-}
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-/**
- * A freshly split pane is not immediately usable: its shell has to reach its
- * prompt first. Without this wait, `agent start` races the shell and loses.
- */
-export async function waitForShell(
-  pane: string,
-  timeoutMs: number,
-  signal?: AbortSignal,
-): Promise<boolean> {
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    if (isAvailableShell(await paneProcessInfo(pane, signal))) return true;
-    if (Date.now() >= deadline || signal?.aborted) return false;
-    await sleep(150);
-  }
 }
 
 /**

@@ -5,11 +5,11 @@ const pane = (paneId: string, agent: string) => ({ paneId, agent });
 const DRIVER = 'w1:p1';
 
 describe('anchorFor', () => {
-  it('opens the right column off the driver', () => {
+  it('opens the right column off the driver, leaving it the left third', () => {
     expect(anchorFor('coder', {}, DRIVER)).toEqual({
       paneId: DRIVER,
       direction: 'right',
-      ratio: 0.5,
+      ratio: 1 / 3,
     });
   });
 

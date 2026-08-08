@@ -27,7 +27,6 @@ const TRANSITIONS: Record<Phase, readonly Phase[]> = {
 export interface AgentSession {
   sessionId: string;
   generation: number;
-  tokensUsed: number;
 }
 
 export interface ChunkOverride {
@@ -140,7 +139,6 @@ export function createState(
   const agent = (name: AgentName): AgentSession => ({
     sessionId: agentSessionId(slug, name),
     generation: 0,
-    tokensUsed: 0,
   });
 
   return {
@@ -216,7 +214,6 @@ export function reseedAgent(
       [agent]: {
         sessionId: agentSessionId(state.slug, agent, generation),
         generation,
-        tokensUsed: 0,
       },
     },
     updatedAt: now.toISOString(),

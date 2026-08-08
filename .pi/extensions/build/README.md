@@ -4,6 +4,10 @@ A pi extension that turns "triage → grill → plan → tasks → execute → c
 is asked to follow into a state machine the harness enforces. Self-contained: its own
 `package.json`, `tsconfig.json`, and `vitest.config.ts`; the root project is untouched.
 
+**Requires herdr.** The coder, tester and reviewer run as live interactive pi agents in their own
+herdr panes, so you watch them work rather than reading a summary afterwards. `/build` refuses to
+start outside a herdr session — there is nowhere to put them.
+
 ## Commands
 
 | Command | Effect |
@@ -13,7 +17,6 @@ is asked to follow into a state machine the harness enforces. Self-contained: it
 | `/build:resume <slug>` | Re-attach a paused workflow and re-gate tools. |
 | `/build:abort` | Discard phase state. Plan and task files are kept. |
 | `/build:list` | Every workflow in the project with phase, status, and last attachment. |
-| `/build:attach [coder\|tester]` | Print the `pi --session …` command for an agent's own session. |
 
 ## Phases and their tools
 
@@ -43,18 +46,46 @@ A tool called in the wrong phase throws; the model cannot advance by asserting t
 ## The chunk loop
 
 Per chunk: coder → tester → reviewer, up to `maxRounds` rounds. A chunk completes only when the
-tester reports **zero failures with at least one pass** *and* the reviewer reports `pass`. Both
-arrive as typed arguments to `submit_test_result` / `submit_verdict`, injected into each subagent
-via `pi -e`. A missing or unreadable signal is a failure, never a pass.
+coder reports `completed`, the tester reports **zero failures with at least one pass**, *and* the
+reviewer reports `pass`. All three arrive as typed arguments to `submit_completion` /
+`submit_test_result` / `submit_verdict`, from an extension injected into each agent via `pi -e`. A
+missing or unreadable signal is a failure, never a pass.
+
+A coder that reports `blocked` ends the round immediately: there is no point testing and reviewing
+work that was not done, so the loop stops and tells you what it needs decided.
 
 After the last round you get: stop, or override with a reason that is written into the task file
 as `(override: …)`.
 
 Coder and tester have long-lived sessions (`wf-<slug>-coder`) so they accumulate context; the
-reviewer is spawned fresh each chunk and pinned to a different model, so it cannot anchor on work
-it already approved. When a long-lived agent passes `contextBudget` of the window, its session is
-retired and reseeded — every task restates the plan and chunk, so a reseed costs continuity, not
-the brief.
+reviewer's pane is closed and rebuilt every chunk, so it cannot anchor on work it already approved.
+When a long-lived agent passes `contextBudget` of its window — read from the session file pi
+writes — it is retired and reseeded. Every task restates the plan and chunk, so a reseed costs
+continuity, not the brief.
+
+## The panes
+
+`workflow_run_chunk` lays the crew out on first use: the driver session keeps the left half, and
+coder, tester and reviewer are stacked in equal thirds down the right. Each is a real interactive
+`pi`, started with `herdr agent start --kind pi` and named for its role, so the herdr sidebar reads
+as the crew and shows which one is `working`, `idle`, or `blocked`.
+
+The loop drives them with `herdr agent prompt --wait`. Agents run with `--approve`, so `blocked`
+means a genuine question rather than a tool approval: you get a notification, the workflow waits
+`blockedTimeoutMs` for you to answer it in the pane, and a timeout fails the round. The loop never
+answers for you.
+
+Each agent is found by its name — `<role>-<slug>`, derived from the workflow — looked up in herdr on
+every pass. herdr is the authority on what is running and where, so the workflow stores no layout of
+its own that could fall out of step with the screen: a half-built crew, a crashed driver, or a
+resumed session all reattach to the agents that are already live instead of starting a second one.
+
+Panes are yours once created. They stay open at close and abort, and a pane you close is rebuilt
+next chunk — costing that agent's context, not the layout. Because the agents own their terminals,
+their results come back through a file named by `YAAWC_BUILD_RESULT` rather than through stdout.
+
+A freshly split pane is not immediately usable: `agent start` needs the shell at its prompt, so the
+loop waits for the pane's foreground process group to *be* the shell before starting anything there.
 
 ## Files
 
@@ -62,25 +93,43 @@ the brief.
 - `.ai/plans/<date>-<slug>.md` — the plan.
 - `.ai/task/<date>-<slug>.md` — chunks and progress. **Authoritative** for both; the extension is
   the only writer of `[x]`, and hash-checks it before each chunk.
+- `.ai/builds/<date>-<slug>-<role>.{system.md,result.json}` — each agent's system prompt and its
+  last typed result. Machine-owned scratch.
 
 ## Config — `.pi/build.json`
 
 ```json
 {
-  "reviewerModel": "~anthropic/claude-sonnet-latest",
+  "models": {
+    "plan": "openai-codex/gpt-5.6-sol:high",
+    "coder": "~anthropic/claude-sonnet-latest",
+    "tester": "~anthropic/claude-sonnet-latest",
+    "reviewer": "openai-codex/gpt-5.6-sol:medium"
+  },
   "checks": ["npm run lint", "npx tsc --noEmit", "npm run test:unit"],
   "maxRounds": 2,
   "contextBudget": 0.6
 }
 ```
 
-Invalid values fall back to defaults rather than leaving a workflow unrunnable.
+**All four models are required**, and `/build` refuses to start until every one of them resolves
+against the model catalogue. Which model plans and which one grinds chunks is a cost/quality
+decision, and a harness that guessed at it would quietly plan on the cheap model. Specs are
+`provider/id`, `provider/id:thinking`, or a bare `id`.
+
+`models.plan` is applied to *your* session for triage, grilling, planning and chunking; entering
+execution restores whatever model you were on, as do pause, abort and close. It is set only when the
+phase changes, so a manual `/model` inside a phase stands.
+
+Everything else falls back to a default rather than leaving a workflow unrunnable: `maxRounds` (2),
+`contextBudget` (0.6), `turnTimeoutMs` (30m), `blockedTimeoutMs` (15m), `checks` (none).
 
 ## Agents
 
-`.pi/agents/{coder,tester,reviewer}.md` — frontmatter `name`, `description`, optional `model` and
-`tools`. An agent's tool allowlist is always extended with the submit tools, so it can never be
-configured such that it cannot report.
+`.pi/agents/{coder,tester,reviewer}.md` — frontmatter `name`, `description`, and optional `tools`.
+An agent's tool allowlist is always extended with the submit tools, so it can never be configured
+such that it cannot report. A leftover `model:` field is a hard error: models live in
+`.pi/build.json`, and silently ignoring the field would let you change it and change nothing.
 
 ## Known weaknesses, accepted deliberately
 
@@ -91,6 +140,16 @@ configured such that it cannot report.
 - **No locking.** Two sessions driving one slug will interleave writes into the shared agent
   sessions. Chosen so a crash never leaves a workflow unresumable; `/build:list` shows an advisory
   last-attached stamp only.
+- **The panes are visible, not authoritative.** What the parent believes comes from the result
+  file, not from the transcript you are reading. An agent whose terminal shows a finished review but
+  that never called `submit_verdict` is a failed round, by design.
+- **Pane geometry is best-effort.** Splits are placed for equal thirds, but a pane you close and
+  the workflow rebuilds is split off whichever sibling survived, so the layout drifts. Resize it
+  yourself; nothing in the loop depends on the geometry. The one invariant is that your own pane is
+  split at most once — only to open the right column, and never again while any crew pane lives.
+- **Agent names are the identity, so they collide.** Two workflows whose slugs truncate to the same
+  32 characters would adopt each other's agents. Slugs are unique per day, so this needs two
+  same-day workflows with near-identical names to bite.
 - **`.ai/` is gitignored**, so plans, task lists, and override annotations are local to whoever ran
   the workflow. They are durable and greppable, but not an audit trail for review.
 

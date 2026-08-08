@@ -4,8 +4,11 @@ import type {
 } from '@earendil-works/pi-coding-agent';
 import { isSafeCommand } from './bash-allowlist.ts';
 import { registerClose } from './checks.ts';
+import { CONFIG_PATH, loadConfig } from './config.ts';
 import { registerGates, type Controller } from './gates.ts';
+import { insideHerdr } from './herdr.ts';
 import { registerLoop } from './loop.ts';
+import { parseModelSpec, resolveModel, unresolvableModels } from './models.ts';
 import { phasePrompt } from './prompts.ts';
 import { findBuild, listBuilds, saveBuild, uniqueSlug } from './store.ts';
 import {
@@ -14,20 +17,34 @@ import {
   mintSlug,
   setStatus,
   type BuildState,
+  type Phase,
 } from './state.ts';
 
 const ENTRY_TYPE = 'build-workflow';
 const WITHHELD_TOOLS = ['edit', 'write'];
+
+/** Phases whose thinking happens in this session, and so run on the plan model. */
+const PLANNING_PHASES: readonly Phase[] = ['triage', 'grill', 'plan', 'tasks'];
 
 interface Attachment {
   slug: string;
   date: string;
 }
 
+interface ModelChoice {
+  provider: string;
+  id: string;
+  thinkingLevel: string | null;
+}
+
 export default function buildWorkflow(pi: ExtensionAPI): void {
   let active: BuildState | null = null;
   let withheld: string[] = [];
   let projectCwd = process.cwd();
+  /** What this session was on before /build touched it, restored when it ends. */
+  let priorModel: ModelChoice | null = null;
+  /** The phase whose model has been applied, so a manual /model within it stands. */
+  let modelledPhase: Phase | null = null;
 
   // Re-applied at every point the tool set can change, because `session_start`
   // fires before `resources_discover` rebuilds it — gate once and the rebuild
@@ -50,6 +67,67 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
     withheld = [];
   }
 
+  async function switchModel(
+    ctx: ExtensionContext,
+    choice: ModelChoice,
+  ): Promise<boolean> {
+    const model = ctx.modelRegistry.find(choice.provider, choice.id);
+    if (!model || !(await pi.setModel(model))) return false;
+    if (choice.thinkingLevel) {
+      pi.setThinkingLevel(choice.thinkingLevel as never);
+    }
+    return true;
+  }
+
+  /**
+   * The plan model covers triage through tasks; execution restores whatever the
+   * session was on, since the driver narrates rather than designs. Applied only on
+   * a phase change, so a manual `/model` mid-phase is never overridden.
+   */
+  async function applyPhaseModel(
+    ctx: ExtensionContext,
+    state: BuildState,
+  ): Promise<void> {
+    if (modelledPhase === state.phase) return;
+    modelledPhase = state.phase;
+
+    if (PLANNING_PHASES.includes(state.phase)) {
+      const loaded = loadConfig(ctx.cwd);
+      if (!loaded.ok) return;
+
+      const spec = loaded.config.models.plan;
+      const model = resolveModel(ctx.modelRegistry, spec);
+      if (!model) return;
+      if (!(await switchModel(ctx, resolvedChoice(model, spec)))) {
+        ctx.ui.notify(`No API key for the plan model (${spec}).`, 'error');
+      }
+      return;
+    }
+
+    await restoreModel(ctx);
+  }
+
+  async function restoreModel(ctx: ExtensionContext): Promise<void> {
+    if (!priorModel) return;
+    const restoring = priorModel;
+    priorModel = null;
+    if (!(await switchModel(ctx, restoring))) {
+      ctx.ui.notify(
+        `Could not restore ${restoring.provider}/${restoring.id}. Pick a model with /model.`,
+        'warning',
+      );
+    }
+  }
+
+  function rememberCurrentModel(ctx: ExtensionContext): void {
+    if (priorModel || !ctx.model) return;
+    priorModel = {
+      provider: ctx.model.provider,
+      id: ctx.model.id,
+      thinkingLevel: ctx.thinkingLevel ?? null,
+    };
+  }
+
   function showStatus(ctx: ExtensionContext): void {
     ctx.ui.setStatus(
       'build',
@@ -64,11 +142,15 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
     enforceGating();
     pi.appendEntry(ENTRY_TYPE, { slug: state.slug, date: state.date });
     showStatus(ctx);
+    rememberCurrentModel(ctx);
+    void applyPhaseModel(ctx, state);
   }
 
   function detach(ctx: ExtensionContext): void {
     active = null;
+    modelledPhase = null;
     restoreTools();
+    void restoreModel(ctx);
     showStatus(ctx);
   }
 
@@ -77,12 +159,39 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
     saveBuild(cwd, state);
   }
 
+  /**
+   * The workflow drives three interactive agents in herdr panes, so there is no
+   * degraded mode to fall back to: without herdr there is nowhere to put them.
+   */
+  function herdrProblem(): string | null {
+    return insideHerdr()
+      ? null
+      : 'This session is not running inside herdr (HERDR_ENV is not 1). ' +
+          'The /build workflow runs its coder, tester and reviewer as live agents in herdr panes, ' +
+          'so start pi inside a herdr pane and try again.';
+  }
+
+  function configProblems(ctx: ExtensionContext): string[] {
+    const loaded = loadConfig(ctx.cwd);
+    if (!loaded.ok) return loaded.problems;
+    return unresolvableModels(ctx.modelRegistry, loaded.config.models).map(
+      (entry) => `No model matches ${entry}.`,
+    );
+  }
+
+  /** Every precondition, reported together rather than one restart at a time. */
+  function blockers(ctx: ExtensionContext): string[] {
+    const herdr = herdrProblem();
+    return [...(herdr ? [herdr] : []), ...configProblems(ctx)];
+  }
+
   // The session records which workflow it drives; the workflow itself lives on
   // disk, so a resumed session re-reads the current phase rather than trusting
   // whatever the entry said when it was written.
   pi.on('session_start', async (_event, ctx) => {
     active = null;
     withheld = [];
+    modelledPhase = null;
     projectCwd = ctx.cwd;
 
     let attachment: Attachment | undefined;
@@ -106,9 +215,11 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
     enforceGating();
   });
 
-  pi.on('before_agent_start', async (event) => {
+  pi.on('before_agent_start', async (event, ctx) => {
     if (!active) return;
     enforceGating();
+    rememberCurrentModel(ctx);
+    await applyPhaseModel(ctx, active);
     return { systemPrompt: `${event.systemPrompt}\n\n${phasePrompt(active)}` };
   });
 
@@ -138,22 +249,6 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
   registerLoop(pi, controller);
   registerClose(pi, controller);
 
-  pi.registerCommand('build:attach', {
-    description: 'Print the command to open an agent session in another terminal',
-    handler: async (args, ctx) => {
-      if (!active) {
-        ctx.ui.notify('No active workflow.', 'warning');
-        return;
-      }
-      const role = args.trim() === 'tester' ? 'tester' : 'coder';
-      ctx.ui.notify(
-        `Open in another terminal (safe between chunks, not during one):\n` +
-          `  pi --session ${active.agents[role].sessionId}`,
-        'info',
-      );
-    },
-  });
-
   pi.registerCommand('build', {
     description: 'Start a phase-gated build workflow',
     handler: async (args, ctx) => {
@@ -169,6 +264,15 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
       const ask = args.trim();
       if (!ask) {
         ctx.ui.notify('Usage: /build <what you want built>', 'warning');
+        return;
+      }
+
+      const problems = blockers(ctx);
+      if (problems.length) {
+        ctx.ui.notify(
+          `Cannot start a workflow:\n- ${problems.join('\n- ')}\n\nModels are declared per role in ${CONFIG_PATH}.`,
+          'error',
+        );
         return;
       }
 
@@ -197,7 +301,10 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
       const slug = active.slug;
       persist(ctx.cwd, setStatus(active, 'paused', new Date()));
       detach(ctx);
-      ctx.ui.notify(`Workflow "${slug}" paused. Resume with /build:resume ${slug}`, 'info');
+      ctx.ui.notify(
+        `Workflow "${slug}" paused. Resume with /build:resume ${slug}`,
+        'info',
+      );
     },
   });
 
@@ -216,7 +323,9 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
       const stored = slug ? findBuild(ctx.cwd, slug) : null;
       if (!stored) {
         ctx.ui.notify(
-          slug ? `No workflow found for "${slug}".` : 'Usage: /build:resume <slug>',
+          slug
+            ? `No workflow found for "${slug}".`
+            : 'Usage: /build:resume <slug>',
           'warning',
         );
         return;
@@ -225,6 +334,15 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
         ctx.ui.notify(
           `Workflow "${slug}" is ${stored.state.status} and cannot be resumed.`,
           'warning',
+        );
+        return;
+      }
+
+      const problems = blockers(ctx);
+      if (problems.length) {
+        ctx.ui.notify(
+          `Cannot resume "${slug}":\n- ${problems.join('\n- ')}`,
+          'error',
         );
         return;
       }
@@ -253,7 +371,7 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
         ? true
         : await ctx.ui.confirm(
             `Abort workflow "${slug}"?`,
-            'Phase state is discarded. The plan and task files stay on disk.',
+            'Phase state is discarded. The plan and task files stay on disk, and the agent panes stay open.',
           );
       if (!ok) return;
 
@@ -282,4 +400,16 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
       ctx.ui.notify(lines.join('\n'), 'info');
     },
   });
+}
+
+/** The registry match decides provider and id; the spec only pins thinking level. */
+function resolvedChoice(
+  model: { provider: string; id: string },
+  spec: string,
+): ModelChoice {
+  return {
+    provider: model.provider,
+    id: model.id,
+    thinkingLevel: parseModelSpec(spec).thinkingLevel,
+  };
 }

@@ -44,7 +44,8 @@ export function registerClose(pi: ExtensionAPI, controller: Controller): void {
           );
         }
 
-        const { checks } = loadConfig(ctx.cwd);
+        const loaded = loadConfig(ctx.cwd);
+        const checks = loaded.ok ? loaded.config.checks : [];
         const outcomes: CheckOutcome[] = [];
 
         for (const command of checks) {

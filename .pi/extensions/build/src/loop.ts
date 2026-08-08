@@ -6,10 +6,17 @@ import {
   type ExtensionAPI,
 } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
-import { loadAgent, type AgentRole } from './agents.ts';
-import { loadConfig } from './config.ts';
+import { loadConfig, CONFIG_PATH } from './config.ts';
 import type { Controller } from './gates.ts';
-import { runAgent } from './runner.ts';
+import type { AgentRole } from './models.ts';
+import {
+  ensureCrew,
+  retireRole,
+  runRole,
+  type Crew,
+  type CrewContext,
+} from './panes.ts';
+import { sessionTokens } from './sessions.ts';
 import {
   advance,
   recordOverride,
@@ -23,7 +30,12 @@ import {
   parseTasks,
   type TaskChunk,
 } from './tasks.ts';
-import { decodeTestResult, decodeVerdict, isGreen } from './verdict.ts';
+import {
+  decodeCompletion,
+  decodeTestResult,
+  decodeVerdict,
+  isGreen,
+} from './verdict.ts';
 
 const DEFAULT_CONTEXT_WINDOW = 200_000;
 
@@ -65,7 +77,7 @@ function briefFor(
   const preamble = `${chunkText(brief.chunk)}\n\n--- PLAN ---\n${brief.plan}${done}`;
 
   if (role === 'coder') {
-    return `Implement exactly this chunk and nothing else.\n\n${preamble}${
+    return `Implement exactly this chunk and nothing else, then report with submit_completion.\n\n${preamble}${
       feedback ? `\n\n--- FIX THESE ---\n${feedback}` : ''
     }`;
   }
@@ -83,7 +95,7 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
       name: 'workflow_run_chunk',
       label: 'Run Chunk',
       description:
-        'Run the next unfinished chunk through coder, tester and reviewer. Takes no arguments: the harness picks the chunk.',
+        'Run the next unfinished chunk through coder, tester and reviewer in their herdr panes. Takes no arguments: the harness picks the chunk.',
       parameters: Type.Object({}),
 
       async execute(_id, _params, signal, onUpdate, ctx) {
@@ -97,7 +109,14 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
         }
         if (!state.taskPath) throw new Error('This workflow has no task list.');
 
-        const config = loadConfig(ctx.cwd);
+        const loaded = loadConfig(ctx.cwd);
+        if (!loaded.ok) {
+          throw new Error(
+            `${CONFIG_PATH} is not usable:\n- ${loaded.problems.join('\n- ')}`,
+          );
+        }
+        const config = loaded.config;
+
         const taskFile = join(ctx.cwd, state.taskPath);
         const original = readFileSync(taskFile, 'utf-8');
         const hash = hashContent(original);
@@ -137,45 +156,62 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
           ctx.model?.contextWindow ?? DEFAULT_CONTEXT_WINDOW;
         let working = state;
 
-        const runRole = async (role: AgentRole, feedback: string) => {
-          const agent = loadAgent(ctx.cwd, role);
-          const persistent = role !== 'reviewer';
-          const name = role as AgentName;
+        const crewContext = (): CrewContext => ({
+          cwd: ctx.cwd,
+          date: working.date,
+          slug: working.slug,
+          config,
+          sessionIdFor: (role) =>
+            role === 'reviewer'
+              ? undefined
+              : working.agents[role as AgentName].sessionId,
+          note,
+          signal,
+        });
 
-          if (persistent) {
-            const used = working.agents[name].tokensUsed;
+        // Live agents are found by name in herdr on every pass, so the loop keeps no
+        // record of the layout to fall out of step with what is on screen.
+        let crew: Crew = {};
+
+        const runOne = async (role: AgentRole, feedback: string) => {
+          crew = await ensureCrew(crewContext());
+
+          // A reseed only takes effect once the old agent is gone, since the new one
+          // is adopted by the same name.
+          if (role !== 'reviewer') {
+            const name = role as AgentName;
+            const used = sessionTokens(ctx.cwd, working.agents[name].sessionId);
             if (used > contextWindow * config.contextBudget) {
+              note(`${role}: context budget reached, reseeding`);
               working = reseedAgent(working, name, new Date());
               controller.update(working);
-              note(`${role}: context budget reached, reseeded`);
+              crew = await retireRole(crewContext(), crew, role);
             }
           }
 
-          note(`${role}: running`);
-          const result = await runAgent({
-            agent,
-            task: briefFor(role, brief, feedback),
-            cwd: ctx.cwd,
-            sessionId: persistent ? working.agents[name].sessionId : undefined,
-            model: role === 'reviewer' ? config.reviewerModel : agent.model,
-            signal,
-            onActivity: (line) => note(`${role}: ${line}`),
-          });
-
-          if (persistent) {
-            working = {
-              ...working,
-              agents: {
-                ...working.agents,
-                [name]: {
-                  ...working.agents[name],
-                  tokensUsed: result.tokensUsed,
-                },
-              },
-            };
-            controller.update(working);
+          // Retired before the crew is brought back up, so ensureCrew rebuilds it as
+          // a reviewer that has never seen this code.
+          if (role === 'reviewer') {
+            crew = await retireRole(crewContext(), crew, 'reviewer');
           }
-          return result;
+
+          crew = await ensureCrew(crewContext());
+
+          note(`${role}: working`);
+          return runRole(
+            crewContext(),
+            crew,
+            role,
+            briefFor(role, brief, feedback),
+            (blocked) => {
+              note(`${blocked}: blocked — asking for input in its pane`);
+              ctx.ui.notify(
+                `The ${blocked} agent is blocked in its pane and needs you. ` +
+                  `Answer it there; the workflow is waiting.`,
+                'warning',
+              );
+            },
+          );
         };
 
         let testFeedback = '';
@@ -185,21 +221,28 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
         for (let round = 1; round <= config.maxRounds; round++) {
           note(`--- round ${round} of ${config.maxRounds} ---`);
 
-          const coder = await runRole(
+          const coderRun = await runOne(
             'coder',
             sections(testFeedback, reviewFeedback),
           );
-          if (coder.exitCode !== 0) {
-            throw new Error(
-              `The coder agent failed (exit ${coder.exitCode}).\n${coder.stderr.slice(0, 500)}`,
+          const completion = decodeCompletion(coderRun.envelope);
+          // A coder that gave up is not a round to test and review: stop and say
+          // why, rather than spending two more agents proving nothing changed.
+          if (!completion.ok || completion.value.status === 'blocked') {
+            const why = completion.ok
+              ? completion.value.summary
+              : (coderRun.problem ?? completion.reason);
+            return say(
+              `The coder stopped without implementing chunk ${chunk.number}: ${why}\n\n` +
+                'Decide what to do and re-run the chunk, or revise the task list.',
             );
           }
 
           // The tester sees only test failures — review findings are the coder's to fix.
-          const tester = await runRole('tester', testFeedback);
-          const tests = decodeTestResult(tester.toolCalls);
-          const reviewer = await runRole('reviewer', '');
-          const verdict = decodeVerdict(reviewer.toolCalls);
+          const testerRun = await runOne('tester', testFeedback);
+          const tests = decodeTestResult(testerRun.envelope);
+          const reviewerRun = await runOne('reviewer', '');
+          const verdict = decodeVerdict(reviewerRun.envelope);
 
           const testsGreen = tests.ok && isGreen(tests.value);
           const reviewPassed = verdict.ok && verdict.value.verdict === 'pass';
@@ -233,22 +276,18 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
             ? isGreen(tests.value)
               ? ''
               : `Tests: ${tests.value.failed} failing.\n${tests.value.output.slice(0, 2000)}`
-            : `Tests: ${tests.reason}`;
+            : `Tests: ${testerRun.problem ?? tests.reason}`;
 
-          // The blocking list is only the headline; the prose carries the reasoning behind
-          // each finding, and is the whole review when the verdict itself does not decode.
-          const report = reviewer.text.trim();
+          // The blocking list is only the headline; the reviewer's notes carry the
+          // reasoning, and are the whole review when the verdict does not decode.
           reviewFeedback = verdict.ok
             ? verdict.value.verdict === 'pass'
               ? ''
               : sections(
                   `Reviewer blocking:\n- ${verdict.value.blocking.join('\n- ')}`,
-                  report,
+                  verdict.value.notes,
                 )
-            : sections(
-                `Reviewer: ${verdict.reason}`,
-                report && `Reviewer report:\n${report}`,
-              );
+            : `Reviewer: ${reviewerRun.problem ?? verdict.reason}`;
 
           problems.push(
             `Round ${round}:\n${sections(testFeedback, reviewFeedback)}`,

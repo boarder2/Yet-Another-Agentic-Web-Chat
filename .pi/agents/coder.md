@@ -31,6 +31,17 @@ Exact entry points, function/type signatures, and behaviors that must be covered
 
 Anything you could not do, or where you departed from the chunk, and why. Omit if none.
 
+## Reporting
+
+Finish by calling `submit_completion` with:
+
+- `status` — exactly `completed` or `blocked`
+- `summary` — what you implemented, or what blocked you and what you need decided
+
+Work that ends without calling it does not count as done. Report `blocked` — never `completed` —
+when the chunk turned out to be wrong, ambiguous, or impossible as written; the workflow stops
+there instead of testing and reviewing work you did not do.
+
 ## Continuity
 
 Your session is long-lived across the whole workflow, so you already remember the plan and your

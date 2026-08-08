@@ -140,18 +140,21 @@ describe('overrides and reseeding', () => {
     ]);
   });
 
-  it('gives a reseeded agent a fresh session id and zeroed usage', () => {
-    const used = state();
-    used.agents.coder.tokensUsed = 500_000;
-
-    const after = reseedAgent(used, 'coder', LATER);
+  it('gives a reseeded agent a fresh session id', () => {
+    const after = reseedAgent(state(), 'coder', LATER);
 
     expect(after.agents.coder).toEqual({
       sessionId: 'wf-retry-guard-coder-g1',
       generation: 1,
-      tokensUsed: 0,
     });
     expect(after.agents.tester.sessionId).toBe('wf-retry-guard-tester');
+  });
+
+  // Where each agent lives is read from herdr by name, never stored, so state has
+  // no layout to keep in step with the screen.
+  it('records no pane layout at all', () => {
+    expect(state()).not.toHaveProperty('panes');
+    expect(reseedAgent(state(), 'coder', LATER)).not.toHaveProperty('panes');
   });
 });
 

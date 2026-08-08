@@ -1,12 +1,10 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-
-export type AgentRole = 'coder' | 'tester' | 'reviewer';
+import type { AgentRole } from './models.ts';
 
 export interface AgentDefinition {
   name: string;
   description: string;
-  model?: string;
   tools?: string[];
   systemPrompt: string;
 }
@@ -35,9 +33,22 @@ export function parseFrontmatter(text: string): Frontmatter {
   return { fields, body: text.slice(match[0].length).trim() };
 }
 
+export class AgentConfigError extends Error {}
+
+/**
+ * A `model:` field is rejected rather than ignored: models live in
+ * `.pi/build.json` now, and dead config that looks live is how someone changes
+ * the coder's model without changing anything at all.
+ */
 export function parseAgent(text: string): AgentDefinition | null {
   const { fields, body } = parseFrontmatter(text);
   if (!fields.name || !fields.description) return null;
+  if (fields.model) {
+    throw new AgentConfigError(
+      `\`model: ${fields.model}\` is no longer read from agent frontmatter. ` +
+        `Set it in ${'.pi/build.json'} under \`models\` and remove the field.`,
+    );
+  }
 
   const tools = fields.tools
     ?.split(',')
@@ -47,7 +58,6 @@ export function parseAgent(text: string): AgentDefinition | null {
   return {
     name: fields.name,
     description: fields.description,
-    model: fields.model || undefined,
     tools: tools?.length ? tools : undefined,
     systemPrompt: body,
   };

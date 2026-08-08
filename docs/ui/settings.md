@@ -46,7 +46,7 @@ Toggles for automatic suggestions after responses and auto-generating chat title
 
 ### MCP Servers
 
-CRUD for remote MCP servers (see `mcp-integration` skill).
+CRUD for remote MCP servers (see `yaawc-mcp-integration` skill).
 
 - Add/edit a server's name, URL, transport (auto/Streamable HTTP/SSE), and auth (none, bearer/API key, OAuth client credentials, or interactive OAuth). Secrets are write-only — existing tokens are never re-displayed.
 - **Test** probes the connection; **Authorize** starts the interactive OAuth flow; **Refresh tools** re-runs discovery.

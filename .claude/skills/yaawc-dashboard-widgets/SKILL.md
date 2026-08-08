@@ -1,6 +1,6 @@
 ---
 name: yaawc-dashboard-widgets
-description: Use when working on dashboard widgets — LLM-transformed widgets, user-JS code widgets, the Docker sandbox runner, source fetching/sanitization, charts, the in-editor widget-builder agent, theme-aware rendering, or the /dashboard and home-page boards.
+description: Use when working on dashboard widgets — LLM or code widgets, the Docker sandbox runner, source fetching/sanitization, the widget-builder agent, or the /dashboard and home boards.
 ---
 
 # Dashboard Widgets

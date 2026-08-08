@@ -1,6 +1,6 @@
 ---
 name: yaawc-agent-panel
-description: Use when working on the Agent Panel composer mode — fanning one prompt across 2–4 executor models in parallel then synthesizing one answer. Covers PanelCoordinator, panel executors, the restricted executor toolset, panel_executor_* events, PanelColumns markup, and panel presets/selection.
+description: Use when working on the Agent Panel composer mode — PanelCoordinator, executor models/toolset, panel_executor_* events, PanelColumns, or panel presets/selection.
 ---
 
 # Agent Panel

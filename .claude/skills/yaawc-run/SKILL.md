@@ -1,6 +1,6 @@
 ---
 name: yaawc-run
-description: Build, run, and drive YAAWC (the Next.js AI search app in this repo). Use when asked to start YAAWC, launch the dev server, build it, smoke-test it, screenshot or inspect the home/dashboard UI, or interact with the running app in a browser.
+description: Build, run, and drive YAAWC. Use when asked to start the dev server, build, smoke-test, screenshot the UI, or interact with the running app in a browser.
 ---
 
 YAAWC is a Next.js (App Router) web app: start `npm run dev`, then drive headless Chromium with `playwright-cli`. The harness `.claude/skills/yaawc-run/smoke.sh` wraps the whole loop. Paths are relative to repo root.

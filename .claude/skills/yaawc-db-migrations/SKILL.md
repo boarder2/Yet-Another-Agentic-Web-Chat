@@ -1,6 +1,6 @@
 ---
 name: yaawc-db-migrations
-description: Use when changing the database — adding or altering a table/column, the Drizzle schema, generating or applying migrations, or writing DB queries. Covers schema.ts, db:generate/db:push, and where query helpers live.
+description: Use when changing the database — the Drizzle schema, tables/columns, migrations (db:generate/db:push), or DB query helpers.
 ---
 
 # DB Schema & Migrations

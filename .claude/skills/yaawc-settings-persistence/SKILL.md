@@ -1,6 +1,6 @@
 ---
 name: yaawc-settings-persistence
-description: Use when working on app settings — adding/changing a setting, the config.toml-vs-DB split, the localStorage⇄DB sync layer, the SettingsPanel/settings modal, model selection (ModelPicker), or reading settings server-side. Covers MIGRATED_SETTING_KEYS, persist.ts, settings/server.ts, and the seed-from-config flow.
+description: Use when working on app settings — the config.toml-vs-DB split, localStorage⇄DB sync (MIGRATED_SETTING_KEYS, persist.ts), SettingsPanel, model selection persistence, or reading settings server-side.
 ---
 
 # Settings & Persistence

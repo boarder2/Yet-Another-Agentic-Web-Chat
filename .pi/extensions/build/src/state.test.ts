@@ -67,13 +67,19 @@ describe('formatDate and buildPaths', () => {
 describe('agentSessionId', () => {
   it('names the chunk the session belongs to', () => {
     expect(
-      agentSessionId('retry-guard', 'coder', { chunkId: 'chunk-2', generation: 0 }),
+      agentSessionId('retry-guard', 'coder', {
+        chunkId: 'chunk-2',
+        generation: 0,
+      }),
     ).toBe('wf-retry-guard-coder-chunk-2');
   });
 
   it('suffixes reseeded generations within a chunk', () => {
     expect(
-      agentSessionId('retry-guard', 'coder', { chunkId: 'chunk-2', generation: 3 }),
+      agentSessionId('retry-guard', 'coder', {
+        chunkId: 'chunk-2',
+        generation: 3,
+      }),
     ).toBe('wf-retry-guard-coder-chunk-2-g3');
   });
 
@@ -96,19 +102,17 @@ describe('transitions', () => {
   it('allows only the phases the workflow defines', () => {
     expect(canTransition('triage', 'grill')).toBe(true);
     expect(canTransition('triage', 'plan')).toBe(true);
-    expect(canTransition('plan', 'tasks')).toBe(true);
-    expect(canTransition('tasks', 'execute')).toBe(true);
+    expect(canTransition('plan', 'execute')).toBe(true);
     expect(canTransition('execute', 'close')).toBe(true);
   });
 
-  it('refuses to skip the plan and task gates', () => {
+  it('refuses to skip the plan gate', () => {
     expect(canTransition('triage', 'execute')).toBe(false);
-    expect(canTransition('plan', 'execute')).toBe(false);
-    expect(canTransition('grill', 'tasks')).toBe(false);
+    expect(canTransition('grill', 'execute')).toBe(false);
   });
 
   it('refuses to go backwards or past the end', () => {
-    expect(canTransition('tasks', 'plan')).toBe(false);
+    expect(canTransition('execute', 'plan')).toBe(false);
     expect(canTransition('execute', 'triage')).toBe(false);
     expect(canTransition('close', 'execute')).toBe(false);
   });
@@ -185,14 +189,20 @@ describe('beginChunk', () => {
     const first = beginChunk(state(), 'chunk-1', NOW);
     const second = beginChunk(first, 'chunk-2', LATER);
 
-    expect(
-      agentSessionId(second.slug, 'coder', second.agents.coder),
-    ).not.toBe(agentSessionId(first.slug, 'coder', first.agents.coder));
+    expect(agentSessionId(second.slug, 'coder', second.agents.coder)).not.toBe(
+      agentSessionId(first.slug, 'coder', first.agents.coder),
+    );
   });
 
   it('drops a within-chunk reseed when the next chunk starts', () => {
-    const reseeded = reseedAgent(beginChunk(state(), 'chunk-1', NOW), 'coder', NOW);
-    expect(beginChunk(reseeded, 'chunk-2', LATER).agents.coder.generation).toBe(0);
+    const reseeded = reseedAgent(
+      beginChunk(state(), 'chunk-1', NOW),
+      'coder',
+      NOW,
+    );
+    expect(beginChunk(reseeded, 'chunk-2', LATER).agents.coder.generation).toBe(
+      0,
+    );
   });
 
   // Re-running a failed chunk must reattach, not throw away work in progress.
@@ -202,8 +212,14 @@ describe('beginChunk', () => {
   });
 
   it('leaves a within-chunk reseed alone when the same chunk is re-run', () => {
-    const reseeded = reseedAgent(beginChunk(state(), 'chunk-1', NOW), 'coder', NOW);
-    expect(beginChunk(reseeded, 'chunk-1', LATER).agents.coder.generation).toBe(1);
+    const reseeded = reseedAgent(
+      beginChunk(state(), 'chunk-1', NOW),
+      'coder',
+      NOW,
+    );
+    expect(beginChunk(reseeded, 'chunk-1', LATER).agents.coder.generation).toBe(
+      1,
+    );
   });
 });
 
@@ -218,7 +234,9 @@ describe('serialization', () => {
     expect(() => parseState('{"version":99}')).toThrow(
       'Unsupported build state version: 99',
     );
-    expect(() => parseState('{"version":1}')).toThrow('missing required fields');
+    expect(() => parseState('{"version":1}')).toThrow(
+      'missing required fields',
+    );
     expect(() =>
       parseState(
         JSON.stringify({
@@ -230,5 +248,13 @@ describe('serialization', () => {
         }),
       ),
     ).toThrow('Unknown phase: shipping');
+  });
+
+  // A workflow written before plan and chunking merged must still load.
+  it('reads the retired tasks phase as planning', () => {
+    const migrated = parseState(
+      serializeState({ ...state(), phase: 'tasks' as never }),
+    );
+    expect(migrated.phase).toBe('plan');
   });
 });

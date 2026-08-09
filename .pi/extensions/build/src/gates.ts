@@ -121,8 +121,8 @@ export function registerGates(pi: ExtensionAPI, controller: Controller): void {
         return say(
           complexity === 'complex'
             ? `Triaged as complex. Grill the ask now — one question at a time, waiting for each answer. ` +
-              `Call workflow_end_grilling only once the user has agreed in conversation that nothing is left open.`
-            : `Triaged as simple. Go straight to planning and call workflow_write_plan.`,
+                `Call workflow_end_grilling only once the user has agreed in conversation that nothing is left open.`
+            : `Triaged as simple. Go straight to planning and call workflow_write_plan with the plan and its chunking.`,
         );
       },
     }),
@@ -162,7 +162,7 @@ export function registerGates(pi: ExtensionAPI, controller: Controller): void {
 
         controller.update(advance(state, 'plan', new Date()));
         return say(
-          'Understanding agreed. Write the plan with workflow_write_plan.',
+          'Understanding agreed. Write the plan and its chunked task list, and submit both with workflow_write_plan.',
         );
       },
     }),
@@ -171,94 +171,60 @@ export function registerGates(pi: ExtensionAPI, controller: Controller): void {
   pi.registerTool(
     defineTool({
       name: 'workflow_write_plan',
-      label: 'Write Plan',
+      label: 'Write Plan and Tasks',
       description:
-        'Submit the implementation plan. The harness owns the path and validates structure; the user approves it.',
+        'Submit the implementation plan together with its chunked task list. The harness owns both paths and validates structure; one approval covers both and starts execution.',
       parameters: Type.Object({
-        markdown: Type.String({
+        plan: Type.String({
           description:
             'The whole plan. Needs ## Problem, ## Scope, ## Approach, ## Changes (naming files), ## Acceptance Criteria.',
+        }),
+        tasks: Type.String({
+          description:
+            'The whole task list chunking that plan. Each chunk is `## Chunk <n> — <name>` with `- [ ]` items.',
         }),
       }),
 
       async execute(_id, params, _signal, _onUpdate, ctx) {
         const state = requirePhase(controller, 'workflow_write_plan', 'plan');
 
-        const failures = validatePlan(params.markdown);
+        // Neither document is written unless both validate: a plan on disk with no
+        // task list beside it is a half-submitted gate the user never approved.
+        const failures = [
+          ...validatePlan(params.plan).map((failure) => `Plan: ${failure}`),
+          ...validateTasks(params.tasks).map((failure) => `Tasks: ${failure}`),
+        ];
         if (failures.length > 0) {
           throw new Error(
-            `Plan rejected, not written. Fix and resubmit:\n- ${failures.join('\n- ')}`,
+            `Rejected, nothing written. Fix and resubmit both documents:\n- ${failures.join('\n- ')}`,
           );
         }
 
-        const relative = buildPaths(state.date, state.slug).plan;
-        writeDocument(ctx.cwd, relative, params.markdown);
+        const paths = buildPaths(state.date, state.slug);
+        writeDocument(ctx.cwd, paths.plan, params.plan);
+        writeDocument(ctx.cwd, paths.task, params.tasks);
 
         const approved = ctx.hasUI
           ? await ctx.ui.confirm(
-              'Approve this plan?',
-              `Written to ${relative}. Approving moves the workflow to the task list.`,
+              'Approve this plan and its chunking?',
+              `Written to ${paths.plan} and ${paths.task}. Approving starts execution; chunk order is then frozen.`,
             )
           : true;
         if (!approved) {
           return say(
-            `Plan written to ${relative} but not approved. Revise it and resubmit.`,
+            `Written to ${paths.plan} and ${paths.task} but not approved. Ask what is wrong, revise both, and resubmit.`,
           );
         }
 
         controller.update(
-          advance({ ...state, planPath: relative }, 'tasks', new Date()),
+          advance(
+            { ...state, planPath: paths.plan, taskPath: paths.task },
+            'execute',
+            new Date(),
+          ),
         );
         return say(
-          `Plan approved (${relative}). Break it into chunks with workflow_write_tasks.`,
-        );
-      },
-    }),
-  );
-
-  pi.registerTool(
-    defineTool({
-      name: 'workflow_write_tasks',
-      label: 'Write Task List',
-      description:
-        'Submit the chunked task list. Chunk order is frozen once approved.',
-      parameters: Type.Object({
-        markdown: Type.String({
-          description:
-            'The whole task list. Each chunk is `## Chunk <n> — <name>` with `- [ ]` items.',
-        }),
-      }),
-
-      async execute(_id, params, _signal, _onUpdate, ctx) {
-        const state = requirePhase(controller, 'workflow_write_tasks', 'tasks');
-
-        const failures = validateTasks(params.markdown);
-        if (failures.length > 0) {
-          throw new Error(
-            `Task list rejected, not written. Fix and resubmit:\n- ${failures.join('\n- ')}`,
-          );
-        }
-
-        const relative = buildPaths(state.date, state.slug).task;
-        writeDocument(ctx.cwd, relative, params.markdown);
-
-        const approved = ctx.hasUI
-          ? await ctx.ui.confirm(
-              'Approve this chunking?',
-              `Written to ${relative}. Approving starts execution; chunk order is then frozen.`,
-            )
-          : true;
-        if (!approved) {
-          return say(
-            `Task list written to ${relative} but not approved. Recut the chunks and resubmit.`,
-          );
-        }
-
-        controller.update(
-          advance({ ...state, taskPath: relative }, 'execute', new Date()),
-        );
-        return say(
-          `Chunking approved (${relative}). Run chunks with workflow_run_chunk.`,
+          `Plan and chunking approved (${paths.plan}, ${paths.task}). Run chunks with workflow_run_chunk.`,
         );
       },
     }),

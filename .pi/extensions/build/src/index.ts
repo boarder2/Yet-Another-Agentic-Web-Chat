@@ -36,7 +36,7 @@ const ENTRY_TYPE = 'build-workflow';
 const WITHHELD_TOOLS = ['edit', 'write'];
 
 /** Phases whose thinking happens in this session, and so run on the plan model. */
-const PLANNING_PHASES: readonly Phase[] = ['triage', 'grill', 'plan', 'tasks'];
+const PLANNING_PHASES: readonly Phase[] = ['triage', 'grill', 'plan'];
 
 interface Attachment {
   slug: string;
@@ -120,7 +120,7 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
   }
 
   /**
-   * The plan model covers triage through tasks; execution restores whatever the
+   * The plan model covers triage through planning; execution restores whatever the
    * session was on, since the driver narrates rather than designs. Applied only on
    * a phase change, so a manual `/model` mid-phase is never overridden.
    */
@@ -257,7 +257,10 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
       return null;
     }
     if (!ctx.hasUI) {
-      ctx.ui.notify('This command needs a workflow slug in non-interactive mode.', 'warning');
+      ctx.ui.notify(
+        'This command needs a workflow slug in non-interactive mode.',
+        'warning',
+      );
       return null;
     }
 
@@ -303,7 +306,10 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
     };
     persist(ctx.cwd, state);
     attach(state, ctx);
-    ctx.ui.notify(`Workflow "${state.slug}" resumed in ${state.phase}.`, 'info');
+    ctx.ui.notify(
+      `Workflow "${state.slug}" resumed in ${state.phase}.`,
+      'info',
+    );
     return true;
   }
 
@@ -350,7 +356,9 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
   ): Promise<boolean> {
     if (!ctx.hasUI) return true;
 
-    const files = buildArtifactPaths(state).map((path) => `- ${path}`).join('\n');
+    const files = buildArtifactPaths(state)
+      .map((path) => `- ${path}`)
+      .join('\n');
     return ctx.ui.confirm(
       `Delete workflow "${state.slug}" completely?`,
       `The following files will be deleted:\n${files}\n\n` +
@@ -362,7 +370,12 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
   async function deleteStored(
     stored: StoredBuild,
     ctx: ExtensionCommandContext,
-  ): Promise<{ ok: boolean; missing: string[]; failed: string[]; error?: string }> {
+  ): Promise<{
+    ok: boolean;
+    missing: string[];
+    failed: string[];
+    error?: string;
+  }> {
     if (sameBuild(active, stored.state) && !ctx.isIdle()) {
       ctx.abort();
       await ctx.waitForIdle();
@@ -388,10 +401,7 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
     };
   }
 
-  function cleanupReport(
-    missing: string[],
-    failed: string[],
-  ): string {
+  function cleanupReport(missing: string[], failed: string[]): string {
     const notes: string[] = [];
     if (missing.length > 0) {
       notes.push(`Agent panes already absent: ${missing.join(', ')}`);
@@ -493,7 +503,9 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
   pi.on('tool_call', async (event) => {
     if (!active || event.toolName !== 'bash') return;
 
-    const command = String((event.input as { command?: unknown }).command ?? '');
+    const command = String(
+      (event.input as { command?: unknown }).command ?? '',
+    );
     if (!isSafeCommand(command)) {
       return {
         block: true,
@@ -572,8 +584,7 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
 
   pi.registerCommand('build:resume', {
     description: 'Resume a workflow by slug, or choose one interactively',
-    getArgumentCompletions: (prefix) =>
-      buildCompletions(prefix, isResumable),
+    getArgumentCompletions: (prefix) => buildCompletions(prefix, isResumable),
     handler: async (args, ctx) => {
       if (active) {
         ctx.ui.notify(
@@ -606,7 +617,10 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
     description: 'Delete the current workflow and all of its artifacts',
     handler: async (_args, ctx) => {
       if (!active) {
-        ctx.ui.notify('No current workflow. Use /build:manage to choose one.', 'warning');
+        ctx.ui.notify(
+          'No current workflow. Use /build:manage to choose one.',
+          'warning',
+        );
         return;
       }
       await deleteOne({ state: active, file: '' }, ctx);
@@ -659,7 +673,9 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
       ctx.ui.notify(
         `Pruned ${removed} of ${completed.length} completed workflow${completed.length === 1 ? '' : 's'}.` +
           (problems.length ? `\n${problems.join('\n')}` : '') +
-          (missing.length ? `\nAgent panes already absent: ${missing.join(', ')}` : ''),
+          (missing.length
+            ? `\nAgent panes already absent: ${missing.join(', ')}`
+            : ''),
         problems.length ? 'warning' : 'info',
       );
     },
@@ -690,7 +706,9 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
       );
       if (!selected) return;
 
-      const action = actions.find((candidate) => actionLabels[candidate] === selected);
+      const action = actions.find(
+        (candidate) => actionLabels[candidate] === selected,
+      );
       if (!action) return;
 
       switch (action) {

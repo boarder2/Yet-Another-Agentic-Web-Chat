@@ -32,14 +32,12 @@ confirmation of an agreement you already have, not the place where you go lookin
 
   plan: `PHASE: PLANNING.
 Read the real code first: name actual files, functions and types, never placeholders. Ask any
-clarifying question the moment it appears rather than assuming silently. When the plan is ready,
-call workflow_write_plan with the full markdown. The harness owns the path and validates structure;
-a rejected plan comes back with the specific failures to fix. The user's approval is the gate.`,
-
-  tasks: `PHASE: TASK LIST.
-Break the approved plan into chunks that are independently implementable, independently testable,
-and leave the tree green. Order them so each builds only on merged work. If a chunk cannot be
-tested alone it is cut wrong — recut it. Call workflow_write_tasks with the full markdown.`,
+clarifying question the moment it appears rather than assuming silently. Write the plan and the
+task list that chunks it together, and submit both in one workflow_write_plan call — the user
+approves them as one thing. Chunks must be independently implementable, independently testable, and
+leave the tree green, ordered so each builds only on merged work; a chunk that cannot be tested
+alone is cut wrong, so recut it. The harness owns both paths and validates structure; a rejection
+comes back with the specific failures to fix, and neither document is written until both pass.`,
 
   execute: `PHASE: EXECUTION.
 Call workflow_run_chunk to run the next chunk. It takes no arguments: the harness picks the chunk,

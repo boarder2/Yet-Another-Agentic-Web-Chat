@@ -4,7 +4,6 @@ export const WORKFLOW_TOOL_NAMES = [
   'workflow_triage',
   'workflow_end_grilling',
   'workflow_write_plan',
-  'workflow_write_tasks',
   'workflow_run_chunk',
   'workflow_close',
 ] as const;

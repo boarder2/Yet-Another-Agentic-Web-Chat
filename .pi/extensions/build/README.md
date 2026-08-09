@@ -1,6 +1,6 @@
 # /build — phase-gated build workflow
 
-A pi extension that turns "triage → grill → plan → tasks → execute → close" from prose the model
+A pi extension that turns "triage → grill → plan → execute → close" from prose the model
 is asked to follow into a state machine the harness enforces. Self-contained: its own
 `package.json`, `tsconfig.json`, and `vitest.config.ts`; the root project is untouched.
 
@@ -10,17 +10,17 @@ start outside a herdr session — there is nowhere to put them.
 
 ## Commands
 
-| Command                | Effect                                                                   |
-| ---------------------- | ------------------------------------------------------------------------ |
-| `/build <ask>`                   | Start a workflow with an automatic slug. Refuses if one is already active here. |
-| `/build <slug> -- <ask>`         | Start a workflow with an explicit slug.                                      |
-| `/build:pause`                   | Restore normal tools and keep state.                                         |
-| `/build:resume [<slug>]`         | Re-attach a workflow; without a slug, open a picker.                         |
-| `/build:abort`                   | Discard phase state. Plan and task files are kept.                           |
-| `/build:delete`                  | Confirm and remove the current workflow's files and agent panes.              |
-| `/build:prune`                   | Confirm and remove every completed (`done`) workflow and its artifacts.      |
-| `/build:manage [<slug>]`         | Pick a workflow, then inspect or run a valid management action.               |
-| `/build:list`                    | Non-interactive inventory with phase, status, and last attachment.            |
+| Command                  | Effect                                                                          |
+| ------------------------ | ------------------------------------------------------------------------------- |
+| `/build <ask>`           | Start a workflow with an automatic slug. Refuses if one is already active here. |
+| `/build <slug> -- <ask>` | Start a workflow with an explicit slug.                                         |
+| `/build:pause`           | Restore normal tools and keep state.                                            |
+| `/build:resume [<slug>]` | Re-attach a workflow; without a slug, open a picker.                            |
+| `/build:abort`           | Discard phase state. Plan and task files are kept.                              |
+| `/build:delete`          | Confirm and remove the current workflow's files and agent panes.                |
+| `/build:prune`           | Confirm and remove every completed (`done`) workflow and its artifacts.         |
+| `/build:manage [<slug>]` | Pick a workflow, then inspect or run a valid management action.                 |
+| `/build:list`            | Non-interactive inventory with phase, status, and last attachment.              |
 
 ## Phases and their tools
 
@@ -28,8 +28,7 @@ start outside a herdr session — there is nowhere to put them.
 | ------- | ----------------------- | ------------------------------------------------ |
 | triage  | `workflow_triage`       | You pick simple/complex; dismissal means complex |
 | grill   | `workflow_end_grilling` | You confirm the restatement of the ask           |
-| plan    | `workflow_write_plan`   | Structural validation, then your approval        |
-| tasks   | `workflow_write_tasks`  | Parse validation, then your approval             |
+| plan    | `workflow_write_plan`   | Plan _and_ chunking validated, then one approval |
 | execute | `workflow_run_chunk`    | No arguments — the harness picks the chunk       |
 | close   | `workflow_close`        | Runs configured checks, reports real exit codes  |
 
@@ -146,7 +145,7 @@ against the model catalogue. Which model plans and which one grinds chunks is a 
 decision, and a harness that guessed at it would quietly plan on the cheap model. Specs are
 `provider/id`, `provider/id:thinking`, or a bare `id`.
 
-`models.plan` is applied to _your_ session for triage, grilling, planning and chunking; entering
+`models.plan` is applied to _your_ session for triage, grilling and planning; entering
 execution restores whatever model you were on, as do pause, abort and close. It is set only when the
 phase changes, so a manual `/model` inside a phase stands.
 

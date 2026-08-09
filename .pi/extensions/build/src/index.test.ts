@@ -1,8 +1,18 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from '@earendil-works/pi-coding-agent';
+import type {
+  ExtensionAPI,
+  ExtensionCommandContext,
+  ExtensionContext,
+} from '@earendil-works/pi-coding-agent';
 import buildWorkflow from './index.ts';
 import { findBuild, saveBuild } from './store.ts';
 import { createState, type BuildState } from './state.ts';
@@ -12,7 +22,6 @@ const WORKFLOW_TOOLS = [
   'workflow_triage',
   'workflow_end_grilling',
   'workflow_write_plan',
-  'workflow_write_tasks',
   'workflow_run_chunk',
   'workflow_close',
 ];
@@ -78,7 +87,11 @@ class FakePi {
     return this as unknown as ExtensionAPI;
   }
 
-  async emit(name: string, event: unknown, ctx: ExtensionContext): Promise<unknown[]> {
+  async emit(
+    name: string,
+    event: unknown,
+    ctx: ExtensionContext,
+  ): Promise<unknown[]> {
     const results: unknown[] = [];
     for (const handler of this.handlers.get(name) ?? []) {
       results.push(await handler(event as never, ctx as never));
@@ -86,13 +99,21 @@ class FakePi {
     return results;
   }
 
-  async command(name: string, args: string, ctx: ExtensionCommandContext): Promise<void> {
+  async command(
+    name: string,
+    args: string,
+    ctx: ExtensionCommandContext,
+  ): Promise<void> {
     const command = this.commands.get(name);
     if (!command) throw new Error(`Missing command: ${name}`);
     await command.handler(args, ctx);
   }
 
-  async tool(name: string, params: unknown, ctx: ExtensionContext): Promise<void> {
+  async tool(
+    name: string,
+    params: unknown,
+    ctx: ExtensionContext,
+  ): Promise<void> {
     const tool = this.tools.get(name);
     if (!tool) throw new Error(`Missing tool: ${name}`);
     await tool.execute('test-call', params, undefined, undefined, ctx);
@@ -160,12 +181,15 @@ function expectWorkflowEnabled(pi: FakePi): void {
 }
 
 function expectNormalTools(pi: FakePi): void {
-  expect(pi.getActiveTools().filter((name) => name.startsWith('workflow_'))).toEqual([]);
+  expect(
+    pi.getActiveTools().filter((name) => name.startsWith('workflow_')),
+  ).toEqual([]);
   expect(pi.getActiveTools()).toEqual(expect.arrayContaining(BASE_TOOLS));
 }
 
 afterEach(() => {
-  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+  for (const root of roots.splice(0))
+    rmSync(root, { recursive: true, force: true });
   if (previousHerdrEnv === undefined) delete process.env.HERDR_ENV;
   else process.env.HERDR_ENV = previousHerdrEnv;
 });
@@ -173,19 +197,34 @@ afterEach(() => {
 describe('workflow tool activation', () => {
   it('leaves an ordinary session normal despite an active project workflow', async () => {
     const cwd = tempProject();
-    const state = createState('add a retry guard', 'retry-guard', '2026-08-09', NOW);
+    const state = createState(
+      'add a retry guard',
+      'retry-guard',
+      '2026-08-09',
+      NOW,
+    );
     saveBuild(cwd, state);
 
     const pi = new FakePi();
     buildWorkflow(pi.api);
-    await pi.emit('session_start', { type: 'session_start', reason: 'startup' }, context(cwd));
+    await pi.emit(
+      'session_start',
+      { type: 'session_start', reason: 'startup' },
+      context(cwd),
+    );
 
     expectNormalTools(pi);
 
     pi.setActiveTools([...BASE_TOOLS, ...WORKFLOW_TOOLS]);
-    await pi.emit('resources_discover', { type: 'resources_discover', cwd, reason: 'startup' }, context(cwd));
+    await pi.emit(
+      'resources_discover',
+      { type: 'resources_discover', cwd, reason: 'startup' },
+      context(cwd),
+    );
     expectNormalTools(pi);
-    expect(existsSync(join(cwd, '.ai', 'builds', '2026-08-09-retry-guard.json'))).toBe(true);
+    expect(
+      existsSync(join(cwd, '.ai', 'builds', '2026-08-09-retry-guard.json')),
+    ).toBe(true);
   });
 
   it('enables tools only while the current session starts or resumes a workflow', async () => {
@@ -206,7 +245,11 @@ describe('workflow tool activation', () => {
     expectWorkflowEnabled(pi);
 
     pi.setActiveTools(BASE_TOOLS);
-    await pi.emit('resources_discover', { type: 'resources_discover', cwd, reason: 'startup' }, ctx);
+    await pi.emit(
+      'resources_discover',
+      { type: 'resources_discover', cwd, reason: 'startup' },
+      ctx,
+    );
     expectWorkflowEnabled(pi);
 
     await pi.command('build:abort', '', ctx);
@@ -224,7 +267,11 @@ describe('workflow tool activation', () => {
     const pi = new FakePi();
     buildWorkflow(pi.api);
     const ctx = context(cwd, [attach(state)]);
-    await pi.emit('session_start', { type: 'session_start', reason: 'resume' }, ctx);
+    await pi.emit(
+      'session_start',
+      { type: 'session_start', reason: 'resume' },
+      ctx,
+    );
     expectWorkflowEnabled(pi);
 
     await pi.tool('workflow_close', {}, ctx);

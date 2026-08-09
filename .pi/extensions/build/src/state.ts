@@ -1,14 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-export const PHASES = [
-  'triage',
-  'grill',
-  'plan',
-  'tasks',
-  'execute',
-  'close',
-] as const;
+export const PHASES = ['triage', 'grill', 'plan', 'execute', 'close'] as const;
 
 export type Phase = (typeof PHASES)[number];
 export type Complexity = 'simple' | 'complex';
@@ -18,8 +11,7 @@ export type AgentName = 'coder' | 'tester';
 const TRANSITIONS: Record<Phase, readonly Phase[]> = {
   triage: ['grill', 'plan'],
   grill: ['plan'],
-  plan: ['tasks'],
-  tasks: ['execute'],
+  plan: ['execute'],
   execute: ['close'],
   close: [],
 };
@@ -274,6 +266,9 @@ export function parseState(text: string): BuildState {
   if (!state.slug || !state.date || !state.phase || !state.status) {
     throw new Error('Build state is missing required fields');
   }
+  // Chunking was once a phase of its own; a workflow saved mid-chunking re-enters
+  // planning and submits the plan and the task list together.
+  if ((state.phase as string) === 'tasks') state.phase = 'plan';
   if (!PHASES.includes(state.phase)) {
     throw new Error(`Unknown phase: ${state.phase}`);
   }

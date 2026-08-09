@@ -9,6 +9,13 @@ import { Readability } from '@mozilla/readability';
 import { JSDOM } from 'jsdom';
 import { chromium, Page, Browser, BrowserContext } from 'playwright';
 import TurndownService from 'turndown';
+import {
+  isGeminiCaptionTrack,
+  parseJson3Captions,
+  readCaptionTrackList,
+  selectCaptionTrack,
+  type YouTubeCaptionTrack,
+} from '@/lib/utils/youtubeCaptions';
 
 function htmlToMarkdown(html: string): string {
   const turndown = new TurndownService({
@@ -107,15 +114,237 @@ const extractYoutubeVideoId = (url: string): string | null => {
   return m ? m[1] : null;
 };
 
+const ANDROID_VR_CLIENT = {
+  clientName: 'ANDROID_VR',
+  clientVersion: '1.60.19',
+  deviceMake: 'Oculus',
+  deviceModel: 'Quest 3',
+  androidSdkVersion: 32,
+  userAgent:
+    'com.google.android.apps.youtube.vr.oculus/1.60.19 (Linux; U; Android 12; en_US; Quest 3 Build/SQ3A.220705.003)',
+  osName: 'Android',
+  osVersion: '12',
+  hl: 'en',
+  gl: 'US',
+} as const;
+const ANDROID_VR_CLIENT_ID = '28';
+
+type YoutubePageData = {
+  playerResponse: unknown;
+  apiKey: string | null;
+  visitorData: string | null;
+};
+
+const readYoutubePageData = async (page: Page): Promise<YoutubePageData> =>
+  page.evaluate(() => {
+    type YoutubeGlobals = typeof globalThis & {
+      ytInitialPlayerResponse?: unknown;
+      ytcfg?: { get?: (key: string) => unknown };
+    };
+
+    const globals = globalThis as YoutubeGlobals;
+    const playerResponse = globals.ytInitialPlayerResponse;
+    let apiKey: unknown;
+    let visitorData: unknown;
+    let context: unknown;
+    if (typeof globals.ytcfg?.get === 'function') {
+      try {
+        apiKey = globals.ytcfg.get('INNERTUBE_API_KEY');
+      } catch {}
+      try {
+        visitorData = globals.ytcfg.get('VISITOR_DATA');
+      } catch {}
+      try {
+        context = globals.ytcfg.get('INNERTUBE_CONTEXT');
+      } catch {}
+    }
+
+    const playerRecord =
+      playerResponse !== null &&
+      typeof playerResponse === 'object' &&
+      !Array.isArray(playerResponse)
+        ? (playerResponse as Record<string, unknown>)
+        : null;
+    const contextRecord =
+      context !== null && typeof context === 'object' && !Array.isArray(context)
+        ? (context as Record<string, unknown>)
+        : null;
+    const contextClient =
+      contextRecord?.client !== null &&
+      typeof contextRecord?.client === 'object' &&
+      !Array.isArray(contextRecord.client)
+        ? (contextRecord.client as Record<string, unknown>)
+        : null;
+    const responseContext =
+      playerRecord?.responseContext !== null &&
+      typeof playerRecord?.responseContext === 'object' &&
+      !Array.isArray(playerRecord.responseContext)
+        ? (playerRecord.responseContext as Record<string, unknown>)
+        : null;
+    visitorData =
+      visitorData ?? contextClient?.visitorData ?? responseContext?.visitorData;
+
+    return {
+      playerResponse: playerResponse ?? null,
+      apiKey: typeof apiKey === 'string' && apiKey ? apiKey : null,
+      visitorData:
+        typeof visitorData === 'string' && visitorData ? visitorData : null,
+    };
+  });
+
+const retrieveAndroidVrPlayerResponse = async (
+  page: Page,
+  videoId: string,
+  apiKey: string,
+  visitorData: string | null,
+): Promise<unknown> =>
+  page.evaluate(
+    async ({ videoId, apiKey, visitorData, client, clientId }) => {
+      const response = await fetch(
+        `https://www.youtube.com/youtubei/v1/player?key=${encodeURIComponent(apiKey)}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-YouTube-Client-Name': clientId,
+            'X-YouTube-Client-Version': client.clientVersion,
+          },
+          body: JSON.stringify({
+            context: {
+              client: {
+                ...client,
+                ...(visitorData ? { visitorData } : {}),
+              },
+            },
+            videoId,
+          }),
+        },
+      );
+      if (!response.ok) {
+        throw new Error(
+          `Android VR player request failed with HTTP ${response.status}`,
+        );
+      }
+      return (await response.json()) as unknown;
+    },
+    {
+      videoId,
+      apiKey,
+      visitorData,
+      client: ANDROID_VR_CLIENT,
+      clientId: ANDROID_VR_CLIENT_ID,
+    },
+  );
+
+const retrieveJson3Captions = async (
+  page: Page,
+  track: YouTubeCaptionTrack,
+): Promise<string | null> => {
+  const payload = await page.evaluate(async (baseUrl) => {
+    let url: URL;
+    try {
+      url = new URL(baseUrl);
+    } catch {
+      throw new Error('YouTube caption track URL was invalid');
+    }
+    url.searchParams.set('fmt', 'json3');
+
+    const response = await fetch(url.toString());
+    if (!response.ok) {
+      throw new Error(
+        `YouTube caption request failed with HTTP ${response.status}`,
+      );
+    }
+    return await response.text();
+  }, track.baseUrl);
+
+  return parseJson3Captions(payload);
+};
+
+const readPanelTranscript = async (page: Page): Promise<string | null> => {
+  try {
+    // Expand the description (the transcript button lives inside it), then open
+    // the transcript panel. Both clicks are best-effort across layout variants.
+    try {
+      await page.click('#expand', { timeout: 3000 });
+    } catch {}
+    for (const sel of [
+      'button[aria-label="Show transcript"]',
+      'ytd-video-description-transcript-section-renderer button',
+    ]) {
+      try {
+        await page.click(sel, { timeout: 3000 });
+        break;
+      } catch {}
+    }
+
+    const hasPanel = await page
+      .waitForSelector('transcript-segment-view-model', { timeout: 8000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!hasPanel) return null;
+
+    const segments = await page.$$eval('transcript-segment-view-model', (els) =>
+      els
+        .map((el) => ({
+          ts:
+            el
+              .querySelector('.ytwTranscriptSegmentViewModelTimestamp')
+              ?.textContent?.trim() || '',
+          text:
+            el
+              .querySelector('[role="text"]')
+              ?.textContent?.replace(/\s+/g, ' ')
+              .trim() || '',
+        }))
+        .filter((s) => s.text),
+    );
+    if (segments.length === 0) return null;
+
+    return segments
+      .map((s) => (s.ts ? `[${s.ts}] ${s.text}` : s.text))
+      .join('\n');
+  } catch (error) {
+    console.warn('[retrieveYoutubeTranscript] Transcript panel failed:', error);
+    return null;
+  }
+};
+
+const saveYoutubeTranscript = async (
+  page: Page,
+  url: string,
+  pageContent: string,
+): Promise<Document> => {
+  const title = (await page.title()).replace(/ - YouTube$/, '').trim();
+  // `source` holds the bare video ID — the ToolCall UI embeds it as a player.
+  const source = extractYoutubeVideoId(url) ?? url;
+
+  await writeCachedRecord(url + '_youtube', {
+    pageContent,
+    title,
+    metadata: { source },
+  });
+
+  return new Document({
+    pageContent,
+    metadata: {
+      title: title || 'YouTube Video Transcript',
+      url,
+      source,
+    },
+  });
+};
+
 /**
  * Retrieves a YouTube video's transcript by driving a real browser.
  *
- * YouTube no longer serves caption text to plain HTTP clients: the `baseUrl`
- * scraped from the watch page returns an empty body, and the InnerTube
- * `get_transcript` endpoint fails a server-side attestation (`pot`/BotGuard)
- * check. A real browser satisfies that check natively, so we open the watch
- * page, expand the description, click "Show transcript", and scrape the
- * rendered transcript panel. Returns null when the video has no transcript.
+ * YouTube's watch-page player response advertises the available caption tracks.
+ * Conventional tracks still use the rendered transcript panel first. Gemini
+ * tracks bypass that panel and use the browser's native Android VR InnerTube
+ * client to fetch signed JSON3 captions; that path is also the fallback when
+ * the panel cannot produce text. Returns null only when no caption tracks are
+ * advertised. Advertised tracks that cannot produce text throw a retrieval
+ * error so callers can distinguish absence from failure.
  */
 export const retrieveYoutubeTranscript = async (
   url: string,
@@ -172,71 +401,94 @@ export const retrieveYoutubeTranscript = async (
     await page.waitForTimeout(2500);
     if (signal?.aborted) return null;
 
-    // Expand the description (the transcript button lives inside it), then open
-    // the transcript panel. Both clicks are best-effort across layout variants.
-    try {
-      await page.click('#expand', { timeout: 3000 });
-    } catch {}
-    for (const sel of [
-      'button[aria-label="Show transcript"]',
-      'ytd-video-description-transcript-section-renderer button',
-    ]) {
-      try {
-        await page.click(sel, { timeout: 3000 });
-        break;
-      } catch {}
+    const pageData = await readYoutubePageData(page);
+    if (
+      !pageData.playerResponse ||
+      typeof pageData.playerResponse !== 'object' ||
+      Array.isArray(pageData.playerResponse)
+    ) {
+      throw new Error('YouTube player response was not available');
     }
 
-    const hasPanel = await page
-      .waitForSelector('transcript-segment-view-model', { timeout: 8000 })
-      .then(() => true)
-      .catch(() => false);
-    if (!hasPanel) {
+    const trackList = readCaptionTrackList(pageData.playerResponse);
+    const rawCaptionTracks = (
+      pageData.playerResponse as {
+        captions?: {
+          playerCaptionsTracklistRenderer?: { captionTracks?: unknown };
+        };
+      }
+    ).captions?.playerCaptionsTracklistRenderer?.captionTracks;
+    const hasAdvertisedCaptionTracks =
+      Array.isArray(rawCaptionTracks) && rawCaptionTracks.length > 0;
+
+    if (!hasAdvertisedCaptionTracks) {
       console.log('[retrieveYoutubeTranscript] No transcript available:', url);
       return null;
     }
+    if (!trackList || trackList.captionTracks.length === 0) {
+      throw new Error(
+        'YouTube advertised captions, but no usable caption track was available',
+      );
+    }
 
-    const segments = await page.$$eval('transcript-segment-view-model', (els) =>
-      els
-        .map((el) => ({
-          ts:
-            el
-              .querySelector('.ytwTranscriptSegmentViewModelTimestamp')
-              ?.textContent?.trim() || '',
-          text:
-            el
-              .querySelector('[role="text"]')
-              ?.textContent?.replace(/\s+/g, ' ')
-              .trim() || '',
-        }))
-        .filter((s) => s.text),
-    );
-    if (segments.length === 0) return null;
+    const selectedTrack = selectCaptionTrack(trackList);
+    if (!selectedTrack) {
+      throw new Error(
+        'YouTube advertised captions, but no original caption track was available',
+      );
+    }
 
-    const title = (await page.title()).replace(/ - YouTube$/, '').trim();
-    const pageContent = segments
-      .map((s) => (s.ts ? `[${s.ts}] ${s.text}` : s.text))
-      .join('\n');
-    // `source` holds the bare video ID — the ToolCall UI embeds it as a player.
-    const source = extractYoutubeVideoId(url) ?? url;
+    let pageContent: string | null = null;
+    if (!isGeminiCaptionTrack(selectedTrack)) {
+      pageContent = await readPanelTranscript(page);
+      if (signal?.aborted) return null;
+    }
 
-    await writeCachedRecord(url + '_youtube', {
-      pageContent,
-      title,
-      metadata: { source },
-    });
+    if (!pageContent) {
+      const videoId = extractYoutubeVideoId(url);
+      if (!videoId) {
+        throw new Error(
+          'YouTube advertised captions, but the video ID could not be determined',
+        );
+      }
+      if (!pageData.apiKey) {
+        throw new Error(
+          'YouTube advertised captions, but the InnerTube API key was unavailable',
+        );
+      }
+      if (signal?.aborted) return null;
 
-    return new Document({
-      pageContent,
-      metadata: {
-        title: title || 'YouTube Video Transcript',
-        url,
-        source,
-      },
-    });
+      const fallbackPlayerResponse = await retrieveAndroidVrPlayerResponse(
+        page,
+        videoId,
+        pageData.apiKey,
+        pageData.visitorData,
+      );
+      if (signal?.aborted) return null;
+
+      const fallbackTrack = selectCaptionTrack(fallbackPlayerResponse);
+      if (!fallbackTrack) {
+        throw new Error(
+          'YouTube advertised captions, but the Android VR player returned no original caption track',
+        );
+      }
+
+      pageContent = await retrieveJson3Captions(page, fallbackTrack);
+      if (signal?.aborted) return null;
+      if (!pageContent) {
+        throw new Error(
+          'YouTube advertised captions, but no caption text could be retrieved',
+        );
+      }
+    }
+
+    return await saveYoutubeTranscript(page, url, pageContent);
   } catch (error) {
+    if (signal?.aborted) return null;
     console.error('[retrieveYoutubeTranscript] Error:', error);
-    return null;
+    throw error instanceof Error
+      ? error
+      : new Error('YouTube transcript retrieval failed');
   } finally {
     try {
       if (browser) await browser.close();

@@ -1,7 +1,7 @@
 'use client';
 
 import { ExternalLink } from 'lucide-react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { useMemo, useState, type KeyboardEvent } from 'react';
 import {
   ListCount,
@@ -39,7 +39,6 @@ function readArtifactType(value: string | null): ArtifactType {
 
 export default function ArtifactBrowser() {
   const pathname = usePathname();
-  const router = useRouter();
   const searchParams = useSearchParams();
   const { data: activeWorkspaces = [] } = useWorkspacesList(false);
   const { data: archivedWorkspaces = [] } = useWorkspacesList(true);
@@ -70,7 +69,7 @@ export default function ArtifactBrowser() {
   const selectType = (type: ArtifactType) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set('type', type);
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    window.history.pushState(null, '', `${pathname}?${params.toString()}`);
   };
 
   const chatHref = (a: HistoryPageItem) => {

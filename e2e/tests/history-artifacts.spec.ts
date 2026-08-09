@@ -161,6 +161,23 @@ test.describe('history: artifact tab', () => {
       'true',
     );
     await expect(imageRow).toBeVisible();
+
+    // Type choices are navigations, so back/forward restores each filtered view.
+    await page.goBack();
+    await expect(page).toHaveURL(/[?&]type=pages(?:&|$)/);
+    await expect(page.getByTestId('artifact-type-pages')).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect(pageRow).toBeVisible();
+
+    await page.goForward();
+    await expect(page).toHaveURL(/[?&]type=images(?:&|$)/);
+    await expect(page.getByTestId('artifact-type-images')).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect(imageRow).toBeVisible();
   });
 
   test('Images use a responsive gallery with complete framing and provenance', async ({

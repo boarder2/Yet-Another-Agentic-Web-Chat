@@ -1,16 +1,27 @@
 import type {
   ExtensionAPI,
+  ExtensionCommandContext,
   ExtensionContext,
 } from '@earendil-works/pi-coding-agent';
+import { parseStartArgs } from './args.ts';
 import { isSafeCommand } from './bash-allowlist.ts';
 import { registerClose } from './checks.ts';
 import { CONFIG_PATH, loadConfig } from './config.ts';
 import { registerGates, type Controller } from './gates.ts';
 import { insideHerdr } from './herdr.ts';
+import { closeBuildAgents } from './panes.ts';
 import { registerLoop } from './loop.ts';
 import { parseModelSpec, resolveModel, unresolvableModels } from './models.ts';
 import { phasePrompt } from './prompts.ts';
-import { findBuild, listBuilds, saveBuild, uniqueSlug } from './store.ts';
+import {
+  buildArtifactPaths,
+  findBuild,
+  listBuilds,
+  removeBuildArtifacts,
+  saveBuild,
+  uniqueSlug,
+  type StoredBuild,
+} from './store.ts';
 import {
   createState,
   formatDate,
@@ -19,6 +30,7 @@ import {
   type BuildState,
   type Phase,
 } from './state.ts';
+import { setWorkflowToolsActive } from './workflow-tools.ts';
 
 const ENTRY_TYPE = 'build-workflow';
 const WITHHELD_TOOLS = ['edit', 'write'];
@@ -35,6 +47,34 @@ interface ModelChoice {
   provider: string;
   id: string;
   thinkingLevel: string | null;
+}
+
+type ManageAction = 'inspect' | 'resume' | 'pause' | 'abort' | 'delete';
+
+function sameBuild(left: BuildState | null, right: BuildState): boolean {
+  return Boolean(left && left.date === right.date && left.slug === right.slug);
+}
+
+function workflowLabel(state: BuildState, current: BuildState | null): string {
+  const here = sameBuild(current, state) ? ' · this session' : '';
+  return `${state.date} · ${state.slug} — ${state.phase} / ${state.status}${here}`;
+}
+
+function workflowDetails(state: BuildState): string {
+  return [
+    workflowLabel(state, null),
+    `Ask: ${state.ask}`,
+    `Created: ${state.createdAt}`,
+    `Updated: ${state.updatedAt}`,
+    `Last attached: ${state.lastAttachedAt ?? 'never'}`,
+    `State: ${buildArtifactPaths(state)[0]}`,
+    `Plan: ${state.planPath ?? 'not written'}`,
+    `Tasks: ${state.taskPath ?? 'not written'}`,
+  ].join('\n');
+}
+
+function isResumable(state: BuildState): boolean {
+  return state.status === 'active' || state.status === 'paused';
 }
 
 export default function buildWorkflow(pi: ExtensionAPI): void {
@@ -137,8 +177,13 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
     );
   }
 
+  function syncWorkflowTools(): void {
+    setWorkflowToolsActive(pi, active?.status === 'active');
+  }
+
   function attach(state: BuildState, ctx: ExtensionContext): void {
     active = state;
+    syncWorkflowTools();
     enforceGating();
     pi.appendEntry(ENTRY_TYPE, { slug: state.slug, date: state.date });
     showStatus(ctx);
@@ -148,6 +193,7 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
 
   function detach(ctx: ExtensionContext): void {
     active = null;
+    syncWorkflowTools();
     modelledPhase = null;
     restoreTools();
     void restoreModel(ctx);
@@ -185,11 +231,229 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
     return [...(herdr ? [herdr] : []), ...configProblems(ctx)];
   }
 
+  function buildCompletions(
+    prefix: string,
+    predicate: (state: BuildState) => boolean,
+  ) {
+    const needle = prefix.trim();
+    const items = listBuilds(projectCwd)
+      .filter(({ state }) => predicate(state))
+      .map(({ state }) => ({
+        value: state.slug,
+        label: `${state.slug} (${state.status}, ${state.phase}, ${state.date})`,
+      }))
+      .filter(({ value }) => value.startsWith(needle));
+    return items.length > 0 ? items : null;
+  }
+
+  async function chooseBuild(
+    ctx: ExtensionContext,
+    predicate: (state: BuildState) => boolean,
+    title: string,
+  ): Promise<StoredBuild | null> {
+    const builds = listBuilds(ctx.cwd).filter(({ state }) => predicate(state));
+    if (builds.length === 0) {
+      ctx.ui.notify('No matching workflows.', 'info');
+      return null;
+    }
+    if (!ctx.hasUI) {
+      ctx.ui.notify('This command needs a workflow slug in non-interactive mode.', 'warning');
+      return null;
+    }
+
+    const labels = builds.map(({ state }) => workflowLabel(state, active));
+    const selected = await ctx.ui.select(title, labels);
+    if (!selected) return null;
+    const index = labels.indexOf(selected);
+    return builds[index] ?? null;
+  }
+
+  async function resumeStored(
+    stored: StoredBuild,
+    ctx: ExtensionContext,
+  ): Promise<boolean> {
+    if (active) {
+      ctx.ui.notify(
+        `Workflow "${active.slug}" is active here. Pause it before resuming another.`,
+        'warning',
+      );
+      return false;
+    }
+    if (!isResumable(stored.state)) {
+      ctx.ui.notify(
+        `Workflow "${stored.state.slug}" is ${stored.state.status} and cannot be resumed.`,
+        'warning',
+      );
+      return false;
+    }
+
+    const problems = blockers(ctx);
+    if (problems.length) {
+      ctx.ui.notify(
+        `Cannot resume "${stored.state.slug}":\n- ${problems.join('\n- ')}`,
+        'error',
+      );
+      return false;
+    }
+
+    const now = new Date();
+    const state = {
+      ...setStatus(stored.state, 'active', now),
+      lastAttachedAt: now.toISOString(),
+    };
+    persist(ctx.cwd, state);
+    attach(state, ctx);
+    ctx.ui.notify(`Workflow "${state.slug}" resumed in ${state.phase}.`, 'info');
+    return true;
+  }
+
+  function pauseCurrent(ctx: ExtensionContext): boolean {
+    if (!active) {
+      ctx.ui.notify('No active workflow.', 'warning');
+      return false;
+    }
+
+    const slug = active.slug;
+    persist(ctx.cwd, setStatus(active, 'paused', new Date()));
+    detach(ctx);
+    ctx.ui.notify(
+      `Workflow "${slug}" paused. Resume with /build:resume or /build:resume ${slug}`,
+      'info',
+    );
+    return true;
+  }
+
+  async function abortCurrent(ctx: ExtensionContext): Promise<boolean> {
+    if (!active) {
+      ctx.ui.notify('No active workflow.', 'warning');
+      return false;
+    }
+
+    const slug = active.slug;
+    const ok = !ctx.hasUI
+      ? true
+      : await ctx.ui.confirm(
+          `Abort workflow "${slug}"?`,
+          'Phase state is discarded. The plan and task files stay on disk, and the agent panes stay open.',
+        );
+    if (!ok) return false;
+
+    persist(ctx.cwd, setStatus(active, 'aborted', new Date()));
+    detach(ctx);
+    ctx.ui.notify(`Workflow "${slug}" aborted.`, 'info');
+    return true;
+  }
+
+  async function confirmDelete(
+    state: BuildState,
+    ctx: ExtensionContext,
+  ): Promise<boolean> {
+    if (!ctx.hasUI) return true;
+
+    const files = buildArtifactPaths(state).map((path) => `- ${path}`).join('\n');
+    return ctx.ui.confirm(
+      `Delete workflow "${state.slug}" completely?`,
+      `The following files will be deleted:\n${files}\n\n` +
+        'The matching coder, tester, and reviewer panes will be closed. ' +
+        'The existing Pi session attachment remains in the transcript.',
+    );
+  }
+
+  async function deleteStored(
+    stored: StoredBuild,
+    ctx: ExtensionCommandContext,
+  ): Promise<{ ok: boolean; missing: string[]; failed: string[]; error?: string }> {
+    if (sameBuild(active, stored.state) && !ctx.isIdle()) {
+      ctx.abort();
+      await ctx.waitForIdle();
+    }
+
+    const cleanup = await closeBuildAgents(stored.state.slug);
+    try {
+      removeBuildArtifacts(ctx.cwd, stored.state, stored.file);
+    } catch (error) {
+      return {
+        ok: false,
+        missing: cleanup.missing,
+        failed: cleanup.failed,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+
+    if (sameBuild(active, stored.state)) detach(ctx);
+    return {
+      ok: true,
+      missing: cleanup.missing,
+      failed: cleanup.failed,
+    };
+  }
+
+  function cleanupReport(
+    missing: string[],
+    failed: string[],
+  ): string {
+    const notes: string[] = [];
+    if (missing.length > 0) {
+      notes.push(`Agent panes already absent: ${missing.join(', ')}`);
+    }
+    if (failed.length > 0) {
+      notes.push(`Agent panes could not be closed: ${failed.join(', ')}`);
+    }
+    return notes.length > 0 ? `\n${notes.join('\n')}` : '';
+  }
+
+  async function deleteOne(
+    stored: StoredBuild,
+    ctx: ExtensionCommandContext,
+  ): Promise<boolean> {
+    if (!(await confirmDelete(stored.state, ctx))) return false;
+
+    const result = await deleteStored(stored, ctx);
+    if (!result.ok) {
+      ctx.ui.notify(
+        `Could not completely delete workflow "${stored.state.slug}": ${result.error}` +
+          cleanupReport(result.missing, result.failed),
+        'error',
+      );
+      return false;
+    }
+
+    ctx.ui.notify(
+      `Workflow "${stored.state.slug}" deleted.` +
+        cleanupReport(result.missing, result.failed),
+      'info',
+    );
+    return true;
+  }
+
+  function manageActions(
+    state: BuildState,
+    current: BuildState | null,
+  ): ManageAction[] {
+    const actions: ManageAction[] = ['inspect'];
+    if (sameBuild(current, state) && state.status === 'active') {
+      actions.push('pause', 'abort');
+    } else if (!current && isResumable(state)) {
+      actions.push('resume');
+    }
+    actions.push('delete');
+    return actions;
+  }
+
+  const actionLabels: Record<ManageAction, string> = {
+    inspect: 'Inspect details',
+    resume: 'Resume workflow',
+    pause: 'Pause workflow',
+    abort: 'Abort workflow (keep plan and tasks)',
+    delete: 'Delete workflow and all artifacts',
+  };
+
   // The session records which workflow it drives; the workflow itself lives on
   // disk, so a resumed session re-reads the current phase rather than trusting
   // whatever the entry said when it was written.
   pi.on('session_start', async (_event, ctx) => {
     active = null;
+    syncWorkflowTools();
     withheld = [];
     modelledPhase = null;
     projectCwd = ctx.cwd;
@@ -202,20 +466,23 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
     }
     if (!attachment) return;
 
-    const stored = findBuild(ctx.cwd, attachment.slug);
+    const stored = findBuild(ctx.cwd, attachment.slug, attachment.date);
     if (!stored || stored.state.status !== 'active') return;
 
     active = stored.state;
+    syncWorkflowTools();
     enforceGating();
     showStatus(ctx);
   });
 
-  // The tool set is rebuilt after session_start, so re-gate once resources are in.
+  // The tool set is rebuilt after session_start, so restore the session's tool mode once resources are in.
   pi.on('resources_discover', async () => {
+    syncWorkflowTools();
     enforceGating();
   });
 
   pi.on('before_agent_start', async (event, ctx) => {
+    syncWorkflowTools();
     if (!active) return;
     enforceGating();
     rememberCurrentModel(ctx);
@@ -241,8 +508,10 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
     current: () => active,
     update: (state) => {
       persist(projectCwd, state);
+      syncWorkflowTools();
       enforceGating();
     },
+    detach,
   };
 
   registerGates(pi, controller);
@@ -261,9 +530,12 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
         return;
       }
 
-      const ask = args.trim();
-      if (!ask) {
-        ctx.ui.notify('Usage: /build <what you want built>', 'warning');
+      const parsed = parseStartArgs(args);
+      if (!parsed) {
+        ctx.ui.notify(
+          'Usage: /build <what you want built> or /build <slug> -- <what you want built>',
+          'warning',
+        );
         return;
       }
 
@@ -278,8 +550,9 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
 
       const now = new Date();
       const date = formatDate(now);
-      const slug = uniqueSlug(ctx.cwd, date, mintSlug(ask));
-      const state = createState(ask, slug, date, now);
+      const baseSlug = parsed.requestedSlug ?? mintSlug(parsed.ask);
+      const slug = uniqueSlug(ctx.cwd, date, baseSlug);
+      const state = createState(parsed.ask, slug, date, now);
 
       persist(ctx.cwd, state);
       attach(state, ctx);
@@ -293,23 +566,14 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
   pi.registerCommand('build:pause', {
     description: 'Pause the active workflow and restore normal tools',
     handler: async (_args, ctx) => {
-      if (!active) {
-        ctx.ui.notify('No active workflow.', 'warning');
-        return;
-      }
-
-      const slug = active.slug;
-      persist(ctx.cwd, setStatus(active, 'paused', new Date()));
-      detach(ctx);
-      ctx.ui.notify(
-        `Workflow "${slug}" paused. Resume with /build:resume ${slug}`,
-        'info',
-      );
+      pauseCurrent(ctx);
     },
   });
 
   pi.registerCommand('build:resume', {
-    description: 'Resume a paused workflow by slug',
+    description: 'Resume a workflow by slug, or choose one interactively',
+    getArgumentCompletions: (prefix) =>
+      buildCompletions(prefix, isResumable),
     handler: async (args, ctx) => {
       if (active) {
         ctx.ui.notify(
@@ -320,64 +584,132 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
       }
 
       const slug = args.trim();
-      const stored = slug ? findBuild(ctx.cwd, slug) : null;
+      const stored = slug
+        ? findBuild(ctx.cwd, slug)
+        : await chooseBuild(ctx, isResumable, 'Resume which workflow?');
       if (!stored) {
-        ctx.ui.notify(
-          slug
-            ? `No workflow found for "${slug}".`
-            : 'Usage: /build:resume <slug>',
-          'warning',
-        );
+        if (slug) ctx.ui.notify(`No workflow found for "${slug}".`, 'warning');
         return;
       }
-      if (stored.state.status === 'aborted' || stored.state.status === 'done') {
-        ctx.ui.notify(
-          `Workflow "${slug}" is ${stored.state.status} and cannot be resumed.`,
-          'warning',
-        );
-        return;
-      }
-
-      const problems = blockers(ctx);
-      if (problems.length) {
-        ctx.ui.notify(
-          `Cannot resume "${slug}":\n- ${problems.join('\n- ')}`,
-          'error',
-        );
-        return;
-      }
-
-      const now = new Date();
-      const state = {
-        ...setStatus(stored.state, 'active', now),
-        lastAttachedAt: now.toISOString(),
-      };
-      persist(ctx.cwd, state);
-      attach(state, ctx);
-      ctx.ui.notify(`Workflow "${slug}" resumed in ${state.phase}.`, 'info');
+      await resumeStored(stored, ctx);
     },
   });
 
   pi.registerCommand('build:abort', {
     description: 'Abandon the active workflow (plan and task files are kept)',
     handler: async (_args, ctx) => {
+      await abortCurrent(ctx);
+    },
+  });
+
+  pi.registerCommand('build:delete', {
+    description: 'Delete the current workflow and all of its artifacts',
+    handler: async (_args, ctx) => {
       if (!active) {
-        ctx.ui.notify('No active workflow.', 'warning');
+        ctx.ui.notify('No current workflow. Use /build:manage to choose one.', 'warning');
+        return;
+      }
+      await deleteOne({ state: active, file: '' }, ctx);
+    },
+  });
+
+  pi.registerCommand('build:prune', {
+    description: 'Delete all completed workflows and their artifacts',
+    handler: async (_args, ctx) => {
+      const completed = listBuilds(ctx.cwd).filter(
+        ({ state }) => state.status === 'done',
+      );
+      if (completed.length === 0) {
+        ctx.ui.notify('No completed workflows to prune.', 'info');
         return;
       }
 
-      const slug = active.slug;
+      const names = completed
+        .map(({ state }) => `- ${workflowLabel(state, active)}`)
+        .join('\n');
       const ok = !ctx.hasUI
         ? true
         : await ctx.ui.confirm(
-            `Abort workflow "${slug}"?`,
-            'Phase state is discarded. The plan and task files stay on disk, and the agent panes stay open.',
+            `Prune ${completed.length} completed workflow${completed.length === 1 ? '' : 's'}?`,
+            `Plans, task lists, state, agent scratch, and matching panes will be removed:\n${names}`,
           );
       if (!ok) return;
 
-      persist(ctx.cwd, setStatus(active, 'aborted', new Date()));
-      detach(ctx);
-      ctx.ui.notify(`Workflow "${slug}" aborted.`, 'info');
+      let removed = 0;
+      const missing: string[] = [];
+      const failed: string[] = [];
+      const errors: string[] = [];
+      for (const stored of completed) {
+        const result = await deleteStored(stored, ctx);
+        if (!result.ok) {
+          errors.push(`${stored.state.slug}: ${result.error}`);
+          continue;
+        }
+        removed++;
+        missing.push(...result.missing);
+        failed.push(...result.failed);
+      }
+
+      const problems = [
+        ...errors,
+        ...(failed.length > 0
+          ? [`Agent panes could not be closed: ${failed.join(', ')}`]
+          : []),
+      ];
+      ctx.ui.notify(
+        `Pruned ${removed} of ${completed.length} completed workflow${completed.length === 1 ? '' : 's'}.` +
+          (problems.length ? `\n${problems.join('\n')}` : '') +
+          (missing.length ? `\nAgent panes already absent: ${missing.join(', ')}` : ''),
+        problems.length ? 'warning' : 'info',
+      );
+    },
+  });
+
+  pi.registerCommand('build:manage', {
+    description: 'Choose a workflow and inspect or manage it interactively',
+    getArgumentCompletions: (prefix) => buildCompletions(prefix, () => true),
+    handler: async (args, ctx) => {
+      const slug = args.trim();
+      const stored = slug
+        ? findBuild(ctx.cwd, slug)
+        : await chooseBuild(ctx, () => true, 'Manage which workflow?');
+      if (!stored) {
+        if (slug) ctx.ui.notify(`No workflow found for "${slug}".`, 'warning');
+        return;
+      }
+
+      if (!ctx.hasUI) {
+        ctx.ui.notify(workflowDetails(stored.state), 'info');
+        return;
+      }
+
+      const actions = manageActions(stored.state, active);
+      const selected = await ctx.ui.select(
+        `Manage ${stored.state.slug}`,
+        actions.map((action) => actionLabels[action]),
+      );
+      if (!selected) return;
+
+      const action = actions.find((candidate) => actionLabels[candidate] === selected);
+      if (!action) return;
+
+      switch (action) {
+        case 'inspect':
+          ctx.ui.notify(workflowDetails(stored.state), 'info');
+          break;
+        case 'resume':
+          await resumeStored(stored, ctx);
+          break;
+        case 'pause':
+          pauseCurrent(ctx);
+          break;
+        case 'abort':
+          await abortCurrent(ctx);
+          break;
+        case 'delete':
+          await deleteOne(stored, ctx);
+          break;
+      }
     },
   });
 
@@ -391,11 +723,11 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
       }
 
       const lines = builds.map(({ state }) => {
-        const here = state.slug === active?.slug ? ' (this session)' : '';
+        const here = sameBuild(active, state) ? ' (this session)' : '';
         const seen = state.lastAttachedAt
           ? ` last attached ${state.lastAttachedAt}`
           : '';
-        return `${state.slug} — ${state.phase} / ${state.status}${here}${seen}`;
+        return `${state.date} · ${state.slug} — ${state.phase} / ${state.status}${here}${seen}`;
       });
       ctx.ui.notify(lines.join('\n'), 'info');
     },

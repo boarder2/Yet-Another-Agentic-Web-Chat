@@ -60,6 +60,7 @@ export function registerClose(pi: ExtensionAPI, controller: Controller): void {
         }
 
         controller.update(setStatus(state, 'done', new Date()));
+        controller.detach(ctx);
 
         const failed = outcomes.filter((outcome) => outcome.exitCode !== 0);
         // Advisory by design: a pre-existing failure must not deadlock the close.

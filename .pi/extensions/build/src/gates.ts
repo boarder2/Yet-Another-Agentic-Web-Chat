@@ -4,6 +4,7 @@ import {
   defineTool,
   type AgentToolResult,
   type ExtensionAPI,
+  type ExtensionContext,
 } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
 import { validatePlan } from './plan.ts';
@@ -22,6 +23,7 @@ import { validateTasks } from './tasks.ts';
 export interface Controller {
   current(): BuildState | null;
   update(state: BuildState): void;
+  detach(ctx: ExtensionContext): void;
 }
 
 const say = (text: string): AgentToolResult<unknown> => ({

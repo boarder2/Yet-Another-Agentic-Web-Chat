@@ -354,3 +354,35 @@ export async function retireRole(
     // Already gone — the point was that it stops existing.
   }
 }
+
+export interface CrewCleanup {
+  closed: string[];
+  missing: string[];
+  failed: string[];
+}
+
+/** Close every pane belonging to a workflow, best-effort by design. */
+export async function closeBuildAgents(
+  slug: string,
+  signal?: AbortSignal,
+): Promise<CrewCleanup> {
+  const cleanup: CrewCleanup = { closed: [], missing: [], failed: [] };
+
+  for (const role of AGENT_ROLES) {
+    const name = agentName(slug, role);
+    const paneId = await agentPane(name, signal);
+    if (!paneId) {
+      cleanup.missing.push(name);
+      continue;
+    }
+
+    try {
+      await closePane(paneId, signal);
+      cleanup.closed.push(name);
+    } catch {
+      cleanup.failed.push(name);
+    }
+  }
+
+  return cleanup;
+}

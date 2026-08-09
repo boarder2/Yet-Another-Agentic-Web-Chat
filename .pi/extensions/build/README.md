@@ -12,11 +12,15 @@ start outside a herdr session — there is nowhere to put them.
 
 | Command                | Effect                                                                   |
 | ---------------------- | ------------------------------------------------------------------------ |
-| `/build <ask>`         | Start a workflow in this session. Refuses if one is already active here. |
-| `/build:pause`         | Restore normal tools, keep state.                                        |
-| `/build:resume <slug>` | Re-attach a paused workflow and re-gate tools.                           |
-| `/build:abort`         | Discard phase state. Plan and task files are kept.                       |
-| `/build:list`          | Every workflow in the project with phase, status, and last attachment.   |
+| `/build <ask>`                   | Start a workflow with an automatic slug. Refuses if one is already active here. |
+| `/build <slug> -- <ask>`         | Start a workflow with an explicit slug.                                      |
+| `/build:pause`                   | Restore normal tools and keep state.                                         |
+| `/build:resume [<slug>]`         | Re-attach a workflow; without a slug, open a picker.                         |
+| `/build:abort`                   | Discard phase state. Plan and task files are kept.                           |
+| `/build:delete`                  | Confirm and remove the current workflow's files and agent panes.              |
+| `/build:prune`                   | Confirm and remove every completed (`done`) workflow and its artifacts.      |
+| `/build:manage [<slug>]`         | Pick a workflow, then inspect or run a valid management action.               |
+| `/build:list`                    | Non-interactive inventory with phase, status, and last attachment.            |
 
 ## Phases and their tools
 
@@ -30,6 +34,16 @@ start outside a herdr session — there is nowhere to put them.
 | close   | `workflow_close`        | Runs configured checks, reports real exit codes  |
 
 A tool called in the wrong phase throws; the model cannot advance by asserting that it has.
+
+Workflow tools are active only in the session that starts or resumes an active workflow. In every
+other session, including one in the same project as an active workflow, Pi keeps its normal tool set;
+`/build*` commands remain available to start or resume one.
+
+`/build:resume` and `/build:manage` offer argument completion and interactive pickers, so
+slugs do not need to be memorized. `/build:manage` nests a second picker for the actions valid
+for the selected workflow. The delete command/action removes the state, plan/task documents, and
+agent scratch, and closes matching coder/tester/reviewer panes. Pi's existing session transcript entry
+cannot be removed by an extension and is intentionally left as historical context.
 
 ## How enforcement works
 
@@ -94,8 +108,9 @@ every pass. herdr is the authority on what is running and where, so the workflow
 its own that could fall out of step with the screen: a half-built crew, a crashed driver, or a
 resumed session all reattach to the agents that are already live instead of starting a second one.
 
-Panes are yours once created. They stay open at close and abort, and a pane you close is rebuilt
-next chunk — costing that agent's context, not the layout. Because the agents own their terminals,
+Panes are yours once created. They stay open at close and abort; delete and prune close matching
+agent panes. A pane you close is rebuilt next chunk — costing that agent's context, not the layout.
+Because the agents own their terminals,
 their results come back through a file named by `YAAWC_BUILD_RESULT` rather than through stdout.
 
 A freshly split pane is not immediately usable: `agent start` needs the shell at its prompt, so the

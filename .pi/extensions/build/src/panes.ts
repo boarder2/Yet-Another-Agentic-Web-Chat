@@ -29,19 +29,16 @@ import {
 } from './herdr.ts';
 import { AGENT_ROLES, type AgentRole } from './models.ts';
 import {
-  COMPLETION_TOOL,
+  BUILD_ROLE_ENV,
   parseResult,
+  REPORT_TOOL_BY_ROLE,
   RESULT_FILE_ENV,
-  TEST_RESULT_TOOL,
-  VERDICT_TOOL,
   type ResultEnvelope,
 } from './verdict.ts';
 
 const VERDICT_EXTENSION = fileURLToPath(
   new URL('./verdict-tool.ts', import.meta.url),
 );
-
-const SUBMIT_TOOLS = [VERDICT_TOOL, TEST_RESULT_TOOL, COMPLETION_TOOL];
 
 /** Scratch lives beside the build state, so a workflow's files are all one prefix. */
 function scratchPath(
@@ -80,6 +77,24 @@ export interface CrewContext {
   signal?: AbortSignal;
 }
 
+export function agentToolAllowlist(
+  role: AgentRole,
+  configured: readonly string[] | undefined,
+): string[] | undefined {
+  if (!configured?.length) return undefined;
+  return [...new Set([...configured, REPORT_TOOL_BY_ROLE[role]])];
+}
+
+export function agentEnvironment(
+  role: AgentRole,
+  resultFile: string,
+): Record<string, string> {
+  return {
+    [BUILD_ROLE_ENV]: role,
+    [RESULT_FILE_ENV]: resultFile,
+  };
+}
+
 function agentArgs(
   ctx: CrewContext,
   role: AgentRole,
@@ -100,10 +115,9 @@ function agentArgs(
   if (sessionId) args.push('--session-id', sessionId);
   else args.push('--no-session');
 
-  // An agent's tool allowlist must never exclude the channel it reports through.
-  if (agent.tools?.length) {
-    args.push('--tools', [...new Set([...agent.tools, ...SUBMIT_TOOLS])].join(','));
-  }
+  // An agent's tool allowlist must never exclude its own reporting channel.
+  const tools = agentToolAllowlist(role, agent.tools);
+  if (tools) args.push('--tools', tools.join(','));
   return args;
 }
 
@@ -170,7 +184,7 @@ async function createPane(
     direction: anchor.direction,
     ratio: anchor.ratio,
     cwd: ctx.cwd,
-    env: { [RESULT_FILE_ENV]: resultFile },
+    env: agentEnvironment(role, resultFile),
     signal: ctx.signal,
   });
 

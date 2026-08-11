@@ -1,3 +1,5 @@
+import { AGENT_ROLES, type AgentRole } from './models.ts';
+
 /**
  * The typed signals every role reports through. Interactive agents own their own
  * terminal, so the parent cannot read their stdout: each submit tool writes its
@@ -29,8 +31,19 @@ export const VERDICT_TOOL = 'submit_verdict';
 export const TEST_RESULT_TOOL = 'submit_test_result';
 export const COMPLETION_TOOL = 'submit_completion';
 
-/** Env var naming the file a subagent writes its typed result to. */
+export const REPORT_TOOL_BY_ROLE = {
+  coder: COMPLETION_TOOL,
+  tester: TEST_RESULT_TOOL,
+  reviewer: VERDICT_TOOL,
+} as const satisfies Record<AgentRole, string>;
+
+/** Env vars identifying a subagent's reporting contract and result channel. */
+export const BUILD_ROLE_ENV = 'PI_BUILD_EXT_ROLE';
 export const RESULT_FILE_ENV = 'YAAWC_BUILD_RESULT';
+
+export function parseBuildRole(value: string | undefined): AgentRole | null {
+  return AGENT_ROLES.includes(value as AgentRole) ? (value as AgentRole) : null;
+}
 
 export interface ResultEnvelope {
   kind: string;

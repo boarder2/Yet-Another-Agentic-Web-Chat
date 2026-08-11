@@ -1,8 +1,44 @@
 import { describe, it, expect } from 'vitest';
-import { agentName, anchorFor, type Crew } from './panes.ts';
+import {
+  agentEnvironment,
+  agentName,
+  agentToolAllowlist,
+  anchorFor,
+  type Crew,
+} from './panes.ts';
+import {
+  BUILD_ROLE_ENV,
+  COMPLETION_TOOL,
+  RESULT_FILE_ENV,
+  VERDICT_TOOL,
+} from './verdict.ts';
 
 const pane = (paneId: string, agent: string) => ({ paneId, agent });
 const DRIVER = 'w1:p1';
+
+describe('agent reporting contract', () => {
+  it('puts the explicit role and result channel in a new agent pane', () => {
+    expect(agentEnvironment('tester', '/tmp/tester-result.json')).toEqual({
+      [BUILD_ROLE_ENV]: 'tester',
+      [RESULT_FILE_ENV]: '/tmp/tester-result.json',
+    });
+  });
+
+  it('adds only the role’s reporting tool to a configured allowlist', () => {
+    expect(agentToolAllowlist('coder', ['read', 'edit', COMPLETION_TOOL])).toEqual(
+      ['read', 'edit', COMPLETION_TOOL],
+    );
+    expect(agentToolAllowlist('reviewer', ['read', 'bash'])).toEqual([
+      'read',
+      'bash',
+      VERDICT_TOOL,
+    ]);
+  });
+
+  it('leaves the default tool set unrestricted when no allowlist is configured', () => {
+    expect(agentToolAllowlist('coder', undefined)).toBeUndefined();
+  });
+});
 
 describe('anchorFor', () => {
   it('opens the right column off the driver, leaving it the left third', () => {

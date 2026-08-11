@@ -7,16 +7,43 @@
  * to the terminal: each tool writes its payload to the file named by
  * `YAAWC_BUILD_RESULT`, which is the parent's only channel for the result.
  */
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { isDeepStrictEqual } from 'node:util';
 import { defineTool, type ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
 import {
+  BUILD_ROLE_ENV,
   COMPLETION_TOOL,
+  parseBuildRole,
+  parseResult,
+  REPORT_TOOL_BY_ROLE,
   RESULT_FILE_ENV,
   serializeResult,
   TEST_RESULT_TOOL,
   VERDICT_TOOL,
 } from './verdict.ts';
+
+/** First report wins; an identical retry is harmless, but a conflicting answer is not. */
+export function recordResult(
+  path: string,
+  kind: string,
+  payload: Record<string, unknown>,
+): void {
+  const next = { kind, payload };
+  try {
+    writeFileSync(path, serializeResult(kind, payload), {
+      encoding: 'utf-8',
+      flag: 'wx',
+    });
+    return;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+  }
+
+  const current = parseResult(readFileSync(path, 'utf-8'));
+  if (current && isDeepStrictEqual(current, next)) return;
+  throw new Error(`A conflicting build result is already recorded at ${path}.`);
+}
 
 /**
  * A report the parent cannot read is not a report: fail the tool call loudly so
@@ -29,7 +56,7 @@ function record(kind: string, payload: Record<string, unknown>): void {
       `${RESULT_FILE_ENV} is not set, so ${kind} has nowhere to report. This agent was not started by the /build workflow.`,
     );
   }
-  writeFileSync(path, serializeResult(kind, payload), 'utf-8');
+  recordResult(path, kind, payload);
 }
 
 const submitVerdict = defineTool({
@@ -144,8 +171,26 @@ const submitCompletion = defineTool({
   },
 });
 
-export default function verdictTools(pi: ExtensionAPI): void {
-  pi.registerTool(submitVerdict);
-  pi.registerTool(submitTestResult);
-  pi.registerTool(submitCompletion);
+const TOOL_BY_ROLE = {
+  coder: submitCompletion,
+  tester: submitTestResult,
+  reviewer: submitVerdict,
+} as const;
+
+export default function verdictTools(
+  pi: ExtensionAPI,
+  env: NodeJS.ProcessEnv = process.env,
+): void {
+  const role = parseBuildRole(env[BUILD_ROLE_ENV]);
+  if (!role) {
+    throw new Error(
+      `${BUILD_ROLE_ENV} must be one of coder, tester, or reviewer; received ${JSON.stringify(env[BUILD_ROLE_ENV])}.`,
+    );
+  }
+
+  const tool = TOOL_BY_ROLE[role];
+  if (tool.name !== REPORT_TOOL_BY_ROLE[role]) {
+    throw new Error(`Reporting tool configuration is inconsistent for ${role}.`);
+  }
+  pi.registerTool(tool);
 }

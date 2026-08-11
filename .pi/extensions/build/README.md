@@ -64,8 +64,9 @@ Per chunk: coder → tester, up to `maxRounds` rounds. A chunk completes when th
 complete, `workflow_run_review` runs one final reviewer over the whole build. A blocking final
 review gets a fresh coder and tester crew to repair and validate it, then a fresh reviewer verifies
 the repair, up to `maxRounds` repairs. Typed results arrive through `submit_completion` /
-`submit_test_result` / `submit_verdict`, from an extension injected into each agent via `pi -e`. A
-missing or unreadable signal is a failure, never a pass.
+`submit_test_result` / `submit_verdict`, from an extension injected into each agent via `pi -e`.
+`PI_BUILD_EXT_ROLE` makes that extension register only the current role's reporting tool. A missing,
+conflicting, or unreadable signal is a failure, never a pass.
 
 A coder that reports `blocked` ends its current loop immediately: there is no point testing work
 that was not done, so the workflow stops and tells you what it needs decided.
@@ -155,8 +156,9 @@ or final-review repair), `turnTimeoutMs` (30m), `blockedTimeoutMs` (15m), `check
 ## Agents
 
 `.pi/agents/{coder,tester,reviewer}.md` — frontmatter `name`, `description`, and optional `tools`.
-An agent's tool allowlist is always extended with the submit tools, so it can never be configured
-such that it cannot report. A leftover `model:` field is a hard error: models live in
+An agent's tool allowlist is always extended with that role's submit tool, so it can never be
+configured such that it cannot report or see another role's reporting channel. A leftover `model:`
+field is a hard error: models live in
 `.pi/build.json`, and silently ignoring the field would let you change it and change nothing.
 
 ## Known weaknesses, accepted deliberately

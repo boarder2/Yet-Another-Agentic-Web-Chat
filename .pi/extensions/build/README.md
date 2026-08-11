@@ -30,6 +30,7 @@ start outside a herdr session — there is nowhere to put them.
 | grill   | `workflow_end_grilling` | You confirm the restatement of the ask           |
 | plan    | `workflow_write_plan`   | Plan _and_ chunking validated, then one approval |
 | execute | `workflow_run_chunk`    | No arguments — the harness picks the chunk       |
+| review  | `workflow_run_review`   | Reviews the completed build, then repairs findings |
 | close   | `workflow_close`        | Runs configured checks, reports real exit codes  |
 
 A tool called in the wrong phase throws; the model cannot advance by asserting that it has.
@@ -58,32 +59,29 @@ cannot be removed by an extension and is intentionally left as historical contex
 
 ## The chunk loop
 
-Per chunk: coder → tester → reviewer, up to `maxRounds` rounds. A chunk completes only when the
-coder reports `completed`, the tester reports **zero failures with at least one pass**, _and_ the
-reviewer reports `pass`. All three arrive as typed arguments to `submit_completion` /
+Per chunk: coder → tester, up to `maxRounds` rounds. A chunk completes when the coder reports
+`completed` and the tester reports **zero failures with at least one pass**. Once every chunk is
+complete, `workflow_run_review` runs one final reviewer over the whole build. A blocking final
+review gets a fresh coder and tester crew to repair and validate it, then a fresh reviewer verifies
+the repair, up to `maxRounds` repairs. Typed results arrive through `submit_completion` /
 `submit_test_result` / `submit_verdict`, from an extension injected into each agent via `pi -e`. A
 missing or unreadable signal is a failure, never a pass.
 
-A coder that reports `blocked` ends the round immediately: there is no point testing and reviewing
-work that was not done, so the loop stops and tells you what it needs decided.
+A coder that reports `blocked` ends its current loop immediately: there is no point testing work
+that was not done, so the workflow stops and tells you what it needs decided.
 
 After the last round you get: stop, or override with a reason that is written into the task file
 as `(override: …)`.
 
-**Every chunk gets a clean crew.** All three agents are retired and restarted when a new chunk
-starts: coder and tester move to a per-chunk session (`wf-<slug>-coder-chunk-3`) and the reviewer to
-a fresh one. Context earned on an earlier chunk is a liability on the next — it is where stale
-assumptions about code that has since changed come from — and a fresh agent's first task restates the
-ask, the plan, the whole task list with its chunk marked, and the paths both documents live at, so it
-loses continuity, not the brief, and can go read for itself when the brief is not enough.
+**Every chunk gets a clean crew.** Coder and tester move to per-chunk sessions
+(`wf-<slug>-coder-chunk-3`) when a new chunk starts. Context earned on an earlier chunk is a
+liability on the next, while a fresh agent's first task restates the ask, plan, whole task list, and
+its marked chunk. The reviewer is not started for chunks.
 
-**Later rounds carry only what changed.** The coder and tester keep their session across the rounds of
-a chunk, so a second round hands them the failures and review findings alone rather than the brief they
-are still holding. The reviewer is the exception: it is retired and restarted every round by design, so
-it is always briefed in full — but its brief names the round and carries the previous reviewer's
-findings, so a later round verifies the fixes instead of reviewing the chunk from scratch at a higher
-bar. A fresh reviewer every round is otherwise a standard that only ratchets up, and a chunk that can
-never pass.
+**Final review gets its own crew.** Only after every chunk is complete does a fresh reviewer inspect
+the whole approved build. If it blocks, fresh coder and tester sessions receive the complete brief and
+review findings; each reviewer verification is a fresh agent, so it checks the repair without stale
+assumptions.
 
 The reset is keyed on the chunk, so re-running a chunk that failed reattaches to the sessions already
 working on it instead of throwing their work away. Within a chunk, an agent that passes
@@ -92,8 +90,9 @@ which is the backstop for a chunk that takes many rounds.
 
 ## The panes
 
-`workflow_run_chunk` lays the crew out on first use: the driver session keeps the left third, and
-coder, tester and reviewer are stacked in equal thirds down the remaining two. Each is a real interactive
+`workflow_run_chunk` first lays out coder and tester; `workflow_run_review` adds the reviewer only
+after implementation completes. The driver session keeps the left third, and the crew panes stack in
+the remaining two. Each is a real interactive
 `pi`, started with `herdr agent start --kind pi` and named for its role, so the herdr sidebar reads
 as the crew and shows which one is `working`, `idle`, or `blocked`.
 
@@ -149,9 +148,9 @@ decision, and a harness that guessed at it would quietly plan on the cheap model
 execution restores whatever model you were on, as do pause, abort and close. It is set only when the
 phase changes, so a manual `/model` inside a phase stands.
 
-Everything else falls back to a default rather than leaving a workflow unrunnable: `maxRounds` (2),
-`contextBudget` (0.6, applied within a chunk), `turnTimeoutMs` (30m), `blockedTimeoutMs` (15m),
-`checks` (none).
+Everything else falls back to a default rather than leaving a workflow unrunnable: `maxRounds` (2,
+for both chunk test repairs and final-review repairs), `contextBudget` (0.6, applied within a chunk
+or final-review repair), `turnTimeoutMs` (30m), `blockedTimeoutMs` (15m), `checks` (none).
 
 ## Agents
 

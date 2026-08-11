@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-export const PHASES = ['triage', 'grill', 'plan', 'execute', 'close'] as const;
+export const PHASES = ['triage', 'grill', 'plan', 'execute', 'review', 'close'] as const;
 
 export type Phase = (typeof PHASES)[number];
 export type Complexity = 'simple' | 'complex';
@@ -12,7 +12,8 @@ const TRANSITIONS: Record<Phase, readonly Phase[]> = {
   triage: ['grill', 'plan'],
   grill: ['plan'],
   plan: ['execute'],
-  execute: ['close'],
+  execute: ['review'],
+  review: ['close'],
   close: [],
 };
 
@@ -213,6 +214,23 @@ export function beginChunk(
   if (state.agents.coder.chunkId === chunkId) return state;
 
   const fresh: AgentSession = { chunkId, generation: 0 };
+  return {
+    ...state,
+    agents: { coder: { ...fresh }, tester: { ...fresh } },
+    updatedAt: now.toISOString(),
+  };
+}
+
+/**
+ * The final review is a distinct job, so its repair crew must not inherit the
+ * last chunk's narrow brief or its accumulated context.
+ */
+export function beginReview(state: BuildState, now: Date): BuildState {
+  const generation =
+    state.agents.coder.chunkId === 'review'
+      ? Math.max(state.agents.coder.generation, state.agents.tester.generation) + 1
+      : 0;
+  const fresh: AgentSession = { chunkId: 'review', generation };
   return {
     ...state,
     agents: { coder: { ...fresh }, tester: { ...fresh } },

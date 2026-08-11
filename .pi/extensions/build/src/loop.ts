@@ -21,6 +21,7 @@ import {
   advance,
   agentSessionId,
   beginChunk,
+  beginReview,
   recordOverride,
   reseedAgent,
   type AgentName,
@@ -41,14 +42,16 @@ import {
 
 const DEFAULT_CONTEXT_WINDOW = 200_000;
 
-interface ChunkBrief {
-  chunk: TaskChunk;
+interface WorkflowBrief {
   ask: string;
   plan: string;
   planPath: string | null;
   taskPath: string;
-  /** Every chunk with its state, so an agent sees where its chunk sits in the whole. */
   outline: string;
+}
+
+interface ChunkBrief extends WorkflowBrief {
+  chunk: TaskChunk;
 }
 
 function readDocument(cwd: string, relative: string | null): string {
@@ -70,79 +73,50 @@ function chunkText(chunk: TaskChunk): string {
   ].join('\n');
 }
 
-function outlineOf(chunks: TaskChunk[], current: TaskChunk): string {
+function outlineOf(chunks: TaskChunk[], current?: TaskChunk): string {
   return chunks
     .map(
       (chunk) =>
         `- [${chunk.complete ? 'x' : ' '}] Chunk ${chunk.number} — ${chunk.title}` +
-        (chunk.id === current.id ? '   <- this chunk' : ''),
+        (chunk.id === current?.id ? '   <- this chunk' : ''),
     )
     .join('\n');
 }
 
-// A first brief carries the ask, the plan, the whole task list and the chunk, plus
-// the paths both documents live at, so an agent with no history can both act and go
-// read for itself. That is what makes a per-chunk reset affordable: it costs
-// continuity, not the brief.
-function firstBrief(
-  role: AgentRole,
-  brief: ChunkBrief,
-  round: number,
-  priorReview: string,
-): string {
-  const where = sections(
+function preamble(brief: WorkflowBrief): string {
+  return sections(
     `Ask: ${brief.ask}`,
     brief.planPath
       ? `The plan is at ${brief.planPath} and the task list at ${brief.taskPath} — read them whenever you need more than this brief carries.`
       : `The task list is at ${brief.taskPath} — read it whenever you need more than this brief carries.`,
     `--- TASK LIST ---\n${brief.outline}`,
-  );
-  const preamble = sections(
-    where,
-    `--- THIS CHUNK ---\n${chunkText(brief.chunk)}`,
     brief.plan ? `--- PLAN ---\n${brief.plan}` : '',
-  );
-
-  if (role === 'coder') {
-    return sections(
-      'Implement exactly this chunk and nothing else, then report with submit_completion.',
-      preamble,
-    );
-  }
-  if (role === 'tester') {
-    return sections(
-      'Write and run tests for the chunk just implemented, then report with submit_test_result.',
-      preamble,
-    );
-  }
-  // The reviewer is new every round, so the round it is in has to be told to it.
-  // Without it, each round is a first review by a reviewer with a slightly
-  // different taste, and the standard only ever ratchets up.
-  return sections(
-    'Review the code and tests for this chunk against it, then report with submit_verdict.',
-    preamble,
-    round === 1
-      ? ''
-      : sections(
-          `This is round ${round} for this chunk; earlier rounds were reviewed by an agent like you whose findings the coder has already acted on.`,
-          priorReview
-            ? `Confirm these are fixed and that fixing them broke nothing else. Anything an earlier round saw and did not block on is settled — do not re-open it.\n\n--- PREVIOUS REVIEW ---\n${priorReview}`
-            : 'The previous round failed on its tests rather than its review, so the code has changed since a review passed it. Check the change, not the chunk from scratch.',
-        ),
   );
 }
 
-// A later round in the same session: the agent still holds the brief it was given,
-// so it gets the feedback and nothing else.
-function briefFor(
-  role: AgentRole,
+function firstChunkBrief(role: 'coder' | 'tester', brief: ChunkBrief): string {
+  const context = sections(
+    preamble(brief),
+    `--- THIS CHUNK ---\n${chunkText(brief.chunk)}`,
+  );
+  return role === 'coder'
+    ? sections(
+        'Implement exactly this chunk and nothing else, then report with submit_completion.',
+        context,
+      )
+    : sections(
+        'Write and run tests for the chunk just implemented, then report with submit_test_result.',
+        context,
+      );
+}
+
+function chunkBriefFor(
+  role: 'coder' | 'tester',
   brief: ChunkBrief,
   feedback: string,
   fresh: boolean,
-  round: number,
 ): string {
-  if (fresh) return firstBrief(role, brief, round, feedback);
-
+  if (fresh) return firstChunkBrief(role, brief);
   if (role === 'coder') {
     return `Chunk ${brief.chunk.number} did not pass. Fix exactly this, then report again with submit_completion.\n\n--- FIX THESE ---\n${feedback}`;
   }
@@ -152,34 +126,81 @@ function briefFor(
   );
 }
 
+function finalReviewBrief(brief: WorkflowBrief, priorReview = ''): string {
+  return sections(
+    'Review the completed build against the approved plan and task list, then report with submit_verdict. This is one final review of all chunks, not a per-chunk review.',
+    preamble(brief),
+    priorReview ? `--- PREVIOUS REVIEW FINDINGS ---\n${priorReview}` : '',
+  );
+}
+
+function repairBrief(
+  role: 'coder' | 'tester',
+  brief: WorkflowBrief,
+  feedback: string,
+  fresh: boolean,
+): string {
+  if (fresh) {
+    return sections(
+      role === 'coder'
+        ? 'Fix the final review findings across the completed build, then report with submit_completion.'
+        : 'Run and extend tests needed to validate the final review repairs, then report with submit_test_result.',
+      preamble(brief),
+      `--- REVIEW FEEDBACK ---\n${feedback}`,
+    );
+  }
+  if (role === 'coder') {
+    return `The final review repairs are not yet green. Fix exactly this, then report again with submit_completion.\n\n--- FIX THESE ---\n${feedback}`;
+  }
+  return sections(
+    'The coder has changed the final-review repairs. Re-run the tests, extend them where the fix needs it, then report with submit_test_result.',
+    feedback ? `--- PREVIOUS FAILURES ---\n${feedback}` : '',
+  );
+}
+
+function testFailure(
+  tests: ReturnType<typeof decodeTestResult>,
+  problem?: string,
+): string {
+  if (!tests.ok) return `Tests: ${problem ?? tests.reason}`;
+  if (isGreen(tests.value)) return '';
+  return `Tests: ${tests.value.failed} failing.\n${tests.value.output.slice(0, 2000)}`;
+}
+
+function reviewFailure(
+  verdict: ReturnType<typeof decodeVerdict>,
+  problem?: string,
+): string {
+  if (!verdict.ok) return `Reviewer: ${problem ?? verdict.reason}`;
+  if (verdict.value.verdict === 'pass') return '';
+  return sections(
+    `Reviewer blocking:\n- ${verdict.value.blocking.join('\n- ')}`,
+    verdict.value.notes,
+  );
+}
+
 export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
   pi.registerTool(
     defineTool({
       name: 'workflow_run_chunk',
       label: 'Run Chunk',
       description:
-        'Run the next unfinished chunk through coder, tester and reviewer in their herdr panes. Takes no arguments: the harness picks the chunk.',
+        'Run the next unfinished chunk through coder and tester in their herdr panes. Takes no arguments: the harness picks the chunk.',
       parameters: Type.Object({}),
 
       async execute(_id, _params, signal, onUpdate, ctx) {
         const state = controller.current();
-        if (!state)
-          throw new Error('No active workflow. Start one with /build.');
+        if (!state) throw new Error('No active workflow. Start one with /build.');
         if (state.phase !== 'execute') {
-          throw new Error(
-            `workflow_run_chunk is not available in the ${state.phase} phase.`,
-          );
+          throw new Error(`workflow_run_chunk is not available in the ${state.phase} phase.`);
         }
         if (!state.taskPath) throw new Error('This workflow has no task list.');
 
         const loaded = loadConfig(ctx.cwd);
         if (!loaded.ok) {
-          throw new Error(
-            `${CONFIG_PATH} is not usable:\n- ${loaded.problems.join('\n- ')}`,
-          );
+          throw new Error(`${CONFIG_PATH} is not usable:\n- ${loaded.problems.join('\n- ')}`);
         }
         const config = loaded.config;
-
         const taskFile = join(ctx.cwd, state.taskPath);
         const original = readFileSync(taskFile, 'utf-8');
         const hash = hashContent(original);
@@ -189,16 +210,14 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
             'The task list changed since the last chunk.',
             'Run the next unfinished chunk from the edited file?',
           );
-          if (!proceed)
-            return say('Stopped: the task list changed and was not confirmed.');
+          if (!proceed) return say('Stopped: the task list changed and was not confirmed.');
         }
 
-        const chunk = nextChunk(parseTasks(original));
+        const tasks = parseTasks(original);
+        const chunk = nextChunk(tasks);
         if (!chunk) {
-          controller.update(advance(state, 'close', new Date()));
-          return say(
-            'Every chunk is complete. Close the workflow with workflow_close.',
-          );
+          controller.update(advance(state, 'review', new Date()));
+          return say('Every chunk is complete. Run the final review with workflow_run_review.');
         }
 
         const brief: ChunkBrief = {
@@ -207,40 +226,28 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
           plan: readDocument(ctx.cwd, state.planPath),
           planPath: state.planPath,
           taskPath: state.taskPath,
-          outline: outlineOf(parseTasks(original).chunks, chunk),
+          outline: outlineOf(tasks.chunks, chunk),
         };
-
         const activity: string[] = [];
         const note = (line: string) => {
           activity.push(line);
           onUpdate?.(say(activity.slice(-12).join('\n')));
         };
-
-        const contextWindow =
-          ctx.model?.contextWindow ?? DEFAULT_CONTEXT_WINDOW;
+        const contextWindow = ctx.model?.contextWindow ?? DEFAULT_CONTEXT_WINDOW;
         let working = state;
-
         const chunkSessionId = (name: AgentName): string =>
           agentSessionId(working.slug, name, working.agents[name]);
-
-        // The reviewer is ephemeral by design: no session id means `--no-session`.
-        const sessionIdFor = (role: AgentRole): string | undefined =>
-          role === 'reviewer' ? undefined : chunkSessionId(role);
-
         const crewContext = (): CrewContext => ({
           cwd: ctx.cwd,
           date: working.date,
           slug: working.slug,
           config,
-          sessionIdFor,
+          sessionIdFor: (role) =>
+            role === 'reviewer' ? undefined : chunkSessionId(role),
           note,
           signal,
         });
 
-        // Every chunk starts all three agents clean: the coder and tester move to a
-        // new session, and their panes are closed so the new session is what comes
-        // back up. Skipped when this chunk is being re-run, which reattaches to the
-        // sessions already working on it instead of discarding their work.
         if (working.agents.coder.chunkId !== chunk.id) {
           note(`chunk ${chunk.number}: fresh coder and tester`);
           working = beginChunk(working, chunk.id, new Date());
@@ -249,82 +256,39 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
           await retireRole(crewContext(), 'tester');
         }
 
-        // Live agents are found by name in herdr on every pass, so the loop keeps no
-        // record of the layout to fall out of step with what is on screen.
         let crew: Crew = {};
-
-        // Roles whose current session has already had the full brief this call. The
-        // reviewer is never in it: it is retired every round, so it is always new.
-        const briefed = new Set<AgentRole>();
-
+        const briefed = new Set<'coder' | 'tester'>();
         const runOne = async (
-          role: AgentRole,
+          role: 'coder' | 'tester',
           feedback: string,
-          round: number,
         ) => {
-          // A reseed only takes effect once the old agent is gone, since the new one
-          // is adopted under the same name.
-          if (role !== 'reviewer') {
-            const name = role;
-            const used = sessionTokens(ctx.cwd, chunkSessionId(name));
-            if (used > contextWindow * config.contextBudget) {
-              note(
-                `${role}: context budget reached within the chunk, reseeding`,
-              );
-              working = reseedAgent(working, name, new Date());
-              controller.update(working);
-              await retireRole(crewContext(), role);
-              briefed.delete(role);
-            }
+          const used = sessionTokens(ctx.cwd, chunkSessionId(role));
+          if (used > contextWindow * config.contextBudget) {
+            note(`${role}: context budget reached within the chunk, reseeding`);
+            working = reseedAgent(working, role, new Date());
+            controller.update(working);
+            await retireRole(crewContext(), role);
+            briefed.delete(role);
           }
-
-          // Retired before the crew is brought back up, so ensureCrew rebuilds it as
-          // a reviewer that has never seen this code.
-          if (role === 'reviewer') {
-            await retireRole(crewContext(), 'reviewer');
-            briefed.delete('reviewer');
-          }
-
-          crew = await ensureCrew(crewContext());
-
-          // A session that has not been briefed yet gets the whole thing; one that
-          // has gets only what changed. Feedback the agent cannot act on without the
-          // brief — a coder round with nothing to fix — falls back to the full text.
+          crew = await ensureCrew(crewContext(), [role]);
           const fresh = !briefed.has(role) || (role === 'coder' && !feedback);
           briefed.add(role);
-
           note(`${role}: working`);
           return runRole(
             crewContext(),
             crew,
             role,
-            briefFor(role, brief, feedback, fresh, round),
-            (blocked) => {
-              note(`${blocked}: blocked — asking for input in its pane`);
-              ctx.ui.notify(
-                `The ${blocked} agent is blocked in its pane and needs you. ` +
-                  `Answer it there; the workflow is waiting.`,
-                'warning',
-              );
-            },
+            chunkBriefFor(role, brief, feedback, fresh),
+            (blocked) => notifyBlocked(ctx, note, blocked),
           );
         };
 
         let testFeedback = '';
-        let reviewFeedback = '';
         const problems: string[] = [];
-
         for (let round = 1; round <= config.maxRounds; round++) {
-          note(`--- round ${round} of ${config.maxRounds} ---`);
-
-          const coderRun = await runOne(
-            'coder',
-            sections(testFeedback, reviewFeedback),
-            round,
-          );
+          note(`--- chunk round ${round} of ${config.maxRounds} ---`);
+          const coderRun = await runOne('coder', testFeedback);
           const completion = decodeCompletion(coderRun.envelope);
-          // A coder that gave up is not a round to test and review: stop and say
-          // why, rather than spending two more agents proving nothing changed.
           if (!completion.ok || completion.value.status === 'blocked') {
             const why = completion.ok
               ? completion.value.summary
@@ -335,105 +299,231 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
             );
           }
 
-          // The tester sees only test failures — review findings are the coder's to fix.
-          const testerRun = await runOne('tester', testFeedback, round);
+          const testerRun = await runOne('tester', testFeedback);
           const tests = decodeTestResult(testerRun.envelope);
-          // The reviewer carries its predecessor's findings so a later round checks
-          // the fixes instead of hunting the chunk from scratch at a higher bar.
-          const reviewerRun = await runOne('reviewer', reviewFeedback, round);
-          const verdict = decodeVerdict(reviewerRun.envelope);
-
-          const testsGreen = tests.ok && isGreen(tests.value);
-          const reviewPassed = verdict.ok && verdict.value.verdict === 'pass';
-
-          if (testsGreen && reviewPassed) {
+          if (tests.ok && isGreen(tests.value)) {
             writeFileSync(taskFile, completeChunk(original, chunk.id), 'utf-8');
+            const completedTasks = parseTasks(readFileSync(taskFile, 'utf-8'));
             const finished = {
               ...working,
               taskHash: hashContent(readFileSync(taskFile, 'utf-8')),
               rounds: { ...working.rounds, [chunk.id]: round },
             };
-            // Advance here when this was the last chunk, so close does not need a
-            // further run_chunk call just to discover there is nothing left.
-            const remaining = nextChunk(
-              parseTasks(readFileSync(taskFile, 'utf-8')),
-            );
+            const remaining = nextChunk(completedTasks);
             controller.update(
-              remaining ? finished : advance(finished, 'close', new Date()),
+              remaining ? finished : advance(finished, 'review', new Date()),
             );
             return say(
               `Chunk ${chunk.number} (${chunk.title}) complete in round ${round}. ` +
-                `Tests: ${tests.value.passed} passed. Reviewer: pass.` +
+                `Tests: ${tests.value.passed} passed.` +
                 (remaining
                   ? ''
-                  : ' That was the last chunk — close the workflow with workflow_close.'),
+                  : ' All chunks are complete — run the final review with workflow_run_review.'),
             );
           }
 
-          // Fail-closed: an undecodable signal is a failure with its reason, not a pass.
-          testFeedback = tests.ok
-            ? isGreen(tests.value)
-              ? ''
-              : `Tests: ${tests.value.failed} failing.\n${tests.value.output.slice(0, 2000)}`
-            : `Tests: ${testerRun.problem ?? tests.reason}`;
-
-          // The blocking list is only the headline; the reviewer's notes carry the
-          // reasoning, and are the whole review when the verdict does not decode.
-          reviewFeedback = verdict.ok
-            ? verdict.value.verdict === 'pass'
-              ? ''
-              : sections(
-                  `Reviewer blocking:\n- ${verdict.value.blocking.join('\n- ')}`,
-                  verdict.value.notes,
-                )
-            : `Reviewer: ${reviewerRun.problem ?? verdict.reason}`;
-
-          problems.push(
-            `Round ${round}:\n${sections(testFeedback, reviewFeedback)}`,
-          );
-          note(`round ${round} failed`);
+          testFeedback = testFailure(tests, testerRun.problem);
+          problems.push(`Round ${round}:\n${testFeedback}`);
+          note(`chunk round ${round} failed`);
         }
 
-        const summary = problems.join('\n\n');
-        const choice = ctx.hasUI
-          ? await ctx.ui.select(
-              `Chunk ${chunk.number} still failing after ${config.maxRounds} rounds.`,
-              ['Stop and let me look', 'Override — mark it complete anyway'],
-            )
-          : 'Stop and let me look';
+        return overrideChunk(ctx, controller, working, taskFile, original, chunk, problems.join('\n\n'));
+      },
+    }),
+  );
 
-        if (choice?.startsWith('Override')) {
-          const reason =
-            (await ctx.ui.editor('Why is this override justified?', '')) ?? '';
-          if (!reason.trim()) {
-            return say(`Override cancelled — no reason given.\n\n${summary}`);
+  pi.registerTool(
+    defineTool({
+      name: 'workflow_run_review',
+      label: 'Run Final Review',
+      description:
+        'Review the completed build after every chunk is implemented. Blocking findings are repaired and retested before a fresh final verdict.',
+      parameters: Type.Object({}),
+
+      async execute(_id, _params, signal, onUpdate, ctx) {
+        const state = controller.current();
+        if (!state) throw new Error('No active workflow. Start one with /build.');
+        if (state.phase !== 'review') {
+          throw new Error(`workflow_run_review is not available in the ${state.phase} phase.`);
+        }
+        if (!state.taskPath) throw new Error('This workflow has no task list.');
+
+        const loaded = loadConfig(ctx.cwd);
+        if (!loaded.ok) {
+          throw new Error(`${CONFIG_PATH} is not usable:\n- ${loaded.problems.join('\n- ')}`);
+        }
+        const config = loaded.config;
+        const tasks = parseTasks(readFileSync(join(ctx.cwd, state.taskPath), 'utf-8'));
+        if (nextChunk(tasks)) {
+          throw new Error('Final review requires every chunk to be complete.');
+        }
+
+        const brief: WorkflowBrief = {
+          ask: state.ask,
+          plan: readDocument(ctx.cwd, state.planPath),
+          planPath: state.planPath,
+          taskPath: state.taskPath,
+          outline: outlineOf(tasks.chunks),
+        };
+        const activity: string[] = [];
+        const note = (line: string) => {
+          activity.push(line);
+          onUpdate?.(say(activity.slice(-12).join('\n')));
+        };
+        const contextWindow = ctx.model?.contextWindow ?? DEFAULT_CONTEXT_WINDOW;
+        let working = state;
+        const sessionId = (role: AgentName) =>
+          agentSessionId(working.slug, role, working.agents[role]);
+        const crewContext = (): CrewContext => ({
+          cwd: ctx.cwd,
+          date: working.date,
+          slug: working.slug,
+          config,
+          sessionIdFor: (role) => (role === 'reviewer' ? undefined : sessionId(role)),
+          note,
+          signal,
+        });
+        let crew: Crew = {};
+
+        const review = async (priorReview = '') => {
+          await retireRole(crewContext(), 'reviewer');
+          crew = await ensureCrew(crewContext(), ['reviewer']);
+          note('reviewer: working');
+          return runRole(
+            crewContext(),
+            crew,
+            'reviewer',
+            finalReviewBrief(brief, priorReview),
+            (blocked) => notifyBlocked(ctx, note, blocked),
+          );
+        };
+
+        const initialRun = await review();
+        const initialVerdict = decodeVerdict(initialRun.envelope);
+        if (!initialVerdict.ok) {
+          return say(`The final reviewer did not produce a usable verdict: ${initialRun.problem ?? initialVerdict.reason}`);
+        }
+        if (initialVerdict.value.verdict === 'pass') {
+          controller.update(advance(working, 'close', new Date()));
+          return say('Final review passed. Close the workflow with workflow_close.');
+        }
+
+        let feedback = reviewFailure(initialVerdict, initialRun.problem);
+        working = beginReview(working, new Date());
+        controller.update(working);
+        await retireRole(crewContext(), 'coder');
+        await retireRole(crewContext(), 'tester');
+        const briefed = new Set<'coder' | 'tester'>();
+
+        const repair = async (role: 'coder' | 'tester', repairFeedback: string) => {
+          const used = sessionTokens(ctx.cwd, sessionId(role));
+          if (used > contextWindow * config.contextBudget) {
+            note(`${role}: context budget reached during final review, reseeding`);
+            working = reseedAgent(working, role, new Date());
+            controller.update(working);
+            await retireRole(crewContext(), role);
+            briefed.delete(role);
+          }
+          crew = await ensureCrew(crewContext(), [role]);
+          const fresh = !briefed.has(role);
+          briefed.add(role);
+          note(`${role}: working`);
+          return runRole(
+            crewContext(),
+            crew,
+            role,
+            repairBrief(role, brief, repairFeedback, fresh),
+            (blocked) => notifyBlocked(ctx, note, blocked),
+          );
+        };
+
+        const problems = [`Initial review:\n${feedback}`];
+        for (let round = 1; round <= config.maxRounds; round++) {
+          note(`--- final-review repair ${round} of ${config.maxRounds} ---`);
+          const coderRun = await repair('coder', feedback);
+          const completion = decodeCompletion(coderRun.envelope);
+          if (!completion.ok || completion.value.status === 'blocked') {
+            const why = completion.ok
+              ? completion.value.summary
+              : (coderRun.problem ?? completion.reason);
+            return say(`The coder stopped during final-review repairs: ${why}`);
           }
 
-          writeFileSync(
-            taskFile,
-            completeChunk(original, chunk.id, { override: reason }),
-            'utf-8',
-          );
-          const overridden = recordOverride(
-            { ...working, taskHash: null },
-            `Chunk ${chunk.number}`,
-            reason,
-            new Date(),
-          );
-          controller.update({
-            ...overridden,
-            taskHash: hashContent(readFileSync(taskFile, 'utf-8')),
-          });
-          return say(
-            `Chunk ${chunk.number} marked complete by override: ${reason.trim()}`,
-          );
+          const testerRun = await repair('tester', feedback);
+          const tests = decodeTestResult(testerRun.envelope);
+          const testsGreen = tests.ok && isGreen(tests.value);
+          const testFeedback = testFailure(tests, testerRun.problem);
+          const reviewerRun = await review(feedback);
+          const verdict = decodeVerdict(reviewerRun.envelope);
+          const reviewFeedback = reviewFailure(verdict, reviewerRun.problem);
+          const reviewPassed = verdict.ok && verdict.value.verdict === 'pass';
+
+          if (testsGreen && reviewPassed) {
+            controller.update(advance(working, 'close', new Date()));
+            return say(
+              `Final review passed after repair ${round}. Tests: ${tests.value.passed} passed. ` +
+                'Close the workflow with workflow_close.',
+            );
+          }
+
+          feedback = sections(testFeedback, reviewFeedback);
+          problems.push(`Repair ${round}:\n${feedback}`);
+          note(`final-review repair ${round} failed`);
         }
 
         return say(
-          `Chunk ${chunk.number} did not pass in ${config.maxRounds} rounds. Stopping for the user.\n\n${summary}`,
+          `Final review still has blocking work after ${config.maxRounds} repairs. Stopping for the user.\n\n${problems.join('\n\n')}`,
         );
       },
     }),
+  );
+}
+
+function notifyBlocked(
+  ctx: { ui: { notify(message: string, level: 'warning'): void } },
+  note: (line: string) => void,
+  blocked: AgentRole,
+): void {
+  note(`${blocked}: blocked — asking for input in its pane`);
+  ctx.ui.notify(
+    `The ${blocked} agent is blocked in its pane and needs you. Answer it there; the workflow is waiting.`,
+    'warning',
+  );
+}
+
+async function overrideChunk(
+  ctx: { hasUI: boolean; ui: { select(title: string, options: string[]): Promise<string | undefined>; editor(title: string, initial: string): Promise<string | undefined> } },
+  controller: Controller,
+  state: Parameters<typeof recordOverride>[0],
+  taskFile: string,
+  original: string,
+  chunk: TaskChunk,
+  summary: string,
+): Promise<AgentToolResult<unknown>> {
+  const choice = ctx.hasUI
+    ? await ctx.ui.select(
+        `Chunk ${chunk.number} still failing.`,
+        ['Stop and let me look', 'Override — mark it complete anyway'],
+      )
+    : 'Stop and let me look';
+  if (!choice?.startsWith('Override')) {
+    return say(`Chunk ${chunk.number} did not pass. Stopping for the user.\n\n${summary}`);
+  }
+
+  const reason = (await ctx.ui.editor('Why is this override justified?', '')) ?? '';
+  if (!reason.trim()) return say(`Override cancelled — no reason given.\n\n${summary}`);
+
+  writeFileSync(taskFile, completeChunk(original, chunk.id, { override: reason }), 'utf-8');
+  const overridden = recordOverride(state, `Chunk ${chunk.number}`, reason, new Date());
+  const finished = {
+    ...overridden,
+    taskHash: hashContent(readFileSync(taskFile, 'utf-8')),
+  };
+  const remaining = nextChunk(parseTasks(readFileSync(taskFile, 'utf-8')));
+  controller.update(remaining ? finished : advance(finished, 'review', new Date()));
+  return say(
+    `Chunk ${chunk.number} marked complete by override: ${reason.trim()}` +
+      (remaining ? '' : ' All chunks are complete — run the final review with workflow_run_review.'),
   );
 }
 

@@ -3,6 +3,7 @@ import {
   advance,
   agentSessionId,
   beginChunk,
+  beginReview,
   buildPaths,
   canTransition,
   createState,
@@ -103,7 +104,8 @@ describe('transitions', () => {
     expect(canTransition('triage', 'grill')).toBe(true);
     expect(canTransition('triage', 'plan')).toBe(true);
     expect(canTransition('plan', 'execute')).toBe(true);
-    expect(canTransition('execute', 'close')).toBe(true);
+    expect(canTransition('execute', 'review')).toBe(true);
+    expect(canTransition('review', 'close')).toBe(true);
   });
 
   it('refuses to skip the plan gate', () => {
@@ -114,6 +116,7 @@ describe('transitions', () => {
   it('refuses to go backwards or past the end', () => {
     expect(canTransition('execute', 'plan')).toBe(false);
     expect(canTransition('execute', 'triage')).toBe(false);
+    expect(canTransition('execute', 'close')).toBe(false);
     expect(canTransition('close', 'execute')).toBe(false);
   });
 
@@ -220,6 +223,21 @@ describe('beginChunk', () => {
     expect(beginChunk(reseeded, 'chunk-1', LATER).agents.coder.generation).toBe(
       1,
     );
+  });
+});
+
+describe('beginReview', () => {
+  it('moves the repair crew onto fresh final-review sessions', () => {
+    const after = beginReview(beginChunk(state(), 'chunk-2', NOW), LATER);
+
+    expect(after.agents).toEqual({
+      coder: { chunkId: 'review', generation: 0 },
+      tester: { chunkId: 'review', generation: 0 },
+    });
+    expect(beginReview(after, LATER).agents).toEqual({
+      coder: { chunkId: 'review', generation: 1 },
+      tester: { chunkId: 'review', generation: 1 },
+    });
   });
 });
 

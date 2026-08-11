@@ -23,6 +23,7 @@ const WORKFLOW_TOOLS = [
   'workflow_end_grilling',
   'workflow_write_plan',
   'workflow_run_chunk',
+  'workflow_run_review',
   'workflow_close',
 ];
 const NOW = new Date('2026-08-09T12:00:00.000Z');

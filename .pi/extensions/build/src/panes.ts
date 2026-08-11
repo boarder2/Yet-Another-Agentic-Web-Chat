@@ -236,7 +236,10 @@ async function startRole(
  * half-built run reattaches instead of trying to start a second agent under a name
  * that is already taken.
  */
-export async function ensureCrew(ctx: CrewContext): Promise<Crew> {
+export async function ensureCrew(
+  ctx: CrewContext,
+  roles: readonly AgentRole[] = AGENT_ROLES,
+): Promise<Crew> {
   const crew: Crew = {};
   for (const role of AGENT_ROLES) {
     const agent = agentName(ctx.slug, role);
@@ -246,7 +249,7 @@ export async function ensureCrew(ctx: CrewContext): Promise<Crew> {
 
   const driver = callerPaneId();
 
-  for (const role of AGENT_ROLES) {
+  for (const role of roles) {
     if (crew[role]) continue;
 
     const anchor = anchorFor(role, crew, driver);
@@ -338,8 +341,8 @@ export async function runRole(
  * fresh session. Closing the pane is what makes the retirement real: adoption goes
  * by agent name, so an agent left running would simply be picked up again.
  *
- * Used for the reviewer between chunks — it must not anchor on work it already
- * approved — and for a long-lived agent that has outgrown its context budget.
+ * Used for each final-review verdict — it must not anchor on work it already
+ * reviewed — and for a long-lived agent that has outgrown its context budget.
  */
 export async function retireRole(
   ctx: CrewContext,

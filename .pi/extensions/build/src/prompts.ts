@@ -41,9 +41,16 @@ comes back with the specific failures to fix, and neither document is written un
 
   execute: `PHASE: EXECUTION.
 Call workflow_run_chunk to run the next chunk. It takes no arguments: the harness picks the chunk,
-runs coder then tester then reviewer, and writes the checkbox. You cannot reorder, skip, batch, or
-re-run chunks, and you cannot mark one done yourself. Between chunks, report what happened to the
-user. Your job here is narration and judgement, not implementation.`,
+runs coder then tester, and writes the checkbox. You cannot reorder, skip, batch, or re-run chunks,
+and you cannot mark one done yourself. When every chunk is complete, the harness moves to final
+review. Between chunks, report what happened to the user. Your job here is narration and judgement,
+not implementation.`,
+
+  review: `PHASE: FINAL REVIEW.
+All planned chunks are complete. Call workflow_run_review to review the completed build as one
+change. It takes no arguments and runs the reviewer only after implementation is complete; if the
+reviewer finds blocking defects, it gives a fresh coder and tester crew the findings, then verifies
+the repair. Do not return to chunk execution or mark work complete yourself.`,
 
   close: `PHASE: CLOSE.
 The harness runs the configured checks and reports their real exit codes. Summarise what shipped

@@ -11,7 +11,7 @@ export interface BuildConfig {
   models: Record<Role, string>;
   /** Commands run at close. Advisory: a failure is reported, never blocking. */
   checks: string[];
-  /** Coder/tester rounds per chunk before the loop stops and asks the user. */
+  /** Maximum chunk test rounds and final-review repair rounds before stopping. */
   maxRounds: number;
   /** Reseed a long-lived agent once its context passes this share of the window. */
   contextBudget: number;

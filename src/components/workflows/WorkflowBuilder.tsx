@@ -151,7 +151,7 @@ export default function WorkflowBuilder({ workflow }: { workflow?: Workflow }) {
             aria-label="Workflow description"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Shown on the workflow card"
+            placeholder="Shown in the workflow list"
           />
         </Field>
 

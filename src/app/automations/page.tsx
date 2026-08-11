@@ -7,6 +7,7 @@ import {
   CalendarClock,
   LoaderCircle,
   Pencil,
+  Play,
   Plus,
   Trash2,
   Workflow as WorkflowIcon,
@@ -14,7 +15,12 @@ import {
 import PageHeader from '@/components/PageHeader';
 import Modal from '@/components/ui/Modal';
 import { Button, buttonClasses } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
+import {
+  ListCount,
+  ListRow,
+  ListRowAction,
+  listRowActionClasses,
+} from '@/components/ui/List';
 import DynamicIcon from '@/components/workflows/DynamicIcon';
 import FillForm from '@/components/workflows/FillForm';
 import {
@@ -165,62 +171,65 @@ export default function WorkflowsPage() {
       )}
 
       {!isLoading && workflows.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pb-20 lg:pb-2">
-          {workflows.map((w) => (
-            <Card
-              key={w.id}
-              onClick={() => setLaunch(w)}
-              className="group flex flex-col gap-3 p-4 cursor-pointer transition-colors duration-150 hover:border-accent"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <div className="flex items-center justify-center w-9 h-9 rounded-control bg-accent/10 text-accent shrink-0">
+        <>
+          <ListCount>
+            {workflows.length} workflow{workflows.length === 1 ? '' : 's'}
+          </ListCount>
+          <div className="flex flex-col pb-20 lg:pb-2">
+            {workflows.map((w) => (
+              <ListRow
+                key={w.id}
+                data-workflow-id={w.id}
+                href={`/automations/workflows/${w.id}`}
+                leading={
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-control bg-accent/10 text-accent">
                     <DynamicIcon name={w.icon} size={18} />
                   </div>
-                  <span className="font-medium truncate">{w.name}</span>
-                </div>
-                {w.running && (
-                  <LoaderCircle
-                    size={14}
-                    className="animate-spin text-accent shrink-0"
-                  />
-                )}
-              </div>
-              {w.description && (
-                <p className="text-sm text-fg/60 line-clamp-2">
-                  {w.description}
-                </p>
-              )}
-              <div
-                className="flex items-center gap-1 mt-auto pt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <Link
-                  href={`/automations/schedules/new?workflow=${w.id}`}
-                  className="p-1.5 rounded-control hover:bg-surface-2 text-fg/60 hover:text-fg transition-colors duration-150"
-                  title="Add schedule"
-                >
-                  <CalendarClock size={16} />
-                </Link>
-                <Link
-                  href={`/automations/workflows/${w.id}`}
-                  className="p-1.5 rounded-control hover:bg-surface-2 text-fg/60 hover:text-fg transition-colors duration-150"
-                  title="Edit"
-                >
-                  <Pencil size={16} />
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => setToDelete(w)}
-                  className="p-1.5 rounded-control hover:bg-surface-2 text-fg/60 hover:text-danger transition-colors duration-150"
-                  title="Delete"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            </Card>
-          ))}
-        </div>
+                }
+                title={w.name}
+                body={
+                  <p className="h-5 overflow-hidden text-sm leading-5 text-fg/60 line-clamp-1">
+                    {w.description ?? ''}
+                  </p>
+                }
+                actions={
+                  <>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      icon={Play}
+                      onClick={() => setLaunch(w)}
+                    >
+                      Run
+                    </Button>
+                    <Link
+                      href={`/automations/schedules/new?workflow=${w.id}`}
+                      className={listRowActionClasses()}
+                      title="Add schedule"
+                      aria-label="Schedule"
+                    >
+                      <CalendarClock size={15} />
+                    </Link>
+                    <Link
+                      href={`/automations/workflows/${w.id}`}
+                      className={listRowActionClasses()}
+                      title="Edit"
+                      aria-label="Edit"
+                    >
+                      <Pencil size={15} />
+                    </Link>
+                    <ListRowAction
+                      icon={Trash2}
+                      label="Delete"
+                      danger
+                      onClick={() => setToDelete(w)}
+                    />
+                  </>
+                }
+              />
+            ))}
+          </div>
+        </>
       )}
 
       {launch && (

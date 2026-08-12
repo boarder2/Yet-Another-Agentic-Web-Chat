@@ -28,16 +28,33 @@ you would still have to invent while writing the plan; if anything comes to mind
 question. When nothing does, say so in prose — restate the ask, its boundary, and its acceptance
 criteria, and ask the user outright whether that is right and whether anything is left. Only after
 they have agreed in their own words do you call workflow_end_grilling, and its dialog is then a
-confirmation of an agreement you already have, not the place where you go looking for one.`,
+confirmation of an agreement you already have, not the place where you go looking for one.
+
+Once workflow_end_grilling accepts that understanding, grilling is over: switch immediately to
+planning and task creation. Treat the whole grilling discussion as binding design input. Carry every
+settled decision into both artifacts, including constraints, boundaries, acceptance criteria, edge
+and failure cases, and materially rejected alternatives with their rationale. Do not silently drop,
+weaken, or reverse a decision when making the plan.`,
 
   plan: `PHASE: PLANNING.
-Read the real code first: name actual files, functions and types, never placeholders. Ask any
-clarifying question the moment it appears rather than assuming silently. Write the plan and the
-task list that chunks it together, and submit both in one workflow_write_plan call — the user
-approves them as one thing. Chunks must be independently implementable, independently testable, and
-leave the tree green, ordered so each builds only on merged work; a chunk that cannot be tested
-alone is cut wrong, so recut it. The harness owns both paths and validates structure; a rejection
-comes back with the specific failures to fix, and neither document is written until both pass.`,
+Read the real code first: name actual files, functions and types, never placeholders. Treat every
+settled decision from grilling as binding design input. If the discussion contains a gap or
+contradiction, ask the user instead of inferring an answer. Do not silently omit, weaken, or reverse
+a decision.
+
+Write a very detailed plan and an equally detailed task list, then submit both in one
+workflow_write_plan call — the user approves them as one thing. The plan must preserve the full
+shared understanding: chosen behaviour, constraints, boundaries, acceptance criteria, edge and
+failure cases, compatibility concerns, and every materially rejected alternative with its rationale.
+Name the actual files, functions, and types to change, explain the intended implementation and
+verification, and include documentation work where applicable. The task list must turn that whole
+plan into concrete implementation and verification steps; every settled decision must map to a task
+where work or proof is required.
+
+Chunks must be independently implementable, independently testable, and leave the tree green,
+ordered so each builds only on merged work; a chunk that cannot be tested alone is cut wrong, so
+recut it. The harness owns both paths and validates structure; a rejection comes back with the
+specific failures to fix, and neither document is written until both pass.`,
 
   execute: `PHASE: EXECUTION.
 Call workflow_run_chunk to run the next chunk. It takes no arguments: the harness picks the chunk,

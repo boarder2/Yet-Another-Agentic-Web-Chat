@@ -206,12 +206,12 @@ const ModelField = ({
             leaveTo="opacity-0 translate-y-1"
           >
             <PopoverPanel
-              className={cn(
-                'absolute z-10 w-72 transform',
-                panelPosition === 'below'
-                  ? 'top-full mt-1'
-                  : 'bottom-full mb-2',
-              )}
+              anchor={{
+                to: panelPosition === 'below' ? 'bottom end' : 'top end',
+                gap: panelPosition === 'below' ? '4px' : '8px',
+                padding: '16px',
+              }}
+              className="z-50 w-72"
             >
               <div className="overflow-hidden rounded-surface shadow-raised bg-surface border border-surface-2 divide-y divide-surface-2">
                 <div className="px-4 py-3 flex items-start justify-between gap-2">

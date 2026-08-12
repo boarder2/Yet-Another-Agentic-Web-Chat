@@ -47,8 +47,9 @@ const ListRow = ({
   <div
     data-list-row
     className={cn(
-      'group relative flex items-start gap-2 py-3 border-b border-surface-2 last:border-b-0',
-      href && 'transition-colors duration-150 hover:bg-surface-2',
+      'group relative flex items-start gap-2 px-3 py-3',
+      href &&
+        'transition-colors duration-150 hover:rounded-surface hover:bg-surface',
       className,
     )}
     {...props}

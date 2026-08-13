@@ -8,7 +8,7 @@ import {
 import { Type } from 'typebox';
 import { loadConfig, CONFIG_PATH } from './config.ts';
 import type { Controller } from './gates.ts';
-import type { AgentRole } from './models.ts';
+import { resolveModel, type AgentRole } from './models.ts';
 import {
   ensureCrew,
   retireRole,
@@ -233,7 +233,9 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
           activity.push(line);
           onUpdate?.(say(activity.slice(-12).join('\n')));
         };
-        const contextWindow = ctx.model?.contextWindow ?? DEFAULT_CONTEXT_WINDOW;
+        const contextWindowFor = (role: AgentRole) =>
+          resolveModel(ctx.modelRegistry, config.models[role])?.contextWindow ??
+          DEFAULT_CONTEXT_WINDOW;
         let working = state;
         const chunkSessionId = (name: AgentName): string =>
           agentSessionId(working.slug, name, working.agents[name]);
@@ -263,7 +265,7 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
           feedback: string,
         ) => {
           const used = sessionTokens(ctx.cwd, chunkSessionId(role));
-          if (used > contextWindow * config.contextBudget) {
+          if (used > contextWindowFor(role) * config.contextBudget) {
             note(`${role}: context budget reached within the chunk, reseeding`);
             working = reseedAgent(working, role, new Date());
             controller.update(working);
@@ -370,7 +372,9 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
           activity.push(line);
           onUpdate?.(say(activity.slice(-12).join('\n')));
         };
-        const contextWindow = ctx.model?.contextWindow ?? DEFAULT_CONTEXT_WINDOW;
+        const contextWindowFor = (role: AgentRole) =>
+          resolveModel(ctx.modelRegistry, config.models[role])?.contextWindow ??
+          DEFAULT_CONTEXT_WINDOW;
         let working = state;
         const sessionId = (role: AgentName) =>
           agentSessionId(working.slug, role, working.agents[role]);
@@ -417,7 +421,7 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
 
         const repair = async (role: 'coder' | 'tester', repairFeedback: string) => {
           const used = sessionTokens(ctx.cwd, sessionId(role));
-          if (used > contextWindow * config.contextBudget) {
+          if (used > contextWindowFor(role) * config.contextBudget) {
             note(`${role}: context budget reached during final review, reseeding`);
             working = reseedAgent(working, role, new Date());
             controller.update(working);

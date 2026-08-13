@@ -1,10 +1,16 @@
-import { describe, it, expect } from 'vitest';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { describe, it, expect, vi } from 'vitest';
+import { promptAgent, waitForAgent } from './herdr.ts';
 import {
   agentEnvironment,
   agentName,
   agentToolAllowlist,
   anchorFor,
+  runRole,
   type Crew,
+  type CrewContext,
 } from './panes.ts';
 import {
   BUILD_ROLE_ENV,
@@ -12,6 +18,15 @@ import {
   RESULT_FILE_ENV,
   VERDICT_TOOL,
 } from './verdict.ts';
+
+vi.mock('./herdr.ts', async () => {
+  const actual = await vi.importActual<typeof import('./herdr.ts')>('./herdr.ts');
+  return {
+    ...actual,
+    promptAgent: vi.fn(),
+    waitForAgent: vi.fn(),
+  };
+});
 
 const pane = (paneId: string, agent: string) => ({ paneId, agent });
 const DRIVER = 'w1:p1';
@@ -37,6 +52,70 @@ describe('agent reporting contract', () => {
 
   it('leaves the default tool set unrestricted when no allowlist is configured', () => {
     expect(agentToolAllowlist('coder', undefined)).toBeUndefined();
+  });
+});
+
+describe('runRole', () => {
+  it('waits through a transient idle state caused by compaction', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'build-compaction-'));
+    const resultFile = join(
+      cwd,
+      '.ai/builds/2026-08-13-retry-guard-tester.result.json',
+    );
+    mkdirSync(join(cwd, '.ai/builds'), { recursive: true });
+    const ctx: CrewContext = {
+      cwd,
+      date: '2026-08-13',
+      slug: 'retry-guard',
+      config: {
+        models: {
+          plan: 'test/model',
+          coder: 'test/model',
+          tester: 'test/model',
+          reviewer: 'test/model',
+        },
+        checks: [],
+        maxRounds: 2,
+        contextBudget: 0.6,
+        turnTimeoutMs: 30_000,
+        blockedTimeoutMs: 30_000,
+      },
+      sessionIdFor: () => undefined,
+      note: vi.fn(),
+    };
+
+    vi.mocked(promptAgent).mockResolvedValueOnce('idle');
+    vi.mocked(waitForAgent)
+      .mockResolvedValueOnce('working')
+      .mockImplementationOnce(async () => {
+        writeFileSync(
+          resultFile,
+          JSON.stringify({
+            kind: 'submit_test_result',
+            payload: { passed: 1, failed: 0, output: 'green' },
+          }),
+        );
+        return 'idle';
+      });
+
+    try {
+      const result = await runRole(
+        ctx,
+        { tester: pane('w1:p3', 'tester-retry-guard') },
+        'tester',
+        'test the chunk',
+        vi.fn(),
+      );
+
+      expect(result.status).toBe('idle');
+      expect(result.envelope).toMatchObject({ kind: 'submit_test_result' });
+      expect(waitForAgent).toHaveBeenCalledTimes(2);
+      expect(ctx.note).toHaveBeenCalledWith(
+        'tester: idle without a result; waiting for a compaction retry',
+      );
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
   });
 });
 

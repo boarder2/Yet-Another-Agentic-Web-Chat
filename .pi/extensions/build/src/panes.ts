@@ -197,6 +197,7 @@ async function createPane(
 
 /** How long a freshly split pane gets to become one herdr will start an agent in. */
 const PANE_READY_TIMEOUT_MS = 30_000;
+const COMPACTION_RESUME_TIMEOUT_MS = 300_000;
 const RETRY_DELAY_MS = 750;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -319,12 +320,43 @@ export async function runRole(
   const resultFile = scratchPath(ctx.cwd, ctx.date, ctx.slug, role, 'result.json');
   rmSync(resultFile, { force: true });
 
+  const turnDeadline = Date.now() + ctx.config.turnTimeoutMs;
   let status = await promptAgent({
     name: pane.agent,
     text: brief,
     waitTimeoutMs: ctx.config.turnTimeoutMs,
     signal: ctx.signal,
   });
+
+  while (status === 'idle' && !existsSync(resultFile)) {
+    const remaining = turnDeadline - Date.now();
+    if (remaining <= 0) break;
+
+    ctx.note(`${role}: idle without a result; waiting for a compaction retry`);
+    try {
+      status = await waitForAgent(
+        pane.agent,
+        Math.min(remaining, COMPACTION_RESUME_TIMEOUT_MS),
+        ['working', 'blocked', 'done'],
+        ctx.signal,
+      );
+      if (status === 'working') {
+        status = await waitForAgent(
+          pane.agent,
+          Math.max(1, turnDeadline - Date.now()),
+          ['idle', 'blocked', 'done'],
+          ctx.signal,
+        );
+      }
+    } catch (error) {
+      if (ctx.signal?.aborted) throw error;
+      return {
+        status: 'idle',
+        envelope: null,
+        problem: `The ${role} agent became idle without reporting and did not resume within five minutes.`,
+      };
+    }
+  }
 
   if (status === 'blocked') {
     onBlocked(role);

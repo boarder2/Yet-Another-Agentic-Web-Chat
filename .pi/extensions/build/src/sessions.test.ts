@@ -4,7 +4,7 @@ import { maxTotalTokens, sessionsDir } from './sessions.ts';
 describe('sessionsDir', () => {
   it('mirrors pi’s per-project directory naming', () => {
     expect(sessionsDir('/workspaces/YAAWC', '/home/node')).toBe(
-      '/home/node/.pi/agent/sessions/--workspaces-YAAWC-',
+      '/home/node/.pi/agent/sessions/--workspaces-YAAWC--',
     );
   });
 });

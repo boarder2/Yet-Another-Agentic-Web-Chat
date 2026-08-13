@@ -7,9 +7,10 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-/** `~/.pi/agent/sessions/--<cwd with slashes replaced>--/` */
+/** `~/.pi/agent/sessions/--<cwd with separators replaced>--/` */
 export function sessionsDir(cwd: string, home = homedir()): string {
-  return join(home, '.pi', 'agent', 'sessions', `-${cwd.replace(/\//g, '-')}-`);
+  const encoded = cwd.replace(/^[/\\]/, '').replace(/[/\\:]/g, '-');
+  return join(home, '.pi', 'agent', 'sessions', `--${encoded}--`);
 }
 
 function sessionFile(cwd: string, sessionId: string): string | null {

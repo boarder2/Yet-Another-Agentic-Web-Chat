@@ -97,10 +97,11 @@ the remaining two. Each is a real interactive
 `pi`, started with `herdr agent start --kind pi` and named for its role, so the herdr sidebar reads
 as the crew and shows which one is `working`, `idle`, or `blocked`.
 
-The loop drives them with `herdr agent prompt --wait`. Agents run with `--approve`, so `blocked`
-means a genuine question rather than a tool approval: you get a notification, the workflow waits
-`blockedTimeoutMs` for you to answer it in the pane, and a timeout fails the round. The loop never
-answers for you.
+The loop drives them with `herdr agent prompt --wait`. Pi briefly reports `idle` between automatic
+compaction and its retry; without a typed result, the loop waits up to five minutes for that retry
+instead of failing the round. Agents run with `--approve`, so `blocked` means a genuine question
+rather than a tool approval: you get a notification, the workflow waits `blockedTimeoutMs` for you
+to answer it in the pane, and a timeout fails the round. The loop never answers for you.
 
 Each agent is found by its name — `<role>-<slug>`, derived from the workflow — looked up in herdr on
 every pass. herdr is the authority on what is running and where, so the workflow stores no layout of

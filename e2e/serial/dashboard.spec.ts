@@ -33,10 +33,25 @@ test.describe('dashboard', () => {
   // `serial` project (one worker) keeps a concurrently-running spec from
   // hydrating a dirty value; reset after each test so nothing leaks between
   // tests.
-  test.afterEach(async ({ request }) => {
-    await request.patch('/api/settings', {
-      data: { yaawc_dashboard_widgets: '[]', yaawc_dashboard_cache: '{}' },
+  test.afterEach(async ({ page, request }) => {
+    // Clear the page's cache first: an open board re-persists its widget state
+    // on a debounce, and each flush sends whatever localStorage holds at that
+    // moment — so a straggler write can't resurrect the widgets. Then re-patch
+    // until the DB reads back empty.
+    await page.evaluate(() => {
+      localStorage.setItem('yaawc_dashboard_widgets', '[]');
+      localStorage.setItem('yaawc_dashboard_cache', '{}');
     });
+    await expect
+      .poll(async () => {
+        await request.patch('/api/settings', {
+          data: { yaawc_dashboard_widgets: '[]', yaawc_dashboard_cache: '{}' },
+        });
+        const response = await request.get('/api/settings');
+        const settings = (await response.json()) as Record<string, string>;
+        return settings.yaawc_dashboard_widgets;
+      })
+      .toBe('[]');
   });
 
   test('renders the heading and the empty-state board when no widgets exist', async ({

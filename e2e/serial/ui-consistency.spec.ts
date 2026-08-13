@@ -40,6 +40,23 @@ async function waitForSetting(
     .toBe(value);
 }
 
+/**
+ * Opens the widget creator from the dashboard empty state. The board is global,
+ * DB-backed state, so clear it first — a widget left by another spec replaces
+ * the empty-state card with the grid and hides the entry point.
+ */
+async function openWidgetCreator(page: Page, request: APIRequestContext) {
+  await patchSettings(request, {
+    yaawc_dashboard_widgets: '[]',
+    yaawc_dashboard_cache: '{}',
+  });
+  await page.goto('/dashboard');
+  await expect(
+    page.getByRole('heading', { name: 'Dashboard', exact: true }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Create Your First Widget' }).click();
+}
+
 async function resolvedBackgroundClass(page: Page, className: string) {
   return page.evaluate((className) => {
     const probe = document.createElement('span');
@@ -317,13 +334,7 @@ test.describe('canonical AppSwitch migrations', () => {
     });
 
     try {
-      await page.goto('/dashboard');
-      await expect(
-        page.getByRole('heading', { name: 'Dashboard', exact: true }),
-      ).toBeVisible();
-      await page
-        .getByRole('button', { name: 'Create Your First Widget' })
-        .click();
+      await openWidgetCreator(page, request);
 
       const widgetDialog = page.getByRole('dialog');
       const thinking = widgetDialog.getByRole('switch', {
@@ -722,13 +733,7 @@ test.describe('composer action triggers', () => {
     page,
     request,
   }) => {
-    await page.goto('/dashboard');
-    await expect(
-      page.getByRole('heading', { name: 'Dashboard', exact: true }),
-    ).toBeVisible();
-    await page
-      .getByRole('button', { name: 'Create Your First Widget' })
-      .click();
+    await openWidgetCreator(page, request);
     const widgetDialog = page.getByRole('dialog');
     const tools = widgetDialog.getByTitle('Select Tools');
     await expectComposerActionButton(tools, 'content');
@@ -837,13 +842,7 @@ test.describe('ordinary selection checkboxes', () => {
       await page.addInitScript(() => {
         localStorage.setItem('codeExecutionWarningAccepted', 'true');
       });
-      await page.goto('/dashboard');
-      await page
-        .getByRole('heading', { name: 'Dashboard', exact: true })
-        .waitFor({ state: 'visible' });
-      await page
-        .getByRole('button', { name: 'Create Your First Widget' })
-        .click();
+      await openWidgetCreator(page, request);
       await page
         .getByRole('dialog')
         .getByRole('button', { name: /Code Widget/ })

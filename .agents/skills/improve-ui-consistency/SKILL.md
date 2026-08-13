@@ -67,11 +67,20 @@ It corroborates the source pass; it does not re-derive it.
 
 ## Phase 4 — Report
 
-Write a self-contained HTML file to the OS temp dir — `$TMPDIR`, falling back to `/tmp` (`%TEMP%` on Windows) — as `<tmpdir>/ui-consistency-<timestamp>.html`. Open it (`open` / `xdg-open` / `start`) and state the absolute path. Never write to the repo.
-
 Score each finding by **reach** (files, call sites, screens touched; user visibility) × **effort** (mechanical vs. needs design judgment) → `Strong` / `Worth doing` / `Speculative`. Full cards for the top ~10–12 by reach; everything else collapses into a compact "also noted" table. End with a Top recommendation.
 
-See [HTML-REPORT.md](HTML-REPORT.md) for the scaffold, card anatomy, and replica patterns.
+**Number every recommendation.** One flat sequence, `1..n`, ordered by score — the full cards take the leading numbers, the also-noted rows continue the same run. Numbers are the addressing scheme for Phase 5: the reader picks work by saying "3 and 7", so no number may be reused, skipped, or reordered between the two artifacts below.
+
+Ship **two files**, same numbering, same temp dir — `$TMPDIR`, falling back to `/tmp` (`%TEMP%` on Windows). Never write to the repo.
+
+| File                                | For                                                                      |
+| ----------------------------------- | ------------------------------------------------------------------------ |
+| `<tmpdir>/ui-consistency-<ts>.html` | Reading — replicas, screenshots, the visual argument                     |
+| `<tmpdir>/ui-consistency-<ts>.md`   | Acting — greppable sites, pasteable into an issue, feeding another agent |
+
+Share one `<ts>` across the pair so they're obviously siblings. Open the HTML (`open` / `xdg-open` / `start`) and state **both** absolute paths; if no opener exists, say so rather than claiming it opened.
+
+See [HTML-REPORT.md](HTML-REPORT.md) for the scaffold, card anatomy, and replica patterns, and [MD-REPORT.md](MD-REPORT.md) for the Markdown companion.
 
 **Honesty constraints — the report's replicas are the one place it could lie convincingly:**
 
@@ -81,7 +90,7 @@ See [HTML-REPORT.md](HTML-REPORT.md) for the scaffold, card anatomy, and replica
 
 ## Phase 5 — After the report
 
-Ask: **"Which of these would you like me to take on?"** Propose nothing further, and touch nothing, until the user picks.
+Ask: **"Which of these would you like me to take on?"** — by number. Propose nothing further, and touch nothing, until the user picks.
 
 Once picked:
 

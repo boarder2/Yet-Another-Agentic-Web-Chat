@@ -4,6 +4,8 @@ A single self-contained file in the OS temp dir. Tailwind CDN for the report's o
 
 **The replica is the point.** A card that only describes an inconsistency has failed — the reader must _see_ the drift, then see it resolved.
 
+This is the reading half of the pair; [MD-REPORT.md](MD-REPORT.md) is the acting half. Both carry the same numbering (Phase 4): cards take `1..k`, the also-noted rows continue to `n`. Every card's anchor is its number — `id="f7"` for recommendation 7 — so the Markdown can link straight into it.
+
 ## Scaffold
 
 ```html
@@ -56,8 +58,9 @@ Compact. The resolved token set as swatches and values, adoption percentage per 
 
 ## Finding card
 
-One `<article>` per finding:
+One `<article id="f<number>">` per finding:
 
+- **Number** — the recommendation's number, set large and muted beside the title so it reads as an address, not a bullet. It is what the user says back to you.
 - **Title** — names the fix, not the flaw. "Collapse three modal shells into one" beats "Modal inconsistency".
 - **Badge row** — `Strong` (emerald) / `Worth doing` (amber) / `Speculative` (slate), plus the category, plus reach (`14 files · 43 sites`) straight from the census.
 - **Replica** — the centrepiece. See below.
@@ -84,11 +87,11 @@ Built with inlined literal values from the baseline — **never invented**. Mark
 
 ## Also-noted table
 
-Everything below the card cut. Four columns: file, category, one-line description, badge. Sorted by category. Nothing is lost; it just doesn't get a replica.
+Everything below the card cut, continuing the same number run. Five columns: number, file, category, one-line description, badge. Sorted by category. Nothing is lost; it just doesn't get a replica.
 
 ## Top recommendation
 
-One larger card. Which finding to do first, one sentence on why, anchor link. That's it.
+One larger card. Which finding to do first **by number**, one sentence on why, anchor link. That's it.
 
 ## Style
 

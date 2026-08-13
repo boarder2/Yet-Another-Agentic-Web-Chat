@@ -1,4 +1,5 @@
 import { test, expect } from '../fixtures';
+import { expectComposerPopover } from '../utils/composerPopover';
 
 /**
  * Verify the `test` provider and its models are listed in the chat model picker
@@ -33,9 +34,8 @@ test.describe('model picker', () => {
     const dialog = page.getByRole('dialog');
     await dialog.locator('button:has(svg.lucide-cpu)').first().click();
 
-    // The ModelField popover panel: uniquely the overflow-hidden + shadow-raised
-    // container (the dialog panel shares shadow-raised but isn't overflow-hidden).
-    const popover = page.locator('div.overflow-hidden.shadow-raised').first();
+    // ModelField owns the nested shared composer shell inside the dialog.
+    const popover = await expectComposerPopover(page, 'Select Chat Model');
     await expect(popover.locator('h3')).toHaveText('Select Chat Model');
 
     // The seeded default chat model is test/test-direct, so the Test provider is
@@ -70,8 +70,7 @@ test.describe('model picker', () => {
     // The second Cpu button opens the System Model popover.
     await cpuButtons.nth(1).click();
 
-    const popover = page.locator('div.overflow-hidden.shadow-raised').first();
-    await expect(popover.locator('h3')).toHaveText('Select System Model');
+    const popover = await expectComposerPopover(page, 'Select System Model');
 
     // The Test provider's models are also available in the System Model picker.
     await expect(

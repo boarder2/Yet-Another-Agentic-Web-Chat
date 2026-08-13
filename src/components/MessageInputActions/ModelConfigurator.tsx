@@ -33,6 +33,8 @@ import { toast } from 'sonner';
 import ModelPicker from '@/components/models/ModelPicker';
 import PresetOption from '@/components/models/PresetOption';
 import type { WorkspaceModelOverride } from '@/lib/workspaces/types';
+import ComposerActionButton from '@/components/MessageInputActions/ComposerActionButton';
+import ComposerPopover from '@/components/MessageInputActions/ComposerPopover';
 
 const EMPTY_PRESETS: ModelPresetList = [];
 
@@ -136,7 +138,7 @@ export default function ModelConfigurator({
       {computedShowName && (
         <span
           className={cn(
-            'ml-2 text-xs font-medium overflow-hidden text-ellipsis whitespace-nowrap',
+            'text-xs font-medium overflow-hidden text-ellipsis whitespace-nowrap',
             {
               'max-w-44': truncateModelName,
             },
@@ -148,9 +150,6 @@ export default function ModelConfigurator({
     </>
   );
 
-  const buttonClass =
-    'p-1 group flex items-center text-fg/50 rounded-floating hover:bg-surface-2 active:scale-95 transition duration-200 hover:text-fg';
-
   if (modelOverride) {
     const chatName =
       chatProviders[modelOverride.chatProvider]?.[modelOverride.chatModel]
@@ -160,58 +159,62 @@ export default function ModelConfigurator({
         ?.displayName ?? modelOverride.systemModel;
     return (
       <Popover className="relative">
-        <PopoverButton
-          type="button"
-          className={buttonClass}
-          aria-label="Models set by workspace"
-        >
-          <Cpu size={18} />
-          {computedShowName && (
-            <span
-              className={cn(
-                'ml-2 text-xs font-medium overflow-hidden text-ellipsis whitespace-nowrap',
-                { 'max-w-44': truncateModelName },
-              )}
+        {({ open }) => (
+          <>
+            <PopoverButton
+              as={ComposerActionButton}
+              type="button"
+              geometry={computedShowName ? 'content' : 'compact'}
+              configured
+              open={open}
+              aria-label="Models set by workspace"
             >
-              Set by workspace
-            </span>
-          )}
-        </PopoverButton>
+              <Cpu size={18} />
+              {computedShowName && (
+                <span
+                  className={cn(
+                    'text-xs font-medium overflow-hidden text-ellipsis whitespace-nowrap',
+                    { 'max-w-44': truncateModelName },
+                  )}
+                >
+                  Set by workspace
+                </span>
+              )}
+            </PopoverButton>
 
-        <Transition
-          as={Fragment}
-          enter="transition ease-out duration-100"
-          enterFrom="opacity-0 scale-95"
-          enterTo="opacity-100 scale-100"
-          leave="transition ease-in duration-75"
-          leaveFrom="opacity-100 scale-100"
-          leaveTo="opacity-0 scale-95"
-        >
-          <PopoverPanel className="absolute right-0 bottom-full z-50 mb-2 w-72 rounded-floating bg-surface border border-surface-2 shadow-floating overflow-hidden">
-            <div className="px-3 py-2 border-b border-surface-2">
-              <span className="text-xs font-semibold text-fg/80">
-                Models · set by workspace
-              </span>
-            </div>
-            <div className="px-3 py-2 space-y-1 text-xs">
-              <div className="flex justify-between gap-3">
-                <span className="text-fg/50">Chat</span>
-                <span className="text-fg/90 text-right truncate">
-                  {chatName} · {modelOverride.chatProvider}
-                </span>
-              </div>
-              <div className="flex justify-between gap-3">
-                <span className="text-fg/50">System</span>
-                <span className="text-fg/90 text-right truncate">
-                  {systemName} · {modelOverride.systemProvider}
-                </span>
-              </div>
-            </div>
-            <div className="border-t border-surface-2 px-3 py-2 text-xs text-fg/50">
-              Change this in the workspace&apos;s settings.
-            </div>
-          </PopoverPanel>
-        </Transition>
+            <Transition
+              as={Fragment}
+              enter="transition ease-out duration-100"
+              enterFrom="opacity-0 scale-95"
+              enterTo="opacity-100 scale-100"
+              leave="transition ease-in duration-75"
+              leaveFrom="opacity-100 scale-100"
+              leaveTo="opacity-0 scale-95"
+            >
+              <PopoverPanel className="absolute right-0 bottom-full z-50 mb-2 w-72 overflow-hidden">
+                <ComposerPopover title="Models · set by workspace">
+                  <div className="px-3 py-2 space-y-1 text-xs">
+                    <div className="flex justify-between gap-3">
+                      <span className="text-fg/50">Chat</span>
+                      <span className="text-fg/90 text-right truncate">
+                        {chatName} · {modelOverride.chatProvider}
+                      </span>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <span className="text-fg/50">System</span>
+                      <span className="text-fg/90 text-right truncate">
+                        {systemName} · {modelOverride.systemProvider}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="border-t border-surface-2 px-3 py-2 text-xs text-fg/50">
+                    Change this in the workspace&apos;s settings.
+                  </div>
+                </ComposerPopover>
+              </PopoverPanel>
+            </Transition>
+          </>
+        )}
       </Popover>
     );
   }
@@ -220,11 +223,14 @@ export default function ModelConfigurator({
     <>
       {hasPresets ? (
         <Popover className="relative">
-          {({ close }) => (
+          {({ close, open }) => (
             <>
               <PopoverButton
+                as={ComposerActionButton}
                 type="button"
-                className={buttonClass}
+                geometry={computedShowName ? 'content' : 'compact'}
+                configured={Boolean(matchingPreset)}
+                open={open}
                 aria-label="Choose model preset"
               >
                 {buttonInner}
@@ -239,50 +245,46 @@ export default function ModelConfigurator({
                 leaveFrom="opacity-100 scale-100"
                 leaveTo="opacity-0 scale-95"
               >
-                <PopoverPanel className="absolute right-0 bottom-full z-50 mb-2 w-72 rounded-floating bg-surface border border-surface-2 shadow-floating overflow-hidden">
-                  <div className="px-3 py-2 border-b border-surface-2">
-                    <span className="text-xs font-semibold text-fg/80">
-                      Model Presets
-                    </span>
-                  </div>
-                  <div className="max-h-64 overflow-y-auto">
-                    {presets.map((preset) => (
-                      <PresetOption
-                        key={preset.id}
-                        preset={preset}
-                        isActive={matchingPreset?.id === preset.id}
-                        available={isPresetAvailable(preset, chatProviders)}
-                        onClick={() => applyPreset(preset, close)}
-                      />
-                    ))}
-                  </div>
-                  <div className="border-t border-surface-2 px-3 py-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        close();
-                        setOpen(true);
-                      }}
-                      className="flex items-center gap-1.5 text-xs text-fg/60 hover:text-fg transition-colors duration-150"
-                    >
-                      <SlidersHorizontal size={12} />
-                      Configure models…
-                    </button>
-                  </div>
+                <PopoverPanel className="absolute right-0 bottom-full z-50 mb-2 w-72 overflow-hidden">
+                  <ComposerPopover title="Model Presets">
+                    <div className="max-h-64 overflow-y-auto">
+                      {presets.map((preset) => (
+                        <PresetOption
+                          key={preset.id}
+                          preset={preset}
+                          isActive={matchingPreset?.id === preset.id}
+                          available={isPresetAvailable(preset, chatProviders)}
+                          onClick={() => applyPreset(preset, close)}
+                        />
+                      ))}
+                    </div>
+                    <div className="border-t border-surface-2 px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          close();
+                          setOpen(true);
+                        }}
+                        className="flex items-center gap-1.5 text-xs text-fg/60 hover:text-fg transition-colors duration-150"
+                      >
+                        <SlidersHorizontal size={12} />
+                        Configure models…
+                      </button>
+                    </div>
+                  </ComposerPopover>
                 </PopoverPanel>
               </Transition>
             </>
           )}
         </Popover>
       ) : (
-        <button
-          type="button"
-          className={buttonClass}
+        <ComposerActionButton
+          geometry={computedShowName ? 'content' : 'compact'}
           onClick={() => setOpen(true)}
           aria-label="Configure models"
         >
           {buttonInner}
-        </button>
+        </ComposerActionButton>
       )}
 
       <Modal

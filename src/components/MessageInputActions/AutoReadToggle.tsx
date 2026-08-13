@@ -1,5 +1,5 @@
 import { Volume2, VolumeOff } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import ComposerActionButton from '@/components/MessageInputActions/ComposerActionButton';
 import { useLocalStorageBoolean } from '@/lib/hooks/useLocalStorage';
 
 /**
@@ -15,21 +15,16 @@ const AutoReadToggle = () => {
   const label = autoRead ? 'Auto-read replies: on' : 'Auto-read replies: off';
 
   return (
-    <button
-      type="button"
+    <ComposerActionButton
+      geometry="compact"
+      configured={autoRead}
       onClick={() => setAutoRead(!autoRead)}
-      className={cn(
-        'flex items-center rounded-surface p-1 transition-colors duration-150 ease-in-out focus:outline-none',
-        autoRead
-          ? 'text-accent hover:text-accent'
-          : 'text-fg/60 hover:text-fg/30',
-      )}
       title={label}
       aria-label={label}
       aria-pressed={autoRead}
     >
       {autoRead ? <Volume2 size={18} /> : <VolumeOff size={18} />}
-    </button>
+    </ComposerActionButton>
   );
 };
 

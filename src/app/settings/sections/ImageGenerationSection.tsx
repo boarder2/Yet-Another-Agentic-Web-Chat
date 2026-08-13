@@ -5,6 +5,7 @@ import SettingsSection from '../components/SettingsSection';
 import Select from '@/components/ui/Select';
 import { Field } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
+import AppSwitch from '@/components/ui/AppSwitch';
 import { RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { useModels } from '@/lib/hooks/api/useModels';
@@ -67,8 +68,7 @@ export default function ImageGenerationSection() {
     }
   }
 
-  const handleToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const checked = e.target.checked;
+  const handleToggle = (checked: boolean) => {
     setEnabled(checked);
     if (checked) {
       toast.success('Image generation enabled. Configure your model below.');
@@ -99,17 +99,12 @@ export default function ImageGenerationSection() {
               OpenRouter
             </p>
           </div>
-          <label className="relative inline-flex items-center cursor-pointer">
-            <input
-              type="checkbox"
-              className="sr-only peer"
-              checked={enabled}
-              onChange={handleToggle}
-              aria-label="Enable image generation"
-              title="Enable image generation"
-            />
-            <div className="w-9 h-5 bg-fg/20 rounded-full peer peer-checked:bg-accent peer-focus:ring-2 peer-focus:ring-accent/30 after:content-[''] after:absolute after:top-0.5 after:inset-s-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full" />
-          </label>
+          <AppSwitch
+            checked={enabled}
+            onChange={handleToggle}
+            aria-label="Enable image generation"
+            title="Enable image generation"
+          />
         </div>
 
         {enabled && (

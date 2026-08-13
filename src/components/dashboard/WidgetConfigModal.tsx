@@ -1,10 +1,10 @@
 'use client';
 
-import { Switch } from '@headlessui/react';
 import { Play, Save, Brain } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import WidgetContent from '@/components/dashboard/WidgetContent';
 import { Button } from '@/components/ui/Button';
+import AppSwitch from '@/components/ui/AppSwitch';
 import { Field } from '@/components/ui/Field';
 import { Input } from '@/components/ui/Input';
 import { Textarea } from '@/components/ui/Textarea';
@@ -351,20 +351,11 @@ const WidgetConfigModal = ({
               <div className="flex items-center gap-2">
                 <Brain size={16} className="text-fg/70" />
                 <span className="text-sm text-fg/80">Thinking</span>
-                <Switch
+                <AppSwitch
                   checked={showThinking}
                   onChange={setShowThinking}
-                  className="bg-surface border border-surface-2 relative inline-flex h-5 w-10 sm:h-6 sm:w-11 items-center rounded-pill"
-                >
-                  <span className="sr-only">Show thinking tags</span>
-                  <span
-                    className={`${
-                      showThinking
-                        ? 'translate-x-6 bg-accent'
-                        : 'translate-x-1 bg-fg/50'
-                    } inline-block h-3 w-3 sm:h-4 sm:w-4 transform rounded-pill transition-all duration-200`}
-                  />
-                </Switch>
+                  aria-label="Show thinking tags"
+                />
               </div>
               <Button
                 variant="primary"

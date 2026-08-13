@@ -7,11 +7,12 @@ import {
   PopoverButton,
   PopoverPanel,
   Transition,
-  Switch,
 } from '@headlessui/react';
 import { Settings as SettingsIcon, UserCog } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import { useSettingsModal } from '@/components/settings/SettingsModalProvider';
+import AppSwitch from '@/components/ui/AppSwitch';
+import ComposerActionButton from '@/components/MessageInputActions/ComposerActionButton';
+import ComposerPopover from '@/components/MessageInputActions/ComposerPopover';
 
 type PersonalizationPickerProps = {
   hasLocation: boolean;
@@ -69,12 +70,10 @@ const PopoverContent = ({
   return (
     <>
       <PopoverButton
-        className={cn(
-          'flex items-center gap-1 rounded-surface text-sm transition-colors duration-150 focus:outline-none focus-visible:ring-2 p-1',
-          sendLocation || sendPersonalization
-            ? 'text-accent hover:text-accent'
-            : 'text-fg/60 hover:text-fg/30',
-        )}
+        as={ComposerActionButton}
+        geometry="compact"
+        configured={sendLocation || sendPersonalization}
+        open={open}
         title="Personalization options"
       >
         <UserCog size={18} />
@@ -88,17 +87,11 @@ const PopoverContent = ({
         leaveFrom="opacity-100 translate-y-0"
         leaveTo="opacity-0 translate-y-1"
       >
-        <PopoverPanel className="absolute right-0 z-30 w-80 transform bottom-full mb-2">
-          <div className="overflow-hidden rounded-surface shadow-raised ring-1 ring-surface-2 bg-surface">
-            <div className="px-4 py-3 border-b border-surface-2 flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-medium text-fg/90">
-                  Personalization
-                </h3>
-                <p className="text-xs text-fg/60 mt-0.5">
-                  Choose what to send with this message.
-                </p>
-              </div>
+        <PopoverPanel className="absolute right-0 z-30 w-80 transform bottom-full mb-2 overflow-hidden">
+          <ComposerPopover
+            title="Personalization"
+            description="Choose what to send with this message."
+            action={
               <CloseButton
                 type="button"
                 onClick={() => openSettings('personalization')}
@@ -107,36 +100,21 @@ const PopoverContent = ({
               >
                 <SettingsIcon size={14} />
               </CloseButton>
-            </div>
-
+            }
+          >
             <div className="px-4 py-3 space-y-4 text-sm">
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
                   <span className="font-medium">Send location</span>
-                  <Switch
+                  <AppSwitch
                     checked={sendLocation && hasLocation}
                     onChange={(value) => {
                       if (!hasLocation) return;
                       setSendLocation(value);
                     }}
                     disabled={!hasLocation}
-                    className={cn(
-                      sendLocation && hasLocation
-                        ? 'bg-accent'
-                        : 'bg-surface-2',
-                      !hasLocation && 'opacity-40 cursor-not-allowed',
-                      'relative inline-flex h-5 w-9 items-center rounded-pill transition-colors focus:outline-none',
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        sendLocation && hasLocation
-                          ? 'translate-x-5'
-                          : 'translate-x-1',
-                        'inline-block h-3 w-3 transform rounded-pill bg-bg transition-transform',
-                      )}
-                    />
-                  </Switch>
+                    aria-label="Send location"
+                  />
                 </div>
                 <p className="text-xs text-fg/60">{locationSummary}</p>
               </div>
@@ -144,35 +122,20 @@ const PopoverContent = ({
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
                   <span className="font-medium">Send personalization</span>
-                  <Switch
+                  <AppSwitch
                     checked={sendPersonalization && hasProfile}
                     onChange={(value) => {
                       if (!hasProfile) return;
                       setSendPersonalization(value);
                     }}
                     disabled={!hasProfile}
-                    className={cn(
-                      sendPersonalization && hasProfile
-                        ? 'bg-accent'
-                        : 'bg-surface-2',
-                      !hasProfile && 'opacity-40 cursor-not-allowed',
-                      'relative inline-flex h-5 w-9 items-center rounded-pill transition-colors focus:outline-none',
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        sendPersonalization && hasProfile
-                          ? 'translate-x-5'
-                          : 'translate-x-1',
-                        'inline-block h-3 w-3 transform rounded-pill bg-bg transition-transform',
-                      )}
-                    />
-                  </Switch>
+                    aria-label="Send personalization"
+                  />
                 </div>
                 <p className="text-xs text-fg/60">{profileSummary}</p>
               </div>
             </div>
-          </div>
+          </ComposerPopover>
         </PopoverPanel>
       </Transition>
     </>

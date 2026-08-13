@@ -19,6 +19,8 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import AppSwitch from '@/components/ui/AppSwitch';
+import ComposerActionButton from '@/components/MessageInputActions/ComposerActionButton';
+import ComposerPopover from '@/components/MessageInputActions/ComposerPopover';
 import { useSettingsModal } from '@/components/settings/SettingsModalProvider';
 import { useLocalStorageJSON } from '@/lib/hooks/useLocalStorage';
 import { useModels } from '@/lib/hooks/api/useModels';
@@ -163,24 +165,12 @@ const PanelSelector = ({ focusMode }: { focusMode: string }) => {
     toast.success(`Panel preset "${name}" saved`);
   };
 
-  // The base stylesheet colors every enabled `button`, so these have to sit
-  // on the halves themselves — on the wrapper they would lose to that rule.
-  const halfClasses = cn(
-    'transition-colors duration-150',
-    !supported
-      ? 'text-fg/25 cursor-not-allowed'
-      : active
-        ? 'text-accent hover:bg-surface-2'
-        : 'text-fg/60 hover:text-fg/80 hover:bg-surface-2',
-  );
-
   const toggleProps = {
     role: 'switch' as const,
     title: supported ? label : UNSUPPORTED_LABEL,
     'aria-label': supported ? label : UNSUPPORTED_LABEL,
     'aria-checked': active,
     disabled: !supported,
-    className: cn(halfClasses, 'hidden sm:inline-block p-2 rounded-l-control'),
   };
 
   return (
@@ -194,28 +184,38 @@ const PanelSelector = ({ focusMode }: { focusMode: string }) => {
               visible. */}
           <div className="flex items-center rounded-control">
             {configured ? (
-              <button
+              <ComposerActionButton
                 type="button"
                 {...toggleProps}
+                geometry="compact"
+                configured={active}
+                className="hidden sm:inline-flex rounded-r-none"
                 onClick={() => update({ enabled: !selection.enabled })}
               >
                 <Layers size={18} />
-              </button>
+              </ComposerActionButton>
             ) : (
-              <PopoverButton type="button" {...toggleProps}>
+              <PopoverButton
+                as={ComposerActionButton}
+                type="button"
+                {...toggleProps}
+                geometry="compact"
+                configured={active}
+                className="hidden sm:inline-flex rounded-r-none"
+              >
                 <Layers size={18} />
               </PopoverButton>
             )}
             <PopoverButton
+              as={ComposerActionButton}
               type="button"
+              geometry="compact"
+              configured={active}
+              open={open}
               title={supported ? 'Configure agent panel' : UNSUPPORTED_LABEL}
               aria-label="Configure agent panel"
               disabled={!supported}
-              className={cn(
-                halfClasses,
-                'p-2 sm:py-2 sm:pl-0.5 sm:pr-1.5 rounded-control sm:rounded-r-control',
-                open && 'text-accent bg-surface-2',
-              )}
+              className="sm:rounded-l-none"
             >
               <Layers className="sm:hidden" size={18} />
               <ChevronDown
@@ -239,39 +239,34 @@ const PanelSelector = ({ focusMode }: { focusMode: string }) => {
             <PopoverPanel className="absolute left-0 z-20 w-80 transform bottom-full mb-2">
               {/* No overflow-hidden: the executor model picker renders its own
                   popover and must not be clipped by this container. */}
-              <div className="rounded-surface shadow-raised ring-1 ring-surface-2 bg-surface">
-                <div className="px-4 py-3 border-b border-surface-2 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <h3 className="text-sm font-medium text-fg/90">
-                      Agent Panel
-                    </h3>
-                    <p className="text-xs text-fg/60 mt-0.5">
-                      Run {PANEL_MIN}–{PANEL_MAX} models in parallel, then
-                      synthesize
-                    </p>
-                  </div>
-                  {/* Read-only on desktop: the composer's toggle half owns
-                      on/off. Below sm it is a real switch. */}
-                  <span
-                    className={cn(
-                      'hidden sm:inline-flex shrink-0 text-xs font-medium px-2 py-0.5 rounded-pill',
-                      active
-                        ? 'bg-accent/10 text-accent'
-                        : 'bg-surface-2 text-fg/60',
-                    )}
-                  >
-                    {active ? 'On' : 'Off'}
-                  </span>
-                  <div className="sm:hidden">
-                    <AppSwitch
-                      checked={active}
-                      onChange={() => update({ enabled: !selection.enabled })}
-                      disabled={!supported || !configured}
-                      aria-label={supported ? label : UNSUPPORTED_LABEL}
-                    />
-                  </div>
-                </div>
-
+              <ComposerPopover
+                title="Agent Panel"
+                description={`Run ${PANEL_MIN}–${PANEL_MAX} models in parallel, then synthesize`}
+                action={
+                  <>
+                    {/* Read-only on desktop: the composer's toggle half owns
+                        on/off. Below sm it is a real switch. */}
+                    <span
+                      className={cn(
+                        'hidden sm:inline-flex shrink-0 text-xs font-medium px-2 py-0.5 rounded-pill',
+                        active
+                          ? 'bg-accent/10 text-accent'
+                          : 'bg-surface-2 text-fg/60',
+                      )}
+                    >
+                      {active ? 'On' : 'Off'}
+                    </span>
+                    <div className="sm:hidden">
+                      <AppSwitch
+                        checked={active}
+                        onChange={() => update({ enabled: !selection.enabled })}
+                        disabled={!supported || !configured}
+                        aria-label={supported ? label : UNSUPPORTED_LABEL}
+                      />
+                    </div>
+                  </>
+                }
+              >
                 {!supported ? (
                   <div className="px-4 py-4 text-xs text-fg/60">
                     The agent panel is only available in Web Search and Local
@@ -511,7 +506,7 @@ const PanelSelector = ({ focusMode }: { focusMode: string }) => {
                     </div>
                   </div>
                 )}
-              </div>
+              </ComposerPopover>
             </PopoverPanel>
           </Transition>
         </>

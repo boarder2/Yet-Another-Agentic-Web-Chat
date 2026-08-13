@@ -19,6 +19,7 @@ import {
 import { Field } from '@/components/ui/Field';
 import { Input } from '@/components/ui/Input';
 import { Button, buttonClasses } from '@/components/ui/Button';
+import AppSwitch from '@/components/ui/AppSwitch';
 import Select from '@/components/ui/Select';
 import { cn } from '@/lib/utils';
 
@@ -199,21 +200,11 @@ export default function ScheduleEditor({
 
         <div className="flex items-center gap-3">
           <label className="text-sm font-medium text-fg/70">Enabled</label>
-          <button
-            type="button"
+          <AppSwitch
+            checked={enabled}
+            onChange={setEnabled}
             aria-label="Toggle enabled"
-            aria-pressed={enabled}
-            onClick={() => setEnabled((v) => !v)}
-            className={`relative w-11 h-6 rounded-pill transition-colors duration-150 ${
-              enabled ? 'bg-accent' : 'bg-surface-2'
-            }`}
-          >
-            <span
-              className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-pill bg-bg transition-transform ${
-                enabled ? 'translate-x-5' : 'translate-x-0'
-              }`}
-            />
-          </button>
+          />
         </div>
 
         <div className="flex items-center gap-3 pt-2">

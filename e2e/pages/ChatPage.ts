@@ -1,4 +1,5 @@
 import type { Locator } from '@playwright/test';
+import { composerPopover as findComposerPopover } from '../utils/composerPopover';
 import { BasePage } from './BasePage';
 
 /** The home composer and the in-conversation chat window share this markup. */
@@ -37,9 +38,9 @@ export class ChatPage extends BasePage {
 
   async selectFocusMode(title: string) {
     await this.focusButton.click();
-    // Scope to the open popover panel (ring-1 ring-surface-2 is unique to
-    // it) — plain text like "Chat" also matches the sidebar nav link.
-    const panel = this.page.locator('div.ring-1.ring-surface-2');
+    // Scope to the shared shell — plain text like "Chat" also matches the
+    // sidebar nav link.
+    const panel = this.composerPopover('Focus Mode');
     await panel.getByText(title, { exact: true }).click();
     // The mode options are plain divs (no CloseButton), so the popover
     // panel stays open after a click — close it so it doesn't cover the
@@ -52,9 +53,7 @@ export class ChatPage extends BasePage {
     await this.page.getByRole('button', { name: 'Configure models' }).click();
     const dialog = this.page.getByRole('dialog');
     await dialog.locator('button:has(svg.lucide-cpu)').first().click();
-    const popover = this.page
-      .locator('div.overflow-hidden.shadow-raised')
-      .first();
+    const popover = this.composerPopover('Select Chat Model');
     await popover.locator('span.font-medium', { hasText: displayName }).click();
     await dialog.getByLabel('Close').click();
     await dialog.waitFor({ state: 'hidden' });
@@ -84,12 +83,13 @@ export class ChatPage extends BasePage {
     await this.agentPanel().waitFor({ state: 'visible' });
   }
 
-  /** The Agent Panel popover, scoped by its heading (shares ring/shadow classes
-   * with the focus-mode popover, but only one is open at a time). */
+  /** The Agent Panel's shared composer shell. */
+  composerPopover(title: string): Locator {
+    return findComposerPopover(this.page, title);
+  }
+
   agentPanel(): Locator {
-    return this.page
-      .locator('div.ring-1.ring-surface-2')
-      .filter({ hasText: 'Agent Panel' });
+    return this.composerPopover('Agent Panel');
   }
 
   /** Drive the composer toggle to a known state — the selection is DB-synced,
@@ -111,9 +111,7 @@ export class ChatPage extends BasePage {
     await this.agentPanel()
       .getByRole('button', { name: 'Select Model' })
       .click();
-    const popover = this.page
-      .locator('div.overflow-hidden.shadow-raised')
-      .last();
+    const popover = this.composerPopover('Select Chat Model');
     // The "Test" provider group's expanded state persists across executor
     // picks (it's the same ModelField instance) — only expand if collapsed,
     // since clicking an already-expanded header would re-collapse it.

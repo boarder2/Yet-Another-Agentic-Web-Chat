@@ -7,6 +7,8 @@ description: Use when modifying React components, ChatWindow, MessageBox, Markdo
 
 Next.js App Router, React 19, Tailwind 4, Headless UI. Styling rules and shared primitives (`Button`, `Card`, `Modal`, `Input`/`Field`, `Select`, `List`, `ApprovalPanel`): see `yaawc-design-system`.
 
+Composer-local `ComposerActionButton` owns compact-square/content-width utility-trigger states, while `ComposerPopover` owns the shared floating shell. Headless UI behavior, positioning, scrolling, clipping, and nesting remain caller-owned.
+
 ## Component Hierarchy
 
 ```

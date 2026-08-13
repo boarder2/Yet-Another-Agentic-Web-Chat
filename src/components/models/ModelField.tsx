@@ -19,6 +19,8 @@ import { useModels } from '@/lib/hooks/api/useModels';
 import { useQueryClient } from '@tanstack/react-query';
 import { qk } from '@/lib/api/keys';
 import { useSettingsModal } from '@/components/settings/SettingsModalProvider';
+import ComposerActionButton from '@/components/MessageInputActions/ComposerActionButton';
+import ComposerPopover from '@/components/MessageInputActions/ComposerPopover';
 
 interface ModelOption {
   provider: string;
@@ -172,14 +174,17 @@ const ModelField = ({
         <>
           <div className="relative">
             <PopoverButton
+              as={ComposerActionButton}
               type="button"
-              className="p-2 group flex text-fg/50 rounded-floating hover:bg-surface-2 active:scale-95 transition duration-200 hover:text-fg"
+              geometry="content"
+              configured={Boolean(selectedModel)}
+              open={open}
             >
               <Cpu size={18} />
               {showModelName && (
                 <span
                   className={cn(
-                    'ml-2 text-xs font-medium overflow-hidden text-ellipsis whitespace-nowrap',
+                    'text-xs font-medium overflow-hidden text-ellipsis whitespace-nowrap',
                     { 'max-w-44': truncateModelName },
                   )}
                 >
@@ -211,22 +216,20 @@ const ModelField = ({
                 gap: panelPosition === 'below' ? '4px' : '8px',
                 padding: '16px',
               }}
-              className="z-50 w-72"
+              className="z-50 w-72 overflow-hidden"
             >
-              <div className="overflow-hidden rounded-surface shadow-raised bg-surface border border-surface-2 divide-y divide-surface-2">
-                <div className="px-4 py-3 flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-medium text-fg/90">
-                      {role === 'system'
-                        ? 'Select System Model'
-                        : 'Select Chat Model'}
-                    </h3>
-                    <p className="text-xs text-fg/60 mt-1">
-                      {role === 'system'
-                        ? 'Choose the model used for tools and internal summarization'
-                        : 'Choose the model used for agent decisions and final responses'}
-                    </p>
-                  </div>
+              <ComposerPopover
+                title={
+                  role === 'system'
+                    ? 'Select System Model'
+                    : 'Select Chat Model'
+                }
+                description={
+                  role === 'system'
+                    ? 'Choose the model used for tools and internal summarization'
+                    : 'Choose the model used for agent decisions and final responses'
+                }
+                action={
                   <button
                     type="button"
                     className="p-1.5 rounded-control hover:bg-surface-2 text-fg/60 hover:text-fg transition"
@@ -246,7 +249,8 @@ const ModelField = ({
                       <RefreshCw size={14} />
                     )}
                   </button>
-                </div>
+                }
+              >
                 <div className="max-h-72 overflow-y-auto">
                   {loading ? (
                     <div className="px-4 py-3 text-sm text-fg/70">
@@ -347,7 +351,7 @@ const ModelField = ({
                     </div>
                   )}
                 </div>
-              </div>
+              </ComposerPopover>
             </PopoverPanel>
           </Transition>
         </>

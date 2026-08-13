@@ -1,6 +1,7 @@
 import { test, expect } from '../fixtures';
 import { seedWorkspace, seedChat } from '../utils/seed';
 import { ChatPage } from '../pages/ChatPage';
+import { expectComposerPopover } from '../utils/composerPopover';
 
 const CONFIGURE_MODELS_BUTTON = { name: 'Configure models' };
 
@@ -37,9 +38,12 @@ test.describe('in-chat model button — workspace override', () => {
     // Clicking reveals a read-only popover surfacing the pinned models by their
     // display names — the chat model (tool loop) and the system model (direct).
     await button.click();
-    await expect(page.getByText('Models · set by workspace')).toBeVisible();
-    await expect(page.getByText('Test (tool loop)')).toBeVisible();
-    await expect(page.getByText('Test (direct)')).toBeVisible();
+    const popover = await expectComposerPopover(
+      page,
+      'Models · set by workspace',
+    );
+    await expect(popover.getByText('Test (tool loop)')).toBeVisible();
+    await expect(popover.getByText('Test (direct)')).toBeVisible();
     await expect(page.getByRole('dialog')).toHaveCount(0);
   });
 

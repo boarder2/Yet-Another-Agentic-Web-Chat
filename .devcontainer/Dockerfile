@@ -22,6 +22,12 @@ RUN apt-get update \
   ripgrep \
   sudo \
   libsecret-1-0 libsecret-1-dev libsecret-common gnome-keyring gnome-keyring-pkcs11 seahorse \
+  && install -m 0755 -d /etc/apt/keyrings \
+  && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+  && chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+  && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends gh \
   && apt-get clean && rm -rf /var/lib/apt/lists/* \
   && echo 'node ALL=(root) NOPASSWD:ALL' > /etc/sudoers.d/node \
   && chmod 0440 /etc/sudoers.d/node
@@ -65,9 +71,11 @@ RUN curl -s https://ohmyposh.dev/install.sh | bash -s && echo 'eval "$(oh-my-pos
   curl -fsSL https://herdr.dev/install.sh | sh && \
   curl -fsSL https://pi.dev/install.sh | sh
 
-RUN mkdir -p /home/node/.persist/.claude /home/node/.persist/opencode-config /home/node/.persist/opencode-data /home/node/.persist/opencode-state /home/node/.persist/herdr /home/node/.persist/pi /home/node/.config /home/node/.local/share /home/node/.local/state \
+RUN mkdir -p /home/node/.persist/.claude /home/node/.persist/gh /home/node/.persist/keyrings /home/node/.persist/opencode-config /home/node/.persist/opencode-data /home/node/.persist/opencode-state /home/node/.persist/herdr /home/node/.persist/pi /home/node/.config /home/node/.local/share /home/node/.local/state \
   && touch /home/node/.persist/.claude.json /home/node/.persist/.zsh_history \
   && if [ -d /home/node/.claude ] && [ ! -L /home/node/.claude ]; then cp -a /home/node/.claude/. /home/node/.persist/.claude/ && rm -rf /home/node/.claude; fi \
+  && if [ -d /home/node/.config/gh ] && [ ! -L /home/node/.config/gh ]; then cp -a /home/node/.config/gh/. /home/node/.persist/gh/ && rm -rf /home/node/.config/gh; fi \
+  && if [ -d /home/node/.local/share/keyrings ] && [ ! -L /home/node/.local/share/keyrings ]; then cp -a /home/node/.local/share/keyrings/. /home/node/.persist/keyrings/ && rm -rf /home/node/.local/share/keyrings; fi \
   && if [ -d /home/node/.config/opencode ] && [ ! -L /home/node/.config/opencode ]; then cp -a /home/node/.config/opencode/. /home/node/.persist/opencode-config/ && rm -rf /home/node/.config/opencode; fi \
   && if [ -d /home/node/.local/share/opencode ] && [ ! -L /home/node/.local/share/opencode ]; then cp -a /home/node/.local/share/opencode/. /home/node/.persist/opencode-data/ && rm -rf /home/node/.local/share/opencode; fi \
   && if [ -d /home/node/.local/state/opencode ] && [ ! -L /home/node/.local/state/opencode ]; then cp -a /home/node/.local/state/opencode/. /home/node/.persist/opencode-state/ && rm -rf /home/node/.local/state/opencode; fi \
@@ -76,6 +84,8 @@ RUN mkdir -p /home/node/.persist/.claude /home/node/.persist/opencode-config /ho
   && if [ -f /home/node/.claude.json ] && [ ! -L /home/node/.claude.json ]; then cp /home/node/.claude.json /home/node/.persist/.claude.json && rm -f /home/node/.claude.json; fi \
   && if [ -f /home/node/.zsh_history ] && [ ! -L /home/node/.zsh_history ]; then cp /home/node/.zsh_history /home/node/.persist/.zsh_history && rm -f /home/node/.zsh_history; fi \
   && ln -sfn /home/node/.persist/.claude /home/node/.claude \
+  && ln -sfn /home/node/.persist/gh /home/node/.config/gh \
+  && ln -sfn /home/node/.persist/keyrings /home/node/.local/share/keyrings \
   && ln -sfn /home/node/.persist/opencode-config /home/node/.config/opencode \
   && ln -sfn /home/node/.persist/opencode-data /home/node/.local/share/opencode \
   && ln -sfn /home/node/.persist/opencode-state /home/node/.local/state/opencode \

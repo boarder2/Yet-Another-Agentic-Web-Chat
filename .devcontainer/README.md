@@ -12,5 +12,5 @@ A single-container VS Code Dev Container (image built from `Dockerfile`). SearXN
 
 - The workspace lives at `/workspaces/YAAWC` — bind-mounted from the host, or from the clone volume in volume mode.
 - SQLite + uploads + deep research artifacts persist in the `yaawc-data`, `yaawc-uploads`, and `yaawc-deep-research` volumes (not written into your git workspace).
-- Claude Code (`~/.claude`, `~/.claude.json`), opencode, herdr, pi (`~/.pi`), and Zsh history persist in `yaawc-user-state`.
+- Claude Code (`~/.claude`, `~/.claude.json`), GitHub CLI credentials/config, opencode, herdr, pi (`~/.pi`), and Zsh history persist in `yaawc-user-state`.
 - `config.toml` is read from the workspace root (it is gitignored).

@@ -51,7 +51,7 @@ import { resolveSkillsForChat } from '@/lib/skills/resolve';
 import { buildSkillsPromptSection } from '@/lib/skills/promptSection';
 import { setRunContext, cleanupSkillsForRun } from '@/lib/skills/runStore';
 import type { Skill } from '@/lib/skills/types';
-import { buildCapabilityDocsGuidance } from '@/lib/prompts/simplifiedAgent/capabilityDocsGuidance';
+import { capabilityDocsGuidance } from '@/lib/prompts/simplifiedAgent/capabilityDocsGuidance';
 import { getImageGenerationConfig } from '@/lib/settings/server';
 import { getResolvedSearchCapabilities } from '@/lib/search/providers';
 import type { CapabilityRuntimeFacts } from '@/lib/capabilities/availability';
@@ -618,7 +618,7 @@ export class SimplifiedAgent {
     // This is deliberately the final prompt layer so persona, memory, workspace,
     // and skill instructions cannot weaken product-claim grounding. Firefox AI
     // keeps external/action tools disabled, but can use the local docs lookup.
-    basePrompt += '\n\n' + buildCapabilityDocsGuidance();
+    basePrompt += '\n\n' + capabilityDocsGuidance;
 
     return basePrompt;
   }
@@ -752,7 +752,7 @@ export class SimplifiedAgent {
           tracker: this.tracker,
           chatRecorder: this.chatRecorder,
           systemRecorder: this.systemRecorder,
-          capabilityFacts: this.getCapabilityFacts(focusMode, fileIds),
+          capabilityFacts: () => this.getCapabilityFacts(focusMode, fileIds),
         },
         recursionLimit: 150, // Increased to handle complex multi-task research with todo_list
         signal: this.retrievalSignal,
@@ -1791,7 +1791,7 @@ ${url ? `<url>${url}</url>` : ''}
           tracker: this.tracker,
           chatRecorder: this.chatRecorder,
           systemRecorder: this.systemRecorder,
-          capabilityFacts: this.getCapabilityFacts(focusMode, fileIds),
+          capabilityFacts: () => this.getCapabilityFacts(focusMode, fileIds),
         },
         recursionLimit: 150,
         signal: this.retrievalSignal,

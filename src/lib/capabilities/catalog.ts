@@ -4,13 +4,12 @@ import {
   CAPABILITY_DOC_FILENAMES,
   CAPABILITY_DOC_MAX_PAGE_LENGTH,
   CAPABILITY_DOC_MAX_QUERY_LENGTH,
-  CAPABILITY_DOCS_ROUTE,
   CapabilityDocsLoader,
   CapabilityPage,
-  CapabilityPageUrlOptions,
   CapabilityResult,
   CapabilitySearchHit,
   CapabilitySearchOptions,
+  isValidSectionAnchor,
 } from './types';
 import {
   getSectionByAnchor,
@@ -35,7 +34,7 @@ export const capabilityDocsDirectory = path.join(
   'capabilities',
 );
 
-export function isSafeCapabilityFilename(filename: string): boolean {
+function isSafeCapabilityFilename(filename: string): boolean {
   return (
     typeof filename === 'string' &&
     filename.length <= 160 &&
@@ -44,7 +43,7 @@ export function isSafeCapabilityFilename(filename: string): boolean {
   );
 }
 
-export function capabilitySlugFromFilename(filename: string): string | null {
+function capabilitySlugFromFilename(filename: string): string | null {
   if (!isSafeCapabilityFilename(filename)) return null;
   if (filename === 'README.md') return 'README';
   return filename.slice(0, -'.md'.length);
@@ -59,24 +58,11 @@ export function capabilityFilenameFromSlug(slug: string): string | null {
   return `${slug}.md`;
 }
 
-export function capabilityPageUrl(
-  pageOrSlug: CapabilityPage | string,
-  options: CapabilityPageUrlOptions = {},
-): string {
-  const slug = typeof pageOrSlug === 'string' ? pageOrSlug : pageOrSlug.slug;
-  const base =
-    slug === 'README' || slug.toLocaleLowerCase() === 'readme'
-      ? CAPABILITY_DOCS_ROUTE
-      : `${CAPABILITY_DOCS_ROUTE}/${encodeURIComponent(slug)}`;
-  if (!options.anchor) return base;
-  return `${base}#${encodeURIComponent(options.anchor)}`;
-}
-
-export function capabilitySectionUrl(
-  page: CapabilityPage,
-  anchor: string,
-): string {
-  return capabilityPageUrl(page, { anchor });
+/** The corpus root never moves within a process; resolve its realpath once. */
+let realCorpusRootPromise: Promise<string> | undefined;
+function realCorpusRoot(): Promise<string> {
+  realCorpusRootPromise ??= fs.realpath(path.resolve(capabilityDocsDirectory));
+  return realCorpusRootPromise;
 }
 
 /** The production adapter reads only direct, catalogued Markdown filenames. */
@@ -106,7 +92,7 @@ export const filesystemCapabilityDocsLoader: CapabilityDocsLoader = {
     if (path.dirname(resolved) !== corpusRoot) {
       throw new Error('Invalid capability documentation path');
     }
-    const realRoot = await fs.realpath(corpusRoot);
+    const realRoot = await realCorpusRoot();
     const realFile = await fs.realpath(resolved);
     if (
       realFile !== realRoot &&
@@ -150,11 +136,6 @@ export class CapabilityDocsCatalog {
     this.loader = loader;
   }
 
-  /** Clear the in-memory page cache, useful after a deployment or in tests. */
-  clearCache(): void {
-    this.snapshotPromise = undefined;
-  }
-
   async load(): Promise<CapabilityResult<CapabilityPage[]>> {
     if (!this.snapshotPromise) {
       this.snapshotPromise = this.loadSnapshot();
@@ -167,9 +148,15 @@ export class CapabilityDocsCatalog {
       const listed = uniqueSafeFiles(await this.loader.listFiles());
       if (listed.length === 0) return unavailableResult();
 
+      const sources = await Promise.all(
+        listed.map(async (filename) => ({
+          filename,
+          markdown: await this.loader.readFile(filename),
+        })),
+      );
+
       const pages: CapabilityPage[] = [];
-      for (const filename of listed) {
-        const markdown = await this.loader.readFile(filename);
+      for (const { filename, markdown } of sources) {
         if (
           typeof markdown !== 'string' ||
           markdown.length > CAPABILITY_DOC_MAX_PAGE_LENGTH
@@ -178,12 +165,7 @@ export class CapabilityDocsCatalog {
         }
         const slug = capabilitySlugFromFilename(filename);
         if (!slug) continue;
-        pages.push(
-          parseCapabilityMarkdown(markdown, {
-            slug,
-            filename,
-          }),
-        );
+        pages.push(parseCapabilityMarkdown(markdown, { slug, filename }));
       }
       return pages.length > 0
         ? { ok: true, value: pages }
@@ -212,37 +194,16 @@ export class CapabilityDocsCatalog {
     return page ? { ok: true, value: page } : noMatchResult();
   }
 
-  async readPage(slug: string): Promise<CapabilityResult<CapabilityPage>> {
-    return this.getPage(slug);
-  }
-
   async getSection(
     slug: string,
     anchor: string,
   ): Promise<CapabilityResult<CapabilityPage['sections'][number]>> {
     if (!capabilityFilenameFromSlug(slug)) return invalidResult();
-    if (
-      typeof anchor !== 'string' ||
-      anchor.length === 0 ||
-      anchor.length > 200 ||
-      anchor.includes('/') ||
-      anchor.includes('\\') ||
-      anchor.includes('..') ||
-      anchor.includes('#')
-    ) {
-      return invalidResult();
-    }
+    if (!isValidSectionAnchor(anchor)) return invalidResult();
     const page = await this.getPage(slug);
     if (!page.ok) return page;
     const section = getSectionByAnchor(page.value, anchor);
     return section ? { ok: true, value: section } : noMatchResult();
-  }
-
-  async readSection(
-    slug: string,
-    anchor: string,
-  ): Promise<CapabilityResult<CapabilityPage['sections'][number]>> {
-    return this.getSection(slug, anchor);
   }
 
   async search(
@@ -263,12 +224,7 @@ export class CapabilityDocsCatalog {
     }
     if (
       options.sectionAnchor !== undefined &&
-      (options.sectionAnchor.length === 0 ||
-        options.sectionAnchor.length > 200 ||
-        options.sectionAnchor.includes('/') ||
-        options.sectionAnchor.includes('\\') ||
-        options.sectionAnchor.includes('..') ||
-        options.sectionAnchor.includes('#'))
+      !isValidSectionAnchor(options.sectionAnchor)
     ) {
       return invalidResult();
     }
@@ -306,23 +262,8 @@ export function getCapabilityDocsCatalog(): CapabilityDocsCatalog {
   return defaultCatalog;
 }
 
-export const getCapabilityCatalog = getCapabilityDocsCatalog;
-
 export function setCapabilityDocsCatalogForTests(
   catalog: CapabilityDocsCatalog,
 ): void {
   defaultCatalog = catalog;
-}
-
-export async function loadCapabilityCatalog(): Promise<
-  CapabilityResult<CapabilityPage[]>
-> {
-  return getCapabilityDocsCatalog().load();
-}
-
-export async function searchCapabilityDocs(
-  query: string,
-  options: CapabilitySearchOptions = {},
-): Promise<CapabilityResult<CapabilitySearchHit[]>> {
-  return getCapabilityDocsCatalog().search(query, options);
 }

@@ -2,12 +2,15 @@ import { fileURLToPath } from 'node:url';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-
-type Heading = {
-  level: number;
-  text: string;
-  anchor: string;
-};
+import {
+  createHeadingAnchor,
+  parseCapabilityMarkdown,
+} from './capabilities/search';
+import {
+  CAPABILITY_DOC_FILENAMES,
+  isExternalHref,
+  type CapabilitySection,
+} from './capabilities/types';
 
 type SourceFile = {
   path: string;
@@ -19,18 +22,8 @@ const repositoryRoot = resolve(
   '../..',
 );
 const capabilitiesRoot = resolve(repositoryRoot, 'docs/capabilities');
-const capabilityPages = [
-  'administration-and-settings.md',
-  'agent-capabilities.md',
-  'artifacts-and-dashboards.md',
-  'automation.md',
-  'chat-and-research.md',
-  'files-and-workspaces.md',
-  'models-and-providers.md',
-  'personalization-and-memory.md',
-  'privacy-and-data.md',
-] as const;
-const capabilityFiles = ['README.md', ...capabilityPages];
+const capabilityFiles = CAPABILITY_DOC_FILENAMES;
+const capabilityPages = capabilityFiles.filter((file) => file !== 'README.md');
 
 const sourceFiles = [
   'README.md',
@@ -44,40 +37,9 @@ const sourceFiles = [
   text: readFileSync(resolve(repositoryRoot, relativePath), 'utf8'),
 }));
 
-const parseHeadings = (markdown: string): Heading[] => {
-  const headings: Heading[] = [];
-  const usedAnchors = new Map<string, number>();
-  let inFence = false;
-
-  for (const line of markdown.split(/\r?\n/)) {
-    if (/^\s{0,3}(```|~~~)/.test(line)) {
-      inFence = !inFence;
-      continue;
-    }
-    if (inFence) continue;
-
-    const match = /^(#{1,6})[ \t]+(.+?)[ \t]*$/.exec(line);
-    if (!match) continue;
-
-    const text = match[2].replace(/[ \t]+#+[ \t]*$/, '').trim();
-    const baseAnchor = text
-      .toLowerCase()
-      .replace(/[\u0060*_~]/g, '')
-      .replace(/[^\p{L}\p{N}\s-]/gu, '')
-      .trim()
-      .replace(/\s+/g, '-');
-    const occurrence = usedAnchors.get(baseAnchor) ?? 0;
-    usedAnchors.set(baseAnchor, occurrence + 1);
-
-    headings.push({
-      level: match[1].length,
-      text,
-      anchor: occurrence === 0 ? baseAnchor : `${baseAnchor}-${occurrence}`,
-    });
-  }
-
-  return headings;
-};
+/** Use the production parser so the corpus is checked against what ships. */
+const parseHeadings = (markdown: string): CapabilitySection[] =>
+  parseCapabilityMarkdown(markdown).sections;
 
 const extractLinks = (markdown: string): string[] => {
   const links: string[] = [];
@@ -90,15 +52,12 @@ const extractLinks = (markdown: string): string[] => {
   return links;
 };
 
-const isExternalLink = (destination: string) =>
-  /^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(destination);
-
 const assertInternalLinkResolves = (
   source: SourceFile,
   destination: string,
-  headings: Heading[],
+  headings: CapabilitySection[],
 ) => {
-  if (isExternalLink(destination)) return;
+  if (isExternalHref(destination)) return;
 
   const hashIndex = destination.indexOf('#');
   const pathPart =
@@ -125,13 +84,16 @@ const assertInternalLinkResolves = (
   }
 };
 
+/** Only the trees that carry documentation links; not the whole repository. */
+const DOC_LINK_ROOTS = ['docs', '.claude', '.agents', 'e2e'];
+
 const walkMarkdownFiles = (directory: string): string[] => {
-  const ignoredDirectories = new Set(['.git', '.next', 'node_modules']);
   const paths: string[] = [];
+  if (!existsSync(directory)) return paths;
 
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     if (entry.isDirectory()) {
-      if (ignoredDirectories.has(entry.name)) continue;
+      if (entry.name === 'node_modules') continue;
       paths.push(...walkMarkdownFiles(resolve(directory, entry.name)));
     } else if (entry.isFile() && entry.name.endsWith('.md')) {
       paths.push(resolve(directory, entry.name));
@@ -140,6 +102,15 @@ const walkMarkdownFiles = (directory: string): string[] => {
 
   return paths;
 };
+
+const documentationMarkdownFiles = (): string[] => [
+  ...readdirSync(repositoryRoot, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.md'))
+    .map((entry) => resolve(repositoryRoot, entry.name)),
+  ...DOC_LINK_ROOTS.flatMap((root) =>
+    walkMarkdownFiles(resolve(repositoryRoot, root)),
+  ),
+];
 
 describe('authoritative capability corpus', () => {
   it('contains exactly the index and the nine agreed capability pages', () => {
@@ -177,10 +148,14 @@ describe('authoritative capability corpus', () => {
         ).toBeLessThanOrEqual(headings[index - 1].level + 1);
       }
 
-      expect(
-        new Set(headings.map(({ anchor }) => anchor)).size,
-        `${file} has duplicate section anchors`,
-      ).toBe(headings.length);
+      // Anchors must be unique before the parser's dedupe suffix kicks in, so a
+      // heading's anchor is derivable from its text alone.
+      for (const { heading, anchor } of headings) {
+        expect(
+          createHeadingAnchor(heading),
+          `${file} has a duplicate heading "${heading}"`,
+        ).toBe(anchor);
+      }
       expect(source.text).not.toMatch(/!\[[^\]]*\]\([^)]*\)/);
       expect(source.text).not.toMatch(/<img\b/i);
       expect(source.text).not.toMatch(
@@ -242,7 +217,7 @@ describe('authoritative capability corpus', () => {
   });
 
   it('has no repository link targeting the deleted docs/ui tree', () => {
-    for (const file of walkMarkdownFiles(repositoryRoot)) {
+    for (const file of documentationMarkdownFiles()) {
       const relativePath = file.slice(repositoryRoot.length + 1);
       for (const destination of extractLinks(readFileSync(file, 'utf8'))) {
         expect(

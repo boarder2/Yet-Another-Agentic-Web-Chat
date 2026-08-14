@@ -1,12 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
-  capabilityPageUrl,
-  capabilitySectionUrl,
   createCapabilityCatalog,
   filesystemCapabilityDocsLoader,
   type CapabilityDocsLoader,
 } from './catalog';
-import { CAPABILITY_DOC_FILENAMES } from './types';
+import { CAPABILITY_DOC_FILENAMES, capabilityPageUrl } from './types';
 
 const fixedFixtureFiles = Object.fromEntries(
   CAPABILITY_DOC_FILENAMES.map((filename) => [
@@ -82,16 +80,7 @@ describe('capability docs catalog', () => {
       '/docs/capabilities#overview',
     );
     expect(
-      capabilitySectionUrl(
-        {
-          slug: 'chat-and-research',
-          filename: 'chat-and-research.md',
-          title: 'Chat and research',
-          markdown: '',
-          sections: [],
-        },
-        'web-search',
-      ),
+      capabilityPageUrl('chat-and-research', { anchor: 'web-search' }),
     ).toBe('/docs/capabilities/chat-and-research#web-search');
   });
 

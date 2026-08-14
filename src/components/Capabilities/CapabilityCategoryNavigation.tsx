@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import {
-  CAPABILITY_DOCS_ROUTE,
+  capabilityPageUrl,
+  capabilitySlugFromPathname,
   type CapabilityPage,
 } from '@/lib/capabilities/types';
 
@@ -14,36 +15,14 @@ function pageLabel(page: CapabilityNavigationPage): string {
   return page.slug === 'README' ? 'Overview' : page.title;
 }
 
-function slugFromPathname(pathname: string | null): string {
-  if (!pathname || pathname === CAPABILITY_DOCS_ROUTE) return 'README';
-  const prefix = `${CAPABILITY_DOCS_ROUTE}/`;
-  if (!pathname.startsWith(prefix)) return 'README';
-
-  const segment = pathname.slice(prefix.length).split('/')[0];
-  try {
-    return decodeURIComponent(segment) || 'README';
-  } catch {
-    return 'README';
-  }
-}
-
-function pageUrl(page: CapabilityNavigationPage): string {
-  return page.slug === 'README'
-    ? CAPABILITY_DOCS_ROUTE
-    : `${CAPABILITY_DOCS_ROUTE}/${encodeURIComponent(page.slug)}`;
-}
-
 export default function CapabilityCategoryNavigation({
   pages,
-  currentSlug,
   mobile = false,
 }: {
   pages: readonly CapabilityNavigationPage[];
-  currentSlug: string;
   mobile?: boolean;
 }) {
-  const pathname = usePathname();
-  const activeSlug = pathname ? slugFromPathname(pathname) : currentSlug;
+  const activeSlug = capabilitySlugFromPathname(usePathname());
 
   return (
     <nav
@@ -65,7 +44,7 @@ export default function CapabilityCategoryNavigation({
           return (
             <Link
               key={page.slug}
-              href={pageUrl(page)}
+              href={capabilityPageUrl(page)}
               aria-current={active ? 'page' : undefined}
               className={cn(
                 'block border border-transparent text-sm transition-colors duration-150 focus-border-neutral',

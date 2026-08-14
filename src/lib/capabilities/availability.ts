@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 export const CAPABILITY_AVAILABILITY_STATUSES = [
   'available',
   'disabled',
@@ -8,29 +10,36 @@ export const CAPABILITY_AVAILABILITY_STATUSES = [
 export type CapabilityAvailabilityStatus =
   (typeof CAPABILITY_AVAILABILITY_STATUSES)[number];
 
-export interface CapabilitySearchFacts {
-  web?: boolean;
-  images?: boolean;
-  videos?: boolean;
-  autocomplete?: boolean;
-}
+/**
+ * Only non-sensitive, already-known facts may cross the tool boundary. This is
+ * the single declaration; `toolContext` validates against this same schema.
+ */
+export const capabilityRuntimeFactsSchema = z.object({
+  focusMode: z.string().optional(),
+  isPrivate: z.boolean().optional(),
+  hasFiles: z.boolean().optional(),
+  hasWorkspace: z.boolean().optional(),
+  memoryEnabled: z.boolean().optional(),
+  interactiveSession: z.boolean().optional(),
+  hasDurableChat: z.boolean().optional(),
+  hasPersonalization: z.boolean().optional(),
+  codeExecutionConfigured: z.boolean().optional(),
+  codeExecutionEnabled: z.boolean().optional(),
+  imageGenerationConfigured: z.boolean().optional(),
+  imageGenerationEnabled: z.boolean().optional(),
+  searchCapabilities: z
+    .object({
+      web: z.boolean().optional(),
+      images: z.boolean().optional(),
+      videos: z.boolean().optional(),
+      autocomplete: z.boolean().optional(),
+    })
+    .optional(),
+});
 
-/** Only non-sensitive, already-known facts may cross the tool boundary. */
-export interface CapabilityRuntimeFacts {
-  focusMode?: string;
-  isPrivate?: boolean;
-  hasFiles?: boolean;
-  hasWorkspace?: boolean;
-  memoryEnabled?: boolean;
-  interactiveSession?: boolean;
-  hasDurableChat?: boolean;
-  hasPersonalization?: boolean;
-  codeExecutionConfigured?: boolean;
-  codeExecutionEnabled?: boolean;
-  imageGenerationConfigured?: boolean;
-  imageGenerationEnabled?: boolean;
-  searchCapabilities?: CapabilitySearchFacts;
-}
+export type CapabilityRuntimeFacts = z.infer<
+  typeof capabilityRuntimeFactsSchema
+>;
 
 export interface CapabilityAvailability {
   capability: string;
@@ -61,11 +70,13 @@ function capabilityKey(value: string): string {
     .replace(/\s+/g, ' ');
 }
 
-function statusForSearchCapability(
+/** An unset fact is never asserted as a negative; it stays unknown. */
+function tristate(
   value: boolean | undefined,
+  whenFalse: 'disabled' | 'not configured',
 ): CapabilityAvailabilityStatus {
   if (value === true) return 'available';
-  if (value === false) return 'not configured';
+  if (value === false) return whenFalse;
   return 'unknown on this device';
 }
 
@@ -92,97 +103,75 @@ function resolveOne(
     case 'internet search':
       status = !isWebFocus(facts.focusMode)
         ? 'disabled'
-        : statusForSearchCapability(search?.web);
+        : tristate(search?.web, 'not configured');
       break;
     case 'image search':
     case 'images':
       status = !isWebFocus(facts.focusMode)
         ? 'disabled'
-        : statusForSearchCapability(search?.images);
+        : tristate(search?.images, 'not configured');
       break;
     case 'video search':
     case 'videos':
       status = !isWebFocus(facts.focusMode)
         ? 'disabled'
-        : statusForSearchCapability(search?.videos);
+        : tristate(search?.videos, 'not configured');
       break;
     case 'autocomplete':
-      status = statusForSearchCapability(search?.autocomplete);
+      status = tristate(search?.autocomplete, 'not configured');
       break;
     case 'local research':
     case 'file search':
     case 'uploaded files':
     case 'attachments':
-      if (
+      status =
         !isLocalResearchFocus(facts.focusMode) &&
         facts.focusMode !== 'webSearch'
-      ) {
-        status = 'disabled';
-      } else if (facts.hasFiles === true) {
-        status = 'available';
-      } else if (facts.hasFiles === false) {
-        status = 'not configured';
-      } else {
-        status = 'unknown on this device';
-      }
+          ? 'disabled'
+          : tristate(facts.hasFiles, 'not configured');
       break;
     case 'workspace':
     case 'workspace files':
-      status =
-        facts.hasWorkspace === true
-          ? 'available'
-          : facts.hasWorkspace === false
-            ? 'not configured'
-            : 'unknown on this device';
+      status = tristate(facts.hasWorkspace, 'not configured');
       break;
     case 'memory':
     case 'saved memory':
-      if (facts.isPrivate === true) status = 'disabled';
-      else if (facts.memoryEnabled === true) status = 'available';
-      else if (facts.memoryEnabled === false) status = 'disabled';
-      else status = 'unknown on this device';
+      status =
+        facts.isPrivate === true
+          ? 'disabled'
+          : tristate(facts.memoryEnabled, 'disabled');
       break;
     case 'personalization':
-      if (facts.isPrivate === true) status = 'disabled';
-      else if (facts.hasPersonalization === true) status = 'available';
-      else if (facts.hasPersonalization === false) status = 'disabled';
-      else status = 'unknown on this device';
+      status =
+        facts.isPrivate === true
+          ? 'disabled'
+          : tristate(facts.hasPersonalization, 'disabled');
       break;
     case 'code execution':
     case 'code':
       if (facts.interactiveSession === false) status = 'disabled';
       else if (facts.codeExecutionConfigured === false)
         status = 'not configured';
-      else if (facts.codeExecutionEnabled === true) status = 'available';
-      else if (facts.codeExecutionEnabled === false) status = 'disabled';
-      else status = 'unknown on this device';
+      else status = tristate(facts.codeExecutionEnabled, 'disabled');
       break;
     case 'image generation':
     case 'generated images':
-      if (facts.imageGenerationConfigured === false) {
-        status = 'not configured';
-      } else if (facts.imageGenerationEnabled === false) {
-        status = 'disabled';
-      } else if (facts.hasDurableChat === false) {
-        status = 'disabled';
-      } else if (facts.imageGenerationEnabled === true) {
-        status = 'available';
-      } else {
-        status = 'unknown on this device';
-      }
+      if (facts.imageGenerationConfigured === false) status = 'not configured';
+      else if (facts.hasDurableChat === false) status = 'disabled';
+      else status = tristate(facts.imageGenerationEnabled, 'disabled');
       break;
     case 'artifacts':
     case 'artifact':
       if (
-        facts.focusMode !== undefined &&
-        facts.focusMode !== 'webSearch' &&
-        facts.focusMode !== 'localResearch'
+        (facts.focusMode !== undefined &&
+          facts.focusMode !== 'webSearch' &&
+          facts.focusMode !== 'localResearch') ||
+        facts.isPrivate === true
       ) {
         status = 'disabled';
-      } else if (facts.isPrivate === true) status = 'disabled';
-      else if (facts.hasDurableChat === true) status = 'available';
-      else if (facts.hasDurableChat === false) status = 'not configured';
-      else status = 'unknown on this device';
+      } else {
+        status = tristate(facts.hasDurableChat, 'not configured');
+      }
       break;
     case 'deep research':
       status =
@@ -211,14 +200,4 @@ export function getCapabilityAvailability(
     return capability.map((item) => resolveOne(String(item), facts));
   }
   return resolveOne(String(capability), facts);
-}
-
-export const resolveCapabilityAvailability = getCapabilityAvailability;
-export const resolveCapabilityStatus = getCapabilityAvailability;
-
-export function getCapabilityAvailabilityMap(
-  capabilities: readonly string[],
-  facts: CapabilityRuntimeFacts = {},
-): CapabilityAvailability[] {
-  return capabilities.map((capability) => resolveOne(capability, facts));
 }

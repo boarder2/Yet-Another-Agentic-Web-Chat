@@ -44,6 +44,7 @@ Subsystem detail lives in the `.claude/skills/yaawc-*` skills — read the relev
 - Ask before adding dependencies
 - Terse, factual responses; clarify via `AskUserQuestion`, never inline in prose; evaluate the user's proposals critically — say so with reasoning when one is weak
 - Keep this file and the `yaawc-*` skills accurate when a change touches what they document — big-picture only, no implementation minutiae. Docs/README additions equally terse
+- For every user-visible change, review the relevant `docs/capabilities/` page and update it in the same change when behavior, prerequisites, limits, privacy, availability, or failure states change. `docs/capabilities/` is authoritative; its pages must describe current behavior only and must not contain history or roadmap prose.
 
 ## Pointers
 

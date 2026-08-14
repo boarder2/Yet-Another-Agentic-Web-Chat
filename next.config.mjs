@@ -19,6 +19,7 @@ const nextConfig = {
     '**': [
       './node_modules/playwright-core/**/*',
       './node_modules/playwright/**/*',
+      './docs/capabilities/**/*.md',
     ],
   },
 };

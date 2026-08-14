@@ -20,6 +20,8 @@ export const setWideWidth = (next: boolean) => {
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const segments = useSelectedLayoutSegments();
   const isDashboard = segments.includes('dashboard');
+  const isCapabilityDocs =
+    segments[0] === 'docs' && segments[1] === 'capabilities';
   // The root path ('/') also renders a ChatWindow (new chat). The URL is later
   // updated to /c/<id> via history.replaceState (not Next.js navigation), so
   // useSelectedLayoutSegments never sees the change. Treat segments.length === 0
@@ -29,16 +31,17 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   const wide = useWideWidth();
   const wideActive = isChat && wide;
 
-  const containerClass = isDashboard
-    ? 'mx-4'
-    : isWorkspaceDetail
-      ? ''
-      : wideActive
-        ? 'mx-4'
-        : // `--chat-ml` is `auto` until the artifact panel opens, which pins the
-          // column beside the sidebar instead so its text doesn't slide sideways
-          // as the panel is dragged.
-          'max-w-screen-lg mx-4 lg:ml-(--chat-ml) lg:mr-auto';
+  const containerClass =
+    isDashboard || isCapabilityDocs
+      ? 'mx-4'
+      : isWorkspaceDetail
+        ? ''
+        : wideActive
+          ? 'mx-4'
+          : // `--chat-ml` is `auto` until the artifact panel opens, which pins the
+            // column beside the sidebar instead so its text doesn't slide sideways
+            // as the panel is dragged.
+            'max-w-screen-lg mx-4 lg:ml-(--chat-ml) lg:mr-auto';
 
   return (
     // `--artifact-inset` reserves the docked artifact panel's width.

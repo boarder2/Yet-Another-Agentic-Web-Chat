@@ -1,15 +1,24 @@
-# YAAWC's Architecture
+# YAAWC architecture
 
-YAAWC's architecture consists of the following key components:
+These pages describe implementation boundaries for contributors. The authoritative user-facing capability descriptions live in [`docs/capabilities/`](../capabilities/README.md); do not use this overview as a feature or availability reference.
 
-1. **User Interface**: A web-based interface built with React and Next.js that allows users to interact with YAAWC for searching the web, researching local files, and conversational chat.
-2. **LangGraph React Agent (`SimplifiedAgent`)**: The core reasoning engine. A LangGraph-based agentic workflow that autonomously decides which tools to invoke (web search, URL summarization, deep research, file search, image search, etc.) to answer user queries.
-3. **SearXNG**: A metadata search engine used by YAAWC to search the web for sources.
-4. **LLMs (Large Language Models)**: Utilized by the agent for reasoning, tool invocation decisions, content understanding, writing responses, and citing sources. Examples include Claude, GPTs, Gemini, etc.
-5. **Embedding Models**: Used for similarity-based re-ranking of search results using cosine similarity or dot product distance.
-6. **Focus Modes**: YAAWC supports three focus modes that control the agent's behavior:
-   - **Web Search**: The agent has access to all tools (web search, URL summarization, deep research, image search, etc.) for comprehensive web-based research.
-   - **Local Research**: The agent uses file search tools to research uploaded/local files with citations.
-   - **Chat**: A conversational mode with no tools — the agent responds from its training data only.
+YAAWC is composed of:
 
-For a more detailed explanation of how these components work together, see [WORKING.md](https://github.com/boarder2/Yet-Another-Agentic-Web-Chat/tree/master/docs/architecture/WORKING.md).
+1. **User interface:** Next.js App Router and React pages for chat, history, workspaces, automations, dashboards, settings, and streaming controls.
+2. **LangGraph React agent:** `SimplifiedAgent` selects a focus-mode toolset, composes prompt layers, invokes the Chat and System models, and emits the turn's stream events.
+3. **Streaming seam:** typed agent events are synthesized by the run host into persisted and reconnectable stream events consumed by the client reducer.
+4. **Retrieval and tools:** search providers, URL/PDF/YouTube readers, file search, deep-research subagents, workspace tools, skills, memory, artifacts, charts, and approval-gated actions.
+5. **Providers:** configurable Chat, System, embedding, image-generation, and search providers. Model and search availability is resolved from the deployment's settings and credentials.
+6. **Local persistence:** SQLite and Drizzle store chats, run state, settings, credentials, memories, workspaces, workflows, schedules, MCP configuration, skills, artifacts, and generated-image metadata.
+
+## Focus modes
+
+`SimplifiedAgent` chooses the base toolset from the focus mode:
+
+- **Web Search:** the broad research toolset, plus file search when documents are attached.
+- **Local Research:** file search, core interaction tools, charts, and artifact support without web search.
+- **Chat:** core conversational tools without web or file research.
+
+Interactive tools such as user questions, skill edits, and configured code execution are appended by dynamic top-level getters. Workspace and MCP tools are injected from the active chat context. Panel executors and deep-research subagents apply narrower restrictions rather than inheriting every top-level action.
+
+For the request-to-answer flow and the source/citation pipeline, see [WORKING.md](./WORKING.md).

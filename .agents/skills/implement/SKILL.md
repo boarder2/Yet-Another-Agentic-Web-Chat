@@ -6,6 +6,8 @@ disable-model-invocation: true
 
 Implement the work described by the user in the spec or tickets.
 
+For any user-visible change, review the relevant `docs/capabilities/` page and update it in the same change when the behavior, prerequisites, limits, privacy, availability, or failure states change. The authoritative capability pages describe current behavior only: do not add history or roadmap prose there.
+
 Use /tdd where possible, at pre-agreed seams.
 
 Run typechecking regularly, single test files regularly, and the full test suite once at the end.

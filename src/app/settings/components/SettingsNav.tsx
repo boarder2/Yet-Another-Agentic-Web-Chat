@@ -1,26 +1,44 @@
 'use client';
 
+import Link from 'next/link';
+import { BookOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { buttonClasses } from '@/components/ui/Button';
 import { Tabs } from '@/components/ui/Tabs';
 import { SectionKey, SETTINGS_SECTIONS } from '../types';
 
 export function MobileSettingsNav({
   activeSection,
   onSelect,
+  onNavigateToHelp,
 }: {
   activeSection: SectionKey;
   onSelect: (key: SectionKey) => void;
+  onNavigateToHelp?: () => void;
 }) {
   return (
-    <div className="lg:hidden overflow-x-auto overflow-hidden-scrollable -mx-4 px-4 mb-4">
-      <Tabs
-        activeKey={activeSection}
-        items={SETTINGS_SECTIONS.map((section) => ({
-          key: section.key,
-          label: section.label,
-          onClick: () => onSelect(section.key),
-        }))}
-      />
+    <div className="lg:hidden mb-4">
+      <div className="overflow-x-auto overflow-hidden-scrollable -mx-4 px-4">
+        <Tabs
+          activeKey={activeSection}
+          aria-label="Settings sections"
+          items={SETTINGS_SECTIONS.map((section) => ({
+            key: section.key,
+            label: section.label,
+            onClick: () => onSelect(section.key),
+          }))}
+        />
+      </div>
+      {onNavigateToHelp && (
+        <Link
+          href="/docs/capabilities"
+          onClick={onNavigateToHelp}
+          className={cn(buttonClasses('ghost', 'sm'), 'mt-3')}
+        >
+          <BookOpen size={14} />
+          Help & capabilities
+        </Link>
+      )}
     </div>
   );
 }

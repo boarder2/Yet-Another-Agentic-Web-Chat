@@ -32,6 +32,8 @@ export const myTool = defineTool(
 
 3. **Icon/label**: add cases for the tool's `type` string in `getIcon()` and `formatToolMessage()` in `src/components/MessageActions/ToolCall.tsx`. Lifecycle events and widget rendering are automatic (see `yaawc-streaming-events`); tool attrs (`query`, `url`, …) are extracted by `handleToolStart` in `simplifiedAgent.ts`.
 
+`search_yaawc_docs` is a built-in system tool, not a user-toggleable tool: append it only through the dynamic top-level getters so chats, private/workflow/scheduled runs, panel executors, and panel synthesis receive it. Keep it out of `allAgentTools` and other static deep-subagent arrays; the final capability-grounding prompt layer is assembled by `SimplifiedAgent`.
+
 Conventions: use `systemLlm` for internal LLM calls (never the chat LLM); emit extra events via `emitStreamEvent(runtime.context.emitter, …)` (like `todoListTool`); check `runtime.context.retrievalSignal?.aborted` in long loops for hard cancellation.
 
 ## New LLM Provider (`src/lib/providers/`)
@@ -50,4 +52,4 @@ Next.js App Router: export named `GET`/`POST`/`DELETE` handlers, try/catch with 
 2. Create the system prompt in `src/lib/prompts/simplifiedAgent/` (see `yaawc-prompt-system` for the layering).
 3. In `src/lib/search/simplifiedAgent.ts`: add a `case` in `getToolsForFocusMode()` returning a tool set from the dynamic getters, and a `case` in the prompt-selection `switch` in `createEnhancedSystemPrompt()`.
 
-The chat route passes the focus-mode string through without an allow-list check; unknown modes fall through to `webSearch` with a console warning.
+The chat route passes the focus-mode string through without an allow-list check; unknown modes fall through to `webSearch` with a console warning. User-originated agents must retain the invariant `search_yaawc_docs` system tool and final capability-grounding guidance across every focus mode; do not add it to the user tool picker or deep-research subagents.

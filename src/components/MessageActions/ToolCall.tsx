@@ -254,6 +254,8 @@ export const ToolCall = ({
         return <History size={16} className="text-accent" />;
       case 'get_message':
         return <MessageSquare size={16} className="text-accent" />;
+      case 'search_yaawc_docs':
+        return <BookOpen size={16} className="text-accent" />;
       case 'create_artifact':
         return <FilePlus size={16} className="text-accent" />;
       case 'edit_artifact':
@@ -565,6 +567,23 @@ export const ToolCall = ({
         <>
           <span className="mr-2">{getIcon(type)}</span>
           <span>Fetched message</span>
+        </>
+      );
+    }
+
+    if (type === 'search_yaawc_docs') {
+      const docsQuery = decodeHtmlEntities(
+        query ?? (typeof children === 'string' ? children : ''),
+      );
+      return (
+        <>
+          <span className="mr-2">{getIcon(type)}</span>
+          <span>Searching YAAWC documentation</span>
+          {docsQuery && (
+            <ArgChip wide mono={false}>
+              {docsQuery}
+            </ArgChip>
+          )}
         </>
       );
     }

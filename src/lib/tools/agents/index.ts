@@ -27,6 +27,7 @@ import { createChartTool } from './createChartTool';
 import { readSkillTool } from './readSkillTool';
 import { editSkillTool } from './editSkillTool';
 import { artifactTools } from './artifactTools';
+import { yaawcDocsTool } from './yaawcDocsTool';
 
 export { simpleWebSearchTool };
 export { urlFetchTool };
@@ -47,6 +48,7 @@ export { createChartTool };
 export { readSkillTool };
 export { editSkillTool };
 export { artifactTools };
+export { yaawcDocsTool };
 
 // Base tool arrays (non-interactive, used by subagents)
 export const allAgentTools = [
@@ -108,6 +110,9 @@ function withInteractiveTools<T>(tools: T[]): T[] {
   result.push(askUserTool as unknown as T);
   // edit_skill is always available; it checks interactiveSession at call time
   result.push(editSkillTool as unknown as T);
+  // Capability lookup is a system tool: it is always present in top-level
+  // dynamic toolsets, but deliberately absent from the static subagent arrays.
+  result.push(yaawcDocsTool as unknown as T);
   return result;
 }
 

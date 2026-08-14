@@ -30,7 +30,7 @@ Phase 1 runs only on a **new** message; **resume never re-runs Phase 1** (it reu
 
 ## Executor tool restrictions
 
-`src/lib/tools/panel/restrictedToolset.ts` — `filterExecutorTools()` removes `PANEL_EXECUTOR_EXCLUDED_TOOLS`: `code_execution`, `workspace_edit`, `workspace_create_file`, `ask_user`, `edit_skill`, `deep_research`, and the three artifact tools (`create_artifact`, `edit_artifact`, `read_artifact` — chat-scoped rows an executor has no chat to own; authoring belongs to the synthesizing model). Exclusion list (not a whitelist), so executors inherit the full focus-mode set minus the prompting/approval-gated/mutating/recursive tools. Read-only workspace tools (ls/grep/read) intentionally stay — they never interrupt.
+`src/lib/tools/panel/restrictedToolset.ts` — `filterExecutorTools()` removes `PANEL_EXECUTOR_EXCLUDED_TOOLS`: `code_execution`, `workspace_edit`, `workspace_create_file`, `ask_user`, `edit_skill`, `deep_research`, and the three artifact tools (`create_artifact`, `edit_artifact`, `read_artifact` — chat-scoped rows an executor has no chat to own; authoring belongs to the synthesizing model). The invariant `search_yaawc_docs` system tool is not excluded, so both executors and the ordinary synthesis pass can ground YAAWC claims. Exclusion list (not a whitelist), so executors inherit the full focus-mode set minus the prompting/approval-gated/mutating/recursive tools. Read-only workspace tools (ls/grep/read) intentionally stay — they never interrupt.
 
 ## Streaming events
 
@@ -45,7 +45,7 @@ Phase 1 runs only on a **new** message; **resume never re-runs Phase 1** (it reu
 ## Gotchas
 
 - The separate orchestrator **model** was removed (it duplicated the chat-model picker and silently overrode it). Do not reintroduce one; synthesis always uses `body.chatModel`.
-- The final `sources` event re-emits the executor's COMPLETE document set — **replace**, don't append, or you double-count (`sources_added` batches accumulate; `sources` replaces).
-- Phase 1 is fired in a non-awaited async IIFE so the HTTP response can subscribe immediately; errors emit a stream `error` event.
+- The final `sources` event re-emits the executor's COMPLETE document set — **replace**, don't append, or you double-count (`sources_added` batches accumulate; `sources` replaces). Capability-document sections are internal sources and keep their exact `/docs/capabilities/...#...` URLs through this merge.
+- Phase 1 is fired in a non-awaited async IIFE so the HTTP response can subscribe immediately; errors emit a stream `error` event. Deep-research subagents still receive their unchanged static whitelist and do not receive `search_yaawc_docs`.
 
 Related: `yaawc-streaming-events`, `yaawc-subagent-architecture`, `yaawc-settings-persistence`, `yaawc-prompt-system`.

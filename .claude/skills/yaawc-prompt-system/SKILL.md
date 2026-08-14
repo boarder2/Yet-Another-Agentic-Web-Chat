@@ -14,7 +14,8 @@ Persona prompts (DB systemPrompts type='persona', resolved by ID via getPersonaI
   + personalization section (appended inside the focus-mode builder)
   + memory section + memory-tools instructions (when memoryEnabled)
   + workspace suffix
-  + skills section (last; only model-visible, non-invoked skills)
+  + skills section (only model-visible, non-invoked skills)
+  + capability-grounding guidance (final for user-originated runs)
 ```
 
 ## Focus-mode prompts (`src/lib/prompts/simplifiedAgent/`)
@@ -31,6 +32,7 @@ Read-only `Prompt` objects, selectable as personas by `id` (resolved in-memory, 
 - **Memory** — `buildMemorySection(scoredMemories)` (`src/lib/prompts/memory/memoryContext.ts`, ~800-token cap) + inline tool instructions (call `save_memory`/`delete_memory`/`list_memories` only on explicit request). Classification/extraction prompts in `src/lib/prompts/memory/`.
 - **Artifacts** (`artifactGuidance.ts`) — gated on `artifactsEnabled` (`!isPrivate`; never in `chat`/`firefoxAI`): static `## Artifacts` guidance + `buildArtifactRoster(artifacts, now)` — one entry per artifact (id, title, version, relative time; workspace-owned entries carry a read-before-edit warning). The agent self-fetches the roster via `listChatRoster(scope)` at prompt-build time (chat-created ∪ user-mentioned, scanned from persisted messages — can't drift from the transcript). `now` is a parameter for unit-testability.
 - **Skills** — `buildSkillsPromptSection(modelVisibleSkills)` (`src/lib/skills/promptSection.ts`): `## Available Skills` with `read_skill` instructions; excludes `disableModelInvocation` and already-invoked skills.
+- **Capability grounding** — `buildCapabilityDocsGuidance()` (`src/lib/prompts/simplifiedAgent/capabilityDocsGuidance.ts`) is appended after persona, memory, workspace, and skills. It requires `search_yaawc_docs` for YAAWC claims, exact section citations, concise broad answers, fail-closed uncertainty, and safe coarse status. It is not appended to custom deep-research prompts.
 - **Methodology** — `methodologyInstructions` (resolved from `selectedMethodologyId` via `getMethodologyInstructions()`) overrides the Research Strategy section in webSearch/localResearch. Built-ins in `methodologyTemplates.ts`; custom in DB (`type='methodology'`).
 
 ## Personas
@@ -44,4 +46,4 @@ Read-only `Prompt` objects, selectable as personas by `id` (resolved in-memory, 
 - Personalization/memory context → their builders above
 - New focus mode → see `yaawc-adding-features`
 
-Specs assert prompt composition through the `test-prompt-echo` model, which answers with the system prompt it was given.
+Specs assert prompt composition through the `test-prompt-echo` model, which answers with the system prompt it was given. The capability variants in `e2e/CLAUDE.md` exercise the real docs-tool loop and source/citation path.

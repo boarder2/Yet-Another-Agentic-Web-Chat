@@ -15,6 +15,7 @@ import {
   getCoreTools,
   getLocalResearchTools,
   isCodeExecutionEnabled,
+  yaawcDocsTool,
 } from '@/lib/tools/agents';
 import { ARTIFACT_TOOL_NAMES } from '@/lib/tools/agents/artifactTools';
 // import {
@@ -50,6 +51,10 @@ import { resolveSkillsForChat } from '@/lib/skills/resolve';
 import { buildSkillsPromptSection } from '@/lib/skills/promptSection';
 import { setRunContext, cleanupSkillsForRun } from '@/lib/skills/runStore';
 import type { Skill } from '@/lib/skills/types';
+import { buildCapabilityDocsGuidance } from '@/lib/prompts/simplifiedAgent/capabilityDocsGuidance';
+import { getImageGenerationConfig } from '@/lib/settings/server';
+import { getResolvedSearchCapabilities } from '@/lib/search/providers';
+import type { CapabilityRuntimeFacts } from '@/lib/capabilities/availability';
 import { toolContextSchema, type ToolContext } from '@/lib/tools/toolContext';
 import {
   normalizeUsageMetadata,
@@ -262,6 +267,60 @@ export class SimplifiedAgent {
     this.systemModelRef = systemModelRef;
   }
 
+  /** Build only the local, non-sensitive facts the capability tool may report. */
+  private getCapabilityFacts(
+    focusMode: string,
+    fileIds: string[],
+  ): CapabilityRuntimeFacts {
+    let searchCapabilities:
+      CapabilityRuntimeFacts['searchCapabilities'] | undefined;
+    try {
+      searchCapabilities = getResolvedSearchCapabilities(this.isPrivate);
+    } catch {
+      // Settings/provider resolution is local state, but a degraded DB should
+      // produce an unknown status rather than breaking an otherwise valid run.
+      searchCapabilities = undefined;
+    }
+
+    let imageGenerationConfigured: boolean | undefined;
+    let imageGenerationEnabled: boolean | undefined;
+    let codeExecutionEnabled: boolean | undefined;
+    try {
+      codeExecutionEnabled = isCodeExecutionEnabled();
+    } catch {
+      codeExecutionEnabled = undefined;
+    }
+    try {
+      const imageConfig = getImageGenerationConfig();
+      imageGenerationConfigured = Boolean(imageConfig?.model);
+      imageGenerationEnabled = Boolean(
+        imageConfig?.enabled && imageConfig.model,
+      );
+    } catch {
+      imageGenerationConfigured = undefined;
+      imageGenerationEnabled = undefined;
+    }
+
+    return {
+      focusMode,
+      isPrivate: this.isPrivate,
+      hasFiles: fileIds.length > 0,
+      hasWorkspace: Boolean(this.workspaceId),
+      memoryEnabled: this.memoryEnabled,
+      interactiveSession: this.interactiveSession,
+      hasDurableChat: Boolean(this.chatId && this.aiMessageId),
+      hasPersonalization: Boolean(this.userLocation || this.userProfile),
+      // getCodeExecutionConfig() validates the local Docker image/host before
+      // this helper is reached; no image, host, or credential value is exposed.
+      codeExecutionConfigured:
+        codeExecutionEnabled === undefined ? undefined : true,
+      codeExecutionEnabled,
+      imageGenerationConfigured,
+      imageGenerationEnabled,
+      searchCapabilities,
+    };
+  }
+
   /** Returns serializable config state for DB persistence (for resume after restart). */
   public buildConfigSnapshot(
     focusMode: string,
@@ -317,13 +376,18 @@ export class SimplifiedAgent {
       this.resolvedSkills = [];
     }
 
-    const tools = customTools
-      ? customTools
-      : firefoxAIDetected
-        ? []
+    // Firefox page-selection turns keep external and action tools disabled, but
+    // must retain the local docs lookup so YAAWC claims remain grounded. Custom
+    // deep-research prompts keep their explicit tool whitelist unchanged.
+    const firefoxDocsOnly = Boolean(firefoxAIDetected && !customSystemPrompt);
+    const tools = firefoxDocsOnly
+      ? [yaawcDocsTool]
+      : customTools
+        ? customTools
         : this.getToolsForFocusMode(focusMode, fileIds);
 
-    const allTools = extraTools ? [...tools, ...extraTools] : tools;
+    const allTools =
+      firefoxDocsOnly || !extraTools ? tools : [...tools, ...extraTools];
 
     // Cache tool names for usage attribution heuristics
     this.currentToolNames = allTools.map((t) => t.name.toLowerCase());
@@ -360,7 +424,7 @@ export class SimplifiedAgent {
       );
       if (firefoxAIDetected) {
         console.log(
-          'SimplifiedAgent: Firefox AI prompt detected, tools will be disabled for this turn.',
+          'SimplifiedAgent: Firefox AI prompt detected, external/action tools will be disabled; capability docs lookup remains available.',
         );
       }
       console.log(
@@ -551,6 +615,11 @@ export class SimplifiedAgent {
       basePrompt += '\n\n' + buildSkillsPromptSection(modelVisibleSkills);
     }
 
+    // This is deliberately the final prompt layer so persona, memory, workspace,
+    // and skill instructions cannot weaken product-claim grounding. Firefox AI
+    // keeps external/action tools disabled, but can use the local docs lookup.
+    basePrompt += '\n\n' + buildCapabilityDocsGuidance();
+
     return basePrompt;
   }
 
@@ -683,6 +752,7 @@ export class SimplifiedAgent {
           tracker: this.tracker,
           chatRecorder: this.chatRecorder,
           systemRecorder: this.systemRecorder,
+          capabilityFacts: this.getCapabilityFacts(focusMode, fileIds),
         },
         recursionLimit: 150, // Increased to handle complex multi-task research with todo_list
         signal: this.retrievalSignal,
@@ -1721,6 +1791,7 @@ ${url ? `<url>${url}</url>` : ''}
           tracker: this.tracker,
           chatRecorder: this.chatRecorder,
           systemRecorder: this.systemRecorder,
+          capabilityFacts: this.getCapabilityFacts(focusMode, fileIds),
         },
         recursionLimit: 150,
         signal: this.retrievalSignal,

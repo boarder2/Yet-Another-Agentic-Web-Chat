@@ -11,6 +11,7 @@ import {
   History,
   Briefcase,
   MessageSquare,
+  BookOpen,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useSelectedLayoutSegments } from 'next/navigation';
@@ -256,6 +257,14 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
           <div className="flex-1 flex items-end justify-center w-full">
             <div className="flex flex-col items-center gap-y-3 w-full -mb-2">
               <WidthToggle />
+              <IconButton
+                href="/docs/capabilities"
+                icon={BookOpen}
+                iconSize={SIDEBAR_ICON_SIZE}
+                label="Help & capabilities"
+                tone={segments.includes('docs') ? 'active' : 'default'}
+                className="w-full rounded-surface py-2"
+              />
               <IconButton
                 icon={Settings}
                 iconSize={SIDEBAR_ICON_SIZE}

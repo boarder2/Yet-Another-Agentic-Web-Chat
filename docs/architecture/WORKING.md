@@ -1,26 +1,25 @@
-# How does YAAWC work?
+# How YAAWC works
 
-Curious about how YAAWC works? Don't worry, we'll cover it here. Before we begin, make sure you've read about the architecture of YAAWC to ensure you understand what it's made up of. Haven't read it? You can read it [here](https://github.com/boarder2/Yet-Another-Agentic-Web-Chat/tree/master/docs/architecture/README.md).
+This document is an implementation walkthrough. Read the [capability corpus](../capabilities/README.md) for user-facing behavior and prerequisites.
 
-We'll understand how YAAWC works by taking an example of a scenario where a user asks: "How does an A.C. work?". We'll break down the process into steps to make it easier to understand. The steps are as follows:
+## From request to answer
 
-1. The message is sent to the `/api/chat` route. The route resolves the selected chat model, system model, and embedding model from the request body and configured providers.
-2. The route creates a `SimplifiedAgent` — a LangGraph React Agent — and passes the `focusMode` (e.g., `webSearch`, `localResearch`, `chat`). The agent selects tools and prompts based on the focus mode:
-   - **Web Search mode**: `web_search`, `url_fetch`, `image_search`, `image_analysis`, `pdf_loader`, `deep_research`, `todo_list`
-   - **Local Research mode**: `file_search`
-   - **Chat mode**: No tools (the agent responds from its training data)
-3. The agent autonomously reasons about the query and decides which tools to invoke. For a factual question like "How does an A.C. work?", it would typically call the `web_search` tool, which queries SearXNG for results.
-4. Search results are returned to the agent, which may then call `url_fetch` to fetch and read specific web pages for deeper content, or invoke additional tools as needed.
-5. The agent synthesizes all gathered information and streams a response with cited sources back to the user.
+1. The `/api/chat` route receives the message, focus mode, selected Chat/System models, attached file IDs, prompt selections, and run options. It resolves models and embeddings from configured providers and loads the chat's authoritative workspace context.
+2. The route reads ambient settings such as memory and personalization, loads applicable workspace instructions and skills, and creates a `SimplifiedAgent` with run-scoped IDs, abort controls, token tracking, and an event emitter.
+3. `SimplifiedAgent` builds the focus-mode toolset and appends context-specific workspace and MCP tools. Web Search uses the broad research set, Local Research uses file search plus core tools, and Chat uses the core conversational set. Interactive tools are available only where the run has an interactive surface.
+4. The LangGraph agent chooses tools and streams model/tool events. Retrieval tools add `Document` values to `relevantDocuments`; source IDs are assigned as documents enter the turn so final citations can index the same ordered set.
+5. The run host persists assistant content, sources, model usage, tool widgets, approvals, and reconnectable run events. The client folds the wire events through its reducer and renders the answer, source cards, tool calls, subagent activity, panels, and approval controls.
 
-## How are the answers cited?
+## Focus and child runs
 
-The LLMs are prompted to cite sources using numbered references (e.g., `[1]`, `[2]`). The prompt templates instruct the agent to cite inline, and the UI renders these as clickable source links.
+A deep-research call creates an isolated `SubagentExecutor` with a fixed web-research whitelist and no recursive deep research. An Agent Panel runs two to four restricted `SimplifiedAgent` executors concurrently, merges and deduplicates their documents, and gives the Chat model a synthesis context. Neither child surface receives the parent's approval-gated mutation tools.
 
-## Deep Research
+Manual workflows and scheduled tasks construct agents from their stored workflow configuration. They intentionally do not inherit the caller's workspace, MCP, memory, or panel state. Scheduled runs persist headlessly and cannot wait for interactive approvals.
 
-For complex multi-part questions, the agent can invoke the `deep_research` tool. This launches a subagent that breaks the question into sub-tasks, researches each one independently, and returns a comprehensive synthesis. Deep research subagent events are streamed to the UI in real-time.
+## Sources and citations
 
-## Image Search
+Search tools return LangChain `Document` objects with title, URL, processing, and query metadata. URL retrieval may return direct content or a System-model summary; file search returns ranked excerpts with file metadata. The final response cites documents by one-based `[n]` markers, and the UI resolves each marker against the assistant message's source array.
 
-The agent can invoke `image_search` to find images matching the query. The `image_analysis` tool allows the agent to analyze images attached to the conversation using multimodal LLM capabilities.
+## Other retrieval paths
+
+Image and video panels use the resolved search capabilities after an answer. Image analysis and PDF/transcript tools add their returned documents to the same retrieval context. Workspace files use content-addressed blobs and compare-and-swap writes so concurrent edits cannot silently replace one another. Artifacts use immutable message-anchored versions and are scoped to a chat or workspace.

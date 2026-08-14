@@ -22,6 +22,16 @@ const STRUCTURED_TOOL_ARGS: Record<string, Record<string, unknown>> = {
 /** Leading text of the chart model's answer; e2e asserts on it. */
 export const CHART_ANSWER_PREFIX = 'Charted the deterministic findings';
 
+/** Fixed answers used by the capability-document e2e model variants. */
+export const CAPABILITY_DOCS_GROUNDED_ANSWER =
+  'YAAWC capability claims are grounded in the bundled documentation [1].';
+export const CAPABILITY_DOCS_STATUS_ANSWER =
+  'Private sessions are available for this deterministic run.';
+export const CAPABILITY_DOCS_BROAD_ANSWER =
+  'YAAWC provides chat, research, workspaces, automation, and agent capabilities [1].';
+export const CAPABILITY_DOCS_NO_MATCH_ANSWER =
+  'I cannot verify that YAAWC capability from the current documentation.';
+
 /** A valid local 1×1 PNG used by the test-only image-generation backend. */
 export const TEST_IMAGE_GENERATION_FIXTURE = {
   mimeType: 'image/png',
@@ -292,6 +302,34 @@ class FakeChatModel extends BaseChatModel {
       return;
     }
 
+    // Capability-document variants exercise the real search_yaawc_docs loop.
+    // The search variant normally asks for focus modes, but forwards hostile or
+    // oversized user text so API specs can prove the tool's bounds and fail-closed behavior.
+    if (
+      this.modelName.startsWith('test-docs-') &&
+      !hasToolResult &&
+      !lastHumanText(messages).includes('short, concise title')
+    ) {
+      const userText = lastHumanText(messages);
+      const hostileInput =
+        userText.length > 500 ||
+        userText.includes('../') ||
+        userText.includes('..\\') ||
+        userText.includes('\u0000');
+      const args = this.modelName.includes('status')
+        ? { status: 'private sessions' }
+        : this.modelName.includes('broad')
+          ? { query: '', maxResults: 5 }
+          : this.modelName.includes('no-match')
+            ? { query: 'zzzxylophone qwerty-unlisted' }
+            : { query: hostileInput ? userText : 'focus modes' };
+      yield capabilityDocsToolChunk(
+        args,
+        `test-${this.modelName.replace(/[^a-z0-9-]/gi, '-')}-call-1`,
+      );
+      return;
+    }
+
     if (this.modelName.includes('tool-multi') && toolResultCount < 2) {
       const step = toolResultCount + 1;
       yield new ChatGenerationChunk({
@@ -393,6 +431,20 @@ class FakeChatModel extends BaseChatModel {
       // Echo what read_artifact returned so specs can assert on the version
       // and content it resolved, or on its error text.
       answer = lastToolResultText(messages);
+    } else if (this.modelName.includes('docs-search')) {
+      answer = isSuccessfulCapabilityDocsResult(messages)
+        ? CAPABILITY_DOCS_GROUNDED_ANSWER
+        : CAPABILITY_DOCS_NO_MATCH_ANSWER;
+    } else if (this.modelName.includes('docs-status')) {
+      answer = isCapabilityDocsStatusResult(messages)
+        ? CAPABILITY_DOCS_STATUS_ANSWER
+        : CAPABILITY_DOCS_NO_MATCH_ANSWER;
+    } else if (this.modelName.includes('docs-broad')) {
+      answer = isSuccessfulCapabilityDocsResult(messages)
+        ? CAPABILITY_DOCS_BROAD_ANSWER
+        : CAPABILITY_DOCS_NO_MATCH_ANSWER;
+    } else if (this.modelName.includes('docs-no-match')) {
+      answer = CAPABILITY_DOCS_NO_MATCH_ANSWER;
     } else if (this.modelName.includes('artifact')) {
       answer = 'The document is ready beside the conversation.';
     } else if (this.modelName.includes('ask-user')) {
@@ -505,6 +557,39 @@ function hashVector(text: string, dims: number): number[] {
   const norm = Math.sqrt(vec.reduce((s, v) => s + v * v, 0)) || 1;
   for (let i = 0; i < dims; i++) vec[i] /= norm;
   return vec;
+}
+
+function capabilityDocsToolChunk(
+  args: Record<string, unknown>,
+  id: string,
+): ChatGenerationChunk {
+  return new ChatGenerationChunk({
+    text: '',
+    message: new AIMessageChunk({
+      content: '',
+      tool_calls: [
+        {
+          name: 'search_yaawc_docs',
+          args,
+          id,
+          type: 'tool_call',
+        },
+      ],
+      usage_metadata: {
+        input_tokens: 12,
+        output_tokens: 4,
+        total_tokens: 16,
+      },
+    }),
+  });
+}
+
+function isSuccessfulCapabilityDocsResult(messages: BaseMessage[]): boolean {
+  return lastToolResultText(messages).includes('"kind":"ok"');
+}
+
+function isCapabilityDocsStatusResult(messages: BaseMessage[]): boolean {
+  return lastToolResultText(messages).includes('"kind":"status"');
 }
 
 /** One scripted artifact tool call, with the usage every other branch reports. */
@@ -698,6 +783,30 @@ export async function loadTestChatModels(): Promise<Record<string, ChatModel>> {
       displayName: 'Test (echo system prompt)',
       model: new FakeChatModel({
         modelName: 'test-prompt-echo',
+      }) as unknown as BaseChatModel,
+    },
+    'test-docs-search': {
+      displayName: 'Test (YAAWC docs search)',
+      model: new FakeChatModel({
+        modelName: 'test-docs-search',
+      }) as unknown as BaseChatModel,
+    },
+    'test-docs-status': {
+      displayName: 'Test (YAAWC docs status)',
+      model: new FakeChatModel({
+        modelName: 'test-docs-status',
+      }) as unknown as BaseChatModel,
+    },
+    'test-docs-broad': {
+      displayName: 'Test (YAAWC docs overview)',
+      model: new FakeChatModel({
+        modelName: 'test-docs-broad',
+      }) as unknown as BaseChatModel,
+    },
+    'test-docs-no-match': {
+      displayName: 'Test (YAAWC docs no match)',
+      model: new FakeChatModel({
+        modelName: 'test-docs-no-match',
       }) as unknown as BaseChatModel,
     },
     'test-notitle': {

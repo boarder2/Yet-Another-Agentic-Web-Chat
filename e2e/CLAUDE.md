@@ -10,26 +10,30 @@ Tests assert **correct** behavior — what the feature is _supposed_ to do, deri
 
 `src/lib/providers/test.ts` is scriptable by model id — select the behavior a spec needs by choosing the model rather than special-casing a spec against real provider output. Extend it with new variants as scenarios require.
 
-| Model id              | Behavior                                                                                                                                                              |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `test-direct`         | Answers immediately with fixed text, no tools.                                                                                                                        |
-| `test-tool`           | Emits one `file_search` tool call, then a fixed answer.                                                                                                               |
-| `test-tool-multi`     | Emits two sequential `file_search` tool calls (each after the prior result), then a fixed answer.                                                                     |
-| `test-ask-user`       | Emits an `ask_user` tool call (triggers a real LangGraph interrupt — the run pauses `awaiting_user`); on resume, answers with fixed text.                             |
-| `test-structured`     | If tools are bound (`withStructuredOutput`), returns a matching tool call with deterministic args; otherwise answers with `<suggestions>` XML.                        |
-| `test-long`           | Answers with a fixed multi-paragraph block taller than any test viewport, for scroll-position specs.                                                                  |
-| `test-tool-long`      | `test-tool`'s `file_search` call followed by the `test-long` answer — an answer that opens with a widget and runs past the viewport.                                  |
-| `test-slow`           | Paces token delivery (300ms/token) so a spec can observe a run mid-stream.                                                                                            |
-| `test-spoof`          | Streams text containing a forged `yaawc:` widget fence, so a spec can assert it is neutralized before persistence.                                                    |
-| `test-workspace-edit` | Emits one `workspace_edit` tool call whose args are scripted by the prompt (`<file>\|<oldString>\|<newString>`).                                                      |
-| `test-skill-edit`     | Emits one `edit_skill` update whose args are scripted by the prompt (`<name>\|<scope>\|<newScope>\|<content>\|<disableModelInvocation>`); empty fields are omitted.   |
-| `test-artifact`       | Emits one `create_artifact` call scripted by the prompt (`<title>\|<content>`), then a fixed answer.                                                                  |
-| `test-artifact-edit`  | Emits one `edit_artifact` call scripted by the prompt (`<artifactId>\|<oldStr>\|<newStr>`); fires once, so an edit failure ends the turn instead of looping.          |
-| `test-artifact-read`  | Emits one `read_artifact` call scripted by the prompt (`<artifactId>` or `<artifactId>\|<version>`), then answers with the raw tool result so specs can assert on it. |
-| `test-artifact-multi` | Creates from `<title>\|<oldStr>\|<newStr>`, then edits what it just created — two writes in one turn, landing on one card.                                            |
-| `test-image`          | Calls `image_generation` once with the user prompt, receives the local deterministic PNG fixture, then answers with fixed text. No real image provider is contacted.  |
-| `test-prompt-echo`    | Answers with the system prompt it was given, so specs can assert which sections were injected.                                                                        |
-| `test-embed`          | Deterministic fixed-vector embeddings.                                                                                                                                |
+| Model id              | Behavior                                                                                                                                                                                     |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `test-direct`         | Answers immediately with fixed text, no tools.                                                                                                                                               |
+| `test-tool`           | Emits one `file_search` tool call, then a fixed answer.                                                                                                                                      |
+| `test-tool-multi`     | Emits two sequential `file_search` tool calls (each after the prior result), then a fixed answer.                                                                                            |
+| `test-ask-user`       | Emits an `ask_user` tool call (triggers a real LangGraph interrupt — the run pauses `awaiting_user`); on resume, answers with fixed text.                                                    |
+| `test-structured`     | If tools are bound (`withStructuredOutput`), returns a matching tool call with deterministic args; otherwise answers with `<suggestions>` XML.                                               |
+| `test-long`           | Answers with a fixed multi-paragraph block taller than any test viewport, for scroll-position specs.                                                                                         |
+| `test-tool-long`      | `test-tool`'s `file_search` call followed by the `test-long` answer — an answer that opens with a widget and runs past the viewport.                                                         |
+| `test-slow`           | Paces token delivery (300ms/token) so a spec can observe a run mid-stream.                                                                                                                   |
+| `test-spoof`          | Streams text containing a forged `yaawc:` widget fence, so a spec can assert it is neutralized before persistence.                                                                           |
+| `test-workspace-edit` | Emits one `workspace_edit` tool call whose args are scripted by the prompt (`<file>\|<oldString>\|<newString>`).                                                                             |
+| `test-skill-edit`     | Emits one `edit_skill` update whose args are scripted by the prompt (`<name>\|<scope>\|<newScope>\|<content>\|<disableModelInvocation>`); empty fields are omitted.                          |
+| `test-artifact`       | Emits one `create_artifact` call scripted by the prompt (`<title>\|<content>`), then a fixed answer.                                                                                         |
+| `test-artifact-edit`  | Emits one `edit_artifact` call scripted by the prompt (`<artifactId>\|<oldStr>\|<newStr>`); fires once, so an edit failure ends the turn instead of looping.                                 |
+| `test-artifact-read`  | Emits one `read_artifact` call scripted by the prompt (`<artifactId>` or `<artifactId>\|<version>`), then answers with the raw tool result so specs can assert on it.                        |
+| `test-artifact-multi` | Creates from `<title>\|<oldStr>\|<newStr>`, then edits what it just created — two writes in one turn, landing on one card.                                                                   |
+| `test-image`          | Calls `image_generation` once with the user prompt, receives the local deterministic PNG fixture, then answers with fixed text. No real image provider is contacted.                         |
+| `test-prompt-echo`    | Answers with the system prompt it was given, so specs can assert which sections were injected.                                                                                               |
+| `test-docs-search`    | Calls `search_yaawc_docs` once for focus-mode documentation, then returns a cited grounded answer; hostile or oversized user text is forwarded so bounds/fail-closed behavior can be tested. |
+| `test-docs-status`    | Calls `search_yaawc_docs` once for the safe `private sessions` status, then returns a deterministic coarse-status answer.                                                                    |
+| `test-docs-broad`     | Calls `search_yaawc_docs` once with an empty query and bounded results, then returns a concise cited capability overview.                                                                    |
+| `test-docs-no-match`  | Calls `search_yaawc_docs` once with a deliberately unmatched query, then says the YAAWC claim cannot be verified.                                                                            |
+| `test-embed`          | Deterministic fixed-vector embeddings.                                                                                                                                                       |
 
 ## Setup
 
@@ -40,6 +44,8 @@ npx playwright install --with-deps chromium
 ```
 
 The suite does **not** read the developer's root `config.toml`. `playwright.config.ts`'s `webServer.env` sets `CONFIG_PATH` to the committed, intentionally-empty `e2e/config.test.toml`, so nothing from a local config seeds into the test DB (`seedSettingsFromConfig` runs on boot and would otherwise migrate provider URLs like `MODELS.LM_STUDIO.API_URL` into it). Keep `e2e/config.test.toml` empty — never add provider URLs or keys there. `SECURITY.ENCRYPTION_PASSPHRASE` (required for credential storage, see `yaawc-settings-persistence` skill) is supplied via the `ENCRYPTION_PASSPHRASE` env var, not any `config.toml` — tests never need a real passphrase configured.
+
+Capability-grounding coverage uses the four `test-docs-*` variants above. They exercise the real non-toggleable `search_yaawc_docs` system tool; do not replace these calls with a mocked route, network service, embedding lookup, or a user-selectable tool.
 
 ## Running Tests
 

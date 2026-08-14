@@ -67,10 +67,12 @@ export type SettingsPanelVariant = 'page' | 'modal';
 export default function SettingsPanel({
   activeSection,
   onSelectSection,
+  onNavigateToHelp,
   variant = 'page',
 }: {
   activeSection: SectionKey;
   onSelectSection: (key: SectionKey) => void;
+  onNavigateToHelp?: () => void;
   variant?: SettingsPanelVariant;
 }) {
   const [config, setConfig] = useState<SettingsType | null>(null);
@@ -740,6 +742,7 @@ export default function SettingsPanel({
             <MobileSettingsNav
               activeSection={activeSection}
               onSelect={onSelectSection}
+              onNavigateToHelp={onNavigateToHelp}
             />
 
             <div

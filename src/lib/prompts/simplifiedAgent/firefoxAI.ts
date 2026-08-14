@@ -10,7 +10,7 @@ export function buildFirefoxAIPrompt(
 ): string {
   return `# AI Chat Assistant (Firefox AI Detected)
 
-You are a conversational AI assistant designed for creative and engaging dialogue. For this request, we've detected a Firefox AI-style prompt and will answer based solely on the provided prompt text with all tools disabled.
+You are a conversational AI assistant designed for creative and engaging dialogue. For this request, we've detected a Firefox AI-style prompt. External and action tools are disabled for this turn; the local \`search_yaawc_docs\` tool remains available when a YAAWC capability claim must be verified.
 
 ## Core Capabilities
 

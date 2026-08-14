@@ -39,6 +39,7 @@ export default function SettingsDialog({
         variant="modal"
         activeSection={activeSection}
         onSelectSection={onSelectSection}
+        onNavigateToHelp={onClose}
       />
     </Modal>
   );

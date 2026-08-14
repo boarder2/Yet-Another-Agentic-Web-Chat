@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import {
   createCapabilityCatalog,
@@ -64,13 +65,24 @@ describe('capability docs catalog', () => {
     );
   });
 
-  it('includes the Markdown corpus in standalone output tracing', async () => {
-    const config = (await import('../../../next.config.mjs')).default as {
-      outputFileTracingIncludes?: Record<string, string[]>;
-    };
+  it('includes the Markdown corpus in standalone and Docker builds', async () => {
+    const [config, dockerfile] = await Promise.all([
+      import('../../../next.config.mjs').then(
+        (module) =>
+          module.default as {
+            outputFileTracingIncludes?: Record<string, string[]>;
+          },
+      ),
+      readFile(new URL('../../../app.dockerfile', import.meta.url), 'utf8'),
+    ]);
 
     expect(config.outputFileTracingIncludes?.['**']).toContain(
       './docs/capabilities/**/*.md',
+    );
+    const corpusCopy = 'COPY docs/capabilities ./docs/capabilities';
+    expect(dockerfile).toContain(corpusCopy);
+    expect(dockerfile.indexOf(corpusCopy)).toBeLessThan(
+      dockerfile.indexOf('RUN npm run build'),
     );
   });
 

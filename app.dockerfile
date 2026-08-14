@@ -13,6 +13,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 COPY tsconfig.json next.config.mjs postcss.config.js drizzle.config.ts tailwind.config.ts eslint.config.mjs ./
 COPY drizzle ./drizzle
+COPY docs/capabilities ./docs/capabilities
 COPY src ./src
 COPY public ./public
 

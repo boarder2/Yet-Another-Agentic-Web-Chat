@@ -4,6 +4,7 @@ import SettingsSection from '../components/SettingsSection';
 import { Field } from '@/components/ui/Field';
 import InputComponent from '../components/InputComponent';
 import Select from '@/components/ui/Select';
+import Badge, { type BadgeTone } from '@/components/ui/Badge';
 import { SettingsType } from '../types';
 import { useLocalStorageString } from '@/lib/hooks/useLocalStorage';
 import { useRefreshModels } from '@/lib/hooks/api/useModels';
@@ -132,10 +133,10 @@ function getSourceForCapability(
   return 'unavailable';
 }
 
-const BADGE_STYLES: Record<string, string> = {
-  primary: 'bg-accent/20 text-accent',
-  fallback: 'bg-warning-soft text-warning',
-  unavailable: 'bg-danger-soft text-danger',
+const BADGE_TONES: Record<string, BadgeTone> = {
+  primary: 'accent',
+  fallback: 'warning',
+  unavailable: 'danger',
 };
 
 export default function SearchProvidersSection({
@@ -291,21 +292,13 @@ export default function SearchProvidersSection({
                   <tr key={key} className="border-t border-surface-2">
                     <td className="px-3 py-2">{label}</td>
                     <td className="px-3 py-2">
-                      <span
-                        className={`px-2 py-0.5 rounded-pill ${BADGE_STYLES[regular]}`}
-                      >
-                        {regular}
-                      </span>
+                      <Badge tone={BADGE_TONES[regular]}>{regular}</Badge>
                     </td>
                     <td className="px-3 py-2">
                       {priv === null ? (
                         <span className="text-fg-subtle">not applicable</span>
                       ) : (
-                        <span
-                          className={`px-2 py-0.5 rounded-pill ${BADGE_STYLES[priv]}`}
-                        >
-                          {priv}
-                        </span>
+                        <Badge tone={BADGE_TONES[priv]}>{priv}</Badge>
                       )}
                     </td>
                   </tr>

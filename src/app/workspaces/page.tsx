@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import PageHeader from '@/components/PageHeader';
 import { Button } from '@/components/ui/Button';
+import { FilterChip } from '@/components/ui/FilterChip';
 import { ListEmptyState, ListLoading } from '@/components/ui/List';
 import Modal from '@/components/ui/Modal';
 import WorkspaceIcon from '@/components/Workspaces/WorkspaceIcon';
@@ -147,19 +148,14 @@ const WorkspacesPage = () => {
         }
         actions={
           <>
-            <button
-              type="button"
+            <FilterChip
+              selected={showArchived}
+              size="md"
               onClick={() => setShowArchived((v) => !v)}
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-surface border border-surface-2 transition-colors duration-150 focus-border-neutral',
-                showArchived
-                  ? 'bg-accent/20 text-accent'
-                  : 'bg-surface hover:bg-surface-2',
-              )}
             >
               <Archive size={14} />
               {showArchived ? 'Active' : 'Archived'}
-            </button>
+            </FilterChip>
             <Button
               variant="primary"
               icon={Plus}

@@ -1,10 +1,12 @@
 'use client';
 
 import AppSwitch from '@/components/ui/AppSwitch';
+import { Button } from '@/components/ui/Button';
 import { ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react';
 import { PROVIDER_METADATA } from '@/lib/providers/metadata';
 import SettingsSection from '../components/SettingsSection';
 import { ListEmptyState } from '@/components/ui/List';
+import Badge from '@/components/ui/Badge';
 
 export default function ModelVisibilitySection({
   allModels,
@@ -98,9 +100,7 @@ export default function ModelVisibilitySection({
                     <div className="flex items-center space-x-2 text-xs">
                       <span>{totalCount - hiddenCount} visible</span>
                       {hiddenCount > 0 && (
-                        <span className="px-2 py-1 bg-danger-soft text-danger rounded-control">
-                          {hiddenCount} hidden
-                        </span>
+                        <Badge tone="danger">{hiddenCount} hidden</Badge>
                       )}
                     </div>
                   </button>
@@ -108,30 +108,30 @@ export default function ModelVisibilitySection({
                   {isExpanded && (
                     <div className="p-3 bg-surface-2 border-t border-surface-2">
                       <div className="flex justify-end mb-3 space-x-2">
-                        <button
-                          type="button"
+                        <Button
+                          variant="successSoft"
+                          size="lg"
+                          icon={Eye}
                           onClick={(e) => {
                             e.stopPropagation();
                             onToggleProvider(models, true);
                           }}
-                          className="px-3 py-1.5 text-xs rounded-control bg-success-soft hover:bg-success-soft text-success flex items-center gap-1.5 transition-colors duration-150 border border-transparent focus-border-contrast"
                           title="Show all models in this provider"
                         >
-                          <Eye size={14} />
                           Show All
-                        </button>
-                        <button
-                          type="button"
+                        </Button>
+                        <Button
+                          variant="dangerSoft"
+                          size="lg"
+                          icon={EyeOff}
                           onClick={(e) => {
                             e.stopPropagation();
                             onToggleProvider(models, false);
                           }}
-                          className="px-3 py-1.5 text-xs rounded-control bg-danger-soft hover:bg-danger-soft text-danger flex items-center gap-1.5 transition-colors duration-150 border border-transparent focus-border-contrast"
                           title="Hide all models in this provider"
                         >
-                          <EyeOff size={14} />
                           Hide All
-                        </button>
+                        </Button>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                         {modelEntries.map(([modelKey, model]) => (

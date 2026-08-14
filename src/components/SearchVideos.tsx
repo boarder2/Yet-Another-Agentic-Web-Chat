@@ -161,7 +161,8 @@ const Searchvideos = ({
             key={`video-results-${messageId}`}
           >
             {videos.slice(0, displayLimit).map((video, i) => (
-              <div
+              <button
+                type="button"
                 onClick={() => {
                   setOpen(true);
                   setSlides([
@@ -170,7 +171,8 @@ const Searchvideos = ({
                     ...slides.slice(i + 1),
                   ]);
                 }}
-                className="relative transition-transform duration-200 active:scale-95 hover:scale-[1.02] cursor-pointer"
+                aria-label={`Open video ${video.title}`}
+                className="relative cursor-pointer border border-transparent p-0 transition-transform duration-200 active:scale-95 hover:scale-[1.02] focus-border-neutral"
                 key={i}
               >
                 <img
@@ -178,11 +180,11 @@ const Searchvideos = ({
                   alt={video.title}
                   className="relative h-full w-full aspect-video object-cover rounded-surface"
                 />
-                <div className="absolute bg-bg/70 text-fg-muted px-2 py-1 flex flex-row items-center space-x-1 bottom-1 right-1 rounded-control">
+                <div className="absolute bottom-1 right-1 flex flex-row items-center space-x-1 rounded-control bg-bg/70 text-fg-muted px-2 py-1">
                   <PlayCircle size={15} />
                   <p className="text-xs">Video</p>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
           {videos.length > displayLimit && (

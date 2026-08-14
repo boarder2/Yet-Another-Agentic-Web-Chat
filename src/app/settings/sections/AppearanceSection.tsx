@@ -16,7 +16,7 @@ import { Field } from '@/components/ui/Field';
 import Modal from '@/components/ui/Modal';
 import Select from '@/components/ui/Select';
 import Textarea from '@/components/ui/Textarea';
-import AppSwitch from '@/components/ui/AppSwitch';
+import SettingToggleRow from '@/components/ui/SettingToggleRow';
 import { CodeBlock } from '@/components/CodeBlock';
 import { cn } from '@/lib/utils';
 import {
@@ -159,7 +159,7 @@ function VariantChip({
       {children}
       <span
         title={title}
-        className="flex min-w-0 items-center gap-0.5 rounded-control border border-transparent bg-surface px-1.5 py-0.5 text-caption text-fg-muted peer-focus-visible:border-accent"
+        className="flex min-w-0 items-center gap-0.5 rounded-control border border-transparent bg-surface px-1.5 py-0.5 text-xs text-fg-muted peer-focus-visible:border-accent"
       >
         <span className="truncate">{label}</span>
         <ChevronDown size={11} className="shrink-0" />
@@ -476,15 +476,13 @@ export default function AppearanceSection() {
           </div>
         )}
 
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-medium">Dark mode</p>
-          <AppSwitch
-            aria-label="Dark mode"
-            checked={active.mode === 'dark'}
-            disabled={!isCustom}
-            onChange={(on) => handleEdit({ mode: on ? 'dark' : 'light' })}
-          />
-        </div>
+        <SettingToggleRow
+          label="Dark mode"
+          checked={active.mode === 'dark'}
+          disabled={!isCustom}
+          ariaLabel="Dark mode"
+          onChange={(on) => handleEdit({ mode: on ? 'dark' : 'light' })}
+        />
 
         <div className="grid gap-3 sm:grid-cols-2">
           {SEED_KEYS.map((key) => {

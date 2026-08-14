@@ -1,4 +1,4 @@
-import { Wrench, ChevronDown, CheckSquare, Square } from 'lucide-react';
+import { Wrench, ChevronDown } from 'lucide-react';
 import {
   Popover,
   PopoverButton,
@@ -8,6 +8,7 @@ import {
 import { Fragment, useEffect } from 'react';
 import { useTools } from '@/lib/hooks/api/useTools';
 import ComposerActionButton from '@/components/MessageInputActions/ComposerActionButton';
+import ComposerOptionRow from '@/components/MessageInputActions/ComposerOptionRow';
 import ComposerPopover from '@/components/MessageInputActions/ComposerPopover';
 
 interface ToolSelectorProps {
@@ -80,34 +81,15 @@ const ToolSelector = ({
                   )}
 
                   {availableTools.map((tool) => (
-                    <div
+                    <ComposerOptionRow
                       key={tool.name}
+                      selected={selectedToolNames.includes(tool.name)}
+                      mode="check"
+                      label={tool.name.replace(/_/g, ' ')}
+                      description={tool.description}
+                      title={tool.name}
                       onClick={() => handleToggleTool(tool.name)}
-                      className="flex items-start gap-2.5 p-2.5 rounded-control hover:bg-surface-2 cursor-pointer"
-                    >
-                      {selectedToolNames.includes(tool.name) ? (
-                        <CheckSquare
-                          size={18}
-                          className="text-accent flex-shrink-0 mt-0.5"
-                        />
-                      ) : (
-                        <Square
-                          size={18}
-                          className="text-fg-subtle flex-shrink-0 mt-0.5"
-                        />
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <span
-                          className="text-sm font-medium text-fg block truncate"
-                          title={tool.name}
-                        >
-                          {tool.name.replace(/_/g, ' ')}
-                        </span>
-                        <p className="text-xs text-fg-muted mt-0.5">
-                          {tool.description}
-                        </p>
-                      </div>
-                    </div>
+                    />
                   ))}
                 </div>
               </ComposerPopover>

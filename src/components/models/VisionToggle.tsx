@@ -15,7 +15,7 @@ export default function VisionToggle({
     <div className="flex items-center justify-between">
       <div>
         <span className="text-xs text-fg-muted">Vision capable</span>
-        <p className="text-[10px] text-fg-subtle mt-0.5">
+        <p className="text-2xs text-fg-subtle mt-0.5">
           Allow image attachments for the selected chat model
         </p>
       </div>

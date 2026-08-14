@@ -39,6 +39,73 @@ test.describe('artifact viewer', () => {
     await expect(page.getByTestId('artifact-panel')).toBeVisible();
   });
 
+  test('artifact icon actions expose labels, href semantics, and danger tone', async ({
+    page,
+    request,
+  }) => {
+    const { chatId, artifactId } = await seedArtifact(request, {
+      title: 'Icon action artifact',
+      content: DOC,
+    });
+    const workspaceId = await seedWorkspace(request, {
+      name: 'artifact-icon-actions-workspace',
+    });
+    const workspaceArtifact = await seedArtifact(request, {
+      workspaceId,
+      title: 'Delete icon artifact',
+      content: DOC,
+    });
+
+    try {
+      await page.goto(`/c/${chatId}`);
+      await page
+        .getByTestId('artifact-card')
+        .getByRole('button', { name: 'Open' })
+        .click();
+
+      const panel = page.getByTestId('artifact-panel');
+      for (const name of [
+        'Close artifact panel',
+        'Download artifact',
+        'Open artifact in new tab',
+      ]) {
+        const action = panel.getByRole(
+          name === 'Close artifact panel' ? 'button' : 'link',
+          { name, exact: true },
+        );
+        await expect(action).toHaveAttribute('title', name);
+        await expect(action).toHaveClass(/focus-border-neutral/);
+        await expect(action.locator('svg')).toHaveAttribute('width', '15');
+        await expect(action.locator('svg')).toHaveAttribute('height', '15');
+      }
+      await expect(
+        panel.getByRole('link', { name: 'Download artifact' }),
+      ).toHaveAttribute(
+        'href',
+        `/api/artifacts/${artifactId}/raw?version=1&download=1`,
+      );
+      await expect(
+        panel.getByRole('link', { name: 'Open artifact in new tab' }),
+      ).toHaveAttribute('href', `/api/artifacts/${artifactId}/raw?version=1`);
+
+      await page.goto(
+        `/workspaces/${workspaceId}/artifacts/${workspaceArtifact.artifactId}`,
+      );
+      const deleteAction = page.getByRole('button', {
+        name: 'Delete artifact',
+        exact: true,
+      });
+      await expect(deleteAction).toHaveAttribute('title', 'Delete artifact');
+      await expect(deleteAction).toHaveClass(/focus-border-contrast/);
+      await expect(deleteAction).toHaveClass(/text-danger/);
+    } finally {
+      const response = await request.delete(`/api/workspaces/${workspaceId}`);
+      expect([200, 204, 404]).toContain(response.status());
+      const chatResponse = await request.delete(`/api/chats/${chatId}`);
+      expect([200, 204, 404]).toContain(chatResponse.status());
+    }
+  });
+
   test('the frame pins the sandbox that withholds same-origin access', async ({
     page,
     request,

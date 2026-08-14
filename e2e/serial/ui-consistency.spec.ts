@@ -1,6 +1,7 @@
 import { test, expect } from '../fixtures';
 import { ChatPage } from '../pages/ChatPage';
 import { SettingsPage } from '../pages/SettingsPage';
+import { WorkspaceDetailPage } from '../pages/WorkspaceDetailPage';
 import {
   cancelAwaitingRun,
   seedAwaitingApproval,
@@ -149,6 +150,10 @@ async function expectComposerActionState(
   } else {
     await expect(button).not.toHaveClass(/(^|\s)bg-surface-2(\s|$)/);
   }
+}
+
+function presetPanel(trigger: Locator): Locator {
+  return trigger.locator('xpath=..').locator('[class~="w-72"]');
 }
 
 async function switchStyles(toggle: Locator) {
@@ -579,6 +584,572 @@ test.describe('composer popover shell', () => {
   });
 });
 
+test.describe('composer option rows', () => {
+  test('use keyboard buttons with explicit radio/check selection semantics', async ({
+    page,
+    request,
+  }) => {
+    const methodologyName = uniq('keyboard-methodology');
+    const promptName = uniq('keyboard-persona');
+    const methodologyId = await seedSystemPrompt(request, {
+      name: methodologyName,
+      type: 'methodology',
+    });
+    const promptId = await seedSystemPrompt(request, {
+      name: promptName,
+      type: 'persona',
+    });
+    const before = await readSettings(request);
+    const original = {
+      selectedSystemPromptIds: before.selectedSystemPromptIds ?? null,
+      selectedMethodologyId: before.selectedMethodologyId ?? null,
+    };
+
+    try {
+      await patchSettings(request, {
+        selectedSystemPromptIds: null,
+        selectedMethodologyId: null,
+      });
+
+      const chat = new ChatPage(page);
+      await chat.goto('/');
+
+      await chat.focusButton.click();
+      const focusPanel = await expectComposerPopover(page, 'Focus Mode');
+      const all = focusPanel.getByRole('button', { name: /^All\b/ });
+      const chatMode = focusPanel.getByRole('button', {
+        name: /^Chat\b/,
+      });
+      const localResearch = focusPanel.getByRole('button', {
+        name: /^Local Research\b/,
+      });
+
+      for (const option of [all, chatMode, localResearch]) {
+        await expect(option).toHaveAttribute('type', 'button');
+        await expect(option).toHaveClass(/focus-border-neutral/);
+        await expect(option).toHaveClass(/hover:bg-surface-2/);
+        await expect(option).toHaveClass(/border-transparent/);
+        await expect(option).not.toHaveClass(/focus-visible:outline/);
+      }
+      await expect(all).toHaveAttribute('aria-pressed', 'true');
+      await expect(chatMode).toHaveAttribute('aria-pressed', 'false');
+      await expect(localResearch).toHaveAttribute('aria-pressed', 'false');
+
+      // Tab reaches the real option button, and Enter changes the selected
+      // radio without dismissing the popover.
+      await all.focus();
+      await page.keyboard.press('Tab');
+      await expect(chatMode).toBeFocused();
+      await expect(chatMode).toHaveCSS('border-top-width', '1px');
+      await chatMode.press('Enter');
+      await expect(chatMode).toBeFocused();
+      await expect(chatMode).toHaveAttribute('aria-pressed', 'true');
+      await expect(all).toHaveAttribute('aria-pressed', 'false');
+      await expect(focusPanel).toBeVisible();
+
+      // Escape is owned by the popover and returns focus to its trigger.
+      await page.keyboard.press('Escape');
+      await expect(focusPanel).toBeHidden();
+      await expect(chat.focusButton).toBeFocused();
+
+      // Switch to a research mode so the methodology selector is mounted.
+      await chat.focusButton.click();
+      await focusPanel
+        .getByRole('button', { name: /^Local Research\b/ })
+        .press('Enter');
+      await page.keyboard.press('Escape');
+      const methodologyTrigger = page.getByTitle('Select Research Methodology');
+      await expect(methodologyTrigger).toBeVisible();
+      await methodologyTrigger.click();
+      const methodologyPanel = await expectComposerPopover(
+        page,
+        'Research Methodology',
+      );
+      const methodologyOption = methodologyPanel.getByRole('button', {
+        name: new RegExp(`^${methodologyName}$`),
+      });
+      await expect(methodologyOption).toHaveAttribute('aria-pressed', 'false');
+      await methodologyOption.focus();
+      await methodologyOption.press('Space');
+      await expect(methodologyOption).toBeFocused();
+      await expect(methodologyOption).toHaveAttribute('aria-pressed', 'true');
+
+      await page.keyboard.press('Escape');
+      const promptsTrigger = page.getByTitle('Select Prompts');
+      await promptsTrigger.click();
+      const promptsPanel = await expectComposerPopover(page, 'Persona Prompts');
+      const promptOption = promptsPanel.getByRole('button', {
+        name: promptName,
+        exact: true,
+      });
+      await expect(promptOption).toHaveAttribute('aria-pressed', 'false');
+      await promptOption.focus();
+      await promptOption.press('Enter');
+      await expect(promptOption).toBeFocused();
+      await expect(promptOption).toHaveAttribute('aria-pressed', 'true');
+      await expect
+        .poll(async () =>
+          page.evaluate(() => {
+            const raw = localStorage.getItem('selectedSystemPromptIds');
+            return raw ? (JSON.parse(raw) as string[]) : [];
+          }),
+        )
+        .toContain(promptId);
+    } finally {
+      await page.keyboard.press('Escape').catch(() => undefined);
+      await page.waitForTimeout(600);
+      await patchSettings(request, original);
+      await request.delete(`/api/system-prompts/${methodologyId}`);
+      await request.delete(`/api/system-prompts/${promptId}`);
+    }
+  });
+
+  test('suggestion rows have no selection indicator and submit by keyboard', async ({
+    page,
+    request,
+  }) => {
+    const before = await readSettings(request);
+    const original = {
+      modelPresets: before.modelPresets ?? null,
+      chatModelProvider: before.chatModelProvider ?? null,
+      chatModel: before.chatModel ?? null,
+      selectedSystemPromptIds: before.selectedSystemPromptIds ?? null,
+    };
+    let chatId: string | undefined;
+
+    try {
+      await patchSettings(request, {
+        modelPresets: null,
+        chatModelProvider: 'test',
+        chatModel: 'test-direct',
+        selectedSystemPromptIds: null,
+      });
+
+      const chat = new ChatPage(page);
+      await chat.goto('/');
+      await chat.selectChatModel('Test (structured output)');
+      await chat.sendMessage(`suggestion-row-${Date.now()}`);
+      await chat.waitForStreamComplete();
+      chatId = new URL(page.url()).pathname.split('/').pop();
+
+      await page.getByRole('button', { name: 'Load suggestions' }).click();
+      const suggestion = page.getByRole('button', {
+        name: 'What else should I know about this topic?',
+        exact: true,
+      });
+      await expect(suggestion).toBeVisible({ timeout: 10_000 });
+      await expect(suggestion).toHaveAttribute('type', 'button');
+      await expect(suggestion).not.toHaveAttribute('aria-pressed');
+      await expect(suggestion).toHaveClass(/focus-border-neutral/);
+      await expect(suggestion).toHaveClass(/hover:bg-surface-2/);
+      // `mode="none"` leaves only the action icon; no radio/checkbox is
+      // exposed as a selection affordance for a one-shot suggestion.
+      await expect(suggestion.locator('svg')).toHaveCount(1);
+      await expect(suggestion.locator('svg')).toHaveClass(/lucide-plus/);
+
+      const sent = page.waitForRequest(
+        (candidate) =>
+          candidate.url().includes('/api/chat') &&
+          candidate.method() === 'POST' &&
+          (candidate.postData() ?? '').includes(
+            'What else should I know about this topic?',
+          ),
+      );
+      await suggestion.focus();
+      await expect(suggestion).toBeFocused();
+      await suggestion.press('Enter');
+      const requestBody = JSON.parse((await sent).postData() ?? '{}') as {
+        message?: { content?: string };
+      };
+      expect(requestBody.message?.content).toBe(
+        'What else should I know about this topic?',
+      );
+      await chat.waitForStreamComplete();
+    } finally {
+      if (chatId) {
+        const response = await request.delete(`/api/chats/${chatId}`);
+        expect([200, 204, 404]).toContain(response.status());
+      }
+      await page.waitForTimeout(600);
+      await patchSettings(request, original);
+    }
+  });
+});
+
+test.describe('preset popovers', () => {
+  test('model presets share the compact empty state and close on save/manage', async ({
+    page,
+    request,
+  }) => {
+    const before = await readSettings(request);
+    const keys = [
+      'modelPresets',
+      'chatModelProvider',
+      'chatModel',
+      'systemModelProvider',
+      'systemModel',
+      'imageCapable',
+      'contextWindowSize',
+    ];
+    const original = Object.fromEntries(
+      keys.map((key) => [key, before[key] ?? null]),
+    );
+
+    try {
+      await patchSettings(request, {
+        modelPresets: JSON.stringify([]),
+        chatModelProvider: 'test',
+        chatModel: 'test-direct',
+        systemModelProvider: 'test',
+        systemModel: 'test-direct',
+        imageCapable: 'false',
+        contextWindowSize: '32768',
+      });
+
+      await page.goto('/');
+      await page.getByRole('button', { name: 'Configure models' }).click();
+      const dialog = page
+        .getByRole('heading', {
+          name: 'Model Configuration',
+          exact: true,
+        })
+        .locator('xpath=ancestor::*[@role="dialog"]');
+      await expect(dialog).toBeVisible();
+
+      const trigger = dialog.getByRole('button', {
+        name: 'Select preset',
+        exact: true,
+      });
+      await trigger.focus();
+      await page.keyboard.press('Enter');
+      const panel = presetPanel(trigger);
+      await expect(panel).toBeVisible();
+      await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      await expect(panel).toHaveClass(/(^|\s)w-72(\s|$)/);
+      await page.keyboard.press('Escape');
+      await expect(panel).toBeHidden();
+      await expect(trigger).toBeFocused();
+      await trigger.press('Enter');
+      await expect(panel).toBeVisible();
+      const empty = panel.locator(
+        '[data-list-state="empty"][data-list-layout="compact"]',
+      );
+      await expect(empty).toBeVisible();
+      await expect(empty).toContainText(
+        'No presets yet. Save the current selection to create one.',
+      );
+      await expect(
+        panel.getByRole('button', { name: 'Save current…', exact: true }),
+      ).toBeEnabled();
+      await expect(
+        panel.getByRole('button', { name: 'Manage', exact: true }),
+      ).toBeVisible();
+
+      // Saving the model preset closes the shared popover and preserves the
+      // caller's trimmed name through its localStorage-backed state.
+      await panel
+        .getByRole('button', { name: 'Save current…', exact: true })
+        .click();
+      const name = panel.getByLabel('Preset name', { exact: true });
+      await expect(name).toBeFocused();
+      await name.fill('  saved model preset  ');
+      await name.press('Enter');
+      await expect(panel).toBeHidden();
+      await expect
+        .poll(async () =>
+          page.evaluate(() => {
+            const raw = localStorage.getItem('modelPresets');
+            return raw
+              ? (JSON.parse(raw) as Array<{ name: string }>).map((p) => p.name)
+              : [];
+          }),
+        )
+        .toContain('saved model preset');
+
+      // Manage is a real footer action: it closes the preset popover before
+      // opening the requested settings section.
+      await trigger.click();
+      await expect(panel).toBeVisible();
+      await panel.getByRole('button', { name: 'Manage', exact: true }).click();
+      await expect(panel).toBeHidden();
+      const settingsDialog = page
+        .getByRole('heading', { name: 'Settings', exact: true })
+        .locator('xpath=ancestor::*[@role="dialog"]');
+      await expect(
+        settingsDialog.getByRole('heading', {
+          name: 'Model Presets',
+          exact: true,
+        }),
+      ).toBeVisible();
+      await settingsDialog.getByLabel('Close').click();
+      await expect(settingsDialog).toBeHidden();
+      await dialog
+        .getByRole('button', { name: 'Close', exact: true })
+        .last()
+        .click();
+    } finally {
+      await page.waitForTimeout(600);
+      await patchSettings(request, original);
+    }
+  });
+
+  test('model preset application updates the selection and closes its popover', async ({
+    page,
+    request,
+  }) => {
+    const preset = {
+      id: 'ui-consistency-apply-model-preset',
+      name: 'Apply model preset',
+      chatProvider: 'test',
+      chatModel: 'test-slow',
+      systemProvider: 'test',
+      systemModel: 'test-tool',
+      imageCapable: true,
+      contextWindowSize: 65536,
+      createdAt: 0,
+    };
+    const unavailable = {
+      ...preset,
+      id: 'ui-consistency-unavailable-model-preset',
+      name: 'Unavailable model preset',
+      chatProvider: 'missing-provider',
+      systemProvider: 'missing-provider',
+    };
+    const before = await readSettings(request);
+    const keys = [
+      'modelPresets',
+      'chatModelProvider',
+      'chatModel',
+      'systemModelProvider',
+      'systemModel',
+      'imageCapable',
+      'contextWindowSize',
+    ];
+    const original = Object.fromEntries(
+      keys.map((key) => [key, before[key] ?? null]),
+    );
+
+    try {
+      await patchSettings(request, {
+        modelPresets: JSON.stringify([unavailable, preset]),
+        chatModelProvider: 'test',
+        chatModel: 'test-direct',
+        systemModelProvider: 'test',
+        systemModel: 'test-direct',
+        imageCapable: 'false',
+        contextWindowSize: '32768',
+      });
+
+      await page.goto('/');
+      const mainTrigger = page.getByRole('button', {
+        name: 'Choose model preset',
+        exact: true,
+      });
+      await mainTrigger.click();
+      const mainPanel = await expectComposerPopover(page, 'Model Presets');
+      await expect(
+        mainPanel.getByText('unavailable', { exact: true }),
+      ).toBeVisible();
+      await mainPanel
+        .getByRole('button', { name: 'Configure models…', exact: true })
+        .click();
+
+      const dialog = page
+        .getByRole('heading', {
+          name: 'Model Configuration',
+          exact: true,
+        })
+        .locator('xpath=ancestor::*[@role="dialog"]');
+      const trigger = dialog.getByRole('button', {
+        name: 'Select preset',
+        exact: true,
+      });
+      await trigger.click();
+      const panel = presetPanel(trigger);
+      await expect(panel).toBeVisible();
+      const row = panel.getByRole('button').filter({ hasText: preset.name });
+      await expect(row).toBeVisible();
+      await row.click();
+      await expect(panel).toBeHidden();
+      await expect
+        .poll(async () =>
+          page.evaluate(() => ({
+            chat: localStorage.getItem('chatModel'),
+            system: localStorage.getItem('systemModel'),
+            image: localStorage.getItem('imageCapable'),
+            context: localStorage.getItem('contextWindowSize'),
+          })),
+        )
+        .toEqual({
+          chat: 'test-slow',
+          system: 'test-tool',
+          image: 'true',
+          context: '65536',
+        });
+      await dialog
+        .getByRole('button', { name: 'Close', exact: true })
+        .last()
+        .click();
+    } finally {
+      await page.waitForTimeout(600);
+      await patchSettings(request, original);
+    }
+  });
+
+  test('panel presets share the empty state and preserve save/manage closure behavior', async ({
+    page,
+    request,
+  }) => {
+    const before = await readSettings(request);
+    const original = {
+      panelPresets: before.panelPresets ?? null,
+      panelSelection: before.panelSelection ?? null,
+    };
+
+    try {
+      await patchSettings(request, {
+        panelPresets: JSON.stringify([]),
+        panelSelection: JSON.stringify({
+          enabled: false,
+          executors: [
+            { provider: 'test', name: 'test-direct', contextWindowSize: 32768 },
+            { provider: 'test', name: 'test-tool', contextWindowSize: 32768 },
+          ],
+        }),
+      });
+
+      const chat = new ChatPage(page);
+      await chat.goto('/');
+      await chat.panelConfigButton.click();
+      const agentPanel = await expectComposerPopover(page, 'Agent Panel');
+      const trigger = agentPanel.getByRole('button', {
+        name: 'Select panel preset',
+        exact: true,
+      });
+      await trigger.click();
+      const panel = presetPanel(trigger);
+      await expect(panel).toBeVisible();
+      await expect(panel).toHaveClass(/(^|\s)w-72(\s|$)/);
+      await expect(
+        panel.locator('[data-list-state="empty"][data-list-layout="compact"]'),
+      ).toContainText('No presets yet. Save the current panel to create one.');
+      await expect(
+        panel.getByRole('button', { name: 'Save current…', exact: true }),
+      ).toBeEnabled();
+
+      await panel
+        .getByRole('button', { name: 'Save current…', exact: true })
+        .click();
+      const name = panel.getByLabel('Panel preset name', { exact: true });
+      await name.fill('saved panel preset');
+      await name.press('Enter');
+      // PanelSelector historically keeps its inline naming footer open after
+      // saving; the shared shell must not change that caller-owned behavior.
+      await expect(panel).toBeVisible();
+      await expect
+        .poll(async () =>
+          page.evaluate(() => {
+            const raw = localStorage.getItem('panelPresets');
+            return raw
+              ? (JSON.parse(raw) as Array<{ name: string }>).map((p) => p.name)
+              : [];
+          }),
+        )
+        .toContain('saved panel preset');
+
+      await panel.getByRole('button', { name: 'Manage', exact: true }).click();
+      await expect(panel).toBeHidden();
+      const settingsDialog = page
+        .getByRole('heading', { name: 'Settings', exact: true })
+        .locator('xpath=ancestor::*[@role="dialog"]');
+      await expect(
+        settingsDialog.getByRole('heading', {
+          name: 'Agent Panel Presets',
+          exact: true,
+        }),
+      ).toBeVisible();
+      await settingsDialog.getByLabel('Close').click();
+    } finally {
+      await page.waitForTimeout(600);
+      await patchSettings(request, original);
+    }
+  });
+
+  test('panel preset application updates executors and closes its popover', async ({
+    page,
+    request,
+  }) => {
+    const preset = {
+      id: 'ui-consistency-apply-panel-preset',
+      name: 'Apply panel preset',
+      executors: [
+        { provider: 'test', name: 'test-slow', contextWindowSize: 32768 },
+        { provider: 'test', name: 'test-chart', contextWindowSize: 32768 },
+      ],
+      createdAt: 0,
+    };
+    const before = await readSettings(request);
+    const original = {
+      panelPresets: before.panelPresets ?? null,
+      panelSelection: before.panelSelection ?? null,
+    };
+
+    try {
+      await patchSettings(request, {
+        panelPresets: JSON.stringify([preset]),
+        panelSelection: JSON.stringify({
+          enabled: false,
+          executors: [
+            { provider: 'test', name: 'test-direct', contextWindowSize: 32768 },
+            { provider: 'test', name: 'test-tool', contextWindowSize: 32768 },
+          ],
+        }),
+      });
+
+      const chat = new ChatPage(page);
+      await chat.goto('/');
+      await chat.panelConfigButton.click();
+      const agentPanel = await expectComposerPopover(page, 'Agent Panel');
+      const trigger = agentPanel.getByRole('button', {
+        name: 'Select panel preset',
+        exact: true,
+      });
+      await trigger.click();
+      const panel = presetPanel(trigger);
+      await expect(panel).toBeVisible();
+      const row = panel.getByRole('button', {
+        name: `Apply panel preset ${preset.name}`,
+        exact: true,
+      });
+      await expect(row).toBeVisible();
+      await row.click();
+      await expect(panel).toBeHidden();
+      await expect
+        .poll(async () =>
+          page.evaluate(() => {
+            const raw = localStorage.getItem('panelSelection');
+            if (!raw) return null;
+            const value = JSON.parse(raw) as {
+              enabled: boolean;
+              executors: Array<{ name: string }>;
+            };
+            return {
+              enabled: value.enabled,
+              executors: value.executors.map((executor) => executor.name),
+            };
+          }),
+        )
+        .toEqual({
+          enabled: true,
+          executors: ['test-slow', 'test-chart'],
+        });
+    } finally {
+      await page.waitForTimeout(600);
+      await patchSettings(request, original);
+    }
+  });
+});
+
 test.describe('composer action triggers', () => {
   test('shares compact states, focus treatment, pointer press, and panel joining', async ({
     page,
@@ -630,7 +1201,9 @@ test.describe('composer action triggers', () => {
       const prompts = page.getByTitle('Select Prompts');
       const methodology = page.getByTitle('Select Research Methodology');
       const personalization = page.getByTitle('Personalization options');
-      const autoRead = page.locator('button[aria-pressed="false"]');
+      const autoRead = page.getByRole('button', {
+        name: /^Auto-read replies: (on|off)$/,
+      });
 
       for (const button of [
         focus,
@@ -762,10 +1335,8 @@ test.describe('composer action triggers', () => {
       } finally {
         await page.mouse.up();
       }
-      await expect(page.locator('button[aria-pressed="true"]')).toBeVisible();
-      await expect(page.locator('button[aria-pressed="true"]')).toHaveClass(
-        /(^|\s)text-accent(\s|$)/,
-      );
+      await expect(autoRead).toHaveAttribute('aria-pressed', 'true');
+      await expect(autoRead).toHaveClass(/(^|\s)text-accent(\s|$)/);
       await expect
         .poll(() => page.evaluate(() => localStorage.getItem('ttsAutoplay')))
         .toBe('true');
@@ -824,20 +1395,26 @@ test.describe('composer action triggers', () => {
         page,
         'Persona Prompts',
       );
-      await expect(
-        promptPopover.getByText(promptName, { exact: true }),
-      ).toBeVisible();
-      await promptPopover.getByText(promptName, { exact: true }).click();
+      const promptOption = promptPopover.getByRole('button', {
+        name: promptName,
+        exact: true,
+      });
+      await expect(promptOption).toBeVisible();
+      await promptOption.click();
+      await expect(promptOption).toHaveAttribute('aria-pressed', 'true');
       await expectComposerActionButton(prompts, 'content');
       await expectComposerActionState(prompts, {
         configured: true,
         open: true,
       });
+      await expect(prompts).toHaveAttribute('aria-expanded', 'true');
       await page.keyboard.press('Escape');
       await expectComposerActionState(prompts, {
         configured: true,
         open: false,
       });
+      await expect(prompts).toHaveAttribute('aria-expanded', 'false');
+      await expect(prompts).toBeFocused();
 
       const fileName = 'att.txt';
       const chat = new ChatPage(page);
@@ -1211,8 +1788,16 @@ test.describe('IconButton primitive', () => {
       const run = row.getByRole('button', { name: 'Run now', exact: true });
       await run.click();
       await expect(run).toBeDisabled();
-      await expect(run).not.toHaveAttribute('aria-busy');
-      await expect(run.locator('svg.animate-spin')).toHaveCount(0);
+      await expect(run).toHaveAttribute('aria-busy', 'true');
+      await expect(run.locator('svg.animate-spin')).toHaveCount(1);
+      await expect(run.locator('svg.animate-spin')).toHaveAttribute(
+        'width',
+        '15',
+      );
+      await expect(run.locator('svg.animate-spin')).toHaveAttribute(
+        'height',
+        '15',
+      );
       await expect(run).toHaveClass(/focus-border-neutral/);
 
       release();
@@ -1488,6 +2073,360 @@ test.describe('explicit motion contracts', () => {
     } finally {
       const response = await request.delete(`/api/chats/${chatId}`);
       expect([200, 204, 404]).toContain(response.status());
+    }
+  });
+});
+
+test.describe('badges and setting toggle rows', () => {
+  test('uses standard and compact badge recipes in dark and light themes', async ({
+    page,
+    request,
+  }) => {
+    const before = await readSettings(request);
+    const originalPresets = before.modelPresets ?? null;
+    const unavailablePreset = {
+      id: `ui-consistency-unavailable-${Date.now()}`,
+      name: 'Unavailable compact preset',
+      chatProvider: 'missing-provider',
+      chatModel: 'missing-chat-model',
+      systemProvider: 'missing-provider',
+      systemModel: 'missing-system-model',
+      imageCapable: false,
+      contextWindowSize: 32768,
+      createdAt: 0,
+    };
+
+    try {
+      await patchSettings(request, {
+        modelPresets: JSON.stringify([unavailablePreset]),
+      });
+
+      for (const [themeId, mode] of [
+        ['nord', 'dark'],
+        ['solarized-light', 'light'],
+      ] as const) {
+        await page.goto('/');
+        await page.evaluate(
+          (id) => localStorage.setItem('appTheme', id),
+          themeId,
+        );
+        await page.reload();
+        await expect(page.locator('html')).toHaveAttribute('data-theme', mode);
+
+        const settings = new SettingsPage(page);
+        await settings.goto();
+        await settings.openSection('Search Providers');
+
+        const standard = page.getByText('primary', { exact: true }).first();
+        await expect(standard).toBeVisible();
+        for (const token of [
+          'inline-flex',
+          'items-center',
+          'rounded-pill',
+          'px-2',
+          'py-0.5',
+          'text-xs',
+          'border-transparent',
+          'bg-accent-soft',
+          'text-accent',
+        ]) {
+          await expect(standard).toHaveClass(
+            new RegExp(`(^|\\s)${token}(\\s|$)`),
+          );
+        }
+        await expect(standard).toHaveCSS(
+          'background-color',
+          await resolvedBackgroundClass(page, 'bg-accent-soft'),
+        );
+        await expect(standard).toHaveCSS(
+          'color',
+          await resolvedTextClass(page, 'text-accent'),
+        );
+
+        await settings.close();
+        const presetTrigger = page.getByRole('button', {
+          name: 'Choose model preset',
+          exact: true,
+        });
+        await presetTrigger.click();
+        const presetPopover = await expectComposerPopover(
+          page,
+          'Model Presets',
+        );
+        const presetRow = presetPopover
+          .getByRole('button')
+          .filter({ hasText: unavailablePreset.name });
+        await expect(presetRow).toBeVisible();
+        const unavailable = presetRow.getByText('unavailable', {
+          exact: true,
+        });
+        await expect(unavailable).toHaveClass(/rounded-control/);
+        await expect(unavailable).toHaveClass(/px-1/);
+        await expect(unavailable).toHaveClass(/py-0.5/);
+        await expect(unavailable).toHaveClass(/text-2xs/);
+        await expect(presetRow.locator('p').first()).toHaveClass(/text-2xs/);
+        await page.keyboard.press('Escape');
+      }
+    } finally {
+      await patchSettings(request, { modelPresets: originalPresets });
+    }
+  });
+
+  test('keeps icon, nested, muted, and callback behavior on setting rows', async ({
+    page,
+    request,
+  }) => {
+    const before = await readSettings(request);
+    const keys = [
+      'autoSuggestions',
+      'autoTitleEnabled',
+      'memoryEnabled',
+      'memoryRetrievalEnabled',
+      'memoryAutoDetectionEnabled',
+    ];
+    const original = Object.fromEntries(
+      keys.map((key) => [key, before[key] ?? null]),
+    );
+
+    try {
+      await patchSettings(request, {
+        autoSuggestions: 'false',
+        autoTitleEnabled: 'false',
+        memoryEnabled: 'false',
+        memoryRetrievalEnabled: 'false',
+        memoryAutoDetectionEnabled: 'false',
+      });
+
+      const settings = new SettingsPage(page);
+      await settings.goto();
+      await settings.openSection('Automation');
+
+      const suggestions = page.getByRole('switch', {
+        name: 'Automatic Suggestions',
+        exact: true,
+      });
+      const suggestionRow = suggestions.locator('xpath=..');
+      await expect(
+        suggestionRow.getByText('Automatic Suggestions', { exact: true }),
+      ).toHaveClass(/text-sm/);
+      await expect(
+        suggestionRow.getByText(
+          'Automatically show related suggestions after responses',
+          { exact: true },
+        ),
+      ).toHaveClass(/text-xs/);
+      await expect(
+        suggestionRow.getByText(
+          'Automatically show related suggestions after responses',
+          { exact: true },
+        ),
+      ).toHaveClass(/text-fg-muted/);
+      const iconTile = suggestionRow.locator('span.bg-surface-2').first();
+      await expect(iconTile).toHaveClass(/rounded-surface/);
+      await expect(iconTile).toHaveClass(/p-2/);
+      await expect(iconTile.locator('svg')).toHaveAttribute('width', '18');
+      await expect(iconTile.locator('svg')).toHaveAttribute('height', '18');
+
+      await suggestions.click();
+      await expect(suggestions).toHaveAttribute('aria-checked', 'true');
+      await expect
+        .poll(() =>
+          page.evaluate(() => localStorage.getItem('autoSuggestions')),
+        )
+        .toBe('true');
+
+      const autoTitle = page.getByRole('switch', {
+        name: 'Auto-generate chat titles',
+        exact: true,
+      });
+      await autoTitle.click();
+      await expect(autoTitle).toHaveAttribute('aria-checked', 'true');
+      await expect
+        .poll(() =>
+          page.evaluate(() => localStorage.getItem('autoTitleEnabled')),
+        )
+        .toBe('true');
+
+      await settings.openSection('Memory');
+      const memory = page.getByRole('switch', { name: 'Memory', exact: true });
+      await memory.click();
+      await expect(memory).toHaveAttribute('aria-checked', 'true');
+
+      const nested = page.getByRole('switch', {
+        name: 'Use saved memories in chats',
+        exact: true,
+      });
+      const nestedRow = nested.locator('xpath=..');
+      await expect(nestedRow).toHaveClass(/border-l-2/);
+      await expect(nestedRow).toHaveClass(/border-surface-2/);
+      await expect(nestedRow).toHaveClass(/pl-4/);
+      await expect(
+        nestedRow.getByText('Use saved memories in chats', { exact: true }),
+      ).toHaveClass(/text-sm/);
+      await expect(
+        nestedRow.getByText(
+          'Include relevant memories to personalize responses',
+          { exact: true },
+        ),
+      ).toHaveClass(/text-xs/);
+      await expect(nestedRow.locator('span.bg-surface-2')).toHaveCount(0);
+
+      await nested.click();
+      await expect(nested).toHaveAttribute('aria-checked', 'true');
+      await expect
+        .poll(() =>
+          page.evaluate(() => localStorage.getItem('memoryRetrievalEnabled')),
+        )
+        .toBe('true');
+
+      const detection = page.getByRole('switch', {
+        name: 'Automatic memory detection',
+        exact: true,
+      });
+      await detection.click();
+      await expect(detection).toHaveAttribute('aria-checked', 'true');
+      await expect
+        .poll(() =>
+          page.evaluate(() =>
+            localStorage.getItem('memoryAutoDetectionEnabled'),
+          ),
+        )
+        .toBe('true');
+    } finally {
+      await page.waitForTimeout(600);
+      await patchSettings(request, original);
+    }
+  });
+
+  test('workspace setting rows keep canonical typography and callbacks', async ({
+    page,
+    request,
+  }) => {
+    const workspaceId = await seedWorkspace(request, {
+      name: `ui-consistency-toggle-${Date.now()}`,
+      autoAcceptFileEdits: 0,
+    });
+
+    try {
+      const detail = new WorkspaceDetailPage(page);
+      await detail.goto(workspaceId);
+      await detail.openSettings();
+      const dialog = page.getByRole('dialog');
+
+      const autoMemory = dialog.getByRole('switch', {
+        name: 'Auto-memory',
+        exact: true,
+      });
+      const memoryRow = autoMemory.locator('xpath=..');
+      await expect(
+        memoryRow.getByText('Auto-memory', { exact: true }),
+      ).toHaveClass(/text-sm/);
+      await expect(
+        memoryRow.getByText(
+          'Automatically extract memories from chats in this workspace',
+          { exact: true },
+        ),
+      ).toHaveClass(/text-xs/);
+
+      const autoAccept = dialog.getByRole('switch', {
+        name: 'Auto-accept file edits',
+        exact: true,
+      });
+      await expect(autoAccept.locator('xpath=..')).toHaveClass(
+        /flex items-center justify-between/,
+      );
+
+      await autoMemory.click();
+      await expect
+        .poll(async () => {
+          const response = await request.get(`/api/workspaces/${workspaceId}`);
+          return (await response.json()).workspace.autoMemoryEnabled;
+        })
+        .toBe(1);
+
+      await autoAccept.click();
+      await expect
+        .poll(async () => {
+          const response = await request.get(`/api/workspaces/${workspaceId}`);
+          return (await response.json()).workspace.autoAcceptFileEdits;
+        })
+        .toBe(1);
+    } finally {
+      const response = await request.delete(`/api/workspaces/${workspaceId}`);
+      expect([200, 204, 404]).toContain(response.status());
+    }
+  });
+
+  test('a no-description muted row keeps its switch callback', async ({
+    page,
+    request,
+  }) => {
+    const workspaceId = await seedWorkspace(request, {
+      name: `ui-consistency-mcp-scope-${Date.now()}`,
+    });
+    const create = await request.post('/api/mcp/servers', {
+      data: {
+        name: `ui-consistency-mcp-${Date.now()}`,
+        url: 'https://example.com/mcp',
+      },
+    });
+    expect(create.status()).toBe(201);
+    const server = (await create.json()).server as {
+      id: string;
+      name: string;
+    };
+
+    try {
+      const scope = await request.put(
+        `/api/mcp/servers/${server.id}/workspaces`,
+        { data: { workspaceIds: [workspaceId] } },
+      );
+      expect(scope.status()).toBe(200);
+
+      const settings = new SettingsPage(page);
+      await settings.goto();
+      await settings.openSection('MCP Servers');
+      const card = page
+        .locator('div.border.border-surface-2.rounded-surface.p-4')
+        .filter({ hasText: server.name });
+      await expect(card).toBeVisible();
+      await card.getByRole('button', { name: /Workspaces/ }).click();
+
+      const showInGeneral = page.getByRole('switch', {
+        name: 'Show in chats with no workspace',
+        exact: true,
+      });
+      await expect(showInGeneral).toBeVisible();
+      const row = showInGeneral.locator('xpath=..');
+      const label = row.getByText('Also show in chats with no workspace', {
+        exact: true,
+      });
+      await expect(label).toHaveClass(/text-xs/);
+      await expect(label).toHaveClass(/text-fg-muted/);
+      await expect(row.locator('p')).toHaveCount(1);
+
+      await showInGeneral.click();
+      await expect(
+        page.getByRole('switch', {
+          name: 'Hide from chats with no workspace',
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect
+        .poll(async () => {
+          const response = await request.get(`/api/mcp/servers/${server.id}`);
+          return (await response.json()).server.visibleInGeneralChat;
+        })
+        .toBe(true);
+    } finally {
+      const serverDelete = await request.delete(
+        `/api/mcp/servers/${server.id}`,
+      );
+      expect([200, 404]).toContain(serverDelete.status());
+      const workspaceDelete = await request.delete(
+        `/api/workspaces/${workspaceId}`,
+      );
+      expect([200, 204, 404]).toContain(workspaceDelete.status());
     }
   });
 });

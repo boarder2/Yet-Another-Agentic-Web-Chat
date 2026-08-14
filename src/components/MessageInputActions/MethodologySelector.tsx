@@ -1,9 +1,4 @@
-import {
-  FlaskConical,
-  Circle,
-  CircleDot,
-  Settings as SettingsIcon,
-} from 'lucide-react';
+import { FlaskConical, Settings as SettingsIcon } from 'lucide-react';
 import {
   CloseButton,
   Popover,
@@ -15,6 +10,7 @@ import { Fragment, useCallback, useEffect, useState } from 'react';
 import { Prompt } from '@/lib/types/prompt';
 import { useSettingsModal } from '@/components/settings/SettingsModalProvider';
 import ComposerActionButton from '@/components/MessageInputActions/ComposerActionButton';
+import ComposerOptionRow from '@/components/MessageInputActions/ComposerOptionRow';
 import ComposerPopover from '@/components/MessageInputActions/ComposerPopover';
 
 interface MethodologySelectorProps {
@@ -111,23 +107,12 @@ const MethodologySelector = ({
               >
                 <div className="max-h-60 overflow-y-auto p-1.5 space-y-3">
                   {/* Default (no methodology) option */}
-                  <div
+                  <ComposerOptionRow
+                    selected={selectedMethodologyId === null}
+                    mode="radio"
+                    label="Default"
                     onClick={() => handleSelect(null)}
-                    className="flex items-center gap-2.5 p-2.5 rounded-control hover:bg-surface-2 cursor-pointer"
-                  >
-                    {selectedMethodologyId === null ? (
-                      <CircleDot
-                        size={18}
-                        className="text-accent flex-shrink-0"
-                      />
-                    ) : (
-                      <Circle
-                        size={18}
-                        className="text-fg-subtle flex-shrink-0"
-                      />
-                    )}
-                    <span className="text-sm text-fg">Default</span>
-                  </div>
+                  />
 
                   {builtIn.length > 0 && (
                     <div>
@@ -137,29 +122,14 @@ const MethodologySelector = ({
                       </div>
                       <div className="space-y-0.5">
                         {builtIn.map((methodology) => (
-                          <div
+                          <ComposerOptionRow
                             key={methodology.id}
+                            selected={selectedMethodologyId === methodology.id}
+                            mode="radio"
+                            label={methodology.name}
+                            title={methodology.name}
                             onClick={() => handleSelect(methodology.id)}
-                            className="flex items-center gap-2.5 p-2.5 rounded-control hover:bg-surface-2 cursor-pointer"
-                          >
-                            {selectedMethodologyId === methodology.id ? (
-                              <CircleDot
-                                size={18}
-                                className="text-accent flex-shrink-0"
-                              />
-                            ) : (
-                              <Circle
-                                size={18}
-                                className="text-fg-subtle flex-shrink-0"
-                              />
-                            )}
-                            <span
-                              className="text-sm text-fg truncate"
-                              title={methodology.name}
-                            >
-                              {methodology.name}
-                            </span>
-                          </div>
+                          />
                         ))}
                       </div>
                     </div>
@@ -173,29 +143,14 @@ const MethodologySelector = ({
                       </div>
                       <div className="space-y-0.5">
                         {custom.map((methodology) => (
-                          <div
+                          <ComposerOptionRow
                             key={methodology.id}
+                            selected={selectedMethodologyId === methodology.id}
+                            mode="radio"
+                            label={methodology.name}
+                            title={methodology.name}
                             onClick={() => handleSelect(methodology.id)}
-                            className="flex items-center gap-2.5 p-2.5 rounded-control hover:bg-surface-2 cursor-pointer"
-                          >
-                            {selectedMethodologyId === methodology.id ? (
-                              <CircleDot
-                                size={18}
-                                className="text-accent flex-shrink-0"
-                              />
-                            ) : (
-                              <Circle
-                                size={18}
-                                className="text-fg-subtle flex-shrink-0"
-                              />
-                            )}
-                            <span
-                              className="text-sm text-fg truncate"
-                              title={methodology.name}
-                            >
-                              {methodology.name}
-                            </span>
-                          </div>
+                          />
                         ))}
                       </div>
                     </div>

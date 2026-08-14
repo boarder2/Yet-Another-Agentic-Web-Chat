@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Cpu, SlidersHorizontal } from 'lucide-react';
+import { Cpu, Eye, SlidersHorizontal } from 'lucide-react';
 import {
   Popover,
   PopoverButton,
@@ -26,6 +26,7 @@ import {
   applyPresetToStorage,
   writeSelectionToStorage,
   findMatchingPreset,
+  presetSummary,
   selectionToActiveSelection,
   isPresetAvailable,
 } from '@/lib/models/presets';
@@ -251,9 +252,18 @@ export default function ModelConfigurator({
                       {presets.map((preset) => (
                         <PresetOption
                           key={preset.id}
-                          preset={preset}
+                          name={preset.name}
+                          summary={presetSummary(preset)}
                           isActive={matchingPreset?.id === preset.id}
                           available={isPresetAvailable(preset, chatProviders)}
+                          trailing={
+                            preset.imageCapable ? (
+                              <Eye
+                                size={12}
+                                className="mt-0.5 shrink-0 text-fg-subtle"
+                              />
+                            ) : undefined
+                          }
                           onClick={() => applyPreset(preset, close)}
                         />
                       ))}

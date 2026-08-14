@@ -6,7 +6,9 @@ import SettingsSection from '../components/SettingsSection';
 import SkillForm, { type SkillFormValue } from '../components/SkillForm';
 import AppSwitch from '@/components/ui/AppSwitch';
 import { Button } from '@/components/ui/Button';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 import { IconButton } from '@/components/ui/IconButton';
+import Badge from '@/components/ui/Badge';
 import { ListEmptyState, ListLoading } from '@/components/ui/List';
 import { toast } from 'sonner';
 import {
@@ -46,6 +48,7 @@ export default function SkillsSection() {
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<SkillFormValue | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<UserSkill | null>(null);
   const [isAddingNew, setIsAddingNew] = useState(false);
 
   const closeForm = () => {
@@ -92,16 +95,7 @@ export default function SkillsSection() {
   };
 
   const handleDelete = (skill: UserSkill) => {
-    if (
-      !window.confirm(
-        `Are you sure you want to delete the skill "${skill.name}"?`,
-      )
-    )
-      return;
-    deleteSkill.mutate(skill.id, {
-      onSuccess: () => toast.success(`Skill "${skill.name}" deleted`),
-      onError: () => toast.error('Failed to delete skill'),
-    });
+    setPendingDelete(skill);
   };
 
   const handleToggle = (skill: UserSkill, enabled: boolean) => {
@@ -141,7 +135,7 @@ export default function SkillsSection() {
       </p>
 
       {isAddingNew && form && (
-        <div className="p-3 border border-accent/40 rounded-control bg-surface-2">
+        <div className="p-3 border border-accent-border rounded-control bg-surface-2">
           <SkillForm
             title="New Skill"
             value={form}
@@ -190,13 +184,9 @@ export default function SkillsSection() {
                       <code className="text-xs font-mono text-fg-muted">
                         {skill.name}
                       </code>
-                      <span className="text-xs text-fg-subtle bg-surface px-1.5 py-0.5 rounded-pill border border-surface-2">
-                        {getScopeBadge(skill)}
-                      </span>
+                      <Badge>{getScopeBadge(skill)}</Badge>
                       {skill.disableModelInvocation && (
-                        <span className="text-xs text-fg-subtle bg-surface px-1.5 py-0.5 rounded-pill border border-surface-2">
-                          Slash-only
-                        </span>
+                        <Badge>Slash-only</Badge>
                       )}
                     </div>
                     <p className="text-xs text-fg-muted mt-0.5 truncate">
@@ -230,6 +220,28 @@ export default function SkillsSection() {
           ))}
         </div>
       )}
+
+      <ConfirmModal
+        open={!!pendingDelete}
+        onClose={() => setPendingDelete(null)}
+        title="Delete skill"
+        body={
+          <p>
+            {`Are you sure you want to delete the skill "${pendingDelete?.name}"?`}
+          </p>
+        }
+        loading={deleteSkill.isPending}
+        onConfirm={() => {
+          if (!pendingDelete) return;
+          deleteSkill.mutate(pendingDelete.id, {
+            onSuccess: () => {
+              toast.success(`Skill "${pendingDelete.name}" deleted`);
+              setPendingDelete(null);
+            },
+            onError: () => toast.error('Failed to delete skill'),
+          });
+        }}
+      />
     </SettingsSection>
   );
 }

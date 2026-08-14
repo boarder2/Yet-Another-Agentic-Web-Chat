@@ -3,15 +3,10 @@
 import { useState, useCallback } from 'react';
 import { Button } from '@/components/ui/Button';
 import ApprovalPanel, { ApprovalChip } from '@/components/ui/ApprovalPanel';
-import { Textarea } from '@/components/ui/Textarea';
-import { BookOpen, X, Check, Ban } from 'lucide-react';
+import { DiffTable, type DiffLine } from '@/components/ui/DiffTable';
+import { BookOpen, Check } from 'lucide-react';
 
 export type { PendingSkillEditApproval } from '@/lib/streaming/chatState';
-
-type DiffLine =
-  | { type: 'context'; text: string; lineNo: number }
-  | { type: 'removed'; text: string; lineNo: number }
-  | { type: 'added'; text: string; newLineNo: number };
 
 // Cap the LCS table size; beyond this we fall back to a plain
 // all-removed/all-added rendering rather than risk a huge O(n*m) allocation.
@@ -66,62 +61,6 @@ function computeDiff(oldStr: string, newStr: string): DiffLine[] {
   return lines;
 }
 
-function DiffView({
-  oldString,
-  newString,
-}: {
-  oldString: string;
-  newString: string;
-}) {
-  const diff = computeDiff(oldString, newString);
-  return (
-    <div className="font-mono text-xs overflow-x-auto">
-      <table className="w-full border-collapse">
-        <tbody>
-          {diff.map((line, idx) => (
-            <tr
-              key={idx}
-              className={
-                line.type === 'removed'
-                  ? 'bg-danger-soft'
-                  : line.type === 'added'
-                    ? 'bg-success-soft'
-                    : ''
-              }
-            >
-              <td className="select-none w-10 px-2 py-0.5 text-right text-fg-subtle border-r border-surface-2 align-top">
-                {line.type === 'removed'
-                  ? line.lineNo
-                  : line.type === 'added'
-                    ? line.newLineNo
-                    : line.lineNo}
-              </td>
-              <td className="px-2 py-0.5 whitespace-pre-wrap break-all">
-                <span
-                  className={
-                    line.type === 'removed'
-                      ? 'text-danger'
-                      : line.type === 'added'
-                        ? 'text-success'
-                        : 'text-fg-muted'
-                  }
-                >
-                  {line.type === 'removed'
-                    ? '−'
-                    : line.type === 'added'
-                      ? '+'
-                      : ' '}
-                </span>{' '}
-                <span className="text-fg">{line.text}</span>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
 export function SkillEditApproval({
   approvalId,
   action,
@@ -157,8 +96,6 @@ export function SkillEditApproval({
 }) {
   // No countdown timer — with interrupt-based flow, runs persist until user responds.
   const [submitted, setSubmitted] = useState(false);
-  const [rejectText, setRejectText] = useState('');
-  const [showRejectInput, setShowRejectInput] = useState(false);
 
   const handleDecide = useCallback(
     (decision: 'accept' | 'reject', text?: string) => {
@@ -169,10 +106,6 @@ export function SkillEditApproval({
     },
     [submitted, approvalId, onDecide, onDismiss],
   );
-
-  const handleRejectSubmit = useCallback(() => {
-    handleDecide('reject', rejectText.trim() || undefined);
-  }, [handleDecide, rejectText]);
 
   if (submitted) return null;
 
@@ -220,31 +153,16 @@ export function SkillEditApproval({
         </>
       }
       onDismiss={() => handleDecide('reject')}
+      rejection={{ onSubmit: (reason) => handleDecide('reject', reason) }}
       footer={
-        <>
-          {showRejectInput ? (
-            <button
-              type="button"
-              onClick={handleRejectSubmit}
-              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-surface bg-danger-soft text-danger hover:bg-danger-soft border border-danger transition-colors duration-150 focus-border-contrast"
-            >
-              <Ban size={14} />
-              Send rejection
-            </button>
-          ) : (
-            <Button size="lg" icon={X} onClick={() => setShowRejectInput(true)}>
-              Reject
-            </Button>
-          )}
-          <Button
-            variant="primary"
-            size="lg"
-            icon={Check}
-            onClick={() => handleDecide('accept')}
-          >
-            Accept
-          </Button>
-        </>
+        <Button
+          variant="primary"
+          size="lg"
+          icon={Check}
+          onClick={() => handleDecide('accept')}
+        >
+          Accept
+        </Button>
       }
     >
       {action === 'delete' ? (
@@ -276,38 +194,17 @@ export function SkillEditApproval({
           {oldDescription !== newDescription && (
             <div className="px-5 py-2 border-b border-surface-2">
               <p className="text-xs text-fg-subtle mb-1">Description</p>
-              <DiffView oldString={oldDescription} newString={newDescription} />
+              <DiffTable lines={computeDiff(oldDescription, newDescription)} />
             </div>
           )}
           {oldContent !== newContent && (
             <div>
               <p className="text-xs text-fg-subtle px-5 pt-2">Content</p>
-              <DiffView oldString={oldContent} newString={newContent} />
+              <DiffTable lines={computeDiff(oldContent, newContent)} />
             </div>
           )}
         </div>
       ) : null}
-
-      {showRejectInput && (
-        <div className="px-5 py-3 border-b border-surface-2">
-          <Textarea
-            autoFocus
-            aria-label="Rejection reason"
-            value={rejectText}
-            onChange={(e) => setRejectText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleRejectSubmit();
-              }
-              if (e.key === 'Escape') setShowRejectInput(false);
-            }}
-            placeholder="Optional: tell the agent why you rejected this…"
-            className="bg-surface-2/50 rounded-surface placeholder:text-fg-subtle resize-none"
-            rows={2}
-          />
-        </div>
-      )}
     </ApprovalPanel>
   );
 }

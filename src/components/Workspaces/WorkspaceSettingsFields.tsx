@@ -2,6 +2,7 @@
 
 import { Description, Field, Label } from '@headlessui/react';
 import AppSwitch from '@/components/ui/AppSwitch';
+import SettingToggleRow from '@/components/ui/SettingToggleRow';
 import { Field as FormField } from '@/components/ui/Field';
 import { Input } from '@/components/ui/Input';
 import { Textarea } from '@/components/ui/Textarea';
@@ -116,29 +117,19 @@ export default function WorkspaceSettingsFields({
         </div>
       )}
 
-      <Field className="flex items-center justify-between">
-        <div>
-          <Label className="text-sm font-medium">Auto-memory</Label>
-          <Description className="text-xs text-fg-muted">
-            Automatically extract memories from chats in this workspace
-          </Description>
-        </div>
-        <AppSwitch checked={autoMemory} onChange={onAutoMemoryChange} />
-      </Field>
+      <SettingToggleRow
+        label="Auto-memory"
+        description="Automatically extract memories from chats in this workspace"
+        checked={autoMemory}
+        onChange={onAutoMemoryChange}
+      />
 
-      <Field className="flex items-center justify-between">
-        <div>
-          <Label className="text-sm font-medium">Auto-accept file edits</Label>
-          <Description className="text-xs text-fg-muted">
-            When on, the agent can edit and create files in this workspace
-            without asking. Per-file overrides still apply.
-          </Description>
-        </div>
-        <AppSwitch
-          checked={autoAcceptFileEdits}
-          onChange={onAutoAcceptFileEditsChange}
-        />
-      </Field>
+      <SettingToggleRow
+        label="Auto-accept file edits"
+        description="When on, the agent can edit and create files in this workspace without asking. Per-file overrides still apply."
+        checked={autoAcceptFileEdits}
+        onChange={onAutoAcceptFileEditsChange}
+      />
     </>
   );
 }

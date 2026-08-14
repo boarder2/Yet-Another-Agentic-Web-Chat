@@ -3,8 +3,7 @@
 import { useState } from 'react';
 import { AtSign, ExternalLink, Trash2 } from 'lucide-react';
 import { formatTimeDifference } from '@/lib/utils';
-import Modal from '@/components/ui/Modal';
-import { Button } from '@/components/ui/Button';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 import { IconButton } from '@/components/ui/IconButton';
 import { ListEmptyState, ListLoading } from '@/components/ui/List';
 import {
@@ -92,37 +91,25 @@ export default function ArtifactsTab({ workspaceId }: { workspaceId: string }) {
         ))}
       </ul>
 
-      <Modal
+      <ConfirmModal
         open={!!pendingDelete}
         onClose={() => setPendingDelete(null)}
         title="Delete artifact"
-        size="sm"
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-fg-muted">
+        body={
+          <p>
             Delete <span className="font-medium">{pendingDelete?.title}</span>{' '}
             and all {pendingDelete?.versionCount} of its versions? This cannot
             be undone.
           </p>
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setPendingDelete(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="danger"
-              loading={del.isPending}
-              onClick={() =>
-                pendingDelete &&
-                del.mutate(pendingDelete.id, {
-                  onSuccess: () => setPendingDelete(null),
-                })
-              }
-            >
-              Delete
-            </Button>
-          </div>
-        </div>
-      </Modal>
+        }
+        loading={del.isPending}
+        onConfirm={() => {
+          if (!pendingDelete) return;
+          del.mutate(pendingDelete.id, {
+            onSuccess: () => setPendingDelete(null),
+          });
+        }}
+      />
     </>
   );
 }

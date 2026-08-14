@@ -412,7 +412,7 @@ test.describe('history: artifact tab', () => {
     // Scope the click to the seeded artifact's row so we never hit a different
     // row's affordance.
     await artifactRow(page, title)
-      .getByRole('button', { name: 'Open in a new tab' })
+      .getByRole('link', { name: 'Open in a new tab' })
       .click();
 
     const newTab = await newTabPromise;

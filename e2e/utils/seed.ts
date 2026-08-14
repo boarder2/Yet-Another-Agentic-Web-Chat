@@ -4,6 +4,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import { expect, type APIRequestContext } from '@playwright/test';
 import type { WorkspaceModelOverride } from '../../src/lib/workspaces/types';
+import { appendWidget } from '../../src/lib/widgets/envelope';
 import { uid, uniq, baseURL } from './helpers';
 import { streamChatUntil, collectSseEvents, type ChatEvent } from './sse';
 
@@ -95,6 +96,58 @@ export async function seedChat(
   // Consume it so the connection is released.
   await res.body();
   return chatId;
+}
+
+/**
+ * Seed a completed chat, then replace its assistant response with two widget
+ * envelopes so the browser can exercise the ToolCall disclosure and PDF link
+ * without adding a production-only model variant.
+ */
+export async function seedExpandableToolChat(
+  request: APIRequestContext,
+): Promise<{ chatId: string; sourceMessageId: number; pdfUrl: string }> {
+  const chatId = await seedChat(request, {
+    content: 'Tool call disclosure fixture',
+  });
+  const pdfUrl = 'https://example.com/deterministic-report.pdf';
+  const db = new Database(E2E_DB_PATH);
+  try {
+    const source = db
+      .prepare(
+        "SELECT id FROM messages WHERE chatId = ? AND type = 'user' ORDER BY id ASC LIMIT 1",
+      )
+      .get(chatId) as { id: number } | undefined;
+    const assistant = db
+      .prepare(
+        "SELECT id FROM messages WHERE chatId = ? AND type = 'assistant' ORDER BY id DESC LIMIT 1",
+      )
+      .get(chatId) as { id: number } | undefined;
+    if (!source || !assistant) {
+      throw new Error(
+        'seedExpandableToolChat: expected user and assistant rows',
+      );
+    }
+
+    let content = appendWidget('', 'tool_call', {
+      id: 'e2e-get-message-call',
+      type: 'get_message',
+      status: 'running',
+      query: String(source.id),
+    });
+    content = appendWidget(content, 'tool_call', {
+      id: 'e2e-pdf-call',
+      type: 'pdf_loader',
+      status: 'running',
+      url: pdfUrl,
+    });
+    db.prepare(
+      'UPDATE messages SET content = ?, sanitized_content = ? WHERE id = ?',
+    ).run(content, '', assistant.id);
+
+    return { chatId, sourceMessageId: source.id, pdfUrl };
+  } finally {
+    db.close();
+  }
 }
 
 export interface SeededGeneratedImage {

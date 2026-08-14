@@ -14,13 +14,13 @@ import {
 import PageHeader from '@/components/PageHeader';
 import Modal from '@/components/ui/Modal';
 import { Button, buttonClasses } from '@/components/ui/Button';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 import { IconButton } from '@/components/ui/IconButton';
 import {
   ListCount,
   ListEmptyState,
   ListLoading,
   ListRow,
-  ListRowAction,
 } from '@/components/ui/List';
 import DynamicIcon from '@/components/workflows/DynamicIcon';
 import FillForm from '@/components/workflows/FillForm';
@@ -81,49 +81,41 @@ function DeleteModal({
   const del = useDeleteWorkflow();
 
   return (
-    <Modal
+    <ConfirmModal
       open
       onClose={onClose}
       title={`Delete “${workflow.name}”`}
-      footer={
+      body={
         <>
-          <Button variant="ghost" onClick={onClose} className="text-fg-muted">
-            Cancel
-          </Button>
-          <Button
-            variant="danger"
-            loading={del.isPending}
-            onClick={async () => {
-              await del.mutateAsync(workflow.id);
-              onClose();
-            }}
-          >
-            {del.isPending ? 'Deleting…' : 'Delete'}
-          </Button>
+          <p className="mb-3">
+            This permanently deletes the workflow. Past run chats are kept.
+          </p>
+          {isLoading ? (
+            <ListLoading layout="compact" size={20} />
+          ) : schedules.length > 0 ? (
+            <div className="mb-4">
+              <p className="mb-2 font-medium text-warning">
+                {schedules.length} schedule
+                {schedules.length === 1 ? '' : 's'} will also be deleted:
+              </p>
+              <ul className="flex flex-col gap-1">
+                {schedules.map((s) => (
+                  <li key={s.id} className="text-fg-muted">
+                    • {s.label}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </>
       }
-    >
-      <p className="text-sm text-fg-muted mb-3">
-        This permanently deletes the workflow. Past run chats are kept.
-      </p>
-      {isLoading ? (
-        <ListLoading layout="compact" size={20} />
-      ) : schedules.length > 0 ? (
-        <div className="mb-4">
-          <p className="text-sm font-medium text-warning mb-2">
-            {schedules.length} schedule
-            {schedules.length === 1 ? '' : 's'} will also be deleted:
-          </p>
-          <ul className="flex flex-col gap-1">
-            {schedules.map((s) => (
-              <li key={s.id} className="text-sm text-fg-muted">
-                • {s.label}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-    </Modal>
+      loading={del.isPending}
+      onConfirm={() =>
+        del.mutate(workflow.id, {
+          onSuccess: onClose,
+        })
+      }
+    />
   );
 }
 
@@ -180,7 +172,7 @@ export default function WorkflowsPage() {
                 data-workflow-id={w.id}
                 href={`/automations/workflows/${w.id}`}
                 leading={
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-control bg-accent/10 text-accent">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-control bg-accent-soft text-accent">
                     <DynamicIcon name={w.icon} size={18} />
                   </div>
                 }
@@ -210,10 +202,10 @@ export default function WorkflowsPage() {
                       icon={Pencil}
                       label="Edit"
                     />
-                    <ListRowAction
+                    <IconButton
                       icon={Trash2}
                       label="Delete"
-                      danger
+                      tone="danger"
                       onClick={() => setToDelete(w)}
                     />
                   </>

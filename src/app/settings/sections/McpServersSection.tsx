@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import SettingsSection from '../components/SettingsSection';
 import { Button } from '@/components/ui/Button';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 import { IconButton } from '@/components/ui/IconButton';
 import { ListEmptyState, ListLoading } from '@/components/ui/List';
 import { Card } from '@/components/ui/Card';
@@ -28,6 +29,7 @@ import { Field } from '@/components/ui/Field';
 import { Input } from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
 import AppSwitch from '@/components/ui/AppSwitch';
+import SettingToggleRow from '@/components/ui/SettingToggleRow';
 import { toast } from 'sonner';
 import {
   useMcpServersList,
@@ -408,20 +410,18 @@ function WorkspaceScopePanel({
         ))}
       </ul>
       {scopedIds.length > 0 && (
-        <div className="flex items-center justify-between gap-3 px-1">
-          <span className="text-xs text-fg-muted">
-            Also show in chats with no workspace
-          </span>
-          <AppSwitch
-            checked={server.visibleInGeneralChat}
-            onChange={toggleVisibleInGeneralChat}
-            aria-label={
-              server.visibleInGeneralChat
-                ? 'Hide from chats with no workspace'
-                : 'Show in chats with no workspace'
-            }
-          />
-        </div>
+        <SettingToggleRow
+          className="px-1"
+          label="Also show in chats with no workspace"
+          mutedLabel
+          checked={server.visibleInGeneralChat}
+          onChange={toggleVisibleInGeneralChat}
+          ariaLabel={
+            server.visibleInGeneralChat
+              ? 'Hide from chats with no workspace'
+              : 'Show in chats with no workspace'
+          }
+        />
       )}
     </div>
   );
@@ -443,6 +443,7 @@ function ServerRow({ server }: { server: McpServer }) {
   const [editing, setEditing] = useState(false);
   const [showTools, setShowTools] = useState(false);
   const [showScope, setShowScope] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const { data: scopedIds = [] } = useMcpServerWorkspaceScopes(server.id);
   const [form, setForm] = useState<ServerFormState>({
     name: server.name,
@@ -797,13 +798,7 @@ function ServerRow({ server }: { server: McpServer }) {
           size="sm"
           variant="danger"
           icon={Trash2}
-          onClick={() => {
-            if (!confirm(`Delete server "${server.name}"?`)) return;
-            del.mutate(undefined, {
-              onSuccess: () => toast.success(`Deleted "${server.name}"`),
-              onError: () => toast.error('Failed to delete server'),
-            });
-          }}
+          onClick={() => setConfirmDeleteOpen(true)}
         >
           Delete
         </Button>
@@ -820,6 +815,22 @@ function ServerRow({ server }: { server: McpServer }) {
       {showScope && (
         <WorkspaceScopePanel server={server} scopedIds={scopedIds} />
       )}
+      <ConfirmModal
+        open={confirmDeleteOpen}
+        onClose={() => setConfirmDeleteOpen(false)}
+        title="Delete server"
+        body={<p>Delete server &quot;{server.name}&quot;?</p>}
+        loading={del.isPending}
+        onConfirm={() =>
+          del.mutate(undefined, {
+            onSuccess: () => {
+              toast.success(`Deleted "${server.name}"`);
+              setConfirmDeleteOpen(false);
+            },
+            onError: () => toast.error('Failed to delete server'),
+          })
+        }
+      />
     </Card>
   );
 }
@@ -862,7 +873,7 @@ function AddServerForm({ onDone }: { onDone: () => void }) {
   };
 
   return (
-    <div className="border border-accent/30 rounded-surface p-4 bg-surface space-y-3">
+    <div className="border border-accent-border rounded-surface p-4 bg-surface space-y-3">
       <h3 className="text-sm font-semibold text-fg">Add MCP Server</h3>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Name">

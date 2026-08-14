@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { formatTimeDifference } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 import { Textarea } from '@/components/ui/Textarea';
 import { ListEmptyState, ListLoading } from '@/components/ui/List';
 import {
@@ -32,6 +33,7 @@ export default function WorkspaceMemoryTab({
   const [newContent, setNewContent] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState('');
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
 
   useEffect(() => {
     onCountChange?.(memories.length);
@@ -66,8 +68,7 @@ export default function WorkspaceMemoryTab({
   }
 
   function handleDelete(id: string) {
-    if (!window.confirm('Delete this memory?')) return;
-    deleteMemory.mutate(id);
+    setPendingDelete(id);
   }
 
   return (
@@ -95,7 +96,7 @@ export default function WorkspaceMemoryTab({
       </div>
 
       {isAdding && (
-        <div className="p-4 bg-surface rounded-floating border border-accent/50">
+        <div className="p-4 bg-surface rounded-floating border border-accent-border">
           <p className="text-xs text-accent mb-2 font-medium">
             Save to workspace
           </p>
@@ -175,7 +176,7 @@ export default function WorkspaceMemoryTab({
                     </p>
                   )}
                   <div className="flex items-center gap-2 mt-1 flex-wrap">
-                    <span className="text-xs px-1.5 py-0.5 rounded-control bg-accent/20 text-accent font-medium">
+                    <span className="text-xs px-1.5 py-0.5 rounded-control bg-accent-soft text-accent font-medium">
                       workspace
                     </span>
                     {m.sourceType && (
@@ -227,6 +228,20 @@ export default function WorkspaceMemoryTab({
           })}
         </ul>
       )}
+
+      <ConfirmModal
+        open={!!pendingDelete}
+        onClose={() => setPendingDelete(null)}
+        title="Delete memory"
+        body={<p>Delete this memory?</p>}
+        loading={deleteMemory.isPending}
+        onConfirm={() => {
+          if (!pendingDelete) return;
+          deleteMemory.mutate(pendingDelete, {
+            onSuccess: () => setPendingDelete(null),
+          });
+        }}
+      />
     </div>
   );
 }

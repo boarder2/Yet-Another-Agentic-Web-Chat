@@ -2,7 +2,8 @@ import React from 'react';
 import { LoaderCircle, LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
+export type ButtonVariant =
+  'primary' | 'secondary' | 'ghost' | 'danger' | 'dangerSoft' | 'successSoft';
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
 const base =
@@ -19,6 +20,10 @@ const variants: Record<ButtonVariant, string> = {
     'text-fg enabled:hover:bg-surface-2 enabled:hover:text-fg focus-border-neutral',
   danger:
     'bg-danger text-danger-fg enabled:hover:bg-danger-700 enabled:hover:text-danger-fg focus-border-contrast',
+  dangerSoft:
+    'bg-danger-soft text-danger enabled:hover:bg-danger-soft enabled:hover:text-danger enabled:hover:border-danger focus-border-neutral',
+  successSoft:
+    'bg-success-soft text-success enabled:hover:bg-success-soft enabled:hover:text-success enabled:hover:border-success focus-border-neutral',
 };
 
 const sizes: Record<ButtonSize, string> = {

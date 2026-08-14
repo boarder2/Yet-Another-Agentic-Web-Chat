@@ -10,7 +10,8 @@ import {
   ExternalLink,
   LoaderCircle,
 } from 'lucide-react';
-import { Button, buttonClasses } from '@/components/ui/Button';
+import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
 import { Select } from '@/components/ui/Select';
 import { CodeBlock } from '@/components/CodeBlock';
 import {
@@ -96,15 +97,12 @@ export default function ArtifactViewer({
 
         {versions.length > 1 && (
           <div className="flex items-center gap-1">
-            <Button
-              size="sm"
-              variant="ghost"
-              aria-label="Previous version"
+            <IconButton
+              icon={ChevronLeft}
+              label="Previous version"
               disabled={index <= 0}
               onClick={() => step(-1)}
-            >
-              <ChevronLeft size={16} />
-            </Button>
+            />
             <Select
               aria-label="Version"
               data-testid="artifact-version"
@@ -118,15 +116,12 @@ export default function ArtifactViewer({
                 label: `v${v.version} of ${versions.length}`,
               }))}
             />
-            <Button
-              size="sm"
-              variant="ghost"
-              aria-label="Next version"
+            <IconButton
+              icon={ChevronRight}
+              label="Next version"
               disabled={index < 0 || index >= versions.length - 1}
               onClick={() => step(1)}
-            >
-              <ChevronRight size={16} />
-            </Button>
+            />
           </div>
         )}
 
@@ -142,25 +137,19 @@ export default function ArtifactViewer({
           >
             {view === 'preview' ? 'Source' : 'Preview'}
           </Button>
-          {/* Links, not buttons — they carry an href — so they borrow the
-              ghost button's styling rather than restating it. */}
-          <a
+          <IconButton
             href={artifactRawUrl(artifactId, active, true)}
             download
-            aria-label="Download artifact"
-            className={buttonClasses('ghost', 'sm')}
-          >
-            <Download size={16} />
-          </a>
-          <a
+            icon={Download}
+            label="Download artifact"
+          />
+          <IconButton
             href={artifactRawUrl(artifactId, active)}
             target="_blank"
             rel="noreferrer"
-            aria-label="Open artifact in new tab"
-            className={buttonClasses('ghost', 'sm')}
-          >
-            <ExternalLink size={16} />
-          </a>
+            icon={ExternalLink}
+            label="Open artifact in new tab"
+          />
           {actions}
         </div>
       </div>

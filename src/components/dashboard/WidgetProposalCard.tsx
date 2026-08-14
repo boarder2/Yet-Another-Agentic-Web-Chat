@@ -38,7 +38,7 @@ const WidgetProposalCard = ({
   const codeChanged = current.code !== proposal.proposed.code;
 
   return (
-    <div className="rounded-control border border-accent/40 bg-surface-2/40 p-3 space-y-2 text-sm">
+    <div className="rounded-control border border-accent-border bg-surface-2/40 p-3 space-y-2 text-sm">
       <p className="text-fg-muted">{proposal.rationale}</p>
 
       {titleChanged && (

@@ -1,11 +1,9 @@
 import { Trash } from 'lucide-react';
-import { Description } from '@headlessui/react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { Chat } from '@/components/Chats/ChatRow';
-import { Button } from '@/components/ui/Button';
-import { ListRowAction } from '@/components/ui/List';
-import Modal from '@/components/ui/Modal';
+import { IconButton } from '@/components/ui/IconButton';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 
 const DeleteChat = ({
   chatId,
@@ -46,13 +44,13 @@ const DeleteChat = ({
 
       setChats(newChats);
 
+      setConfirmationDialogOpen(false);
       if (redirectTo) {
         window.location.href = redirectTo;
       }
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : String(err));
     } finally {
-      setConfirmationDialogOpen(false);
       setLoading(false);
     }
   };
@@ -69,36 +67,30 @@ const DeleteChat = ({
           Delete chat
         </button>
       ) : (
-        <ListRowAction
+        <IconButton
           icon={Trash}
           label="Delete chat"
-          danger
+          tone="danger"
           onClick={() => setConfirmationDialogOpen(true)}
         />
       )}
-      <Modal
+      <ConfirmModal
         open={confirmationDialogOpen}
         onClose={close}
-        size="sm"
         title="Delete Confirmation"
-        footer={
+        body={
           <>
-            <Button variant="ghost" onClick={close}>
-              Cancel
-            </Button>
-            <Button variant="danger" loading={loading} onClick={handleDelete}>
-              Delete
-            </Button>
+            Are you sure you want to delete this chat?
+            {isPrivate && expiresIn
+              ? ` It is a private chat and would expire on its own in ${expiresIn}.`
+              : ''}
           </>
         }
-      >
-        <Description className="text-sm">
-          Are you sure you want to delete this chat?
-          {isPrivate && expiresIn
-            ? ` It is a private chat and would expire on its own in ${expiresIn}.`
-            : ''}
-        </Description>
-      </Modal>
+        loading={loading}
+        onConfirm={() => {
+          void handleDelete();
+        }}
+      />
     </>
   );
 };

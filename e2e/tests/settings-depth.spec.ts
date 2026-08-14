@@ -62,9 +62,13 @@ test.describe('settings depth', () => {
     const afterEdit = (await listPrompts()).find((p) => p.id === created!.id);
     expect(afterEdit?.content).toBe(editedContent);
 
-    // Delete — confirm() is used by the settings panel.
-    page.once('dialog', (d) => d.accept());
+    // Delete — the settings panel uses the shared confirmation modal.
     await card().getByTitle('Delete').click();
+    const confirm = page
+      .getByRole('dialog')
+      .filter({ hasText: 'Delete prompt' });
+    await expect(confirm).toBeVisible();
+    await confirm.getByRole('button', { name: 'Delete', exact: true }).click();
     await expect(page.getByText(name, { exact: true })).toHaveCount(0);
 
     const afterDelete = (await listPrompts()).find((p) => p.id === created!.id);

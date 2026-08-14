@@ -1,6 +1,6 @@
 'use client';
 
-import { cn } from '@/lib/utils';
+import { FilterChip } from '@/components/ui/FilterChip';
 
 export const ARTIFACT_TYPES = ['all', 'pages', 'images'] as const;
 export type ArtifactType = (typeof ARTIFACT_TYPES)[number];
@@ -27,22 +27,14 @@ export default function ArtifactTypeFilter({
       {ARTIFACT_TYPES.map((type) => {
         const selected = value === type;
         return (
-          <button
+          <FilterChip
             key={type}
-            type="button"
-            aria-pressed={selected}
+            selected={selected}
             data-testid={`artifact-type-${type}`}
             onClick={() => onChange(type)}
-            className={cn(
-              'shrink-0 rounded-pill border px-2.5 py-1 text-xs font-medium transition-colors duration-150',
-              'border border-transparent focus-border-neutral',
-              selected
-                ? 'border-accent/30 bg-accent/10 text-accent'
-                : 'border-surface-2 bg-surface text-fg-muted hover:border-fg/30 hover:text-fg',
-            )}
           >
             {labels[type]}
-          </button>
+          </FilterChip>
         );
       })}
     </div>

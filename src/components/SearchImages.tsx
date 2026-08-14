@@ -143,7 +143,8 @@ const SearchImages = ({
             key={`image-results-${messageId}`}
           >
             {images.slice(0, displayLimit).map((image, i) => (
-              <img
+              <button
+                type="button"
                 onClick={() => {
                   setOpen(true);
                   setSlides([
@@ -153,10 +154,15 @@ const SearchImages = ({
                   ]);
                 }}
                 key={i}
-                src={image.img_src}
-                alt={image.title}
-                className="h-full w-full aspect-video object-cover rounded-surface transition-transform duration-200 active:scale-95 hover:scale-[1.02] cursor-zoom-in"
-              />
+                aria-label={`Open image ${image.title}`}
+                className="h-full w-full aspect-video cursor-zoom-in rounded-surface border border-transparent p-0 transition-transform duration-200 active:scale-95 hover:scale-[1.02] focus-border-neutral"
+              >
+                <img
+                  src={image.img_src}
+                  alt={image.title}
+                  className="h-full w-full aspect-video rounded-surface object-cover"
+                />
+              </button>
             ))}
           </div>
           {images.length > displayLimit && (

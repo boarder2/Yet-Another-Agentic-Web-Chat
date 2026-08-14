@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { CodeBlock } from './CodeBlock';
+import { Button } from '@/components/ui/Button';
 import ApprovalPanel from '@/components/ui/ApprovalPanel';
 import { Textarea } from '@/components/ui/Textarea';
 import {
@@ -84,42 +85,41 @@ export function CodeExecutionApproval({
       footer={
         denying ? (
           <>
-            <button
-              type="button"
+            <Button
+              size="lg"
               onClick={() => {
                 setDenying(false);
                 setDenyReason('');
               }}
-              className="px-5 py-2 text-sm font-medium rounded-surface border border-transparent bg-surface-2 text-fg-muted hover:text-fg hover:bg-surface-2/80 transition-colors duration-150 focus-border-neutral"
             >
               Cancel
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="dangerSoft"
+              size="lg"
               onClick={() =>
                 sendApproval(false, denyReason.trim() || undefined)
               }
-              className="px-5 py-2 text-sm font-medium rounded-surface bg-danger-soft text-danger hover:bg-danger-soft border border-danger transition-colors duration-150 focus-border-contrast"
             >
               Deny
-            </button>
+            </Button>
           </>
         ) : (
           <>
-            <button
-              type="button"
+            <Button
+              variant="dangerSoft"
+              size="lg"
               onClick={() => setDenying(true)}
-              className="px-5 py-2 text-sm font-medium rounded-surface bg-danger-soft text-danger hover:bg-danger-soft border border-danger transition-colors duration-150 focus-border-contrast"
             >
               Deny
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="successSoft"
+              size="lg"
               onClick={() => sendApproval(true)}
-              className="px-5 py-2 text-sm font-medium rounded-surface bg-success-soft text-success hover:bg-success-soft border border-success transition-colors duration-150 focus-border-contrast"
             >
               Run
-            </button>
+            </Button>
           </>
         )
       }
@@ -147,7 +147,6 @@ export function CodeExecutionApproval({
               }
             }}
             placeholder="e.g. don't fetch from the network; use a smaller input; try a different approach..."
-            className="rounded-surface placeholder:text-fg-subtle resize-none"
             rows={3}
           />
         </div>

@@ -1,16 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import {
-  FileText,
-  Upload,
-  Plus,
-  Trash2,
-  LoaderCircle,
-  FilePen,
-  Edit3,
-} from 'lucide-react';
+import { FileText, Upload, Plus, Trash2, FilePen, Edit3 } from 'lucide-react';
 import {
   useWorkspaceFiles,
   useUploadWorkspaceFile,
@@ -20,6 +12,7 @@ import {
 } from '@/lib/hooks/api/useWorkspaceFiles';
 import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 import { Input } from '@/components/ui/Input';
 import { ListEmptyState, ListLoading } from '@/components/ui/List';
 
@@ -43,7 +36,7 @@ const AUTO_ACCEPT_SEGMENTS: {
     value: 1,
     label: 'Auto',
     title: 'Always auto-accept edits',
-    activeClass: 'bg-accent/20 text-accent',
+    activeClass: 'bg-accent-soft text-accent',
   },
   {
     value: 0,
@@ -116,17 +109,20 @@ export default function FilesTab({
 
   const [creatingNote, setCreatingNote] = useState(false);
   const [noteName, setNoteName] = useState('note.md');
+  const [pendingDelete, setPendingDelete] = useState<FileMeta | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     onCountChange?.(files.length);
   }, [files.length, onCountChange]);
 
-  async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    if (upload.isPending) return;
     const f = e.target.files?.[0];
     if (!f) return;
     upload.mutate(f, {
       onSettled: () => {
-        e.target.value = '';
+        if (uploadInputRef.current) uploadInputRef.current.value = '';
       },
     });
   }
@@ -143,28 +139,30 @@ export default function FilesTab({
     );
   }
 
-  function remove(id: string) {
-    if (!confirm('Delete file?')) return;
-    del.mutate(id);
+  function remove(file: FileMeta) {
+    setPendingDelete(file);
   }
 
   return (
     <div className="space-y-4">
       <div className="flex gap-2 items-center flex-wrap">
-        <label className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-surface border border-surface-2 bg-surface hover:bg-surface-2 cursor-pointer transition-colors duration-150">
-          {upload.isPending ? (
-            <LoaderCircle size={14} className="animate-spin text-accent" />
-          ) : (
-            <Upload size={14} />
-          )}
+        <Button
+          size="sm"
+          icon={Upload}
+          loading={upload.isPending}
+          onClick={() => {
+            if (!upload.isPending) uploadInputRef.current?.click();
+          }}
+        >
           Upload
-          <input
-            type="file"
-            aria-label="Upload file"
-            className="hidden"
-            onChange={onUpload}
-          />
-        </label>
+        </Button>
+        <input
+          ref={uploadInputRef}
+          type="file"
+          aria-label="Upload file"
+          className="hidden"
+          onChange={onUpload}
+        />
         {creatingNote ? (
           <span
             className={
@@ -275,7 +273,7 @@ export default function FilesTab({
                       icon={Trash2}
                       label="Delete"
                       tone="danger"
-                      onClick={() => remove(f.id)}
+                      onClick={() => remove(f)}
                       className="shrink-0"
                     />
                   </div>
@@ -328,7 +326,7 @@ export default function FilesTab({
                     icon={Trash2}
                     label="Delete"
                     tone="danger"
-                    onClick={() => remove(f.id)}
+                    onClick={() => remove(f)}
                   />
                 </span>
               </li>
@@ -336,6 +334,20 @@ export default function FilesTab({
           })}
         </ul>
       )}
+
+      <ConfirmModal
+        open={!!pendingDelete}
+        onClose={() => setPendingDelete(null)}
+        title="Delete file"
+        body={<p>Delete file?</p>}
+        loading={del.isPending}
+        onConfirm={() => {
+          if (!pendingDelete) return;
+          del.mutate(pendingDelete.id, {
+            onSuccess: () => setPendingDelete(null),
+          });
+        }}
+      />
     </div>
   );
 }

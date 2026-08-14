@@ -12,9 +12,7 @@ import {
 } from '@/lib/hooks/api/useWorkspaces';
 import type { WorkspaceModelOverride } from '@/lib/workspaces/types';
 import { captureCurrentSelection } from '@/lib/models/presets';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import Modal from '@/components/ui/Modal';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 
 interface Workspace {
   id: string;
@@ -51,12 +49,9 @@ export default function SettingsTab({ workspace }: { workspace: Workspace }) {
   const [modelOverride, setModelOverride] =
     useState<WorkspaceModelOverride | null>(workspace.modelOverride ?? null);
   const [isArchived, setIsArchived] = useState(!!workspace.archivedAt);
-  const [deleting, setDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [deleteConfirmName, setDeleteConfirmName] = useState('');
   const cancelDelete = () => {
     setShowDeleteConfirm(false);
-    setDeleteConfirmName('');
   };
 
   const nameRef = useRef(name);
@@ -83,14 +78,12 @@ export default function SettingsTab({ workspace }: { workspace: Workspace }) {
   }
 
   function confirmDelete() {
-    setDeleting(true);
     del.mutate(undefined, {
-      onSuccess: () => router.push('/workspaces'),
-      onError: () => {
-        console.error('Failed to delete workspace');
-        setDeleting(false);
+      onSuccess: () => {
         setShowDeleteConfirm(false);
+        router.push('/workspaces');
       },
+      onError: () => console.error('Failed to delete workspace'),
     });
   }
 
@@ -195,45 +188,31 @@ export default function SettingsTab({ workspace }: { workspace: Workspace }) {
         </div>
       </section>
 
-      <Modal
+      <ConfirmModal
         open={showDeleteConfirm}
         onClose={cancelDelete}
-        size="sm"
         title="Delete workspace?"
-        footer={
-          <>
-            <Button onClick={cancelDelete}>Cancel</Button>
-            <Button
-              variant="danger"
-              onClick={confirmDelete}
-              loading={deleting}
-              disabled={deleteConfirmName !== workspace.name}
-            >
-              {deleting ? 'Deleting…' : 'Delete'}
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-fg-muted">
+        body={
+          <p>
             This will permanently delete{' '}
             <strong>&ldquo;{workspace.name}&rdquo;</strong> and all its files.
             Chats and memories will be detached but not deleted. This cannot be
             undone.
           </p>
-          <div className="space-y-1">
-            <label className="text-xs text-fg-muted">
+        }
+        loading={del.isPending}
+        onConfirm={confirmDelete}
+        requireTypedConfirmation={{
+          value: workspace.name,
+          label: (
+            <>
               Type <strong>{workspace.name}</strong> to confirm
-            </label>
-            <Input
-              aria-label={`Confirm workspace name: ${workspace.name}`}
-              value={deleteConfirmName}
-              onChange={(e) => setDeleteConfirmName(e.target.value)}
-              placeholder={workspace.name}
-            />
-          </div>
-        </div>
-      </Modal>
+            </>
+          ),
+          ariaLabel: `Confirm workspace name: ${workspace.name}`,
+          placeholder: workspace.name,
+        }}
+      />
     </div>
   );
 }

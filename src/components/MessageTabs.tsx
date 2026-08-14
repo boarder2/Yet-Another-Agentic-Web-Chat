@@ -23,6 +23,7 @@ import MessageSources from './MessageSources';
 import SearchImages from './SearchImages';
 import SearchVideos from './SearchVideos';
 import MessageBoxLoading from './MessageBoxLoading';
+import ComposerOptionRow from './MessageInputActions/ComposerOptionRow';
 import { Document } from '@langchain/core/documents';
 import { mapOutsideWidgets } from '@/lib/widgets/envelope';
 
@@ -410,20 +411,15 @@ const MessageTabs = ({
                     {message.suggestions.map((suggestion, i) => (
                       <div className="flex flex-col space-y-3 text-sm" key={i}>
                         <div className="h-px w-full bg-surface-2" />
-                        <div
-                          onClick={() => {
-                            sendMessage(suggestion);
-                          }}
-                          className="cursor-pointer flex flex-row justify-between font-medium space-x-2 items-center"
-                        >
-                          <p className="transition-colors duration-150 hover:text-accent">
-                            {suggestion}
-                          </p>
-                          <Plus
-                            size={20}
-                            className="text-accent flex-shrink-0"
-                          />
-                        </div>
+                        <ComposerOptionRow
+                          selected={false}
+                          mode="none"
+                          label={suggestion}
+                          trailing={
+                            <Plus size={20} className="shrink-0 text-accent" />
+                          }
+                          onClick={() => sendMessage(suggestion)}
+                        />
                       </div>
                     ))}
                   </div>

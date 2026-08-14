@@ -1,6 +1,7 @@
 import { test, expect } from '../fixtures';
 import { ChatPage } from '../pages/ChatPage';
 import { HistoryPage } from '../pages/HistoryPage';
+import { seedChat, seedExpandableToolChat } from '../utils/seed';
 
 const DETERMINISTIC_ANSWER = 'This is a deterministic test answer.';
 const TOOL_ANSWER = 'Based on the document, the answer is deterministic.';
@@ -207,6 +208,165 @@ test.describe('chat conversation flow', () => {
     await expect(
       page.getByRole('heading', { level: 3, name: fileName, exact: true }),
     ).toBeVisible();
+  });
+
+  test('ToolCall disclosures are keyboard buttons and preserve semantic PDF links', async ({
+    page,
+    request,
+  }) => {
+    const { chatId, pdfUrl } = await seedExpandableToolChat(request);
+
+    try {
+      await page.goto(`/c/${chatId}`);
+      const tool = page
+        .locator('[data-execution]')
+        .filter({ hasText: 'Fetched message' })
+        .first();
+      const disclosure = tool.getByRole('button');
+      await expect(disclosure).toHaveAttribute('aria-expanded', 'false');
+      await expect(disclosure).toHaveClass(/focus-border-neutral/);
+
+      const spinner = disclosure.locator('svg.animate-spin');
+      await expect(spinner).toBeVisible();
+      await expect(spinner).toHaveAttribute('width', '16');
+      await expect(spinner).toHaveAttribute('height', '16');
+
+      await disclosure.focus();
+      await page.keyboard.press('Enter');
+      await expect(disclosure).toHaveAttribute('aria-expanded', 'true');
+      await expect(tool).toContainText('Tool call disclosure fixture');
+      await expect(
+        tool.getByRole('link', { name: 'View chat thread ↗' }),
+      ).toHaveAttribute('href', `/c/${chatId}`);
+
+      await page.keyboard.press('Space');
+      await expect(disclosure).toHaveAttribute('aria-expanded', 'false');
+
+      const pdf = page
+        .locator('[data-execution]')
+        .filter({ hasText: 'Loading PDF document' })
+        .getByRole('link', { name: pdfUrl });
+      await expect(pdf).toHaveAttribute('href', pdfUrl);
+      await expect(pdf).toHaveAttribute('target', '_blank');
+      await expect(pdf).toHaveClass(/bg-surface-2/);
+      await expect(pdf).toHaveClass(/font-mono/);
+      await expect(pdf).toHaveClass(/text-accent/);
+    } finally {
+      const response = await request.delete(`/api/chats/${chatId}`);
+      expect([200, 204, 404]).toContain(response.status());
+    }
+  });
+
+  test('image and video results open their lightboxes from the keyboard', async ({
+    page,
+    request,
+  }) => {
+    const chatId = await seedChat(request, {
+      content: `keyboard-media-${Date.now()}`,
+    });
+    const pixel =
+      'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+
+    await page.route('**/api/config', async (route) => {
+      const response = await route.fetch();
+      const body = (await response.json()) as Record<string, unknown> & {
+        searchCapabilitiesRegular?: Record<string, boolean>;
+        searchCapabilitiesPrivate?: Record<string, boolean>;
+      };
+      await route.fulfill({
+        response,
+        json: {
+          ...body,
+          searchCapabilitiesRegular: {
+            ...body.searchCapabilitiesRegular,
+            images: true,
+            videos: true,
+          },
+          searchCapabilitiesPrivate: {
+            ...body.searchCapabilitiesPrivate,
+            images: true,
+            videos: true,
+          },
+        },
+      });
+    });
+    await page.route('**/api/images', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          images: [
+            {
+              url: 'https://example.com/deterministic-image',
+              img_src: pixel,
+              title: 'Deterministic image',
+            },
+          ],
+        }),
+      });
+    });
+    await page.route('**/api/videos', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          videos: [
+            {
+              url: 'https://example.com/deterministic-video',
+              img_src: pixel,
+              title: 'Deterministic video',
+              iframe_src: 'https://example.com/embed/deterministic-video',
+            },
+          ],
+        }),
+      });
+    });
+
+    try {
+      await page.goto(`/c/${chatId}`);
+      const imagesTab = page.getByTitle('Images');
+      const videosTab = page.getByTitle('Videos');
+      await expect(imagesTab).toBeVisible();
+      await expect(videosTab).toBeVisible();
+
+      await imagesTab.focus();
+      await page.keyboard.press('Enter');
+      await expect(imagesTab).toHaveAttribute('aria-pressed', 'true');
+      const imageTrigger = page.getByRole('button', {
+        name: 'Open image Deterministic image',
+        exact: true,
+      });
+      await expect(imageTrigger).toBeVisible();
+      await imageTrigger.focus();
+      await page.keyboard.press('Enter');
+      const imageLightbox = page.getByRole('dialog', { name: 'Lightbox' });
+      await expect(imageLightbox).toBeVisible();
+      await expect(imageLightbox.locator('img').first()).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(imageLightbox).toBeHidden();
+
+      await videosTab.focus();
+      await page.keyboard.press('Enter');
+      await expect(videosTab).toHaveAttribute('aria-pressed', 'true');
+      const videoTrigger = page.getByRole('button', {
+        name: 'Open video Deterministic video',
+        exact: true,
+      });
+      await expect(videoTrigger).toBeVisible();
+      await videoTrigger.focus();
+      await page.keyboard.press('Enter');
+      const videoLightbox = page.getByRole('dialog', { name: 'Lightbox' });
+      await expect(videoLightbox).toBeVisible();
+      await expect(videoLightbox.locator('iframe').first()).toHaveAttribute(
+        'src',
+        /example\.com\/embed\/deterministic-video/,
+      );
+      await page.keyboard.press('Escape');
+      await expect(videoLightbox).toBeHidden();
+    } finally {
+      const response = await request.delete(`/api/chats/${chatId}`);
+      expect([200, 204, 404]).toContain(response.status());
+    }
   });
 
   test('a model-forged yaawc: fence renders as a plain code block, not a widget', async ({

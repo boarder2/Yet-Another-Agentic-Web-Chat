@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { CodeBlock } from '../CodeBlock';
 import { Card } from '@/components/ui/Card';
+import { cn } from '@/lib/utils';
 import { useMessage } from '@/lib/hooks/api/useMessage';
 import { decodeHtmlEntities } from '@/lib/utils/html';
 import MarkdownRenderer from '../MarkdownRenderer';
@@ -43,6 +44,72 @@ import MarkdownRenderer from '../MarkdownRenderer';
  */
 const isTrue = (v: string | boolean | undefined): boolean =>
   v === true || v === 'true';
+
+type ArgChipProps = {
+  children: React.ReactNode;
+  wide?: boolean;
+  maxWidth?: 'xs' | 'md';
+  mono?: boolean;
+  bordered?: boolean;
+  href?: string;
+};
+
+const ArgChip = ({
+  children,
+  wide = false,
+  maxWidth,
+  mono = true,
+  bordered = false,
+  href,
+}: ArgChipProps) => {
+  const className = cn(
+    'ml-2 rounded-control bg-surface-2 px-2 py-0.5 text-sm',
+    mono && 'font-mono',
+    (wide || maxWidth) && 'truncate',
+    wide && !maxWidth && 'max-w-md',
+    maxWidth === 'xs' && 'max-w-xs',
+    maxWidth === 'md' && 'max-w-md',
+    bordered && 'border border-surface-2',
+    href && 'text-accent hover:underline',
+  );
+
+  if (href) {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={className}
+      >
+        {children}
+      </a>
+    );
+  }
+
+  return <span className={className}>{children}</span>;
+};
+
+type ToolCallSectionProps = {
+  children: React.ReactNode;
+  border?: 'surface' | 'danger';
+  className?: string;
+};
+
+const ToolCallSection = ({
+  children,
+  border = 'surface',
+  className,
+}: ToolCallSectionProps) => (
+  <div
+    className={cn(
+      'border-t',
+      border === 'danger' ? 'border-danger' : 'border-surface-2',
+      className,
+    )}
+  >
+    {children}
+  </div>
+);
 
 // Custom ToolCall component for markdown
 export const ToolCall = ({
@@ -204,9 +271,7 @@ export const ToolCall = ({
         <>
           <span className="mr-2">{getIcon(type)}</span>
           <span>Web search:</span>
-          <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm">
-            {decodeHtmlEntities(query || (children as string))}
-          </span>
+          <ArgChip>{decodeHtmlEntities(query || (children as string))}</ArgChip>
         </>
       );
     }
@@ -216,9 +281,7 @@ export const ToolCall = ({
         <>
           <span className="mr-2">{getIcon(type)}</span>
           <span>File search:</span>
-          <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm">
-            {decodeHtmlEntities(query || (children as string))}
-          </span>
+          <ArgChip>{decodeHtmlEntities(query || (children as string))}</ArgChip>
         </>
       );
     }
@@ -245,13 +308,9 @@ export const ToolCall = ({
         <>
           <span className="mr-2">{getIcon(type)}</span>
           <span>Loading PDF document:</span>
-          <a
-            target="_blank"
-            href={decodeHtmlEntities(url)}
-            className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm"
-          >
+          <ArgChip href={decodeHtmlEntities(url)}>
             {decodeHtmlEntities(url)}
-          </a>
+          </ArgChip>
         </>
       );
     }
@@ -261,9 +320,7 @@ export const ToolCall = ({
         <>
           <span className="mr-2">{getIcon(type)}</span>
           <span>Image search:</span>
-          <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm">
-            {decodeHtmlEntities(query || (children as string))}
-          </span>
+          <ArgChip>{decodeHtmlEntities(query || (children as string))}</ArgChip>
         </>
       );
     }
@@ -273,9 +330,9 @@ export const ToolCall = ({
         <>
           <span className="mr-2">{getIcon(type)}</span>
           <span>Analyzing image:</span>
-          <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm truncate max-w-xs">
+          <ArgChip maxWidth="xs">
             {decodeHtmlEntities(url || query || (children as string))}
-          </span>
+          </ArgChip>
         </>
       );
     }
@@ -285,9 +342,9 @@ export const ToolCall = ({
         <>
           <span className="mr-2">{getIcon(type)}</span>
           <span>Generating image:</span>
-          <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm truncate max-w-xs">
+          <ArgChip maxWidth="xs">
             {decodeHtmlEntities(query || (children as string))}
-          </span>
+          </ArgChip>
           {status === 'success' && imageId && (
             <div className="mt-2">
               <a
@@ -343,11 +400,7 @@ export const ToolCall = ({
         <>
           <span className="mr-2">{getIcon(type)}</span>
           <span>Saving memory:</span>
-          {query && (
-            <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm truncate max-w-md">
-              {decodeHtmlEntities(query)}
-            </span>
-          )}
+          {query && <ArgChip wide>{decodeHtmlEntities(query)}</ArgChip>}
         </>
       );
     }
@@ -357,11 +410,7 @@ export const ToolCall = ({
         <>
           <span className="mr-2">{getIcon(type)}</span>
           <span>Deleting memory:</span>
-          {query && (
-            <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm truncate max-w-md">
-              {decodeHtmlEntities(query)}
-            </span>
-          )}
+          {query && <ArgChip wide>{decodeHtmlEntities(query)}</ArgChip>}
         </>
       );
     }
@@ -380,11 +429,7 @@ export const ToolCall = ({
         <>
           <span className="mr-2">{getIcon(type)}</span>
           <span>Code execution{description ? ':' : ''}</span>
-          {description && (
-            <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm truncate max-w-md">
-              {description}
-            </span>
-          )}
+          {description && <ArgChip wide>{description}</ArgChip>}
           {isTrue(denied) && (
             <span className="ml-2 px-2 py-0.5 bg-danger-soft text-danger rounded-control text-xs">
               Denied
@@ -428,9 +473,9 @@ export const ToolCall = ({
           <span className="mr-2">{getIcon(type)}</span>
           <span>Asked user{decodedQuery ? ':' : ''}</span>
           {decodedQuery && (
-            <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control text-sm truncate max-w-md">
+            <ArgChip wide mono={false}>
               {decodedQuery}
-            </span>
+            </ArgChip>
           )}
           {isTrue(skipped) && (
             <span className="ml-2 px-2 py-0.5 bg-warning-soft text-warning rounded-control text-xs">
@@ -448,9 +493,9 @@ export const ToolCall = ({
             </span>
           )}
           {decodedFreeformText && (
-            <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control text-sm truncate max-w-md">
+            <ArgChip wide mono={false}>
               {decodedFreeformText}
-            </span>
+            </ArgChip>
           )}
         </>
       );
@@ -470,11 +515,7 @@ export const ToolCall = ({
         <>
           <span className="mr-2">{getIcon(type)}</span>
           <span>Searching workspace{query ? ':' : ''}</span>
-          {query && (
-            <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm truncate max-w-md">
-              {decodeHtmlEntities(query)}
-            </span>
-          )}
+          {query && <ArgChip wide>{decodeHtmlEntities(query)}</ArgChip>}
         </>
       );
     }
@@ -484,11 +525,7 @@ export const ToolCall = ({
         <>
           <span className="mr-2">{getIcon(type)}</span>
           <span>Reading workspace file{query ? ':' : ''}</span>
-          {query && (
-            <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm truncate max-w-md">
-              {decodeHtmlEntities(query)}
-            </span>
-          )}
+          {query && <ArgChip wide>{decodeHtmlEntities(query)}</ArgChip>}
         </>
       );
     }
@@ -498,11 +535,7 @@ export const ToolCall = ({
         <>
           <span className="mr-2">{getIcon(type)}</span>
           <span>Editing workspace file{query ? ':' : ''}</span>
-          {query && (
-            <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm truncate max-w-md">
-              {decodeHtmlEntities(query)}
-            </span>
-          )}
+          {query && <ArgChip wide>{decodeHtmlEntities(query)}</ArgChip>}
         </>
       );
     }
@@ -512,11 +545,7 @@ export const ToolCall = ({
         <>
           <span className="mr-2">{getIcon(type)}</span>
           <span>Creating workspace file{query ? ':' : ''}</span>
-          {query && (
-            <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm truncate max-w-md">
-              {decodeHtmlEntities(query)}
-            </span>
-          )}
+          {query && <ArgChip wide>{decodeHtmlEntities(query)}</ArgChip>}
         </>
       );
     }
@@ -526,9 +555,7 @@ export const ToolCall = ({
         <>
           <span className="mr-2">{getIcon(type)}</span>
           <span>Searching chat history:</span>
-          <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm">
-            {decodeHtmlEntities(query || (children as string))}
-          </span>
+          <ArgChip>{decodeHtmlEntities(query || (children as string))}</ArgChip>
         </>
       );
     }
@@ -549,11 +576,7 @@ export const ToolCall = ({
             <BookOpen size={16} />
           </span>
           <span>Loaded skill</span>
-          {query && (
-            <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm border border-surface-2">
-              {query}
-            </span>
-          )}
+          {query && <ArgChip bordered>{query}</ArgChip>}
         </>
       );
     }
@@ -593,9 +616,7 @@ export const ToolCall = ({
         <>
           <span className="mr-2">{getIcon(type || 'default')}</span>
           <span>MCP tool:</span>
-          <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm border border-surface-2">
-            {mcpTool || type}
-          </span>
+          <ArgChip bordered>{mcpTool || type}</ArgChip>
           {mcpServer && (
             <span className="ml-1 text-xs text-fg-subtle">on {mcpServer}</span>
           )}
@@ -608,9 +629,7 @@ export const ToolCall = ({
       <>
         <span className="mr-2">{getIcon(type || 'default')}</span>
         <span>Using tool:</span>
-        <span className="ml-2 px-2 py-0.5 bg-fg/5 rounded-control font-mono text-sm border border-surface-2">
-          {type || 'unknown'}
-        </span>
+        <ArgChip bordered>{type || 'unknown'}</ArgChip>
       </>
     );
   };
@@ -620,55 +639,63 @@ export const ToolCall = ({
     type === 'get_message' ||
     mcpExpandable;
 
+  const headerContent = (
+    <>
+      <div className="flex flex-wrap items-center gap-1">
+        {formatToolMessage()}
+      </div>
+      <div className="flex h-5 items-center gap-2">
+        {isExpandable && (
+          <ChevronRight
+            size={16}
+            className={`text-fg-subtle transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`}
+          />
+        )}
+        {status === 'running' && (
+          <LoaderCircle size={16} className="animate-spin text-accent" />
+        )}
+        {status === 'success' &&
+          !isTrue(denied) &&
+          exitCode !== undefined &&
+          String(exitCode) !== '0' && <X size={16} className="text-danger" />}
+        {status === 'success' &&
+          !isTrue(denied) &&
+          (exitCode === undefined || String(exitCode) === '0') && (
+            <CheckCheck size={16} className="text-success" />
+          )}
+        {(status === 'error' || isTrue(denied)) && (
+          <X size={16} className="text-danger" />
+        )}
+      </div>
+    </>
+  );
+
   return (
     <Card data-execution className="my-3 overflow-hidden">
-      <div
-        className={`flex items-start justify-between gap-2 text-sm font-medium px-4 py-3 ${
-          isExpandable
-            ? 'cursor-pointer hover:bg-surface-2/50 transition-colors duration-150'
-            : ''
-        }`}
-        onClick={isExpandable ? () => setExpanded(!expanded) : undefined}
-      >
-        <div className="flex items-center flex-wrap gap-1">
-          {formatToolMessage()}
+      {isExpandable ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((value) => !value)}
+          aria-expanded={expanded}
+          className="flex w-full items-start justify-between gap-2 border border-transparent px-4 py-3 text-left text-sm font-medium transition-colors duration-150 hover:bg-surface-2/50 focus-border-neutral"
+        >
+          {headerContent}
+        </button>
+      ) : (
+        <div className="flex items-start justify-between gap-2 px-4 py-3 text-sm font-medium">
+          {headerContent}
         </div>
-        <div className="flex items-center gap-2 h-5">
-          {isExpandable && (
-            <ChevronRight
-              size={16}
-              className={`text-fg-subtle transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`}
-            />
-          )}
-          {status === 'running' && (
-            <div className="w-4 h-4">
-              <LoaderCircle className="animate-spin text-accent" />
-            </div>
-          )}
-          {status === 'success' &&
-            !isTrue(denied) &&
-            exitCode !== undefined &&
-            String(exitCode) !== '0' && <X size={16} className="text-danger" />}
-          {status === 'success' &&
-            !isTrue(denied) &&
-            (exitCode === undefined || String(exitCode) === '0') && (
-              <CheckCheck size={16} className="text-success" />
-            )}
-          {(status === 'error' || isTrue(denied)) && (
-            <X size={16} className="text-danger" />
-          )}
-        </div>
-      </div>
+      )}
       {status === 'error' && error && (
         <div className="px-4 pb-3 text-xs text-danger break-words font-mono whitespace-pre-wrap">
           {decodeHtmlEntities(error)}
         </div>
       )}
       {type === 'get_message' && expanded && (
-        <div className="border-t border-surface-2 px-4 py-3 text-sm space-y-3">
+        <ToolCallSection className="space-y-3 px-4 py-3 text-sm">
           {fetchState.status === 'loading' && (
             <div className="flex items-center gap-2 text-fg-muted">
-              <LoaderCircle className="w-4 h-4 animate-spin" />
+              <LoaderCircle size={16} className="animate-spin text-accent" />
               <span>Loading message…</span>
             </div>
           )}
@@ -694,31 +721,31 @@ export const ToolCall = ({
               <MarkdownRenderer content={fetchState.data.content} />
             </>
           )}
-        </div>
+        </ToolCallSection>
       )}
       {type === 'code_execution' && expanded && code && (
-        <div className="border-t border-surface-2">
+        <ToolCallSection>
           <CodeBlock className="language-javascript">{code}</CodeBlock>
           {stdout && (
-            <div className="border-t border-surface-2">
+            <ToolCallSection>
               <div className="px-4 py-1 text-xs text-fg-subtle font-mono bg-surface-2/50">
                 stdout
               </div>
               <CodeBlock className="language-text">{stdout}</CodeBlock>
-            </div>
+            </ToolCallSection>
           )}
           {stderr && (
-            <div className="border-t border-danger">
+            <ToolCallSection border="danger">
               <div className="px-4 py-1 text-xs text-danger font-mono bg-danger-soft">
                 stderr
               </div>
               <CodeBlock className="language-text">{stderr}</CodeBlock>
-            </div>
+            </ToolCallSection>
           )}
-        </div>
+        </ToolCallSection>
       )}
       {isMcp && expanded && mcpExpandable && (
-        <div className="border-t border-surface-2">
+        <ToolCallSection>
           {decodedMcpArgs && (
             <div>
               <div className="px-4 py-1 text-xs text-fg-subtle font-mono bg-surface-2/50">
@@ -728,16 +755,16 @@ export const ToolCall = ({
             </div>
           )}
           {decodedMcpResult && (
-            <div className="border-t border-surface-2">
+            <ToolCallSection>
               <div className="px-4 py-1 text-xs text-fg-subtle font-mono bg-surface-2/50">
                 Response
               </div>
               <CodeBlock className="language-text">
                 {decodedMcpResult}
               </CodeBlock>
-            </div>
+            </ToolCallSection>
           )}
-        </div>
+        </ToolCallSection>
       )}
     </Card>
   );

@@ -2,7 +2,6 @@
 'use client';
 
 import ChatRow, { WorkspaceMeta } from './ChatRow';
-import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/Input';
 import { ListCount, ListEmptyState, ListLoading } from '@/components/ui/List';
 import WorkspaceFilterChips from '@/components/Workspaces/WorkspaceFilterChips';
@@ -28,6 +27,7 @@ import { qk } from '@/lib/api/keys';
 import { useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { useActiveRuns } from '@/lib/hooks/api/useActiveRuns';
 import { IconButton } from '@/components/ui/IconButton';
+import { FilterChip } from '@/components/ui/FilterChip';
 
 interface Props {
   /** When set, scopes the browser to a single workspace; hides workspace UI. */
@@ -302,16 +302,12 @@ const ChatBrowser = ({ workspaceId }: Props) => {
             />
           )}
         </div>
-        <button
-          type="button"
+        <FilterChip
+          selected={false}
+          size="md"
           onClick={handleLlmSearch}
           disabled={!searchQuery.trim() || isLlmSearching}
           title="Search with AI"
-          className={cn(
-            'flex items-center gap-1.5 px-3 py-2 rounded-surface text-sm border transition-colors duration-150 focus-border-neutral',
-            'border-surface-2 bg-surface text-fg-muted hover:text-fg hover:border-fg/30',
-            'disabled:opacity-40 disabled:cursor-not-allowed',
-          )}
         >
           {isLlmSearching ? (
             <LoaderCircle size={16} className="animate-spin text-accent" />
@@ -319,26 +315,20 @@ const ChatBrowser = ({ workspaceId }: Props) => {
             <Sparkles size={15} />
           )}
           <span className="hidden sm:inline">AI</span>
-        </button>
+        </FilterChip>
       </div>
 
       {/* Pinned/scheduled chips */}
       <div className="flex items-center gap-2 mb-3">
-        <button
-          type="button"
+        <FilterChip
+          selected={pinnedOnly}
           onClick={() => setPinnedOnly((v) => !v)}
-          className={cn(
-            'flex items-center gap-1 px-2.5 py-1 rounded-pill text-xs font-medium border transition-colors duration-150 focus-border-neutral',
-            pinnedOnly
-              ? 'bg-accent/10 border-accent/30 text-accent'
-              : 'bg-surface border-surface-2 text-fg-muted hover:text-fg hover:border-fg/30',
-          )}
         >
           <Pin size={11} className={pinnedOnly ? 'fill-current' : ''} />
           Pinned
-        </button>
-        <button
-          type="button"
+        </FilterChip>
+        <FilterChip
+          selected={scheduledFilter !== 'all'}
           onClick={() => {
             setScheduledFilter((prev) =>
               prev === 'all'
@@ -348,16 +338,10 @@ const ChatBrowser = ({ workspaceId }: Props) => {
                   : 'all',
             );
           }}
-          className={cn(
-            'flex items-center gap-1 px-2.5 py-1 rounded-pill text-xs font-medium border transition-colors duration-150 focus-border-neutral',
-            scheduledFilter !== 'all'
-              ? 'bg-accent/10 border-accent/30 text-accent'
-              : 'bg-surface border-surface-2 text-fg-muted hover:text-fg hover:border-fg/30',
-          )}
         >
           <CalendarClock size={11} />
           {scheduledFilter === 'unscheduled' ? 'Unscheduled' : 'Scheduled'}
-        </button>
+        </FilterChip>
       </div>
 
       {!isSearchMode && totalConversations > 0 && (

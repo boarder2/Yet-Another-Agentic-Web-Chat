@@ -1,6 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
+import { filterChipClasses } from '@/components/ui/FilterChip';
 
 export interface TabItem {
   key: string;
@@ -33,12 +34,7 @@ export function Tabs({
     >
       {items.map((item) => {
         const active = item.key === activeKey;
-        const cls = cn(
-          'flex items-center gap-1.5 px-3 py-1.5 rounded-pill text-sm font-medium border focus-border-neutral transition-colors duration-150 whitespace-nowrap',
-          active
-            ? 'bg-accent/10 border-accent/30 text-accent'
-            : 'bg-surface border-surface-2 text-fg-muted hover:text-fg hover:border-fg/30',
-        );
+        const cls = filterChipClasses(active, 'md');
         const content = (
           <>
             {item.icon && <item.icon size={15} />}

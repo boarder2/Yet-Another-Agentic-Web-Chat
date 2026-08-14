@@ -12,8 +12,10 @@ import {
   Brain,
   Link as LinkIcon,
 } from 'lucide-react';
-import AppSwitch from '@/components/ui/AppSwitch';
 import { Button } from '@/components/ui/Button';
+import SettingToggleRow from '@/components/ui/SettingToggleRow';
+import Badge, { type BadgeTone } from '@/components/ui/Badge';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 import { IconButton } from '@/components/ui/IconButton';
 import { ListEmptyState, ListLoading } from '@/components/ui/List';
 import { Input } from '@/components/ui/Input';
@@ -22,7 +24,7 @@ import Select from '@/components/ui/Select';
 import ModelField from '@/components/models/ModelField';
 import SettingsSection from '../components/SettingsSection';
 import { SettingsType } from '../types';
-import { cn, formatTimeDifference } from '@/lib/utils';
+import { formatTimeDifference } from '@/lib/utils';
 import { useLocalStorageString } from '@/lib/hooks/useLocalStorage';
 import {
   useMemories,
@@ -61,12 +63,15 @@ const SORT_OPTIONS = [
   { value: 'accessCount', label: 'Times Used' },
 ] as const;
 
-const categoryColors: Record<string, string> = {
-  Preference: 'bg-info-soft text-info',
-  Profile: 'bg-success-soft text-success',
-  Professional: 'bg-accent/20 text-accent',
-  Project: 'bg-warning-soft text-warning',
-  Instruction: 'bg-warning-soft text-warning',
+type MemoryConfirmation =
+  { kind: 'memory'; id: string } | { kind: 'all' } | { kind: 'reindex' };
+
+const categoryTones: Record<string, BadgeTone> = {
+  Preference: 'info',
+  Profile: 'success',
+  Professional: 'accent',
+  Project: 'warning',
+  Instruction: 'warning',
 };
 
 export default function MemorySection({
@@ -128,6 +133,8 @@ export default function MemorySection({
   const deleteMemory = useDeleteMemoryItem();
   const deleteAll = useDeleteAllMemories();
   const reindex = useReindexMemories();
+  const [pendingConfirmation, setPendingConfirmation] =
+    useState<MemoryConfirmation | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(searchQuery), 500);
@@ -153,24 +160,15 @@ export default function MemorySection({
   };
 
   const handleDelete = (id: string) => {
-    if (!window.confirm('Delete this memory?')) return;
-    deleteMemory.mutate(id);
+    setPendingConfirmation({ kind: 'memory', id });
   };
 
   const handleDeleteAll = () => {
-    if (!window.confirm('Delete ALL memories? This action cannot be undone.'))
-      return;
-    deleteAll.mutate(undefined);
+    setPendingConfirmation({ kind: 'all' });
   };
 
   const handleReindex = () => {
-    if (
-      !window.confirm(
-        'Re-index all memory embeddings with the current embedding model?',
-      )
-    )
-      return;
-    reindex.mutate(undefined);
+    setPendingConfirmation({ kind: 'reindex' });
   };
 
   const startEditing = (memory: Memory) => {
@@ -211,63 +209,44 @@ export default function MemorySection({
       </p>
 
       <div className="flex flex-col space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">Memory</p>
-            <p className="text-xs text-fg-muted">
-              Enable cross-conversation memory
-            </p>
-          </div>
-          <AppSwitch
-            checked={memoryEnabled}
-            onChange={(val: boolean) => {
-              setMemoryEnabled(val);
-              localStorage.setItem('memoryEnabled', String(val));
-            }}
-          />
-        </div>
+        <SettingToggleRow
+          label="Memory"
+          description="Enable cross-conversation memory"
+          checked={memoryEnabled}
+          onChange={(val: boolean) => {
+            setMemoryEnabled(val);
+            localStorage.setItem('memoryEnabled', String(val));
+          }}
+        />
 
         {memoryEnabled && (
           <>
-            <div className="flex items-center justify-between pl-4 border-l-2 border-surface-2">
-              <div>
-                <p className="text-sm font-medium">
-                  Use saved memories in chats
-                </p>
-                <p className="text-xs text-fg-muted">
-                  Include relevant memories to personalize responses
-                </p>
-              </div>
-              <AppSwitch
-                checked={memoryRetrievalEnabled}
-                onChange={(val: boolean) => {
-                  setMemoryRetrievalEnabled(val);
-                  localStorage.setItem('memoryRetrievalEnabled', String(val));
-                }}
-              />
-            </div>
+            <SettingToggleRow
+              nested
+              label="Use saved memories in chats"
+              description="Include relevant memories to personalize responses"
+              checked={memoryRetrievalEnabled}
+              onChange={(val: boolean) => {
+                setMemoryRetrievalEnabled(val);
+                localStorage.setItem('memoryRetrievalEnabled', String(val));
+              }}
+            />
 
-            <div className="flex items-center justify-between pl-4 border-l-2 border-surface-2">
-              <div>
-                <p className="text-sm font-medium">
-                  Automatic memory detection
-                </p>
-                <p className="text-xs text-fg-muted">
+            <SettingToggleRow
+              nested
+              label="Automatic memory detection"
+              description={
+                <>
                   Analyze conversations to identify facts worth remembering.
                   Uses additional calls to the memory processing model below.
-                </p>
-              </div>
-              <AppSwitch
-                checked={memoryAutoDetectionEnabled}
-                onChange={(val: boolean) => {
-                  setMemoryAutoDetectionEnabled(val);
-                  localStorage.setItem(
-                    'memoryAutoDetectionEnabled',
-                    String(val),
-                  );
-                }}
-              />
-            </div>
+                </>
+              }
+              checked={memoryAutoDetectionEnabled}
+              onChange={(val: boolean) => {
+                setMemoryAutoDetectionEnabled(val);
+                localStorage.setItem('memoryAutoDetectionEnabled', String(val));
+              }}
+            />
 
             {config.chatModelProviders && (
               <div className="flex flex-col space-y-1 pl-4 border-l-2 border-surface-2">
@@ -355,7 +334,7 @@ export default function MemorySection({
 
       {/* Add memory */}
       {isAdding ? (
-        <div className="p-3 border border-accent/40 rounded-control bg-surface-2 space-y-2">
+        <div className="p-3 border border-accent-border rounded-control bg-surface-2 space-y-2">
           <Textarea
             ref={newInputRef}
             aria-label="New memory content"
@@ -481,15 +460,9 @@ export default function MemorySection({
                   </div>
                   <div className="flex items-center gap-3 mt-2 flex-wrap">
                     {memory.category && (
-                      <span
-                        className={cn(
-                          'px-2 py-0.5 rounded-pill text-xs',
-                          categoryColors[memory.category] ||
-                            'bg-surface text-fg-muted',
-                        )}
-                      >
+                      <Badge tone={categoryTones[memory.category] ?? 'default'}>
                         {memory.category}
-                      </span>
+                      </Badge>
                     )}
                     <span className="text-xs text-fg-subtle">
                       Created{' '}
@@ -531,7 +504,7 @@ export default function MemorySection({
                     {memory.workspaceId && (
                       <Link
                         href={`/workspaces/${memory.workspaceId}`}
-                        className="flex items-center gap-1 border border-transparent text-xs px-1.5 py-0.5 rounded-control bg-accent/20 text-accent hover:bg-accent/30 transition-colors duration-150 focus-border-neutral"
+                        className="flex items-center gap-1 border border-transparent text-xs px-1.5 py-0.5 rounded-control bg-accent-soft text-accent hover:bg-accent-border transition-colors duration-150 focus-border-neutral"
                       >
                         workspace
                       </Link>
@@ -543,6 +516,56 @@ export default function MemorySection({
           ))}
         </div>
       )}
+
+      <ConfirmModal
+        open={!!pendingConfirmation}
+        onClose={() => setPendingConfirmation(null)}
+        title={
+          pendingConfirmation?.kind === 'all'
+            ? 'Delete all memories'
+            : pendingConfirmation?.kind === 'reindex'
+              ? 'Re-index memories'
+              : 'Delete memory'
+        }
+        body={
+          pendingConfirmation?.kind === 'all' ? (
+            <p>Delete ALL memories? This action cannot be undone.</p>
+          ) : pendingConfirmation?.kind === 'reindex' ? (
+            <p>
+              Re-index all memory embeddings with the current embedding model?
+            </p>
+          ) : (
+            <p>Delete this memory?</p>
+          )
+        }
+        confirmLabel={
+          pendingConfirmation?.kind === 'reindex' ? 'Re-index' : 'Delete'
+        }
+        tone={pendingConfirmation?.kind === 'reindex' ? 'primary' : 'danger'}
+        loading={
+          pendingConfirmation?.kind === 'memory'
+            ? deleteMemory.isPending
+            : pendingConfirmation?.kind === 'all'
+              ? deleteAll.isPending
+              : reindex.isPending
+        }
+        onConfirm={() => {
+          if (!pendingConfirmation) return;
+          if (pendingConfirmation.kind === 'memory') {
+            deleteMemory.mutate(pendingConfirmation.id, {
+              onSuccess: () => setPendingConfirmation(null),
+            });
+          } else if (pendingConfirmation.kind === 'all') {
+            deleteAll.mutate(undefined, {
+              onSuccess: () => setPendingConfirmation(null),
+            });
+          } else {
+            reindex.mutate(undefined, {
+              onSuccess: () => setPendingConfirmation(null),
+            });
+          }
+        }}
+      />
     </SettingsSection>
   );
 }

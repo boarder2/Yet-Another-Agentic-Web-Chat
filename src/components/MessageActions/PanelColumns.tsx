@@ -94,12 +94,12 @@ const Column: React.FC<{ ex: PanelColumnPayload }> = ({ ex }) => {
           {ex.model}
         </span>
         {ex.sourceCount !== undefined && ex.sourceCount > 0 && (
-          <span className="text-[10px] text-fg-subtle shrink-0">
+          <span className="text-xs text-fg-subtle shrink-0">
             {ex.sourceCount} src
           </span>
         )}
         {ex.tokens !== undefined && ex.tokens > 0 && (
-          <span className="text-[10px] text-fg-subtle shrink-0">
+          <span className="text-xs text-fg-subtle shrink-0">
             {ex.tokens >= 1000
               ? `${(ex.tokens / 1000).toFixed(1)}k tok`
               : `${ex.tokens} tok`}

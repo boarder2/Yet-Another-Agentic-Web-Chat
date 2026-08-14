@@ -39,9 +39,11 @@ import {
 import SettingsSection from '../components/SettingsSection';
 import ModelPicker from '@/components/models/ModelPicker';
 import { Button } from '@/components/ui/Button';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 import { Input } from '@/components/ui/Input';
 import { IconButton } from '@/components/ui/IconButton';
 import { ListEmptyState } from '@/components/ui/List';
+import Badge from '@/components/ui/Badge';
 
 const EMPTY_PRESETS: ModelPresetList = [];
 
@@ -111,7 +113,7 @@ export default function ModelPresetsSection({
 
   const [addingNew, setAddingNew] = useState(false);
   const [editState, setEditState] = useState<EditState | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ModelPreset | null>(null);
   const [savingCurrentName, setSavingCurrentName] = useState(false);
   const [currentNameInput, setCurrentNameInput] = useState('');
 
@@ -152,7 +154,7 @@ export default function ModelPresetsSection({
 
   const handleDelete = (id: string) => {
     updatePresets(presets.filter((p) => p.id !== id));
-    setDeletingId(null);
+    setDeleteTarget(null);
     toast.success('Preset deleted');
   };
 
@@ -257,7 +259,7 @@ export default function ModelPresetsSection({
       contextWindowSize: preset.contextWindowSize,
     });
     setAddingNew(false);
-    setDeletingId(null);
+    setDeleteTarget(null);
   };
 
   return (
@@ -329,7 +331,7 @@ export default function ModelPresetsSection({
                 setSavingCurrentName(true);
                 setAddingNew(false);
                 setEditState(null);
-                setDeletingId(null);
+                setDeleteTarget(null);
               }}
               title={
                 selectedChatModel
@@ -355,7 +357,6 @@ export default function ModelPresetsSection({
             const isActive = matchingPreset?.id === preset.id;
             const available = isPresetAvailable(preset, chatProviders);
             const isEditing = editState?.id === preset.id;
-            const isDeleting = deletingId === preset.id;
 
             return (
               <div
@@ -446,16 +447,16 @@ export default function ModelPresetsSection({
                           {preset.name}
                         </span>
                         {isActive && (
-                          <span className="flex items-center gap-0.5 text-[10px] text-accent bg-surface px-1.5 py-0.5 rounded-pill border border-accent">
+                          <Badge tone="accent">
                             <Check size={10} />
                             active
-                          </span>
+                          </Badge>
                         )}
                         {!available && (
-                          <span className="flex items-center gap-0.5 text-[10px] text-warning bg-warning-soft px-1.5 py-0.5 rounded-control">
+                          <Badge tone="warning">
                             <AlertTriangle size={10} />
                             model unavailable
-                          </span>
+                          </Badge>
                         )}
                       </div>
                       <div className="flex items-center gap-1 mt-0.5">
@@ -469,51 +470,35 @@ export default function ModelPresetsSection({
                     </div>
 
                     {/* Actions */}
-                    {isDeleting ? (
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <span className="text-xs text-fg-muted">Delete?</span>
-                        <Button
-                          variant="danger"
-                          size="sm"
-                          onClick={() => handleDelete(preset.id)}
-                        >
-                          Yes
-                        </Button>
-                        <Button size="sm" onClick={() => setDeletingId(null)}>
-                          No
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-1 shrink-0">
-                        <Button
-                          size="sm"
-                          onClick={() => handleApply(preset)}
-                          disabled={isActive}
-                          aria-label="Apply preset"
-                        >
-                          Apply
-                        </Button>
-                        <IconButton
-                          icon={Pencil}
-                          label="Edit preset"
-                          onClick={() => startEdit(preset)}
-                          className="p-1.5"
-                        />
-                        <IconButton
-                          icon={Copy}
-                          label="Duplicate preset"
-                          onClick={() => handleDuplicate(preset)}
-                          className="p-1.5"
-                        />
-                        <IconButton
-                          icon={Trash2}
-                          label="Delete preset"
-                          tone="danger"
-                          onClick={() => setDeletingId(preset.id)}
-                          className="p-1.5"
-                        />
-                      </div>
-                    )}
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button
+                        size="sm"
+                        onClick={() => handleApply(preset)}
+                        disabled={isActive}
+                        aria-label="Apply preset"
+                      >
+                        Apply
+                      </Button>
+                      <IconButton
+                        icon={Pencil}
+                        label="Edit preset"
+                        onClick={() => startEdit(preset)}
+                        className="p-1.5"
+                      />
+                      <IconButton
+                        icon={Copy}
+                        label="Duplicate preset"
+                        onClick={() => handleDuplicate(preset)}
+                        className="p-1.5"
+                      />
+                      <IconButton
+                        icon={Trash2}
+                        label="Delete preset"
+                        tone="danger"
+                        onClick={() => setDeleteTarget(preset)}
+                        className="p-1.5"
+                      />
+                    </div>
                   </div>
                 )}
               </div>
@@ -632,7 +617,7 @@ export default function ModelPresetsSection({
           onClick={() => {
             setAddingNew(true);
             setSavingCurrentName(false);
-            setDeletingId(null);
+            setDeleteTarget(null);
             setEditState({
               id: '',
               name: '',
@@ -649,6 +634,21 @@ export default function ModelPresetsSection({
           New preset from scratch
         </Button>
       )}
+
+      <ConfirmModal
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete preset"
+        body={
+          <p>
+            Delete <span className="font-medium">{deleteTarget?.name}</span>?
+            This cannot be undone.
+          </p>
+        }
+        onConfirm={() => {
+          if (deleteTarget) handleDelete(deleteTarget.id);
+        }}
+      />
     </SettingsSection>
   );
 }

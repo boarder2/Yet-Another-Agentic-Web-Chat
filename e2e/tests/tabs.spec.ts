@@ -6,8 +6,8 @@ import { seedWorkspace } from '../utils/seed';
  * `Tabs` primitive (src/components/ui/Tabs.tsx). Each test drives one row and
  * asserts it is a real `role="tablist"` of `role="tab"` items, that the active
  * tab carries `aria-selected`, and that picking a different tab swaps the
- * visible section. No styling assertions — the unified pill look is asserted
- * by humans, structure by these specs.
+ * visible section. The chip-recipe test below also pins the shared selected
+ * colors and keyboard focus behavior at the browser seam.
  */
 test.describe('shared Tabs: history', () => {
   test('renders a tablist and switching tabs swaps the visible section', async ({
@@ -40,6 +40,95 @@ test.describe('shared Tabs: history', () => {
     // list content depends on shared-DB state (other specs seed artifacts), so
     // assert the swap by the chat browser disappearing, not store outcome.
     await expect(chatSearch).toBeHidden();
+  });
+});
+
+test.describe('shared Tabs: chip recipe and keyboard focus', () => {
+  test('selected tabs resolve accent-soft/accent-border in dark and light themes', async ({
+    page,
+  }) => {
+    for (const [themeId, mode] of [
+      ['nord', 'dark'],
+      ['solarized-light', 'light'],
+    ] as const) {
+      await page.goto('/history');
+      await page.evaluate(
+        (id) => localStorage.setItem('appTheme', id),
+        themeId,
+      );
+      await page.reload();
+
+      await expect(page.locator('html')).toHaveAttribute('data-theme', mode);
+      const tablist = page.getByRole('tablist', { name: 'History' });
+      await expect(tablist).toBeVisible();
+
+      const conversations = tablist.getByRole('tab', {
+        name: 'Conversations',
+      });
+      const artifacts = tablist.getByRole('tab', { name: 'Artifacts' });
+      await expect(conversations).toHaveAttribute('aria-selected', 'true');
+      await expect(artifacts).toHaveAttribute('aria-selected', 'false');
+
+      const expected = await page.evaluate(() => {
+        const probe = document.createElement('span');
+        probe.className = 'bg-accent-soft border-accent-border';
+        document.body.appendChild(probe);
+        const style = getComputedStyle(probe);
+        const result = {
+          background: style.backgroundColor,
+          border: style.borderTopColor,
+        };
+        probe.remove();
+        return result;
+      });
+      await expect
+        .poll(() =>
+          conversations.evaluate((element) => {
+            const style = getComputedStyle(element);
+            return {
+              background: style.backgroundColor,
+              border: style.borderTopColor,
+            };
+          }),
+        )
+        .toEqual(expected);
+      await expect(conversations).toHaveClass(/bg-accent-soft/);
+      await expect(conversations).toHaveClass(/border-accent-border/);
+      await expect(artifacts).toHaveClass(/bg-surface/);
+      await expect(artifacts).toHaveClass(/border-surface-2/);
+
+      const before = await conversations.boundingBox();
+      expect(before).not.toBeNull();
+      const accent = await page.evaluate(() => {
+        const probe = document.createElement('span');
+        probe.style.border = '1px solid var(--color-accent)';
+        document.body.appendChild(probe);
+        const color = getComputedStyle(probe).borderTopColor;
+        probe.remove();
+        return color;
+      });
+
+      // Shift+Tab from the next tab makes the selected chip keyboard-focused;
+      // the reserved border changes color without an outline or reflow.
+      await artifacts.focus();
+      await page.keyboard.press('Shift+Tab');
+      await expect(conversations).toBeFocused();
+      await expect
+        .poll(() =>
+          conversations.evaluate(
+            (element) => getComputedStyle(element).borderTopColor,
+          ),
+        )
+        .toBe(accent);
+      await expect(conversations).toHaveCSS('border-top-width', '1px');
+      await expect(conversations).toHaveCSS('outline-style', 'none');
+      expect(await conversations.boundingBox()).toEqual(before);
+
+      // Link tabs retain keyboard activation and their navigation semantics.
+      await artifacts.focus();
+      await artifacts.press('Enter');
+      await expect(page).toHaveURL(/\/history\?tab=artifacts$/);
+    }
   });
 });
 

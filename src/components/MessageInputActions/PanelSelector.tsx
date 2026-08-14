@@ -1,13 +1,5 @@
 import { Fragment, useState } from 'react';
-import {
-  Layers,
-  X,
-  Plus,
-  BookMarked,
-  ChevronDown,
-  ExternalLink,
-  AlertTriangle,
-} from 'lucide-react';
+import { Layers, X, Plus, ChevronDown, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Popover,
@@ -26,6 +18,8 @@ import { useSettingsModal } from '@/components/settings/SettingsModalProvider';
 import { useLocalStorageJSON } from '@/lib/hooks/useLocalStorage';
 import { useModels } from '@/lib/hooks/api/useModels';
 import ModelField from '@/components/models/ModelField';
+import PresetOption from '@/components/models/PresetOption';
+import PresetPopover from '@/components/models/PresetPopover';
 import { DEFAULT_CONTEXT_WINDOW } from '@/lib/models/presets';
 import {
   PANEL_SELECTION_KEY,
@@ -251,7 +245,7 @@ const PanelSelector = ({ focusMode }: { focusMode: string }) => {
                       className={cn(
                         'hidden sm:inline-flex shrink-0 text-xs font-medium px-2 py-0.5 rounded-pill',
                         active
-                          ? 'bg-accent/10 text-accent'
+                          ? 'bg-accent-soft text-accent'
                           : 'bg-surface-2 text-fg-muted',
                       )}
                     >
@@ -280,175 +274,104 @@ const PanelSelector = ({ focusMode }: { focusMode: string }) => {
                       <span className="text-xs font-semibold text-fg-muted uppercase tracking-wide">
                         Presets
                       </span>
-                      <Popover className="relative">
-                        {({ open, close }) => (
-                          <>
-                            <PopoverButton
-                              type="button"
-                              className={cn(
-                                'flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-control border transition-colors duration-150 focus-border-neutral',
-                                open
-                                  ? 'bg-surface-2 border-border-strong text-fg'
-                                  : 'bg-surface border-surface-2 text-fg-muted hover:bg-surface-2 hover:text-fg',
-                              )}
-                              aria-label="Select panel preset"
-                            >
-                              <BookMarked size={12} />
-                              <span className="max-w-28 truncate">
-                                {matchingPreset
-                                  ? matchingPreset.name
-                                  : 'Custom'}
-                              </span>
-                              <ChevronDown
-                                size={12}
-                                className={cn(
-                                  'transition-transform duration-150',
-                                  open ? 'rotate-180' : '',
-                                )}
+                      <PresetPopover
+                        triggerLabel={
+                          matchingPreset ? matchingPreset.name : 'Custom'
+                        }
+                        ariaLabel="Select panel preset"
+                        hasPresets={presets.length > 0}
+                        emptyBody="No presets yet. Save the current panel to create one."
+                        footer={({ close }) =>
+                          savingName ? (
+                            <div className="flex w-full items-center gap-1.5">
+                              <Input
+                                autoFocus
+                                type="text"
+                                aria-label="Panel preset name"
+                                maxLength={PANEL_PRESET_NAME_MAX}
+                                placeholder="Preset name…"
+                                value={nameInput}
+                                onChange={(e) => setNameInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') saveCurrentPreset();
+                                  if (e.key === 'Escape') {
+                                    setSavingName(false);
+                                    setNameInput('');
+                                  }
+                                }}
+                                className="min-w-0 flex-1 text-xs px-2 py-1"
                               />
-                            </PopoverButton>
-
-                            <Transition
-                              as={Fragment}
-                              enter="transition-[opacity,transform] ease-out duration-100"
-                              enterFrom="opacity-0 scale-95"
-                              enterTo="opacity-100 scale-100"
-                              leave="transition-[opacity,transform] ease-in duration-100"
-                              leaveFrom="opacity-100 scale-100"
-                              leaveTo="opacity-0 scale-95"
-                            >
-                              <PopoverPanel className="absolute right-0 z-50 mt-1 w-64 rounded-floating bg-surface border border-surface-2 shadow-floating overflow-hidden">
-                                <div className="max-h-64 overflow-y-auto">
-                                  {presets.length === 0 ? (
-                                    <div className="px-3 py-4 text-center text-xs text-fg-muted">
-                                      No presets yet. Save the current panel to
-                                      create one.
-                                    </div>
-                                  ) : (
-                                    presets.map((p) => {
-                                      const isActive =
-                                        matchingPreset?.id === p.id;
-                                      const available = isPanelPresetAvailable(
-                                        p,
-                                        providers,
-                                      );
-                                      return (
-                                        <button
-                                          key={p.id}
-                                          type="button"
-                                          aria-label={`Apply panel preset ${p.name}`}
-                                          onClick={() => {
-                                            applyPreset(p.id);
-                                            close();
-                                          }}
-                                          className="w-full border border-transparent text-left pl-2 pr-3 py-2.5 flex items-start gap-2 hover:bg-surface-2 transition-colors duration-100 focus-border-neutral"
-                                        >
-                                          <span
-                                            className={cn(
-                                              'w-1 self-stretch rounded-full shrink-0 transition-colors duration-150',
-                                              isActive
-                                                ? 'bg-accent'
-                                                : 'bg-transparent',
-                                            )}
-                                          />
-                                          <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-1.5">
-                                              <span className="text-xs font-medium text-fg truncate">
-                                                {p.name}
-                                              </span>
-                                              {!available && (
-                                                <span className="flex items-center gap-0.5 text-[10px] text-warning bg-warning-soft px-1 py-0.5 rounded-control shrink-0">
-                                                  <AlertTriangle size={10} />
-                                                  unavailable
-                                                </span>
-                                              )}
-                                            </div>
-                                            <p className="text-[10px] text-fg-subtle mt-0.5 truncate">
-                                              {panelPresetSummary(p)}
-                                            </p>
-                                          </div>
-                                        </button>
-                                      );
-                                    })
-                                  )}
-                                </div>
-
-                                <div className="border-t border-surface-2 px-3 py-2 flex items-center justify-between">
-                                  {savingName ? (
-                                    <div className="flex items-center gap-1.5 w-full">
-                                      <Input
-                                        autoFocus
-                                        type="text"
-                                        aria-label="Panel preset name"
-                                        maxLength={PANEL_PRESET_NAME_MAX}
-                                        placeholder="Preset name…"
-                                        value={nameInput}
-                                        onChange={(e) =>
-                                          setNameInput(e.target.value)
-                                        }
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter')
-                                            saveCurrentPreset();
-                                          if (e.key === 'Escape') {
-                                            setSavingName(false);
-                                            setNameInput('');
-                                          }
-                                        }}
-                                        className="flex-1 min-w-0 text-xs px-2 py-1"
-                                      />
-                                      <Button
-                                        variant="primary"
-                                        size="sm"
-                                        onClick={saveCurrentPreset}
-                                        className="shrink-0"
-                                      >
-                                        Save
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        onClick={() => {
-                                          setSavingName(false);
-                                          setNameInput('');
-                                        }}
-                                        className="shrink-0"
-                                      >
-                                        Cancel
-                                      </Button>
-                                    </div>
-                                  ) : (
-                                    <>
-                                      <button
-                                        type="button"
-                                        disabled={!configured}
-                                        onClick={() => setSavingName(true)}
-                                        className="border border-transparent text-xs text-fg-muted hover:text-fg transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed focus-border-neutral"
-                                        title={
-                                          configured
-                                            ? 'Save the current panel as a preset'
-                                            : 'Configure a valid panel first'
-                                        }
-                                      >
-                                        Save current…
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          close();
-                                          openSettings('panel-presets');
-                                        }}
-                                        className="flex items-center gap-1 border border-transparent text-xs text-fg-muted hover:text-fg transition-colors duration-150 focus-border-neutral"
-                                      >
-                                        Manage
-                                        <ExternalLink size={10} />
-                                      </button>
-                                    </>
-                                  )}
-                                </div>
-                              </PopoverPanel>
-                            </Transition>
-                          </>
-                        )}
-                      </Popover>
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={saveCurrentPreset}
+                                className="shrink-0"
+                              >
+                                Save
+                              </Button>
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  setSavingName(false);
+                                  setNameInput('');
+                                }}
+                                className="shrink-0"
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          ) : (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={!configured}
+                                onClick={() => setSavingName(true)}
+                                className="px-0 py-0"
+                                title={
+                                  configured
+                                    ? 'Save the current panel as a preset'
+                                    : 'Configure a valid panel first'
+                                }
+                              >
+                                Save current…
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                icon={ExternalLink}
+                                onClick={() => {
+                                  close();
+                                  openSettings('panel-presets');
+                                }}
+                                className="px-0 py-0"
+                              >
+                                Manage
+                              </Button>
+                            </>
+                          )
+                        }
+                      >
+                        {({ close }) =>
+                          presets.map((preset) => (
+                            <PresetOption
+                              key={preset.id}
+                              name={preset.name}
+                              summary={panelPresetSummary(preset)}
+                              isActive={matchingPreset?.id === preset.id}
+                              available={isPanelPresetAvailable(
+                                preset,
+                                providers,
+                              )}
+                              aria-label={`Apply panel preset ${preset.name}`}
+                              onClick={() => {
+                                applyPreset(preset.id);
+                                close();
+                              }}
+                            />
+                          ))
+                        }
+                      </PresetPopover>
                     </div>
 
                     {/* Executors */}

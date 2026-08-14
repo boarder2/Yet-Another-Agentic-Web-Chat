@@ -6,6 +6,91 @@ import { WorkspaceDetailPage } from '../pages/WorkspaceDetailPage';
 const FILE_NAME = 'notes.md';
 
 test.describe('workspaces CRUD', () => {
+  test('workspace upload is keyboard-activatable, resettable, and locked while pending', async ({
+    page,
+    request,
+  }) => {
+    const workspaceId = await seedWorkspace(request, {
+      name: `ws-upload-${Date.now()}`,
+    });
+    let releaseFirst = () => {};
+    let requestStarted!: () => void;
+    const firstRequestStarted = new Promise<void>((resolve) => {
+      requestStarted = resolve;
+    });
+    const heldFirstRequest = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let postCount = 0;
+
+    await page.route(
+      `**/api/workspaces/${workspaceId}/files`,
+      async (route) => {
+        if (route.request().method() !== 'POST') {
+          await route.fallback();
+          return;
+        }
+        postCount += 1;
+        if (postCount === 1) {
+          requestStarted();
+          await heldFirstRequest;
+        }
+        await route.fallback();
+      },
+    );
+
+    try {
+      await page.goto(`/workspaces/${workspaceId}`);
+      const files = page
+        .locator('[data-workspace-section]')
+        .filter({ hasText: 'Files' })
+        .first();
+      await files.getByRole('button').first().click();
+
+      const upload = files.getByRole('button', { name: 'Upload', exact: true });
+      const input = files.getByLabel('Upload file');
+      const file = {
+        name: 'keyboard-upload.txt',
+        mimeType: 'text/plain',
+        buffer: Buffer.from('keyboard upload content'),
+      };
+
+      await upload.focus();
+      const chooser = page.waitForEvent('filechooser', { timeout: 5_000 });
+      await upload.press('Enter');
+      await (await chooser).setFiles(file);
+      await firstRequestStarted;
+
+      await expect(upload).toBeDisabled();
+      await expect(upload).toHaveAttribute('aria-busy', 'true');
+      await expect(upload.locator('svg.animate-spin')).toBeVisible();
+
+      // A second selection while the mutation is pending is ignored rather
+      // than starting a duplicate POST.
+      await input.setInputFiles({
+        name: 'duplicate-while-pending.txt',
+        mimeType: 'text/plain',
+        buffer: Buffer.from('duplicate'),
+      });
+      expect(postCount).toBe(1);
+
+      releaseFirst();
+      await expect(files.getByText(file.name, { exact: true })).toBeVisible();
+      await expect(input).toHaveValue('');
+
+      // The settled input can select the same file again, proving the reset
+      // happens after the request rather than only on the first activation.
+      await input.setInputFiles(file);
+      await expect.poll(() => postCount).toBe(2);
+      await expect(upload).toBeEnabled();
+      await expect(input).toHaveValue('');
+    } finally {
+      releaseFirst();
+      const response = await request.delete(`/api/workspaces/${workspaceId}`);
+      expect([200, 204, 404]).toContain(response.status());
+    }
+  });
+
   test('create a workspace via UI, rename it, add and remove a file, archive and unarchive', async ({
     page,
     request,

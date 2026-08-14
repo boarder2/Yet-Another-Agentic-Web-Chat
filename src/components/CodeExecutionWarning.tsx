@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Button } from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
 
 const STORAGE_KEY = 'codeExecutionWarningAccepted';
@@ -28,7 +29,33 @@ export function CodeExecutionWarning({ onAccept, onDecline }: Props) {
   };
 
   return (
-    <Modal open onClose={decline} bodyClassName="p-0">
+    <Modal
+      open
+      onClose={decline}
+      bodyClassName="p-0"
+      footer={
+        <>
+          <Button
+            variant="dangerSoft"
+            size="lg"
+            onClick={decline}
+            disabled={declining}
+          >
+            Decline
+          </Button>
+          <Button
+            variant="successSoft"
+            size="lg"
+            onClick={() => {
+              acceptWarning();
+              onAccept();
+            }}
+          >
+            I understand the risks — Enable code execution
+          </Button>
+        </>
+      }
+    >
       <div className="bg-warning-soft border-b border-warning px-6 py-4">
         <h2 className="text-lg font-semibold text-fg flex items-center gap-2">
           ⚠ Code Execution — Risk Acknowledgment
@@ -124,27 +151,6 @@ export function CodeExecutionWarning({ onAccept, onDecline }: Props) {
           execution. Click &quot;Decline&quot; to deny this and all future code
           execution requests.
         </p>
-      </div>
-
-      <div className="flex justify-end gap-3 px-6 py-4 border-t border-surface-2">
-        <button
-          type="button"
-          onClick={decline}
-          disabled={declining}
-          className="px-4 py-2 text-sm rounded-control bg-danger-soft text-danger hover:bg-danger-soft border border-danger transition-colors duration-150 focus-border-contrast disabled:opacity-50"
-        >
-          Decline
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            acceptWarning();
-            onAccept();
-          }}
-          className="px-4 py-2 text-sm rounded-control bg-success-soft text-success hover:bg-success-soft border border-success transition-colors duration-150 focus-border-contrast"
-        >
-          I understand the risks — Enable code execution
-        </button>
       </div>
     </Modal>
   );

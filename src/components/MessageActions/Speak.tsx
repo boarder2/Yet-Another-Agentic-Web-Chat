@@ -1,4 +1,4 @@
-import { LoaderCircle, Pause, Play, Square, Volume2 } from 'lucide-react';
+import { Pause, Play, Square, Volume2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useSpeech } from 'react-text-to-speech';
 import { toSpeechText } from '@/lib/utils/contentStripping';
@@ -309,18 +309,11 @@ const Speak = ({
       {/* In-DOM (not detached) so browser playback-speed extensions discover it. */}
       <audio ref={audioRef} hidden aria-label="Read-aloud audio" />
       <IconButton
-        icon={
-          isLoading
-            ? LoaderCircle
-            : isPlaying
-              ? Pause
-              : isPaused
-                ? Play
-                : Volume2
-        }
+        icon={isPlaying ? Pause : isPaused ? Play : Volume2}
         label={label}
+        loading={isLoading}
         onClick={onClick}
-        className={`rounded-floating p-2 ${isLoading ? '[&_svg]:animate-spin' : ''}`}
+        className="rounded-floating p-2"
       />
       {isActive && (
         <IconButton

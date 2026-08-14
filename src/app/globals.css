@@ -44,6 +44,16 @@
   /* === BRAND === (seed: accent) */
   --color-accent: #2563eb;
   --color-accent-fg: #fcfcfc;
+  --color-accent-soft: color-mix(
+    in oklch,
+    var(--color-accent),
+    transparent 88%
+  );
+  --color-accent-border: color-mix(
+    in oklch,
+    var(--color-accent),
+    transparent 70%
+  );
   --color-accent-500: color-mix(in oklch, var(--color-accent), white 12%);
   --color-accent-600: var(--color-accent);
   --color-accent-700: color-mix(in oklch, var(--color-accent), black 12%);
@@ -92,6 +102,7 @@
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
 
   /* === TYPOGRAPHY ROLES === */
+  --text-2xs: 0.625rem; /* compact counts and metadata */
   --text-caption: 0.75rem; /* text-xs */
   --text-body: 0.875rem; /* text-sm — dominant body size */
   --text-body-lg: 1rem; /* text-base */
@@ -222,38 +233,6 @@
 
 /* Utilities are auto-generated from @theme tokens */
 @layer utilities {
-  /* Backwards-compat for prior custom palette names */
-  .bg-light-primary {
-    background-color: var(--color-bg);
-  }
-  .dark .bg-dark-primary {
-    background-color: var(--color-bg);
-  }
-  .bg-light-secondary {
-    background-color: var(--color-surface);
-  }
-  .dark .bg-dark-secondary {
-    background-color: var(--color-surface);
-  }
-  .bg-light-100 {
-    background-color: var(--color-surface-2);
-  }
-  .dark .bg-dark-100 {
-    background-color: var(--color-surface-2);
-  }
-  .hover\:bg-light-200:hover {
-    background-color: var(--color-surface-2);
-  }
-  .dark .hover\:bg-dark-200:hover {
-    background-color: var(--color-surface-2);
-  }
-  .border-light-200 {
-    border-color: var(--color-surface-2);
-  }
-  .dark .border-dark-200 {
-    border-color: var(--color-surface-2);
-  }
-
   /* Preferred token utilities */
   .bg-bg {
     background-color: var(--color-bg);

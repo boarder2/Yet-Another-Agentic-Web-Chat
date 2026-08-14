@@ -1,7 +1,7 @@
 'use client';
 
 import { X } from 'lucide-react';
-import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
 import { Select } from '@/components/ui/Select';
 import ArtifactViewer from './ArtifactViewer';
 import { useArtifact, useArtifacts } from '@/lib/hooks/api/useArtifacts';
@@ -58,14 +58,7 @@ export default function ArtifactPanel({
       testId="artifact-panel"
       className="flex h-full min-w-0 flex-col border-l border-surface-2 bg-bg"
       actions={
-        <Button
-          size="sm"
-          variant="ghost"
-          aria-label="Close artifact panel"
-          onClick={onClose}
-        >
-          <X size={16} />
-        </Button>
+        <IconButton icon={X} label="Close artifact panel" onClick={onClose} />
       }
     />
   );

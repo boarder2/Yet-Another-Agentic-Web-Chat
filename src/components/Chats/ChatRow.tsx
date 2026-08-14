@@ -4,11 +4,8 @@ import DeleteChat from '@/components/DeleteChat';
 import WorkspaceChip from '@/components/Workspaces/WorkspaceChip';
 import { cn, formatTimeDifference } from '@/lib/utils';
 import { Input } from '@/components/ui/Input';
-import {
-  ListRow,
-  ListRowAction,
-  listRowInteractive,
-} from '@/components/ui/List';
+import { ListRow, listRowInteractive } from '@/components/ui/List';
+import { IconButton } from '@/components/ui/IconButton';
 import {
   AlertCircle,
   CalendarClock,
@@ -281,19 +278,15 @@ const ChatRow = ({
       actions={
         <>
           {(isInProgress || isAwaitingUser) && (
-            <ListRowAction
+            <IconButton
               icon={OctagonX}
               label="Stop run"
-              danger
+              tone="danger"
               loading={cancelRun.isPending}
               onClick={handleStop}
             />
           )}
-          <ListRowAction
-            icon={Pencil}
-            label="Rename chat"
-            onClick={beginEdit}
-          />
+          <IconButton icon={Pencil} label="Rename chat" onClick={beginEdit} />
           <DeleteChat
             chatId={chat.id}
             chats={[chat] as Chat[]}

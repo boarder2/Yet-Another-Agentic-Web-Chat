@@ -142,15 +142,18 @@ export class WorkspaceDetailPage extends BasePage {
       .waitFor({ state: 'visible' });
   }
 
-  /** Remove a file by name. Must handle the `window.confirm` dialog. */
+  /** Remove a file by name through the shared confirmation modal. */
   async removeFile(name: string) {
     await this.expandSection('Files');
     const row = this.page.locator(
       `[data-workspace-section]:has(button:has-text("Files")) li:has-text("${name}")`,
     );
-    const delBtn = row.locator('button[title="Delete"]');
-    this.page.once('dialog', (d) => d.accept());
-    await delBtn.click();
+    await row.locator('button[title="Delete"]').click();
+    const confirm = this.page
+      .getByRole('dialog')
+      .filter({ hasText: 'Delete file?' });
+    await confirm.getByRole('button', { name: 'Delete', exact: true }).click();
+    await confirm.waitFor({ state: 'hidden' });
     await row.waitFor({ state: 'hidden' });
   }
 

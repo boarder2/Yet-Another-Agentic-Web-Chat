@@ -3,6 +3,7 @@
 
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/Input';
+import { FilterChip } from '@/components/ui/FilterChip';
 import { workspaceColorClasses } from '@/lib/workspaces/appearance';
 import WorkspaceIcon from './WorkspaceIcon';
 import { Check, ChevronDown, FolderOpen, Search } from 'lucide-react';
@@ -89,15 +90,13 @@ const WorkspacePicker = ({ value, onChange }: Props) => {
 
   return (
     <div ref={containerRef} className="relative">
-      <button
-        type="button"
+      <FilterChip
+        selected={Boolean(selected)}
+        tint={selected ? cn(c.bgTint, c.border, c.text) : undefined}
         onClick={() => setOpen((v) => !v)}
-        className={cn(
-          'flex items-center gap-1.5 px-3 py-1.5 h-8 rounded-pill border text-sm transition-colors duration-150 focus-border-neutral',
-          selected
-            ? cn(c.bgTint, c.border, c.text)
-            : 'bg-surface border-surface-2 text-fg-muted hover:text-fg hover:border-fg/30',
-        )}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        className="h-8"
       >
         {selected ? (
           <WorkspaceIcon
@@ -110,7 +109,7 @@ const WorkspacePicker = ({ value, onChange }: Props) => {
         )}
         <span>{selected ? selected.name : 'Workspace'}</span>
         <ChevronDown size={13} className="text-fg-subtle" />
-      </button>
+      </FilterChip>
 
       {open && (
         <div

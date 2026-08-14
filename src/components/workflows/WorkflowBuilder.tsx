@@ -15,6 +15,7 @@ import {
 import { useSystemPrompts } from '@/lib/hooks/api/useSystemPrompts';
 import { parseWorkflowTemplate } from '@/lib/workflows/template';
 import { Field } from '@/components/ui/Field';
+import { FilterChip } from '@/components/ui/FilterChip';
 import { Input } from '@/components/ui/Input';
 import { Button, buttonClasses } from '@/components/ui/Button';
 import Select from '@/components/ui/Select';
@@ -235,9 +236,9 @@ export default function WorkflowBuilder({ workflow }: { workflow?: Workflow }) {
                   {personas.map((p) => {
                     const on = selectedSystemPromptIds.includes(p.id);
                     return (
-                      <button
+                      <FilterChip
                         key={p.id}
-                        type="button"
+                        selected={on}
                         onClick={() =>
                           setSelectedSystemPromptIds((ids) =>
                             on
@@ -245,14 +246,9 @@ export default function WorkflowBuilder({ workflow }: { workflow?: Workflow }) {
                               : [...ids, p.id],
                           )
                         }
-                        className={`px-3 py-1 rounded-pill text-xs font-medium transition-colors duration-150 border focus-border-neutral ${
-                          on
-                            ? 'bg-accent/10 border-accent text-accent'
-                            : 'bg-surface border-surface-2 text-fg-muted'
-                        }`}
                       >
                         {p.name}
-                      </button>
+                      </FilterChip>
                     );
                   })}
                 </div>

@@ -48,6 +48,7 @@ import ImageGenerationSection from './sections/ImageGenerationSection';
 import ApiKeysSection from './sections/ApiKeysSection';
 import SkillsSection from './sections/SkillsSection';
 import McpServersSection from './sections/McpServersSection';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 import { IconButton } from '@/components/ui/IconButton';
 import { ListLoading } from '@/components/ui/List';
 
@@ -122,6 +123,10 @@ export default function SettingsPanel({
   const [newMethodologyName, setNewMethodologyName] = useState('');
   const [newMethodologyContent, setNewMethodologyContent] = useState('');
   const [isAddingNewMethodology, setIsAddingNewMethodology] = useState(false);
+  const [pendingPromptDelete, setPendingPromptDelete] = useState<{
+    kind: 'prompt' | 'methodology';
+    prompt: Prompt;
+  } | null>(null);
 
   const [allModels, setAllModels] = useState<{
     chat: Record<string, Record<string, { displayName: string }>>;
@@ -637,15 +642,8 @@ export default function SettingsPanel({
   };
 
   const handleDeleteSystemPrompt = (promptId: string) => {
-    if (!confirm('Are you sure you want to delete this prompt?')) return;
-    deleteSystemPromptMutation.mutate(promptId, {
-      onSuccess: () => {
-        setUserSystemPrompts(
-          userSystemPrompts.filter((p) => p.id !== promptId),
-        );
-      },
-      onError: () => console.error('Failed to delete prompt.'),
-    });
+    const prompt = userSystemPrompts.find((item) => item.id === promptId);
+    if (prompt) setPendingPromptDelete({ kind: 'prompt', prompt });
   };
 
   const handleAddOrUpdateMethodology = () => {
@@ -704,15 +702,11 @@ export default function SettingsPanel({
   };
 
   const handleDeleteMethodology = (methodologyId: string) => {
-    if (!confirm('Are you sure you want to delete this methodology?')) return;
-    deleteSystemPromptMutation.mutate(methodologyId, {
-      onSuccess: () => {
-        setUserMethodologies(
-          userMethodologies.filter((m) => m.id !== methodologyId),
-        );
-      },
-      onError: () => console.error('Failed to delete methodology.'),
-    });
+    const methodology = userMethodologies.find(
+      (item) => item.id === methodologyId,
+    );
+    if (methodology)
+      setPendingPromptDelete({ kind: 'methodology', prompt: methodology });
   };
 
   return (
@@ -933,6 +927,48 @@ export default function SettingsPanel({
           </>
         )
       )}
+
+      <ConfirmModal
+        open={!!pendingPromptDelete}
+        onClose={() => setPendingPromptDelete(null)}
+        title={
+          pendingPromptDelete?.kind === 'methodology'
+            ? 'Delete methodology'
+            : 'Delete prompt'
+        }
+        body={
+          <p>
+            {pendingPromptDelete?.kind === 'methodology'
+              ? 'Are you sure you want to delete this methodology?'
+              : 'Are you sure you want to delete this prompt?'}
+          </p>
+        }
+        loading={deleteSystemPromptMutation.isPending}
+        onConfirm={() => {
+          if (!pendingPromptDelete) return;
+          const { kind, prompt } = pendingPromptDelete;
+          deleteSystemPromptMutation.mutate(prompt.id, {
+            onSuccess: () => {
+              if (kind === 'methodology') {
+                setUserMethodologies((items) =>
+                  items.filter((item) => item.id !== prompt.id),
+                );
+              } else {
+                setUserSystemPrompts((items) =>
+                  items.filter((item) => item.id !== prompt.id),
+                );
+              }
+              setPendingPromptDelete(null);
+            },
+            onError: () =>
+              console.error(
+                kind === 'methodology'
+                  ? 'Failed to delete methodology.'
+                  : 'Failed to delete prompt.',
+              ),
+          });
+        }}
+      />
     </div>
   );
 }

@@ -154,7 +154,7 @@ export function UserQuestionPrompt({
                 onClick={() => handleOptionToggle(opt.label)}
                 className={`w-full text-left px-4 py-2.5 rounded-surface border border-transparent transition-colors duration-150 text-sm focus-border-neutral ${
                   isSelected
-                    ? 'border-accent bg-accent/10 text-fg'
+                    ? 'border-accent bg-accent-soft text-fg'
                     : 'border-surface-2 hover:border-fg/20 text-fg hover:text-fg'
                 }`}
               >
@@ -200,7 +200,6 @@ export function UserQuestionPrompt({
                 ? 'Type additional context or an alternative response...'
                 : 'Type your response...'
             }
-            className="bg-surface-2/50 rounded-surface placeholder:text-fg-subtle resize-none"
             rows={2}
           />
         </div>

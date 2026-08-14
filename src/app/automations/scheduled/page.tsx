@@ -12,18 +12,17 @@ import {
   XCircle,
 } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
-import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
-import Modal from '@/components/ui/Modal';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 import {
   ListCount,
   ListEmptyState,
   ListLoading,
   ListRow,
-  ListRowAction,
 } from '@/components/ui/List';
 import { describeCron } from '@/lib/scheduledTasks/presets';
-import { cn, formatTimeDifference } from '@/lib/utils';
+import { formatTimeDifference } from '@/lib/utils';
+import { FilterChip } from '@/components/ui/FilterChip';
 import {
   useSchedules,
   usePatchSchedule,
@@ -112,22 +111,18 @@ export default function ScheduledTasksPage() {
                 }
                 actions={
                   <>
-                    <button
-                      type="button"
+                    <FilterChip
+                      selected={Boolean(s.enabled)}
+                      tint="bg-success-soft border-success text-success"
                       onClick={() => toggle(s)}
-                      className={cn(
-                        'rounded-pill border px-3 py-1 text-xs font-medium transition-colors duration-150 focus-border-neutral',
-                        s.enabled
-                          ? 'bg-success-soft text-success border-success'
-                          : 'bg-surface-2 text-fg-subtle border-surface-2',
-                      )}
                     >
                       {s.enabled ? 'Enabled' : 'Disabled'}
-                    </button>
-                    <ListRowAction
+                    </FilterChip>
+                    <IconButton
                       icon={Play}
                       label="Run now"
-                      disabled={run.isPending || s.running}
+                      loading={run.isPending}
+                      disabled={s.running}
                       onClick={() => run.mutate(s.id)}
                     />
                     <IconButton
@@ -135,10 +130,10 @@ export default function ScheduledTasksPage() {
                       icon={Pencil}
                       label="Edit"
                     />
-                    <ListRowAction
+                    <IconButton
                       icon={Trash2}
                       label="Delete"
-                      danger
+                      tone="danger"
                       onClick={() => setToDelete(s)}
                     />
                   </>
@@ -149,34 +144,22 @@ export default function ScheduledTasksPage() {
         </>
       )}
 
-      <Modal
+      <ConfirmModal
         open={!!toDelete}
         onClose={() => setToDelete(null)}
-        size="sm"
         title="Delete schedule"
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setToDelete(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="danger"
-              loading={del.isPending}
-              onClick={() =>
-                toDelete &&
-                del.mutate(toDelete.id, { onSettled: () => setToDelete(null) })
-              }
-            >
-              Delete
-            </Button>
-          </>
+        body={
+          <p>
+            Delete <span className="font-medium">{toDelete?.label}</span>? Past
+            run chats are kept.
+          </p>
         }
-      >
-        <p className="text-sm text-fg-muted">
-          Delete <span className="font-medium">{toDelete?.label}</span>? Past
-          run chats are kept.
-        </p>
-      </Modal>
+        loading={del.isPending}
+        onConfirm={() => {
+          if (!toDelete) return;
+          del.mutate(toDelete.id, { onSuccess: () => setToDelete(null) });
+        }}
+      />
     </div>
   );
 }

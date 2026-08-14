@@ -1,5 +1,6 @@
 import { test, expect } from '../fixtures';
 import { MemoryPage } from '../pages/MemoryPage';
+import { SettingsPage } from '../pages/SettingsPage';
 
 /**
  * Behaviors owned by the shared Button primitive (`src/components/ui/Button.tsx`),
@@ -160,6 +161,75 @@ test.describe('button primitive', () => {
       .locator('textarea[aria-label="New memory content"]')
       .fill('button primitive enablement check');
     await expect(save).toBeEnabled();
+  });
+
+  test('soft status variants keep their fill and reveal the matching border on hover', async ({
+    page,
+  }) => {
+    const settings = new SettingsPage(page);
+    await settings.goto();
+    await settings.openSection('Model Visibility');
+
+    const provider = page.getByRole('button', { name: /^Test\b/ }).first();
+    await expect(provider).toBeVisible();
+    await provider.click();
+
+    const variants = [
+      {
+        name: 'Show All',
+        backgroundClass: 'bg-success-soft',
+        textClass: 'text-success',
+        borderClass: 'border-success',
+      },
+      {
+        name: 'Hide All',
+        backgroundClass: 'bg-danger-soft',
+        textClass: 'text-danger',
+        borderClass: 'border-danger',
+      },
+    ];
+
+    for (const variant of variants) {
+      const button = page.getByRole('button', { name: variant.name });
+      await expect(button).toHaveClass(/(^|\s)px-5(\s|$)/);
+      await expect(button).toHaveClass(
+        new RegExp(`(^|\\s)${variant.backgroundClass}(\\s|$)`),
+      );
+      await expect(button).toHaveClass(/border-transparent/);
+
+      const expected = await page.evaluate(
+        ({ backgroundClass, textClass, borderClass }) => {
+          const probe = document.createElement('span');
+          probe.className = `${backgroundClass} ${textClass} ${borderClass}`;
+          document.body.appendChild(probe);
+          const style = getComputedStyle(probe);
+          const result = {
+            background: style.backgroundColor,
+            color: style.color,
+            border: style.borderTopColor,
+          };
+          probe.remove();
+          return result;
+        },
+        variant,
+      );
+
+      await button.hover();
+      await expect
+        .poll(() =>
+          button.evaluate((element) => {
+            const style = getComputedStyle(element);
+            return {
+              background: style.backgroundColor,
+              color: style.color,
+              border: style.borderTopColor,
+            };
+          }),
+        )
+        .toEqual(expected);
+    }
+
+    await settings.close();
   });
 
   test('a loading button is disabled and shows a spinner while its request is in flight', async ({

@@ -377,6 +377,11 @@ const MessageInput = ({
         handleSubmitMessage();
       }}
       onKeyDown={(e) => {
+        // Buttons own their keyboard activation and popover dismissal; the
+        // composer form only handles Enter/Escape from the text input.
+        if (e.target instanceof HTMLElement && e.target.closest('button')) {
+          return;
+        }
         // An open popover owns the arrows, Tab/Enter and Escape, so neither
         // submit nor cancel-edit fires while the user is picking a completion.
         if (skills.onKeyDown(e) || mentions.onKeyDown(e)) {
@@ -557,7 +562,7 @@ const MessageInput = ({
                       pendingImages.length === 0) ||
                     pinInvalid
                   }
-                  className="bg-accent text-accent-fg disabled:text-accent-fg/50 disabled:bg-accent/20 hover:bg-accent-700 transition-colors duration-150 border border-transparent rounded-pill p-2 focus-border-contrast"
+                  className="bg-accent text-accent-fg disabled:text-accent-fg/50 disabled:bg-accent-soft hover:bg-accent-700 transition-colors duration-150 border border-transparent rounded-pill p-2 focus-border-contrast"
                   type="submit"
                 >
                   {firstMessage ? (

@@ -1,5 +1,4 @@
 import { Globe, MessageCircle, Pencil } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import {
   Popover,
   PopoverButton,
@@ -9,6 +8,7 @@ import {
 import { Fragment } from 'react';
 import { focusModes as focusModeDefinitions } from '@/lib/focusModes';
 import ComposerActionButton from '@/components/MessageInputActions/ComposerActionButton';
+import ComposerOptionRow from '@/components/MessageInputActions/ComposerOptionRow';
 import ComposerPopover from '@/components/MessageInputActions/ComposerPopover';
 
 const focusModes = focusModeDefinitions.map((mode) => ({
@@ -62,24 +62,15 @@ const Focus = ({
               >
                 <div className="max-h-60 overflow-y-auto p-1.5">
                   {focusModes.map((mode) => (
-                    <div
+                    <ComposerOptionRow
                       key={mode.key}
+                      selected={focusMode === mode.key}
+                      mode="radio"
+                      leading={mode.icon}
+                      label={mode.title}
+                      description={mode.description}
                       onClick={() => setFocusMode(mode.key)}
-                      className={cn(
-                        'flex items-center gap-3 p-2.5 rounded-control hover:bg-surface-2 cursor-pointer',
-                        focusMode === mode.key
-                          ? 'text-accent'
-                          : 'text-fg-muted',
-                      )}
-                    >
-                      <div className="flex-shrink-0">{mode.icon}</div>
-                      <div>
-                        <p className="text-sm font-medium">{mode.title}</p>
-                        <p className="text-xs text-fg-muted">
-                          {mode.description}
-                        </p>
-                      </div>
-                    </div>
+                    />
                   ))}
                 </div>
               </ComposerPopover>

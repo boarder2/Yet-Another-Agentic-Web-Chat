@@ -9,7 +9,9 @@ import { BasePage } from './BasePage';
  */
 export class MemoryPage extends BasePage {
   private readonly settingsTrigger = this.page.getByLabel('Settings');
-  private readonly closeBtn = this.page.getByLabel('Close');
+  private readonly closeBtn = this.page
+    .getByRole('dialog', { name: 'Settings' })
+    .getByLabel('Close');
 
   async open() {
     // Trigger the settings modal from any page.
@@ -115,21 +117,30 @@ export class MemoryPage extends BasePage {
 
   // ─── Delete ───
 
-  /** Delete a memory by its content text. Handles `window.confirm`. */
+  /** Delete a memory by its content through the shared confirmation modal. */
   async deleteMemory(content: string) {
     const row = this.page.locator('.group.p-3').filter({ hasText: content });
-    const delBtn = row.locator('button[title="Delete"]');
-    this.page.once('dialog', (d) => d.accept());
-    await delBtn.click();
+    await row.locator('button[title="Delete"]').click();
+    const confirm = this.page
+      .getByRole('dialog')
+      .filter({ hasText: 'Delete this memory?' });
+    await confirm.getByRole('button', { name: 'Delete', exact: true }).click();
+    await confirm.waitFor({ state: 'hidden' });
     await row.waitFor({ state: 'hidden' });
   }
 
   // ─── Re-index ───
 
-  /** Click "Re-index" and accept the confirm dialog. */
+  /** Click "Re-index" and confirm through the shared modal. */
   async reindex() {
-    this.page.once('dialog', (d) => d.accept());
     await this.page.getByRole('button', { name: 'Re-index' }).click();
+    const confirm = this.page
+      .getByRole('dialog')
+      .filter({ hasText: 'Re-index all memory embeddings' });
+    await confirm
+      .getByRole('button', { name: 'Re-index', exact: true })
+      .click();
+    await confirm.waitFor({ state: 'hidden' });
     // The button shows a spinner while pending, then returns to idle.
     // Wait for the spinner to appear then disappear.
     await this.page.waitForTimeout(1000);

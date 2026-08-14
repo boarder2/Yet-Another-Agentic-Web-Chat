@@ -10,12 +10,11 @@ import {
   Home,
   LayoutDashboard,
 } from 'lucide-react';
-import { Description } from '@headlessui/react';
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
-import Modal from '@/components/ui/Modal';
+import Badge from '@/components/ui/Badge';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 import { Widget } from '@/lib/types/widget';
 import { useConfig } from '@/lib/hooks/api/useConfig';
 import WidgetContent from './WidgetContent';
@@ -101,13 +100,10 @@ const WidgetDisplay = ({
 
               <CardTitle className="truncate">{widget.title}</CardTitle>
               {isCode && (
-                <span
-                  className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-control bg-surface-2 text-fg-subtle text-[10px]"
-                  title="Code widget"
-                >
+                <Badge title="Code widget">
                   <Code2 size={11} />
                   JS
-                </span>
+                </Badge>
               )}
             </div>
 
@@ -240,36 +236,24 @@ const WidgetDisplay = ({
         </div>
       </CardContent>
 
-      <Modal
+      <ConfirmModal
         open={confirmDeleteOpen}
         onClose={() => setConfirmDeleteOpen(false)}
-        size="sm"
         title="Delete widget"
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setConfirmDeleteOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="danger"
-              onClick={() => {
-                setConfirmDeleteOpen(false);
-                onDelete(widget.id);
-              }}
-            >
-              Delete
-            </Button>
-          </>
+        body={
+          <p>
+            Permanently delete{' '}
+            <span className="font-medium text-fg">{widget.title}</span>? It
+            currently appears on {surfacesText}, and deleting removes it
+            everywhere — this cannot be undone. To hide it from a single page
+            instead, use the home/dashboard toggles.
+          </p>
         }
-      >
-        <Description className="text-sm text-fg-muted">
-          Permanently delete{' '}
-          <span className="font-medium text-fg">{widget.title}</span>? It
-          currently appears on {surfacesText}, and deleting removes it
-          everywhere — this cannot be undone. To hide it from a single page
-          instead, use the home/dashboard toggles.
-        </Description>
-      </Modal>
+        onConfirm={() => {
+          onDelete(widget.id);
+          setConfirmDeleteOpen(false);
+        }}
+      />
     </Card>
   );
 };

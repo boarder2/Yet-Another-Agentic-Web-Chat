@@ -17,6 +17,7 @@ import { IconButton } from '@/components/ui/IconButton';
 import { Field } from '@/components/ui/Field';
 import { Input } from '@/components/ui/Input';
 import Modal from '@/components/ui/Modal';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 import Select from '@/components/ui/Select';
 import SourceListEditor from '@/components/dashboard/SourceListEditor';
 import WidgetChatPanel from '@/components/dashboard/WidgetChatPanel';
@@ -77,6 +78,7 @@ const CodeWidgetConfigModal = ({
   const [revision, setRevision] = useState(0);
   const [autoAccept, setAutoAccept] = useState(false);
   const [undoStack, setUndoStack] = useState<CodeWidgetConfig[]>([]);
+  const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
@@ -87,6 +89,7 @@ const CodeWidgetConfigModal = ({
     setRevision(0);
     setAutoAccept(false);
     setUndoStack([]);
+    setConfirmDiscardOpen(false);
     setWarningAccepted(hasAcceptedWarning());
     const next: CodeWidgetConfig = editingWidget
       ? { ...editingWidget, widgetType: 'code' }
@@ -102,7 +105,10 @@ const CodeWidgetConfigModal = ({
   );
 
   const handleClose = useCallback(() => {
-    if (isDirty && !window.confirm('Discard unsaved changes?')) return;
+    if (isDirty) {
+      setConfirmDiscardOpen(true);
+      return;
+    }
     onClose();
   }, [isDirty, onClose]);
 
@@ -464,6 +470,17 @@ const CodeWidgetConfigModal = ({
           </div>
         </div>
       </div>
+      <ConfirmModal
+        open={confirmDiscardOpen}
+        onClose={() => setConfirmDiscardOpen(false)}
+        title="Discard unsaved changes?"
+        body={<p>Discard unsaved changes?</p>}
+        confirmLabel="Discard"
+        onConfirm={() => {
+          setConfirmDiscardOpen(false);
+          onClose();
+        }}
+      />
     </Modal>
   );
 };

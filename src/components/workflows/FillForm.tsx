@@ -10,6 +10,7 @@ import { Field } from '@/components/ui/Field';
 import { Input } from '@/components/ui/Input';
 import { Textarea } from '@/components/ui/Textarea';
 import { Button } from '@/components/ui/Button';
+import { FilterChip } from '@/components/ui/FilterChip';
 import Select from '@/components/ui/Select';
 
 type Values = Record<string, string | string[]>;
@@ -116,9 +117,9 @@ export default function FillForm({
                 {(f.options ?? []).map((opt) => {
                   const selected = Array.isArray(value) && value.includes(opt);
                   return (
-                    <button
+                    <FilterChip
                       key={opt}
-                      type="button"
+                      selected={selected}
                       onClick={() => {
                         const cur = Array.isArray(value) ? value : [];
                         setValue(
@@ -128,14 +129,9 @@ export default function FillForm({
                             : [...cur, opt],
                         );
                       }}
-                      className={`px-3 py-1 rounded-pill text-xs font-medium border transition-colors duration-150 ${
-                        selected
-                          ? 'bg-accent/10 border-accent text-accent'
-                          : 'bg-surface border-surface-2 text-fg-muted'
-                      }`}
                     >
                       {opt}
-                    </button>
+                    </FilterChip>
                   );
                 })}
               </div>

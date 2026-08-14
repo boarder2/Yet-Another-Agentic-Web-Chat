@@ -3,7 +3,7 @@
 import { X, Save } from 'lucide-react';
 import InputComponent from './InputComponent';
 import TextareaComponent from './TextareaComponent';
-import AppSwitch from '@/components/ui/AppSwitch';
+import SettingToggleRow from '@/components/ui/SettingToggleRow';
 import { Button } from '@/components/ui/Button';
 import Select from '@/components/ui/Select';
 
@@ -83,18 +83,12 @@ export default function SkillForm({
           ))}
         </Select>
       </div>
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-xs font-medium">Disable model auto-invocation</p>
-          <p className="text-xs text-fg-muted">
-            Slash-command only — hidden from model&apos;s available skills list
-          </p>
-        </div>
-        <AppSwitch
-          checked={value.disableModelInvocation}
-          onChange={(val: boolean) => patch({ disableModelInvocation: val })}
-        />
-      </div>
+      <SettingToggleRow
+        label="Disable model auto-invocation"
+        description="Slash-command only — hidden from model's available skills list"
+        checked={value.disableModelInvocation}
+        onChange={(val: boolean) => patch({ disableModelInvocation: val })}
+      />
       <div className="flex justify-end gap-2">
         <Button icon={X} onClick={onCancel}>
           Cancel

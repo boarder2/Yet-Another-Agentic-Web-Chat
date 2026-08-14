@@ -7,6 +7,7 @@ import { SKILL_TOKEN_SCAN_REGEX } from '@/lib/skills/validation';
 import MarkdownRenderer from './MarkdownRenderer';
 import MessageInput from './MessageInput';
 import MessageTabs from './MessageTabs';
+import { IconButton } from '@/components/ui/IconButton';
 import { Document } from '@langchain/core/documents';
 // Wrap valid /skill-name tokens with <SkillToken> so MarkdownRenderer styles
 // them with the accent color. Skips fenced code blocks and inline `code` spans.
@@ -169,21 +170,13 @@ const MessageBox = ({
           ) : (
             <div className="ml-[15%]">
               <div className="relative bg-surface-2 rounded-floating px-4 py-3 border-b-2 border-accent overflow-hidden">
-                <button
-                  type="button"
+                <IconButton
+                  icon={Pencil}
+                  label="Edit message"
                   onClick={startEditMessage}
                   disabled={loading}
-                  className={cn(
-                    'absolute top-2 right-2 z-10 border border-transparent p-1.5 rounded-surface flex-shrink-0 focus-border-neutral',
-                    loading
-                      ? 'opacity-40 cursor-not-allowed'
-                      : 'hover:bg-surface',
-                  )}
-                  aria-label="Edit message"
-                  title="Edit message"
-                >
-                  <Pencil size={16} />
-                </button>
+                  className="absolute right-2 top-2 z-10"
+                />
                 <div
                   className={cn(
                     'relative pr-8',

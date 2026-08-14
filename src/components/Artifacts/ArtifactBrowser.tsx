@@ -8,9 +8,9 @@ import {
   ListEmptyState,
   ListLoading,
   ListRow,
-  ListRowAction,
   listRowInteractive,
 } from '@/components/ui/List';
+import { IconButton } from '@/components/ui/IconButton';
 import WorkspaceChip from '@/components/Workspaces/WorkspaceChip';
 import WorkspaceFilterChips from '@/components/Workspaces/WorkspaceFilterChips';
 import { formatTimeDifference } from '@/lib/utils';
@@ -211,12 +211,12 @@ export default function ArtifactBrowser() {
                   </>
                 }
                 actions={
-                  <ListRowAction
+                  <IconButton
+                    href={artifactRawUrl(a.id)}
+                    target="_blank"
+                    rel="noopener"
                     icon={ExternalLink}
                     label="Open in a new tab"
-                    onClick={() =>
-                      window.open(artifactRawUrl(a.id), '_blank', 'noopener')
-                    }
                   />
                 }
               />

@@ -238,7 +238,7 @@ const WidgetChatPanel = ({
         )}
         {messages.map((m, i) => (
           <div key={i} className={m.role === 'user' ? 'text-fg' : 'text-fg/90'}>
-            <div className="text-[10px] uppercase tracking-wide text-fg-subtle mb-0.5">
+            <div className="text-2xs uppercase tracking-wide text-fg-subtle mb-0.5">
               {m.role}
             </div>
             {m.role === 'assistant' ? (

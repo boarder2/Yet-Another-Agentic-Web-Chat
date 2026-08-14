@@ -35,6 +35,22 @@ test.describe('Model Information popover (ModelStats v2)', () => {
     await chatPage.sendMessage(`message-footer-icons-${Date.now()}`);
     await chatPage.waitForStreamComplete();
 
+    const edit = page.getByRole('button', {
+      name: 'Edit message',
+      exact: true,
+    });
+    await expect(edit).toBeVisible();
+    await expect(edit).toHaveAttribute('title', 'Edit message');
+    await expect(edit).toHaveClass(/focus-border-neutral/);
+    await expect(edit.locator('svg')).toHaveAttribute('width', '15');
+    await edit.focus();
+    await page.keyboard.press('Enter');
+    await expect(
+      page.getByRole('button', { name: 'Cancel editing', exact: true }),
+    ).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(edit).toBeVisible();
+
     for (const name of [
       'Show model information',
       'Copy response',
@@ -83,5 +99,57 @@ test.describe('Model Information popover (ModelStats v2)', () => {
     await expect(info).toHaveCSS('border-top-width', '1px');
     await expect(info).toHaveCSS('outline-style', 'none');
     expect(await info.boundingBox()).toEqual(before);
+  });
+
+  test('Read aloud exposes IconButton loading semantics while TTS prepares', async ({
+    page,
+  }) => {
+    const chatPage = new ChatPage(page);
+    await chatPage.goto('/');
+    await chatPage.sendMessage(`message-footer-loading-${Date.now()}`);
+    await chatPage.waitForStreamComplete();
+
+    let release = () => {};
+    let requestStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      requestStarted = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route('**/api/tts', async (route) => {
+      requestStarted();
+      await held;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ id: 'e2e-tts-loading' }),
+      });
+    });
+
+    try {
+      const read = page.getByRole('button', {
+        name: 'Read aloud',
+        exact: true,
+      });
+      await read.focus();
+      await page.keyboard.press('Enter');
+      await started;
+
+      const stop = page.getByRole('button', { name: 'Stop', exact: true });
+      await expect(stop).toBeDisabled();
+      await expect(stop).toHaveAttribute('aria-busy', 'true');
+      await expect(stop).toHaveAttribute('title', 'Stop');
+      await expect(stop.locator('svg.animate-spin')).toHaveAttribute(
+        'width',
+        '15',
+      );
+      await expect(stop.locator('svg.animate-spin')).toHaveAttribute(
+        'height',
+        '15',
+      );
+    } finally {
+      release();
+    }
   });
 });

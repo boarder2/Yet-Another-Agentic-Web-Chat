@@ -3,8 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Trash2 } from 'lucide-react';
-import Modal from '@/components/ui/Modal';
-import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 import ArtifactViewer from './ArtifactViewer';
 import { WORKSPACE_HEADER_HEIGHT } from '@/components/Workspaces/WorkspaceChatHeader';
 import { useArtifact, useDeleteArtifact } from '@/lib/hooks/api/useArtifacts';
@@ -43,46 +43,35 @@ export default function ArtifactPage({
           </h1>
         }
         actions={
-          <Button
-            size="sm"
-            variant="ghost"
-            aria-label="Delete artifact"
+          <IconButton
+            icon={Trash2}
+            label="Delete artifact"
+            tone="danger"
             onClick={() => setConfirming(true)}
-          >
-            <Trash2 size={16} />
-          </Button>
+          />
         }
       />
 
-      <Modal
+      <ConfirmModal
         open={confirming}
         onClose={() => setConfirming(false)}
         title="Delete artifact"
-        size="sm"
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-fg-muted">
+        body={
+          <p>
             Delete <span className="font-medium">{artifact?.title}</span> and
             all {artifact?.versionCount} of its versions? This cannot be undone.
           </p>
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setConfirming(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="danger"
-              loading={del.isPending}
-              onClick={() =>
-                del.mutate(artifactId, {
-                  onSuccess: () => router.replace(`/workspaces/${workspaceId}`),
-                })
-              }
-            >
-              Delete
-            </Button>
-          </div>
-        </div>
-      </Modal>
+        }
+        loading={del.isPending}
+        onConfirm={() =>
+          del.mutate(artifactId, {
+            onSuccess: () => {
+              setConfirming(false);
+              router.replace(`/workspaces/${workspaceId}`);
+            },
+          })
+        }
+      />
     </>
   );
 }

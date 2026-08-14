@@ -2,7 +2,6 @@ import React from 'react';
 import Link from 'next/link';
 import { LoaderCircle, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { IconButton } from '@/components/ui/IconButton';
 
 /**
  * A navigable `ListRow` stretches its title link across the whole row via an
@@ -83,37 +82,6 @@ const ListRow = ({
       </div>
     )}
   </div>
-);
-
-interface ListRowActionProps extends Omit<
-  React.ButtonHTMLAttributes<HTMLButtonElement>,
-  'aria-label' | 'children' | 'title' | 'type'
-> {
-  icon: LucideIcon;
-  /** Accessible name and tooltip. */
-  label: string;
-  danger?: boolean;
-  loading?: boolean;
-}
-
-const ListRowAction = ({
-  icon,
-  label,
-  danger,
-  loading,
-  className,
-  disabled,
-  ...props
-}: ListRowActionProps) => (
-  <IconButton
-    {...props}
-    icon={icon}
-    label={label}
-    tone={danger ? 'danger' : 'default'}
-    loading={loading}
-    disabled={disabled}
-    className={className}
-  />
 );
 
 export type ListStateLayout = 'compact' | 'section' | 'page';
@@ -239,4 +207,4 @@ const ListCount = ({ children }: { children: React.ReactNode }) => (
   <div className="mb-2 text-xs text-fg-subtle">{children}</div>
 );
 
-export { ListRow, ListRowAction, ListLoading, ListEmptyState, ListCount };
+export { ListRow, ListLoading, ListEmptyState, ListCount };

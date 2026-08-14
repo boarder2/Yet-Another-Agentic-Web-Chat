@@ -56,7 +56,7 @@ const SplitPill = ({
   const fmt = (n: number) => (n > 99 ? '99+' : n);
   return (
     <span
-      className="flex overflow-hidden rounded-pill text-[10px] font-bold leading-none"
+      className="flex overflow-hidden rounded-pill text-2xs font-bold leading-none"
       style={{ height: size }}
     >
       {attention > 0 && (
@@ -245,8 +245,8 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
                       />
                     </span>
                   ) : link.badgeCount > 0 ? (
-                    <span className="absolute top-0.5 right-2 min-w-[18px] h-[18px] flex items-center justify-center rounded-pill bg-accent text-accent-fg text-[10px] font-bold leading-none px-1">
-                      {link.badgeCount > 99 ? '99+' : link.badgeCount}
+                    <span className="absolute top-0.5 right-2">
+                      <SplitPill attention={0} unread={link.badgeCount} />
                     </span>
                   ) : null}
                 </Link>
@@ -294,8 +294,8 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
                   />
                 </span>
               ) : link.badgeCount > 0 ? (
-                <span className="absolute -top-1.5 -right-2.5 min-w-[16px] h-[16px] flex items-center justify-center rounded-pill bg-accent text-accent-fg text-[9px] font-bold leading-none px-0.5">
-                  {link.badgeCount > 99 ? '99+' : link.badgeCount}
+                <span className="absolute -top-1.5 -right-2.5">
+                  <SplitPill attention={0} unread={link.badgeCount} size={16} />
                 </span>
               ) : null}
             </div>

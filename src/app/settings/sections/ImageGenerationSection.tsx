@@ -5,7 +5,7 @@ import SettingsSection from '../components/SettingsSection';
 import Select from '@/components/ui/Select';
 import { Field } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
-import AppSwitch from '@/components/ui/AppSwitch';
+import SettingToggleRow from '@/components/ui/SettingToggleRow';
 import { RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { useModels } from '@/lib/hooks/api/useModels';
@@ -91,21 +91,14 @@ export default function ImageGenerationSection() {
       }
     >
       <div className="flex flex-col space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">Enable Image Generation</p>
-            <p className="text-xs text-fg-muted">
-              Allow the agent to generate images from text prompts via
-              OpenRouter
-            </p>
-          </div>
-          <AppSwitch
-            checked={enabled}
-            onChange={handleToggle}
-            aria-label="Enable image generation"
-            title="Enable image generation"
-          />
-        </div>
+        <SettingToggleRow
+          label="Enable Image Generation"
+          description="Allow the agent to generate images from text prompts via OpenRouter"
+          checked={enabled}
+          onChange={handleToggle}
+          ariaLabel="Enable image generation"
+          title="Enable image generation"
+        />
 
         {enabled && (
           <>

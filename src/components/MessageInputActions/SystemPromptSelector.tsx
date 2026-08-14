@@ -1,11 +1,4 @@
-import {
-  BookUser,
-  CheckSquare,
-  Square,
-  User,
-  Info,
-  Settings as SettingsIcon,
-} from 'lucide-react';
+import { BookUser, User, Info, Settings as SettingsIcon } from 'lucide-react';
 import {
   CloseButton,
   Popover,
@@ -17,6 +10,7 @@ import { Fragment, useEffect, useState } from 'react';
 import { Prompt } from '@/lib/types/prompt';
 import { useSettingsModal } from '@/components/settings/SettingsModalProvider';
 import ComposerActionButton from '@/components/MessageInputActions/ComposerActionButton';
+import ComposerOptionRow from '@/components/MessageInputActions/ComposerOptionRow';
 import ComposerPopover from '@/components/MessageInputActions/ComposerPopover';
 
 interface SystemPromptSelectorProps {
@@ -83,24 +77,14 @@ const PromptPanel = ({
 
   useEffect(() => {
     if (!open) return; // Only fetch when popover is open
+    let active = true;
     const fetchPrompts = async () => {
       try {
         setIsLoading(true);
         const response = await fetch('/api/system-prompts');
         if (response.ok) {
           const prompts = await response.json();
-          setAvailablePrompts(prompts);
-
-          // Check if any currently selected prompt IDs are not in the API response
-          const availablePromptIds = prompts.map((prompt: Prompt) => prompt.id);
-          const validSelectedIds = selectedPromptIds.filter((id) =>
-            availablePromptIds.includes(id),
-          );
-
-          // If some selected IDs are no longer available, update the selection
-          if (validSelectedIds.length !== selectedPromptIds.length) {
-            onSelectedPromptIdsChange(validSelectedIds);
-          }
+          if (active) setAvailablePrompts(prompts);
         } else {
           console.error('Failed to load system prompts.');
         }
@@ -108,11 +92,32 @@ const PromptPanel = ({
         console.error('Error loading system prompts.');
         console.error(error);
       } finally {
-        setIsLoading(false);
+        if (active) setIsLoading(false);
       }
     };
     fetchPrompts();
-  }, [open, selectedPromptIds, onSelectedPromptIdsChange]);
+    return () => {
+      active = false;
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || isLoading) return;
+    const availablePromptIds = availablePrompts.map((prompt) => prompt.id);
+    const validSelectedIds = selectedPromptIds.filter((id) =>
+      availablePromptIds.includes(id),
+    );
+
+    if (validSelectedIds.length !== selectedPromptIds.length) {
+      onSelectedPromptIdsChange(validSelectedIds);
+    }
+  }, [
+    open,
+    isLoading,
+    availablePrompts,
+    selectedPromptIds,
+    onSelectedPromptIdsChange,
+  ]);
 
   const handleTogglePrompt = (promptId: string) => {
     const newSelectedIds = selectedPromptIds.includes(promptId)
@@ -193,29 +198,14 @@ const PromptPanel = ({
               {availablePrompts
                 .filter((p) => p.type === 'persona' && p.readOnly)
                 .map((prompt) => (
-                  <div
+                  <ComposerOptionRow
                     key={prompt.id}
+                    selected={selectedPromptIds.includes(prompt.id)}
+                    mode="check"
+                    label={prompt.name}
+                    title={prompt.name}
                     onClick={() => handleTogglePrompt(prompt.id)}
-                    className="flex items-center gap-2.5 p-2.5 rounded-control hover:bg-surface-2 cursor-pointer"
-                  >
-                    {selectedPromptIds.includes(prompt.id) ? (
-                      <CheckSquare
-                        size={18}
-                        className="text-accent flex-shrink-0"
-                      />
-                    ) : (
-                      <Square
-                        size={18}
-                        className="text-fg-subtle flex-shrink-0"
-                      />
-                    )}
-                    <span
-                      className="text-sm text-fg truncate"
-                      title={prompt.name}
-                    >
-                      {prompt.name}
-                    </span>
-                  </div>
+                  />
                 ))}
             </div>
           </div>
@@ -232,29 +222,14 @@ const PromptPanel = ({
               {availablePrompts
                 .filter((p) => p.type === 'persona' && !p.readOnly)
                 .map((prompt) => (
-                  <div
+                  <ComposerOptionRow
                     key={prompt.id}
+                    selected={selectedPromptIds.includes(prompt.id)}
+                    mode="check"
+                    label={prompt.name}
+                    title={prompt.name}
                     onClick={() => handleTogglePrompt(prompt.id)}
-                    className="flex items-center gap-2.5 p-2.5 rounded-control hover:bg-surface-2 cursor-pointer"
-                  >
-                    {selectedPromptIds.includes(prompt.id) ? (
-                      <CheckSquare
-                        size={18}
-                        className="text-accent flex-shrink-0"
-                      />
-                    ) : (
-                      <Square
-                        size={18}
-                        className="text-fg-subtle flex-shrink-0"
-                      />
-                    )}
-                    <span
-                      className="text-sm text-fg truncate"
-                      title={prompt.name}
-                    >
-                      {prompt.name}
-                    </span>
-                  </div>
+                  />
                 ))}
             </div>
           </div>

@@ -1,17 +1,10 @@
 'use client';
 
 import { cn } from '@/lib/utils';
+import { FilterChip } from '@/components/ui/FilterChip';
 import { workspaceColorClasses } from '@/lib/workspaces/appearance';
 import WorkspaceIcon from './WorkspaceIcon';
 import { useWorkspacesList } from '@/lib/hooks/api/useWorkspaces';
-
-const chipClasses = (selected: boolean, tint?: string) =>
-  cn(
-    'flex items-center gap-1 whitespace-nowrap rounded-pill border px-2.5 py-1 text-xs font-medium transition-colors duration-150 focus-border-neutral',
-    selected
-      ? (tint ?? 'bg-accent/10 border-accent/30 text-accent')
-      : 'bg-surface border-surface-2 text-fg-muted hover:text-fg hover:border-fg/30',
-  );
 
 interface Props {
   /** Selected workspace IDs; `none` means "no workspace". Empty means all. */
@@ -33,22 +26,18 @@ const WorkspaceFilterChips = ({ selected, onChange }: Props) => {
 
   return (
     <div className="mb-3 flex items-center gap-2 overflow-x-auto pb-1">
-      <button
-        type="button"
-        onClick={() => onChange([])}
-        className={chipClasses(selected.length === 0)}
-      >
+      <FilterChip selected={selected.length === 0} onClick={() => onChange([])}>
         All
-      </button>
+      </FilterChip>
       {workspaces.map((ws) => {
         const c = workspaceColorClasses(ws.color);
         const isSelected = selected.includes(ws.id);
         return (
-          <button
-            type="button"
+          <FilterChip
             key={ws.id}
+            selected={isSelected}
+            tint={cn(c.bgTint, c.border, c.text)}
             onClick={() => toggle(ws.id)}
-            className={chipClasses(isSelected, cn(c.bgTint, c.border, c.text))}
           >
             <WorkspaceIcon
               name={ws.icon}
@@ -57,16 +46,15 @@ const WorkspaceFilterChips = ({ selected, onChange }: Props) => {
               applyColor={isSelected}
             />
             {ws.name}
-          </button>
+          </FilterChip>
         );
       })}
-      <button
-        type="button"
+      <FilterChip
+        selected={selected.includes('none')}
         onClick={() => toggle('none')}
-        className={chipClasses(selected.includes('none'))}
       >
         No workspace
-      </button>
+      </FilterChip>
     </div>
   );
 };

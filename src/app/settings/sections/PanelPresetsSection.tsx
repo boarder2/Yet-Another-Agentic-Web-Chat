@@ -21,8 +21,10 @@ import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import SettingsSection from '../components/SettingsSection';
 import { Button } from '@/components/ui/Button';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 import { IconButton } from '@/components/ui/IconButton';
 import { ListEmptyState } from '@/components/ui/List';
+import Badge from '@/components/ui/Badge';
 import {
   PANEL_SELECTION_KEY,
   EMPTY_PANEL_SELECTION,
@@ -71,7 +73,7 @@ export default function PanelPresetsSection() {
     providers[m.provider]?.[m.name]?.displayName ?? m.name;
 
   const [draft, setDraft] = useState<Draft | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<PanelPreset | null>(null);
 
   const entry = (provider: string, name: string): PanelModelEntry => ({
     provider,
@@ -89,7 +91,7 @@ export default function PanelPresetsSection() {
 
   const deletePreset = (id: string) => {
     setPresets(presets.filter((p) => p.id !== id));
-    setDeletingId(null);
+    setDeleteTarget(null);
     if (draft?.id === id) setDraft(null);
     toast.success('Panel preset deleted');
   };
@@ -147,7 +149,7 @@ export default function PanelPresetsSection() {
   };
 
   const startEdit = (p: PanelPreset) => {
-    setDeletingId(null);
+    setDeleteTarget(null);
     setDraft({ id: p.id, name: p.name, executors: p.executors });
   };
 
@@ -156,7 +158,7 @@ export default function PanelPresetsSection() {
       toast.error('Configure a panel in the composer first');
       return;
     }
-    setDeletingId(null);
+    setDeleteTarget(null);
     setDraft({ id: null, name: '', executors: selection.executors });
   };
 
@@ -271,7 +273,6 @@ export default function PanelPresetsSection() {
               return <div key={preset.id}>{draftForm}</div>;
             }
             const available = isPanelPresetAvailable(preset, providers);
-            const isDeleting = deletingId === preset.id;
             return (
               <Card key={preset.id} className="p-3">
                 <div className="flex items-start gap-2">
@@ -298,56 +299,40 @@ export default function PanelPresetsSection() {
                         {preset.name}
                       </span>
                       {!available && (
-                        <span className="flex items-center gap-0.5 text-[10px] text-warning bg-warning-soft px-1.5 py-0.5 rounded-control">
+                        <Badge tone="warning">
                           <AlertTriangle size={10} />
                           model unavailable
-                        </span>
+                        </Badge>
                       )}
                     </div>
                     <p className="text-xs text-fg-subtle truncate mt-0.5">
                       {panelPresetSummary(preset)}
                     </p>
                   </div>
-                  {isDeleting ? (
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <span className="text-xs text-fg-muted">Delete?</span>
-                      <Button
-                        variant="danger"
-                        size="sm"
-                        onClick={() => deletePreset(preset.id)}
-                      >
-                        Yes
-                      </Button>
-                      <Button size="sm" onClick={() => setDeletingId(null)}>
-                        No
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-1 shrink-0">
-                      <Button size="sm" onClick={() => applyPreset(preset)}>
-                        Apply
-                      </Button>
-                      <IconButton
-                        icon={Pencil}
-                        label="Edit preset"
-                        onClick={() => startEdit(preset)}
-                        className="p-1.5"
-                      />
-                      <IconButton
-                        icon={Copy}
-                        label="Duplicate preset"
-                        onClick={() => duplicatePreset(preset)}
-                        className="p-1.5"
-                      />
-                      <IconButton
-                        icon={Trash2}
-                        label="Delete preset"
-                        tone="danger"
-                        onClick={() => setDeletingId(preset.id)}
-                        className="p-1.5"
-                      />
-                    </div>
-                  )}
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button size="sm" onClick={() => applyPreset(preset)}>
+                      Apply
+                    </Button>
+                    <IconButton
+                      icon={Pencil}
+                      label="Edit preset"
+                      onClick={() => startEdit(preset)}
+                      className="p-1.5"
+                    />
+                    <IconButton
+                      icon={Copy}
+                      label="Duplicate preset"
+                      onClick={() => duplicatePreset(preset)}
+                      className="p-1.5"
+                    />
+                    <IconButton
+                      icon={Trash2}
+                      label="Delete preset"
+                      tone="danger"
+                      onClick={() => setDeleteTarget(preset)}
+                      className="p-1.5"
+                    />
+                  </div>
                 </div>
               </Card>
             );
@@ -369,6 +354,21 @@ export default function PanelPresetsSection() {
           New panel preset
         </Button>
       ) : null}
+
+      <ConfirmModal
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete panel preset"
+        body={
+          <p>
+            Delete <span className="font-medium">{deleteTarget?.name}</span>?
+            This cannot be undone.
+          </p>
+        }
+        onConfirm={() => {
+          if (deleteTarget) deletePreset(deleteTarget.id);
+        }}
+      />
     </SettingsSection>
   );
 }

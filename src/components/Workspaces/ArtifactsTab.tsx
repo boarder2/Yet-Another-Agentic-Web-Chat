@@ -5,6 +5,8 @@ import { AtSign, ExternalLink, Trash2 } from 'lucide-react';
 import { formatTimeDifference } from '@/lib/utils';
 import Modal from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
+import { ListEmptyState, ListLoading } from '@/components/ui/List';
 import {
   useDeleteArtifact,
   useWorkspaceArtifacts,
@@ -25,12 +27,13 @@ export default function ArtifactsTab({ workspaceId }: { workspaceId: string }) {
     null,
   );
 
-  if (isLoading) return <p className="text-xs text-fg/50">Loading…</p>;
+  if (isLoading) return <ListLoading layout="compact" size={20} />;
   if (!artifacts?.length) {
     return (
-      <p className="text-xs text-fg/50">
-        No artifacts yet. Ask a chat in this workspace to build one.
-      </p>
+      <ListEmptyState
+        layout="compact"
+        body="No artifacts yet. Ask a chat in this workspace to build one."
+      />
     );
   }
 
@@ -50,47 +53,40 @@ export default function ArtifactsTab({ workspaceId }: { workspaceId: string }) {
         {artifacts.map((a) => (
           <li
             key={a.id}
-            className="group flex items-center gap-1 rounded-control hover:bg-surface-2 transition"
+            className="group flex items-center gap-1 rounded-control hover:bg-surface-2 transition-colors duration-150"
           >
             <button
               type="button"
               onClick={() => open(a.id)}
-              className="flex-1 min-w-0 text-left px-2 py-1.5"
+              className="flex-1 min-w-0 border border-transparent text-left px-2 py-1.5 focus-border-neutral"
             >
               <span className="block text-sm truncate">{a.title}</span>
-              <span className="block text-xs text-fg/50">
+              <span className="block text-xs text-fg-subtle">
                 v{a.latestVersion} ·{' '}
                 {formatTimeDifference(new Date(), a.updatedAt)} ago
               </span>
             </button>
-            <div className="flex items-center opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity pr-1">
+            <div className="flex items-center opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-150 pr-1">
               {bridge?.insertMention && (
-                <button
-                  type="button"
+                <IconButton
+                  icon={AtSign}
+                  label="Mention in the composer"
                   onClick={() => bridge.insertMention?.(a.id, a.title)}
-                  className="p-1.5 rounded-control hover:bg-surface transition text-fg/60"
-                  title="Mention in the composer"
-                >
-                  <AtSign size={14} />
-                </button>
+                />
               )}
-              <a
+              <IconButton
                 href={`/workspaces/${workspaceId}/artifacts/${a.id}`}
+                icon={ExternalLink}
+                label="Open in a new tab"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="p-1.5 rounded-control hover:bg-surface transition text-fg/60"
-                title="Open in a new tab"
-              >
-                <ExternalLink size={14} />
-              </a>
-              <button
-                type="button"
+              />
+              <IconButton
+                icon={Trash2}
+                label="Delete artifact"
+                tone="danger"
                 onClick={() => setPendingDelete(a)}
-                className="p-1.5 rounded-control hover:bg-surface transition text-fg/60 hover:text-danger"
-                title="Delete artifact"
-              >
-                <Trash2 size={14} />
-              </button>
+              />
             </div>
           </li>
         ))}
@@ -103,7 +99,7 @@ export default function ArtifactsTab({ workspaceId }: { workspaceId: string }) {
         size="sm"
       >
         <div className="space-y-4">
-          <p className="text-sm text-fg/70">
+          <p className="text-sm text-fg-muted">
             Delete <span className="font-medium">{pendingDelete?.title}</span>{' '}
             and all {pendingDelete?.versionCount} of its versions? This cannot
             be undone.

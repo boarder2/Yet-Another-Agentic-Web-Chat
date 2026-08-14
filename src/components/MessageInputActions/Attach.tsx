@@ -160,10 +160,10 @@ const Attach = ({
             </PopoverButton>
             <Transition
               as={Fragment}
-              enter="transition ease-out duration-150"
+              enter="transition-[opacity,transform] ease-out duration-150"
               enterFrom="opacity-0 translate-y-1"
               enterTo="opacity-100 translate-y-0"
-              leave="transition ease-in duration-150"
+              leave="transition-[opacity,transform] ease-in duration-150"
               leaveFrom="opacity-100 translate-y-0"
               leaveTo="opacity-0 translate-y-1"
             >
@@ -177,7 +177,7 @@ const Attach = ({
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        className="flex flex-row items-center space-x-1 transition duration-200 text-fg/70 hover:text-fg"
+                        className="flex flex-row items-center space-x-1 border border-transparent transition-colors duration-150 text-fg-muted hover:text-fg focus-border-neutral"
                       >
                         <input
                           type="file"
@@ -201,7 +201,7 @@ const Attach = ({
                           setFiles([]);
                           setFileIds([]);
                         }}
-                        className="flex flex-row items-center space-x-1 transition duration-200 text-fg/70 hover:text-fg"
+                        className="flex flex-row items-center space-x-1 border border-transparent transition-colors duration-150 text-fg-muted hover:text-fg focus-border-neutral"
                       >
                         <Trash size={14} />
                         <p className="text-xs">Clear</p>
@@ -216,9 +216,9 @@ const Attach = ({
                         className="flex flex-row items-center justify-start w-full space-x-3 p-3"
                       >
                         <div className="bg-surface-2 flex items-center justify-center w-10 h-10 rounded-control">
-                          <File size={16} className="text-fg/70" />
+                          <File size={16} className="text-fg-muted" />
                         </div>
-                        <p className="text-fg/70 text-sm">
+                        <p className="text-fg-muted text-sm">
                           {file.fileName.length > 25
                             ? file.fileName
                                 .replace(/\.\w+$/, '')

@@ -164,7 +164,7 @@ const MessageTabs = ({
               const url = source?.metadata?.url;
 
               if (url) {
-                return `<a href="${url}" target="_blank" data-citation="${number}" className="bg-surface px-1 rounded-control ml-1 no-underline text-xs relative hover:bg-surface-2 transition-colors duration-200">${numStr}</a>`;
+                return `<a href="${url}" target="_blank" data-citation="${number}" className="bg-surface px-1 rounded-control ml-1 no-underline text-xs relative hover:bg-surface-2 transition-colors duration-150">${numStr}</a>`;
               } else {
                 return `[${numStr}]`;
               }
@@ -217,15 +217,15 @@ const MessageTabs = ({
 
   const panelIconBtnClass = (active: boolean) =>
     cn(
-      'flex items-center gap-1.5 px-2 py-1.5 rounded-surface text-sm transition duration-200',
+      'flex items-center gap-1.5 px-2 py-1.5 rounded-surface border border-transparent text-sm transition-colors duration-150 focus-border-neutral',
       active
         ? 'bg-surface-2 text-accent'
-        : 'opacity-70 hover:bg-surface-2 hover:opacity-100',
+        : 'text-fg-muted hover:bg-surface-2 hover:text-fg',
     );
 
   return (
     <div className="flex flex-col w-full">
-      <div className="transition-all duration-200 ease-in-out">
+      <div>
         <div className="flex flex-col space-y-4 animate-fadeIn">
           {loading && isLast && (
             <MessageBoxLoading
@@ -318,7 +318,9 @@ const MessageTabs = ({
             <div className="px-4 pb-4 animate-fadeIn">
               {message.searchQuery && (
                 <div className="mb-4 text-sm bg-surface rounded-surface p-3">
-                  <span className="font-medium opacity-70">Search query:</span>{' '}
+                  <span className="font-medium text-fg-subtle">
+                    Search query:
+                  </span>{' '}
                   {message.searchUrl ? (
                     <a
                       href={message.searchUrl}
@@ -384,7 +386,7 @@ const MessageTabs = ({
                       type="button"
                       onClick={handleLoadSuggestions}
                       disabled={loadingSuggestions}
-                      className="px-4 py-2 flex flex-row items-center justify-center space-x-2 rounded-surface bg-surface hover:bg-surface-2 transition duration-200"
+                      className="px-4 py-2 flex flex-row items-center justify-center space-x-2 rounded-surface border border-transparent bg-surface hover:bg-surface-2 transition-colors duration-150 focus-border-neutral"
                     >
                       {loadingSuggestions ? (
                         <LoaderCircle
@@ -414,7 +416,7 @@ const MessageTabs = ({
                           }}
                           className="cursor-pointer flex flex-row justify-between font-medium space-x-2 items-center"
                         >
-                          <p className="transition duration-200 hover:text-accent">
+                          <p className="transition-colors duration-150 hover:text-accent">
                             {suggestion}
                           </p>
                           <Plus

@@ -21,6 +21,8 @@ import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import SettingsSection from '../components/SettingsSection';
 import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
+import { ListEmptyState } from '@/components/ui/List';
 import {
   PANEL_SELECTION_KEY,
   EMPTY_PANEL_SELECTION,
@@ -175,7 +177,7 @@ export default function PanelPresetsSection() {
 
   const draftForm = (
     <div className="border border-surface-2 rounded-surface p-3 flex flex-col gap-3 bg-bg">
-      <p className="text-xs font-medium text-fg/70">
+      <p className="text-xs font-medium text-fg-muted">
         {draft?.id ? 'Edit Panel Preset' : 'New Panel Preset'}
       </p>
       <Input
@@ -192,7 +194,7 @@ export default function PanelPresetsSection() {
       />
 
       <div className="space-y-2">
-        <span className="text-xs font-semibold text-fg/70 uppercase tracking-wide">
+        <span className="text-xs font-semibold text-fg-muted uppercase tracking-wide">
           Executors ({draft?.executors.length ?? 0}/{PANEL_MAX})
         </span>
         <div className="flex flex-wrap gap-1.5">
@@ -202,19 +204,18 @@ export default function PanelPresetsSection() {
               className="inline-flex items-center gap-1 pl-2.5 pr-1 py-1 rounded-control bg-surface-2 text-xs"
             >
               <span className="truncate max-w-[140px]">{displayName(e)}</span>
-              <button
-                type="button"
+              <IconButton
+                icon={X}
+                label="Remove executor"
+                tone="danger"
                 onClick={() => removeDraftExecutor(e)}
-                className="p-0.5 rounded-control hover:bg-surface text-fg/60 hover:text-danger transition-colors duration-150"
-                aria-label="Remove executor"
-              >
-                <X size={12} />
-              </button>
+                className="p-0.5"
+              />
             </span>
           ))}
         </div>
         {(draft?.executors.length ?? 0) < PANEL_MAX && (
-          <div className="flex items-center gap-1 text-fg/70">
+          <div className="flex items-center gap-1 text-fg-muted">
             <Plus size={14} className="text-accent" />
             <ModelField
               role="chat"
@@ -242,34 +243,27 @@ export default function PanelPresetsSection() {
     <SettingsSection
       title="Agent Panel Presets"
       headerAction={
-        <span className="text-xs text-fg/50">
+        <span className="text-xs text-fg-subtle">
           {presets.length}/{PANEL_PRESET_MAX}
         </span>
       }
     >
-      <p className="text-xs text-fg/60">
+      <p className="text-xs text-fg-muted">
         Save named panel configurations — a set of {PANEL_MIN}–{PANEL_MAX}{' '}
         executor models. Apply them here or from the composer.
       </p>
 
       <div className="flex items-center gap-2 p-3 bg-bg rounded-surface border border-surface-2">
-        <p className="flex-1 text-xs text-fg/60">
+        <p className="flex-1 text-xs text-fg-muted">
           Save the panel currently configured in the composer.
         </p>
-        <button
-          type="button"
-          onClick={saveCurrent}
-          className="text-xs px-2.5 py-1.5 rounded-control bg-surface-2 text-fg/70 hover:bg-surface-2/80 hover:text-fg transition-colors duration-150 flex items-center gap-1"
-        >
-          <Plus size={12} />
+        <Button size="sm" icon={Plus} onClick={saveCurrent}>
           Save current panel
-        </button>
+        </Button>
       </div>
 
       {presets.length === 0 && (!draft || draft.id) ? (
-        <div className="text-center py-6 text-xs text-fg/40">
-          No panel presets yet.
-        </div>
+        <ListEmptyState layout="compact">No panel presets yet.</ListEmptyState>
       ) : (
         <div className="flex flex-col gap-2">
           {presets.map((preset, idx) => {
@@ -282,24 +276,20 @@ export default function PanelPresetsSection() {
               <Card key={preset.id} className="p-3">
                 <div className="flex items-start gap-2">
                   <div className="flex flex-col gap-0.5 shrink-0 pt-0.5">
-                    <button
-                      type="button"
+                    <IconButton
+                      icon={ChevronUp}
+                      label="Move preset up"
                       disabled={idx === 0}
                       onClick={() => movePreset(idx, -1)}
-                      className="p-0.5 rounded text-fg/30 hover:text-fg/70 disabled:opacity-20 transition-colors duration-150"
-                      aria-label="Move preset up"
-                    >
-                      <ChevronUp size={14} />
-                    </button>
-                    <button
-                      type="button"
+                      className="p-0.5"
+                    />
+                    <IconButton
+                      icon={ChevronDown}
+                      label="Move preset down"
                       disabled={idx === presets.length - 1}
                       onClick={() => movePreset(idx, 1)}
-                      className="p-0.5 rounded text-fg/30 hover:text-fg/70 disabled:opacity-20 transition-colors duration-150"
-                      aria-label="Move preset down"
-                    >
-                      <ChevronDown size={14} />
-                    </button>
+                      className="p-0.5"
+                    />
                   </div>
 
                   <div className="flex-1 min-w-0">
@@ -314,13 +304,13 @@ export default function PanelPresetsSection() {
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-fg/50 truncate mt-0.5">
+                    <p className="text-xs text-fg-subtle truncate mt-0.5">
                       {panelPresetSummary(preset)}
                     </p>
                   </div>
                   {isDeleting ? (
                     <div className="flex items-center gap-1.5 shrink-0">
-                      <span className="text-xs text-fg/60">Delete?</span>
+                      <span className="text-xs text-fg-muted">Delete?</span>
                       <Button
                         variant="danger"
                         size="sm"
@@ -328,47 +318,34 @@ export default function PanelPresetsSection() {
                       >
                         Yes
                       </Button>
-                      <button
-                        type="button"
-                        onClick={() => setDeletingId(null)}
-                        className="text-xs px-2 py-1 rounded-control bg-surface-2 text-fg/70 hover:bg-surface-2/80 transition-colors duration-150"
-                      >
+                      <Button size="sm" onClick={() => setDeletingId(null)}>
                         No
-                      </button>
+                      </Button>
                     </div>
                   ) : (
                     <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => applyPreset(preset)}
-                        className="text-xs px-2 py-1 rounded-control bg-surface-2 text-fg/70 hover:bg-accent hover:text-accent-fg transition-colors duration-150"
-                      >
+                      <Button size="sm" onClick={() => applyPreset(preset)}>
                         Apply
-                      </button>
-                      <button
-                        type="button"
+                      </Button>
+                      <IconButton
+                        icon={Pencil}
+                        label="Edit preset"
                         onClick={() => startEdit(preset)}
-                        className="p-1.5 rounded-control text-fg/40 hover:text-fg/70 hover:bg-surface-2 transition-colors duration-150"
-                        aria-label="Edit preset"
-                      >
-                        <Pencil size={13} />
-                      </button>
-                      <button
-                        type="button"
+                        className="p-1.5"
+                      />
+                      <IconButton
+                        icon={Copy}
+                        label="Duplicate preset"
                         onClick={() => duplicatePreset(preset)}
-                        className="p-1.5 rounded-control text-fg/40 hover:text-fg/70 hover:bg-surface-2 transition-colors duration-150"
-                        aria-label="Duplicate preset"
-                      >
-                        <Copy size={13} />
-                      </button>
-                      <button
-                        type="button"
+                        className="p-1.5"
+                      />
+                      <IconButton
+                        icon={Trash2}
+                        label="Delete preset"
+                        tone="danger"
                         onClick={() => setDeletingId(preset.id)}
-                        className="p-1.5 rounded-control text-fg/40 hover:text-danger hover:bg-danger-soft transition-colors duration-150"
-                        aria-label="Delete preset"
-                      >
-                        <Trash2 size={13} />
-                      </button>
+                        className="p-1.5"
+                      />
                     </div>
                   )}
                 </div>
@@ -381,15 +358,16 @@ export default function PanelPresetsSection() {
       {draft && !draft.id ? (
         draftForm
       ) : !draft ? (
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="sm"
+          icon={Plus}
           disabled={presets.length >= PANEL_PRESET_MAX}
           onClick={() => setDraft({ id: null, name: '', executors: [] })}
-          className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-control border border-dashed border-surface-2 text-fg/50 hover:border-border-strong hover:text-fg/70 transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed w-full justify-center"
+          className="w-full border-dashed border-surface-2"
         >
-          <Plus size={13} />
           New panel preset
-        </button>
+        </Button>
       ) : null}
     </SettingsSection>
   );

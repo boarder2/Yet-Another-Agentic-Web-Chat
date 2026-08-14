@@ -6,6 +6,7 @@ import ModelField from '@/components/models/ModelField';
 import { useVoices } from '@/lib/hooks/api/useVoices';
 import { useLocalStorageString } from '@/lib/hooks/useLocalStorage';
 import SettingsSection from '../components/SettingsSection';
+import { Field } from '@/components/ui/Field';
 import Select from '@/components/ui/Select';
 import { Input } from '@/components/ui/Input';
 
@@ -87,13 +88,16 @@ export default function VoiceSection() {
   return (
     <SettingsSection title="Voice">
       <div className="flex flex-col space-y-4">
-        <div className="flex flex-col space-y-1">
-          <p className="text-sm">Read-aloud engine</p>
-          <p className="text-xs opacity-70">
-            Neural runs a local model (higher quality, more latency/compute).
-            System uses your device&apos;s built-in voices (instant, no
-            download).
-          </p>
+        <Field
+          label="Read-aloud engine"
+          hint={
+            <>
+              Neural runs a local model (higher quality, more latency/compute).
+              System uses your device&apos;s built-in voices (instant, no
+              download).
+            </>
+          }
+        >
           <Select
             value={engine}
             onChange={(e) => handleEngineChange(e.target.value)}
@@ -102,27 +106,24 @@ export default function VoiceSection() {
               { value: 'browser', label: 'System (instant, built-in voices)' },
             ]}
           />
-        </div>
+        </Field>
         {engine === 'kokoro' && (
-          <div className="flex flex-col space-y-1">
-            <p className="text-sm">Read-aloud voice</p>
-            <p className="text-xs opacity-70">
-              Voice used by the local text-to-speech model when reading
-              responses aloud.
-            </p>
-            <Select
-              value={selectedVoice}
-              onChange={(e) => handleVoiceChange(e.target.value)}
-              options={voiceOptions}
-              disabled={voiceOptions.length === 0}
-            />
-            <div className="flex flex-col space-y-1 pt-2">
-              <p className="text-sm">Playback speed</p>
-              <p className="text-xs opacity-70">
-                Applied as the audio player&apos;s native playback rate, so it
-                stays clear at any speed. Leave at 1× if you drive speed with a
-                browser playback-speed extension instead.
-              </p>
+          <>
+            <Field
+              label="Read-aloud voice"
+              hint="Voice used by the local text-to-speech model when reading responses aloud."
+            >
+              <Select
+                value={selectedVoice}
+                onChange={(e) => handleVoiceChange(e.target.value)}
+                options={voiceOptions}
+                disabled={voiceOptions.length === 0}
+              />
+            </Field>
+            <Field
+              label="Playback speed"
+              hint="Applied as the audio player's native playback rate, so it stays clear at any speed. Leave at 1× if you drive speed with a browser playback-speed extension instead."
+            >
               <Select
                 value={String(speed)}
                 onChange={(e) => handleSpeedChange(e.target.value)}
@@ -137,15 +138,11 @@ export default function VoiceSection() {
                   { value: '3', label: '3×' },
                 ]}
               />
-            </div>
-            <div className="flex flex-col space-y-1 pt-2">
-              <p className="text-sm">Narration mode</p>
-              <p className="text-xs opacity-70">
-                Read speaks the response as written. Narrate uses an LLM to add
-                spoken descriptions of tables, charts, and other visuals (cached
-                per message; one model call per reply the first time it&apos;s
-                read).
-              </p>
+            </Field>
+            <Field
+              label="Narration mode"
+              hint="Read speaks the response as written. Narrate uses an LLM to add spoken descriptions of tables, charts, and other visuals (cached per message; one model call per reply the first time it's read)."
+            >
               <Select
                 value={narrationMode}
                 onChange={(e) => handleNarrationModeChange(e.target.value)}
@@ -154,29 +151,33 @@ export default function VoiceSection() {
                   { value: 'narrate', label: 'Narrate (LLM descriptions)' },
                 ]}
               />
-              {narrationMode === 'narrate' && (
-                <div className="flex items-center justify-between pt-1">
-                  <span className="text-xs opacity-70">
-                    Narration model{' '}
-                    <span className="opacity-60">
-                      (required for narration; otherwise reads aloud as-is)
-                    </span>
-                  </span>
-                  <ModelField
-                    selectedModel={narrationModel}
-                    setSelectedModel={handleNarrationModelChange}
-                    panelPosition="above"
-                  />
-                </div>
-              )}
-            </div>
-            <div className="flex items-center gap-2 pt-1">
+            </Field>
+            {narrationMode === 'narrate' && (
+              <Field
+                grouped
+                label="Narration model"
+                hint="Required for narration; otherwise reads aloud as-is."
+                className="flex-row items-center justify-between"
+              >
+                <ModelField
+                  selectedModel={narrationModel}
+                  setSelectedModel={handleNarrationModelChange}
+                  panelPosition="above"
+                />
+              </Field>
+            )}
+            <Field
+              grouped
+              label="Voice preview"
+              hint="Type text to preview, or leave blank to use the sample."
+              className="flex-row items-center gap-2"
+            >
               <Input
                 type="text"
+                aria-label="Voice preview text"
                 value={testText}
                 onChange={(e) => setTestText(e.target.value)}
                 placeholder={SAMPLE_TEXT}
-                aria-label="Voice preview text"
                 className="flex-1 rounded-surface"
               />
               <Speak
@@ -185,11 +186,8 @@ export default function VoiceSection() {
                 speed={speed}
                 engine={engine}
               />
-            </div>
-            <p className="text-xs opacity-70">
-              Type text to preview, or leave blank to use the sample.
-            </p>
-          </div>
+            </Field>
+          </>
         )}
       </div>
     </SettingsSection>

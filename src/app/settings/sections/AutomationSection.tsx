@@ -18,7 +18,7 @@ export default function AutomationSection({
   return (
     <SettingsSection title="Automation">
       <div className="flex flex-col space-y-4">
-        <div className="flex items-center justify-between p-3 bg-surface rounded-surface hover:bg-surface-2 transition-colors">
+        <div className="flex items-center justify-between p-3 bg-surface rounded-surface hover:bg-surface-2 transition-colors duration-150">
           <div className="flex items-center space-x-3">
             <div className="p-2 bg-surface-2 rounded-surface">
               <Layers3 size={18} />
@@ -32,7 +32,7 @@ export default function AutomationSection({
           </div>
           <AppSwitch checked={automaticSuggestions} onChange={onToggle} />
         </div>
-        <div className="flex items-center justify-between p-3 bg-surface rounded-surface hover:bg-surface-2 transition-colors">
+        <div className="flex items-center justify-between p-3 bg-surface rounded-surface hover:bg-surface-2 transition-colors duration-150">
           <div className="flex items-center space-x-3">
             <div className="p-2 bg-surface-2 rounded-surface">
               <Type size={18} />

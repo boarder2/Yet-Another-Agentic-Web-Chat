@@ -84,7 +84,7 @@ export default function GeneratedImageHistoryCard({
       aria-label={`Preview ${image.title}`}
       data-testid="generated-image-history-card"
       data-image-id={image.id}
-      className="group flex h-full cursor-pointer flex-col overflow-hidden transition-colors duration-150 hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
+      className="group flex h-full cursor-pointer flex-col overflow-hidden border border-transparent transition-colors duration-150 hover:bg-surface-2 focus-border-neutral"
       onClick={handleClick}
       onKeyDown={handleKeyDown}
     >
@@ -97,7 +97,7 @@ export default function GeneratedImageHistoryCard({
             role="img"
             aria-label="Image unavailable"
             data-testid="generated-image-unavailable"
-            className="flex h-full w-full flex-col items-center justify-center gap-2 px-4 text-center text-sm text-fg/60"
+            className="flex h-full w-full flex-col items-center justify-center gap-2 px-4 text-center text-sm text-fg-muted"
           >
             <ImageOff size={24} aria-hidden="true" />
             <span>Image unavailable</span>
@@ -124,7 +124,7 @@ export default function GeneratedImageHistoryCard({
         >
           {image.title}
         </h3>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg/60">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-subtle">
           <GeneratedImageHistoryMetadata image={image} workspace={workspace} />
         </div>
       </div>

@@ -155,7 +155,7 @@ const SearchImages = ({
                 key={i}
                 src={image.img_src}
                 alt={image.title}
-                className="h-full w-full aspect-video object-cover rounded-surface transition duration-200 active:scale-95 hover:scale-[1.02] cursor-zoom-in"
+                className="h-full w-full aspect-video object-cover rounded-surface transition-transform duration-200 active:scale-95 hover:scale-[1.02] cursor-zoom-in"
               />
             ))}
           </div>
@@ -164,10 +164,10 @@ const SearchImages = ({
               <button
                 type="button"
                 onClick={handleShowMore}
-                className="px-4 py-2 bg-surface hover:bg-surface-2 text-fg/70 hover:text-fg rounded-control transition duration-200 flex items-center space-x-2 border border-surface-2"
+                className="px-4 py-2 bg-surface hover:bg-surface-2 text-fg-muted hover:text-fg rounded-control transition-colors duration-150 flex items-center space-x-2 border border-surface-2 focus-border-neutral"
               >
                 <span>Show More Images</span>
-                <span className="text-sm opacity-75">
+                <span className="text-sm text-fg-subtle">
                   ({displayLimit} of {images.length})
                 </span>
               </button>

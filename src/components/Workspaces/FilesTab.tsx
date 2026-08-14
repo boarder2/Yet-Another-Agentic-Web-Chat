@@ -18,14 +18,14 @@ import {
   usePatchWorkspaceFile,
   type FileMeta,
 } from '@/lib/hooks/api/useWorkspaceFiles';
+import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
 import { Input } from '@/components/ui/Input';
+import { ListEmptyState, ListLoading } from '@/components/ui/List';
 
 function isEditableFile(f: FileMeta): boolean {
   return !f.isBinary;
 }
-
-const EDIT_ACTION_CLASS =
-  'p-1 rounded-control text-fg/40 hover:text-fg hover:bg-surface-2 transition-colors duration-150 shrink-0';
 
 const AUTO_ACCEPT_SEGMENTS: {
   value: number | null;
@@ -37,7 +37,7 @@ const AUTO_ACCEPT_SEGMENTS: {
     value: null,
     label: 'Default',
     title: 'Use workspace default',
-    activeClass: 'bg-surface-2 text-fg/80',
+    activeClass: 'bg-surface-2 text-fg',
   },
   {
     value: 1,
@@ -72,9 +72,9 @@ function AutoAcceptPill({
 
   return (
     <div className="inline-flex items-center gap-1.5">
-      <FilePen size={11} className="text-fg/30 shrink-0" />
+      <FilePen size={11} className="text-fg-subtle shrink-0" />
       <div
-        className={`inline-flex items-center rounded-pill border border-surface-2 bg-bg overflow-hidden transition-opacity ${patch.isPending ? 'opacity-50 pointer-events-none' : ''}`}
+        className={`inline-flex items-center rounded-pill border border-surface-2 bg-bg overflow-hidden transition-opacity duration-150 ${patch.isPending ? 'opacity-50 pointer-events-none' : ''}`}
       >
         {AUTO_ACCEPT_SEGMENTS.map((seg, i) => {
           const isActive = current === seg.value;
@@ -84,8 +84,10 @@ function AutoAcceptPill({
               key={String(seg.value)}
               onClick={() => select(seg.value)}
               title={seg.title}
-              className={`px-2 py-0.5 text-xs font-medium transition-colors whitespace-nowrap ${
-                isActive ? seg.activeClass : 'text-fg/35 hover:text-fg/60'
+              className={`border border-transparent px-2 py-0.5 text-xs font-medium transition-colors duration-150 whitespace-nowrap focus-border-neutral ${
+                isActive
+                  ? seg.activeClass
+                  : 'text-fg-subtle hover:text-fg-muted'
               } ${i > 0 ? 'border-l border-surface-2' : ''}`}
             >
               {seg.label}
@@ -149,7 +151,7 @@ export default function FilesTab({
   return (
     <div className="space-y-4">
       <div className="flex gap-2 items-center flex-wrap">
-        <label className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-surface border border-surface-2 bg-surface hover:bg-surface-2 cursor-pointer transition">
+        <label className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-surface border border-surface-2 bg-surface hover:bg-surface-2 cursor-pointer transition-colors duration-150">
           {upload.isPending ? (
             <LoaderCircle size={14} className="animate-spin text-accent" />
           ) : (
@@ -181,106 +183,103 @@ export default function FilesTab({
               }}
             />
             <span className={compact ? 'flex gap-2' : 'contents'}>
-              <button
-                type="button"
+              <Button
+                variant="primary"
+                size="sm"
                 onClick={createNote}
-                className={`px-3 py-1.5 text-sm rounded-surface bg-accent text-accent-fg hover:bg-accent/90 transition ${compact ? 'flex-1' : ''}`}
+                className={`rounded-surface px-3 py-1.5 text-sm ${compact ? 'flex-1' : ''}`}
               >
                 Create
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => setCreatingNote(false)}
-                className={`px-3 py-1.5 text-sm rounded-surface border border-surface-2 hover:bg-surface-2 transition ${compact ? 'flex-1' : ''}`}
+                className={`rounded-surface border border-surface-2 px-3 py-1.5 text-sm ${compact ? 'flex-1' : ''}`}
               >
                 Cancel
-              </button>
+              </Button>
             </span>
           </span>
         ) : (
-          <button
-            type="button"
+          <Button
+            size="sm"
+            icon={Plus}
             onClick={() => setCreatingNote(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-surface border border-surface-2 bg-surface hover:bg-surface-2 transition"
+            className="rounded-surface border border-surface-2 px-3 py-1.5 text-sm"
           >
-            <Plus size={14} />
             New file
-          </button>
+          </Button>
         )}
       </div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-8">
-          <LoaderCircle size={20} className="animate-spin text-accent" />
-        </div>
+        <ListLoading layout="section" size={20} />
       ) : files.length === 0 ? (
-        <div className="text-center py-8">
-          <FileText className="mx-auto mb-2 text-fg/20" size={32} />
-          <p className="text-sm text-fg/50">No files yet.</p>
-        </div>
+        <ListEmptyState
+          layout="section"
+          icon={FileText}
+          title="No files yet."
+        />
       ) : (
         <ul className="divide-y divide-surface-2 border border-surface-2 rounded-floating overflow-hidden">
           {files.map((f) => {
             const inner = (
               <>
-                <FileText size={14} className="text-fg/40 shrink-0" />
+                <FileText size={14} className="text-fg-subtle shrink-0" />
                 <span className="truncate">{f.name}</span>
               </>
             );
             const editButton =
               isEditableFile(f) &&
               (onOpenFile ? (
-                <button
-                  type="button"
+                <IconButton
+                  icon={Edit3}
+                  label="Edit"
                   onClick={() => onOpenFile(f.id, true)}
-                  className={EDIT_ACTION_CLASS}
-                  title="Edit"
-                >
-                  <Edit3 size={12} />
-                </button>
+                  className="shrink-0"
+                />
               ) : (
-                <Link
+                <IconButton
                   href={`/workspaces/${workspaceId}/files/${f.id}?edit=1`}
-                  className={EDIT_ACTION_CLASS}
-                  title="Edit"
-                >
-                  <Edit3 size={12} />
-                </Link>
+                  icon={Edit3}
+                  label="Edit"
+                  className="shrink-0"
+                />
               ));
             if (compact) {
               return (
                 <li
                   key={f.id}
-                  className="flex flex-col gap-1.5 px-3 py-2 bg-surface hover:bg-surface-2 transition"
+                  className="flex flex-col gap-1.5 px-3 py-2 bg-surface hover:bg-surface-2 transition-colors duration-150"
                 >
                   <div className="flex items-center gap-2 min-w-0">
                     {onOpenFile ? (
                       <button
                         type="button"
                         onClick={() => onOpenFile(f.id)}
-                        className="text-sm text-left hover:underline flex items-center gap-2 min-w-0 flex-1"
+                        className="text-sm text-left hover:underline flex items-center gap-2 min-w-0 flex-1 border border-transparent focus-border-neutral"
                       >
                         {inner}
                       </button>
                     ) : (
                       <Link
                         href={`/workspaces/${workspaceId}/files/${f.id}`}
-                        className="text-sm hover:underline flex items-center gap-2 min-w-0 flex-1"
+                        className="text-sm hover:underline flex items-center gap-2 min-w-0 flex-1 border border-transparent focus-border-neutral"
                       >
                         {inner}
                       </Link>
                     )}
                     {editButton}
-                    <button
-                      type="button"
+                    <IconButton
+                      icon={Trash2}
+                      label="Delete"
+                      tone="danger"
                       onClick={() => remove(f.id)}
-                      className="p-1 rounded-control hover:bg-danger-soft text-danger transition shrink-0"
-                      title="Delete"
-                    >
-                      <Trash2 size={12} />
-                    </button>
+                      className="shrink-0"
+                    />
                   </div>
-                  <div className="flex items-center justify-between gap-2 text-xs text-fg/40">
+                  <div className="flex items-center justify-between gap-2 text-xs text-fg-subtle">
                     {isEditableFile(f) && (
                       <AutoAcceptPill
                         workspaceId={workspaceId}
@@ -296,25 +295,25 @@ export default function FilesTab({
             return (
               <li
                 key={f.id}
-                className="flex items-center justify-between px-4 py-2.5 bg-surface hover:bg-surface-2 transition"
+                className="flex items-center justify-between px-4 py-2.5 bg-surface hover:bg-surface-2 transition-colors duration-150"
               >
                 {onOpenFile ? (
                   <button
                     type="button"
                     onClick={() => onOpenFile(f.id)}
-                    className="text-sm text-left hover:underline flex items-center gap-2 min-w-0 flex-1 mr-3"
+                    className="text-sm text-left hover:underline flex items-center gap-2 min-w-0 flex-1 mr-3 border border-transparent focus-border-neutral"
                   >
                     {inner}
                   </button>
                 ) : (
                   <Link
                     href={`/workspaces/${workspaceId}/files/${f.id}`}
-                    className="text-sm hover:underline flex items-center gap-2 min-w-0 flex-1 mr-4"
+                    className="text-sm hover:underline flex items-center gap-2 min-w-0 flex-1 mr-4 border border-transparent focus-border-neutral"
                   >
                     {inner}
                   </Link>
                 )}
-                <span className="flex items-center gap-3 text-xs text-fg/40 shrink-0">
+                <span className="flex items-center gap-3 text-xs text-fg-subtle shrink-0">
                   {isEditableFile(f) && (
                     <AutoAcceptPill
                       workspaceId={workspaceId}
@@ -325,14 +324,12 @@ export default function FilesTab({
                   <span>{f.mime ?? '—'}</span>
                   <span>{(f.size / 1024).toFixed(1)}KB</span>
                   {editButton}
-                  <button
-                    type="button"
+                  <IconButton
+                    icon={Trash2}
+                    label="Delete"
+                    tone="danger"
                     onClick={() => remove(f.id)}
-                    className="p-1 rounded-control hover:bg-danger-soft text-danger transition"
-                    title="Delete"
-                  >
-                    <Trash2 size={12} />
-                  </button>
+                  />
                 </span>
               </li>
             );

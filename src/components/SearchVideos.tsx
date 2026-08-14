@@ -170,7 +170,7 @@ const Searchvideos = ({
                     ...slides.slice(i + 1),
                   ]);
                 }}
-                className="relative transition duration-200 active:scale-95 hover:scale-[1.02] cursor-pointer"
+                className="relative transition-transform duration-200 active:scale-95 hover:scale-[1.02] cursor-pointer"
                 key={i}
               >
                 <img
@@ -178,7 +178,7 @@ const Searchvideos = ({
                   alt={video.title}
                   className="relative h-full w-full aspect-video object-cover rounded-surface"
                 />
-                <div className="absolute bg-bg/70 text-fg/70 px-2 py-1 flex flex-row items-center space-x-1 bottom-1 right-1 rounded-control">
+                <div className="absolute bg-bg/70 text-fg-muted px-2 py-1 flex flex-row items-center space-x-1 bottom-1 right-1 rounded-control">
                   <PlayCircle size={15} />
                   <p className="text-xs">Video</p>
                 </div>
@@ -190,10 +190,10 @@ const Searchvideos = ({
               <button
                 type="button"
                 onClick={handleShowMore}
-                className="px-4 py-2 bg-surface hover:bg-surface-2 text-fg/70 hover:text-fg rounded-control transition duration-200 flex items-center space-x-2 border border-surface-2"
+                className="px-4 py-2 bg-surface hover:bg-surface-2 text-fg-muted hover:text-fg rounded-control transition-colors duration-150 flex items-center space-x-2 border border-surface-2 focus-border-neutral"
               >
                 <span>Show More Videos</span>
-                <span className="text-sm opacity-75">
+                <span className="text-sm text-fg-subtle">
                   ({displayLimit} of {videos.length})
                 </span>
               </button>

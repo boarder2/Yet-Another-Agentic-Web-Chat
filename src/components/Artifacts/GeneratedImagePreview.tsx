@@ -75,7 +75,7 @@ export default function GeneratedImagePreview({
         <section aria-labelledby="generated-image-prompt" className="space-y-2">
           <h2
             id="generated-image-prompt"
-            className="text-xs font-medium uppercase tracking-wide text-fg/60"
+            className="text-xs font-medium uppercase tracking-wide text-fg-subtle"
           >
             Prompt
           </h2>
@@ -89,16 +89,16 @@ export default function GeneratedImagePreview({
 
         <dl className="grid gap-3 text-sm sm:grid-cols-2">
           <div>
-            <dt className="text-xs text-fg/50">Created</dt>
-            <dd className="text-fg/80">
+            <dt className="text-xs text-fg-subtle">Created</dt>
+            <dd className="text-fg">
               <time dateTime={image.createdAt}>
                 {formatTimestamp(image.createdAt)}
               </time>
             </dd>
           </div>
           <div>
-            <dt className="text-xs text-fg/50">Workspace</dt>
-            <dd className="text-fg/80">
+            <dt className="text-xs text-fg-subtle">Workspace</dt>
+            <dd className="text-fg">
               {image.workspaceId ? (
                 workspace ? (
                   <WorkspaceChip
@@ -111,13 +111,13 @@ export default function GeneratedImagePreview({
                   image.workspaceId
                 )
               ) : (
-                <span className="text-fg/50">None</span>
+                <span className="text-fg-subtle">None</span>
               )}
             </dd>
           </div>
           <div>
-            <dt className="text-xs text-fg/50">Originating chat</dt>
-            <dd className="text-fg/80">
+            <dt className="text-xs text-fg-subtle">Originating chat</dt>
+            <dd className="text-fg">
               {originatingChatHref ? (
                 <Link
                   href={originatingChatHref}
@@ -129,7 +129,7 @@ export default function GeneratedImagePreview({
               ) : (
                 <span
                   data-testid="generated-image-chat-unavailable"
-                  className="text-fg/50"
+                  className="text-fg-subtle"
                 >
                   Unavailable
                 </span>
@@ -137,8 +137,8 @@ export default function GeneratedImagePreview({
             </dd>
           </div>
           <div>
-            <dt className="text-xs text-fg/50">Format</dt>
-            <dd className="uppercase text-fg/80">{image.extension}</dd>
+            <dt className="text-xs text-fg-subtle">Format</dt>
+            <dd className="uppercase text-fg">{image.extension}</dd>
           </div>
         </dl>
       </div>

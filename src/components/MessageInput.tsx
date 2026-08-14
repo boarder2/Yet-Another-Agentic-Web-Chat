@@ -414,7 +414,7 @@ const MessageInput = ({
                 />
                 <button
                   type="button"
-                  className="absolute -top-1.5 -right-1.5 bg-surface border border-surface-2 rounded-pill p-0.5 opacity-0 group-hover/thumb:opacity-100 transition-opacity"
+                  className="absolute -top-1.5 -right-1.5 bg-surface border border-surface-2 rounded-pill p-0.5 opacity-0 group-hover/thumb:opacity-100 transition-opacity duration-150 focus-border-neutral"
                   onClick={() =>
                     setPendingImages(
                       pendingImages.filter((i) => i.imageId !== img.imageId),
@@ -525,14 +525,14 @@ const MessageInput = ({
             {loading ? (
               <button
                 type="button"
-                className="bg-danger text-danger-fg hover:bg-danger transition duration-100 rounded-pill p-2 relative group"
+                className="bg-danger text-danger-fg hover:bg-danger transition-colors duration-150 border border-transparent rounded-pill p-2 relative group focus-border-contrast"
                 onClick={onCancel}
                 aria-label="Cancel"
               >
                 {loading && (
                   <LoaderCircle
                     size={40}
-                    className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-spin text-fg/40"
+                    className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-spin text-fg-subtle"
                   />
                 )}
                 <span className="relative flex items-center justify-center w-4.25 h-4.25">
@@ -545,7 +545,7 @@ const MessageInput = ({
                   <button
                     type="button"
                     onClick={onCancelEdit}
-                    className="p-2 rounded-pill border border-surface-2 bg-surface hover:bg-surface-2 transition duration-200 text-fg/80"
+                    className="p-2 rounded-pill border border-surface-2 bg-surface hover:bg-surface-2 transition-colors duration-150 text-fg-muted focus-border-neutral"
                     aria-label="Cancel editing"
                   >
                     <X size={17} />
@@ -557,7 +557,7 @@ const MessageInput = ({
                       pendingImages.length === 0) ||
                     pinInvalid
                   }
-                  className="bg-accent text-accent-fg disabled:text-accent-fg/50 disabled:bg-accent/20 hover:bg-accent-700 transition duration-100 rounded-pill p-2"
+                  className="bg-accent text-accent-fg disabled:text-accent-fg/50 disabled:bg-accent/20 hover:bg-accent-700 transition-colors duration-150 border border-transparent rounded-pill p-2 focus-border-contrast"
                   type="submit"
                 >
                   {firstMessage ? (

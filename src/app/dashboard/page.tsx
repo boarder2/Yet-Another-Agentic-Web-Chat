@@ -3,7 +3,6 @@
 import {
   Plus,
   RefreshCw,
-  LoaderCircle,
   Download,
   Upload,
   LayoutDashboard,
@@ -14,47 +13,39 @@ import {
 } from 'lucide-react';
 import { useMemo } from 'react';
 import { Responsive, WidthProvider } from 'react-grid-layout';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/Card';
 import WidgetDisplay from '@/components/dashboard/WidgetDisplay';
 import WidgetModals from '@/components/dashboard/WidgetModals';
 import PageHeader from '@/components/PageHeader';
 import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
+import { ListEmptyState, ListLoading } from '@/components/ui/List';
 import { useWidgetBoard } from '@/lib/hooks/useWidgetBoard';
 import { DASHBOARD_CONSTRAINTS } from '@/lib/constants/dashboard';
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
 const EmptyDashboard = ({ onAddWidget }: { onAddWidget: () => void }) => (
-  <div className="col-span-2 flex justify-center items-center min-h-[400px]">
-    <Card className="w-96 text-center">
-      <CardHeader>
-        <CardTitle>Welcome to your Dashboard</CardTitle>
-        <CardDescription>
+  <ListEmptyState
+    layout="page"
+    className="col-span-2 min-h-[400px]"
+    title="Welcome to your Dashboard"
+    body={
+      <>
+        <p>
           Create your first widget to get started with personalized information
-        </CardDescription>
-      </CardHeader>
-
-      <CardContent>
-        <p className="text-sm text-fg/60 mb-4">
+        </p>
+        <p className="mt-2">
           Widgets let you fetch content from any URL and process it with AI to
           show exactly what you need.
         </p>
-      </CardContent>
-
-      <CardFooter className="justify-center">
-        <Button variant="primary" icon={Plus} onClick={onAddWidget}>
-          Create Your First Widget
-        </Button>
-      </CardFooter>
-    </Card>
-  </div>
+      </>
+    }
+    action={
+      <Button variant="primary" icon={Plus} onClick={onAddWidget}>
+        Create Your First Widget
+      </Button>
+    }
+  />
 );
 
 const DashboardPage = () => {
@@ -111,69 +102,44 @@ const DashboardPage = () => {
         title="Dashboard"
         actions={
           <>
-            <button
-              type="button"
+            <IconButton
+              icon={isEditMode ? Eye : Pencil}
+              label={isEditMode ? 'Switch to View Mode' : 'Switch to Edit Mode'}
+              tone={isEditMode ? 'active' : 'default'}
+              aria-pressed={isEditMode}
               onClick={() => setIsEditMode((v) => !v)}
-              className={`p-2 rounded-surface transition duration-200 ${
-                isEditMode
-                  ? 'bg-accent text-accent-fg hover:bg-accent-700'
-                  : 'hover:bg-surface-2'
-              }`}
-              title={isEditMode ? 'Switch to View Mode' : 'Switch to Edit Mode'}
-            >
-              {isEditMode ? <Eye size={18} /> : <Pencil size={18} />}
-            </button>
+            />
 
-            <button
-              type="button"
+            <IconButton
+              icon={RefreshCw}
+              label="Refresh All Widgets"
               onClick={handleRefreshAll}
-              className="p-2 hover:bg-surface-2 rounded-surface transition duration-200"
-              title="Refresh All Widgets"
-            >
-              <RefreshCw size={18} />
-            </button>
+            />
 
             {isEditMode && (
               <>
-                <button
-                  type="button"
+                <IconButton
+                  icon={settings.parallelLoading ? Layers : List}
+                  label={`Switch to ${settings.parallelLoading ? 'Sequential' : 'Parallel'} Processing`}
+                  aria-pressed={settings.parallelLoading}
                   onClick={handleToggleProcessingMode}
-                  className="p-2 hover:bg-surface-2 rounded-surface transition duration-200"
-                  title={`Switch to ${settings.parallelLoading ? 'Sequential' : 'Parallel'} Processing`}
-                >
-                  {settings.parallelLoading ? (
-                    <Layers size={18} />
-                  ) : (
-                    <List size={18} />
-                  )}
-                </button>
-
-                <button
-                  type="button"
+                />
+                <IconButton
+                  icon={Download}
+                  label="Export Dashboard Configuration"
                   onClick={handleExport}
-                  className="p-2 hover:bg-surface-2 rounded-surface transition duration-200"
-                  title="Export Dashboard Configuration"
-                >
-                  <Download size={18} />
-                </button>
-
-                <button
-                  type="button"
+                />
+                <IconButton
+                  icon={Upload}
+                  label="Import Dashboard Configuration"
                   onClick={handleImport}
-                  className="p-2 hover:bg-surface-2 rounded-surface transition duration-200"
-                  title="Import Dashboard Configuration"
-                >
-                  <Upload size={18} />
-                </button>
-
-                <button
-                  type="button"
+                />
+                <IconButton
+                  icon={Plus}
+                  label="Add New Widget"
+                  tone="primary"
                   onClick={handleAddWidget}
-                  className="p-2 bg-accent hover:bg-accent-700 rounded-surface transition duration-200"
-                  title="Add New Widget"
-                >
-                  <Plus size={18} />
-                </button>
+                />
               </>
             )}
           </>
@@ -183,15 +149,7 @@ const DashboardPage = () => {
       {/* Main content area */}
       <div className="flex-1 pb-20 lg:pb-2">
         {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="text-center">
-              <LoaderCircle
-                size={32}
-                className="animate-spin mx-auto mb-4 text-accent"
-              />
-              <p className="text-fg/60">Loading dashboard...</p>
-            </div>
-          </div>
+          <ListLoading layout="page" size={32} status="Loading dashboard..." />
         ) : surfaceWidgets.length === 0 ? (
           <EmptyDashboard onAddWidget={handleAddWidget} />
         ) : (

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
 import Modal from '@/components/ui/Modal';
 import {
   ListCount,
@@ -20,7 +21,6 @@ import {
   ListLoading,
   ListRow,
   ListRowAction,
-  listRowActionClasses,
 } from '@/components/ui/List';
 import { describeCron } from '@/lib/scheduledTasks/presets';
 import { cn, formatTimeDifference } from '@/lib/utils';
@@ -46,10 +46,10 @@ export default function ScheduledTasksPage() {
     <div>
       <PageHeader icon={CalendarClock} title="Scheduled Tasks" />
 
-      {isLoading && <ListLoading />}
+      {isLoading && <ListLoading layout="page" size={32} />}
 
       {!isLoading && schedules.length === 0 && (
-        <ListEmptyState>
+        <ListEmptyState layout="page">
           No schedules yet. Add one from a{' '}
           <Link href="/automations" className="text-accent hover:underline">
             workflow
@@ -116,10 +116,10 @@ export default function ScheduledTasksPage() {
                       type="button"
                       onClick={() => toggle(s)}
                       className={cn(
-                        'rounded-pill border px-3 py-1 text-xs font-medium transition-colors duration-150',
+                        'rounded-pill border px-3 py-1 text-xs font-medium transition-colors duration-150 focus-border-neutral',
                         s.enabled
                           ? 'bg-success-soft text-success border-success'
-                          : 'bg-surface-2 text-fg/50 border-surface-2',
+                          : 'bg-surface-2 text-fg-subtle border-surface-2',
                       )}
                     >
                       {s.enabled ? 'Enabled' : 'Disabled'}
@@ -130,14 +130,11 @@ export default function ScheduledTasksPage() {
                       disabled={run.isPending || s.running}
                       onClick={() => run.mutate(s.id)}
                     />
-                    <Link
+                    <IconButton
                       href={`/automations/schedules/${s.id}`}
-                      title="Edit"
-                      aria-label="Edit"
-                      className={listRowActionClasses()}
-                    >
-                      <Pencil size={15} />
-                    </Link>
+                      icon={Pencil}
+                      label="Edit"
+                    />
                     <ListRowAction
                       icon={Trash2}
                       label="Delete"
@@ -175,7 +172,7 @@ export default function ScheduledTasksPage() {
           </>
         }
       >
-        <p className="text-sm text-fg/70">
+        <p className="text-sm text-fg-muted">
           Delete <span className="font-medium">{toDelete?.label}</span>? Past
           run chats are kept.
         </p>

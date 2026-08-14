@@ -118,7 +118,7 @@ export default function CronPicker({
 
         {kind === 'hourly' && (
           <div className="flex items-center gap-1">
-            <span className="text-sm text-fg/60">at minute</span>
+            <span className="text-sm text-fg-muted">at minute</span>
             <Input
               type="number"
               aria-label="Minute"
@@ -135,7 +135,7 @@ export default function CronPicker({
 
         {kind === 'daily' && (
           <div className="flex items-center gap-1">
-            <span className="text-sm text-fg/60">at</span>
+            <span className="text-sm text-fg-muted">at</span>
             <Input
               type="number"
               aria-label="Hour"
@@ -147,7 +147,7 @@ export default function CronPicker({
               }
               className="w-16"
             />
-            <span className="text-sm text-fg/60">:</span>
+            <span className="text-sm text-fg-muted">:</span>
             <Input
               type="number"
               aria-label="Minute"
@@ -180,7 +180,7 @@ export default function CronPicker({
                 </option>
               ))}
             </Select>
-            <span className="text-sm text-fg/60">at</span>
+            <span className="text-sm text-fg-muted">at</span>
             <Input
               type="number"
               aria-label="Hour"
@@ -192,7 +192,7 @@ export default function CronPicker({
               }
               className="w-16"
             />
-            <span className="text-sm text-fg/60">:</span>
+            <span className="text-sm text-fg-muted">:</span>
             <Input
               type="number"
               aria-label="Minute"
@@ -218,7 +218,7 @@ export default function CronPicker({
           />
         )}
       </div>
-      <p className="text-xs text-fg/50">{describeCron(value)}</p>
+      <p className="text-xs text-fg-subtle">{describeCron(value)}</p>
     </div>
   );
 }

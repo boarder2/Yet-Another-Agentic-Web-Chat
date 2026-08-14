@@ -11,7 +11,7 @@ const ChartElement = ({ id }: { id?: string }) => {
   if (!id) return null;
   if (!spec) {
     return (
-      <Card className="my-3 px-4 py-3 text-sm text-fg/60 italic">
+      <Card className="my-3 px-4 py-3 text-sm text-fg-muted italic">
         Loading chart…
       </Card>
     );

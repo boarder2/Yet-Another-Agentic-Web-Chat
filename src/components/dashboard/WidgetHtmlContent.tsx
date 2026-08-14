@@ -53,7 +53,7 @@ const ChartPortal = ({ id, target }: { id: string; target: Element }) => {
     spec ? (
       <ChartWidget spec={spec} />
     ) : (
-      <Card className="my-3 px-4 py-3 text-sm text-fg/60 italic">
+      <Card className="my-3 px-4 py-3 text-sm text-fg-muted italic">
         Loading chart…
       </Card>
     ),

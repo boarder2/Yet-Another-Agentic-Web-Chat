@@ -63,7 +63,7 @@ const DeleteChat = ({
         <button
           type="button"
           onClick={() => setConfirmationDialogOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 text-left hover:bg-surface-2 transition-colors rounded-surface font-medium text-sm text-danger w-full"
+          className="flex items-center gap-2 border border-transparent px-4 py-2 text-left hover:bg-surface-2 transition-colors duration-150 rounded-surface font-medium text-sm text-danger w-full focus-border-contrast"
         >
           <Trash size={17} className="shrink-0" />
           Delete chat

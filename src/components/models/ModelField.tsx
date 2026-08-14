@@ -1,11 +1,5 @@
 import { useEffect, useState } from 'react';
-import {
-  Cpu,
-  ChevronDown,
-  ChevronRight,
-  LoaderCircle,
-  RefreshCw,
-} from 'lucide-react';
+import { Cpu, ChevronDown, ChevronRight, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   CloseButton,
@@ -21,6 +15,7 @@ import { qk } from '@/lib/api/keys';
 import { useSettingsModal } from '@/components/settings/SettingsModalProvider';
 import ComposerActionButton from '@/components/MessageInputActions/ComposerActionButton';
 import ComposerPopover from '@/components/MessageInputActions/ComposerPopover';
+import { IconButton } from '@/components/ui/IconButton';
 
 interface ModelOption {
   provider: string;
@@ -194,7 +189,7 @@ const ModelField = ({
               <ChevronDown
                 size={16}
                 className={cn(
-                  'transition-transform',
+                  'transition-transform duration-150',
                   open ? 'rotate-180' : 'rotate-0',
                 )}
               />
@@ -203,10 +198,10 @@ const ModelField = ({
 
           <Transition
             as={Fragment}
-            enter="transition ease-out duration-200"
+            enter="transition-[opacity,transform] ease-out duration-200"
             enterFrom="opacity-0 translate-y-1"
             enterTo="opacity-100 translate-y-0"
-            leave="transition ease-in duration-150"
+            leave="transition-[opacity,transform] ease-in duration-150"
             leaveFrom="opacity-100 translate-y-0"
             leaveTo="opacity-0 translate-y-1"
           >
@@ -230,39 +225,30 @@ const ModelField = ({
                     : 'Choose the model used for agent decisions and final responses'
                 }
                 action={
-                  <button
-                    type="button"
-                    className="p-1.5 rounded-control hover:bg-surface-2 text-fg/60 hover:text-fg transition"
-                    title="Refresh models"
-                    disabled={refreshing || loading}
+                  <IconButton
+                    icon={RefreshCw}
+                    label="Refresh models"
+                    loading={refreshing}
+                    disabled={loading}
                     onClick={(e) => {
                       e.stopPropagation();
                       handleRefresh();
                     }}
-                  >
-                    {refreshing ? (
-                      <LoaderCircle
-                        size={14}
-                        className="animate-spin text-accent"
-                      />
-                    ) : (
-                      <RefreshCw size={14} />
-                    )}
-                  </button>
+                  />
                 }
               >
                 <div className="max-h-72 overflow-y-auto">
                   {loading ? (
-                    <div className="px-4 py-3 text-sm text-fg/70">
+                    <div className="px-4 py-3 text-sm text-fg-muted">
                       Loading available models...
                     </div>
                   ) : providersList.length === 0 ? (
-                    <div className="px-4 py-3 text-sm text-fg/70">
+                    <div className="px-4 py-3 text-sm text-fg-muted">
                       No models available.{' '}
                       <CloseButton
                         type="button"
                         onClick={() => openSettings('api-keys')}
-                        className="text-accent hover:underline"
+                        className="border border-transparent text-accent hover:underline focus-border-neutral"
                       >
                         Add an API key
                       </CloseButton>{' '}
@@ -282,7 +268,7 @@ const ModelField = ({
                             <button
                               type="button"
                               className={cn(
-                                'w-full flex items-center justify-between px-4 py-2 text-sm text-left',
+                                'w-full flex items-center justify-between border border-transparent px-4 py-2 text-sm text-left focus-border-neutral',
                                 'hover:bg-surface-2',
                                 selectedModel?.provider === providerKey
                                   ? 'bg-surface-2'
@@ -293,7 +279,7 @@ const ModelField = ({
                               }
                             >
                               <div className="font-medium flex items-center">
-                                <Cpu size={14} className="mr-2 text-fg/70" />
+                                <Cpu size={14} className="mr-2 text-fg-muted" />
                                 {provider.displayName}
                                 {selectedModel?.provider === providerKey && (
                                   <span className="ml-2 text-xs text-accent">
@@ -304,7 +290,7 @@ const ModelField = ({
                               <ChevronRight
                                 size={14}
                                 className={cn(
-                                  'transition-transform',
+                                  'transition-transform duration-150',
                                   isExpanded ? 'rotate-90' : '',
                                 )}
                               />
@@ -316,13 +302,13 @@ const ModelField = ({
                                   <PopoverButton
                                     key={`${modelOption.provider}-${modelOption.model}`}
                                     className={cn(
-                                      'w-full text-left px-4 py-2 text-sm flex items-center',
+                                      'w-full border border-transparent text-left px-4 py-2 text-sm flex items-center focus-border-neutral',
                                       selectedModel?.provider ===
                                         modelOption.provider &&
                                         selectedModel?.model ===
                                           modelOption.model
                                         ? 'bg-surface-2 text-fg'
-                                        : 'text-fg/70 hover:bg-surface-2',
+                                        : 'text-fg-muted hover:bg-surface-2',
                                     )}
                                     onClick={() =>
                                       handleSelectModel(modelOption)

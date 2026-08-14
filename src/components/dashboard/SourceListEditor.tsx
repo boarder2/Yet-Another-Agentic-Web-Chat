@@ -3,6 +3,8 @@
 import { Plus, Trash2 } from 'lucide-react';
 import Select from '@/components/ui/Select';
 import { Input } from '@/components/ui/Input';
+import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
 import { Source } from '@/lib/types/widget';
 
 interface SourceListEditorProps {
@@ -23,17 +25,18 @@ const SourceListEditor = ({ sources, onChange }: SourceListEditorProps) => {
     onChange(sources.filter((_, i) => i !== index));
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" role="group" aria-label="Widget sources">
       {sources.map((source, index) => (
         <div key={index} className="flex gap-2">
           <Input
             type="url"
-            aria-label="Source URL"
+            aria-label={`Source URL ${index + 1}`}
             value={source.url}
             onChange={(e) => update(index, 'url', e.target.value)}
             placeholder="https://example.com"
           />
           <Select
+            aria-label={`Source type ${index + 1}`}
             value={source.type}
             onChange={(e) =>
               update(index, 'type', e.target.value as Source['type'])
@@ -42,24 +45,17 @@ const SourceListEditor = ({ sources, onChange }: SourceListEditorProps) => {
             <option value="Web Page">Web Page</option>
             <option value="HTTP Data">HTTP Data</option>
           </Select>
-          <button
-            type="button"
+          <IconButton
+            icon={Trash2}
+            label="Remove source"
+            tone="danger"
             onClick={() => remove(index)}
-            className="p-2 text-danger hover:bg-danger-soft rounded-control"
-            aria-label="Remove source"
-          >
-            <Trash2 size={16} />
-          </button>
+          />
         </div>
       ))}
-      <button
-        type="button"
-        onClick={add}
-        className="flex items-center gap-2 px-3 py-2 text-sm text-accent hover:bg-surface-2 rounded-control"
-      >
-        <Plus size={16} />
+      <Button variant="ghost" size="sm" icon={Plus} onClick={add}>
         Add Source
-      </button>
+      </Button>
     </div>
   );
 };

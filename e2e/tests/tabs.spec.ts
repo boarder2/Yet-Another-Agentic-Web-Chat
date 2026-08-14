@@ -20,6 +20,11 @@ test.describe('shared Tabs: history', () => {
 
     const conversations = tablist.getByRole('tab', { name: 'Conversations' });
     const artifacts = tablist.getByRole('tab', { name: 'Artifacts' });
+    for (const tab of [conversations, artifacts]) {
+      await expect(tab).toHaveClass(/focus-border-neutral/);
+      await expect(tab).toHaveCSS('border-top-width', '1px');
+      await expect(tab).not.toHaveClass(/focus-visible:outline/);
+    }
     await expect(conversations).toHaveAttribute('aria-selected', 'true');
     await expect(artifacts).toHaveAttribute('aria-selected', 'false');
     // Conversations is the default section: the chat browser (its search box)

@@ -117,12 +117,12 @@ function ThemeTile({
         // would make the accessible name "Aa Nord".
         aria-label={theme.name}
         aria-pressed={active}
-        className="flex flex-col gap-1.5 text-left after:absolute after:inset-0"
+        className="flex flex-col gap-1.5 border border-transparent text-left after:absolute after:inset-0 focus-border-neutral"
       >
         <Swatch theme={theme} />
         <span
           title={theme.name}
-          className="truncate px-0.5 text-caption text-fg/70"
+          className="truncate px-0.5 text-caption text-fg-muted"
         >
           {caption ?? theme.name}
         </span>
@@ -159,7 +159,7 @@ function VariantChip({
       {children}
       <span
         title={title}
-        className="flex min-w-0 items-center gap-0.5 rounded-control bg-surface px-1.5 py-0.5 text-caption text-fg/70 peer-focus-visible:ring-1 peer-focus-visible:ring-accent"
+        className="flex min-w-0 items-center gap-0.5 rounded-control border border-transparent bg-surface px-1.5 py-0.5 text-caption text-fg-muted peer-focus-visible:border-accent"
       >
         <span className="truncate">{label}</span>
         <ChevronDown size={11} className="shrink-0" />
@@ -354,14 +354,14 @@ export default function AppearanceSection() {
   return (
     <div id="appearance" className="flex flex-col space-y-4">
       <SettingsSection title="Appearance">
-        <p className="text-xs text-fg/60">
+        <p className="text-xs text-fg-muted">
           Applies instantly and is saved to this device only. Built-in themes
           are read-only — Edit in Customize copies the selected theme into your
           custom theme, or Copy to move a theme to another device.
         </p>
         {custom && (
           <div className="flex flex-col space-y-2">
-            <p className="text-caption font-medium uppercase text-fg/50">
+            <p className="text-caption font-medium uppercase text-fg-subtle">
               Your theme
             </p>
             <ThemeGrid>
@@ -375,7 +375,7 @@ export default function AppearanceSection() {
         )}
         {(['dark', 'light'] as const).map((mode) => (
           <div key={mode} className="flex flex-col space-y-2">
-            <p className="text-caption font-medium uppercase text-fg/50">
+            <p className="text-caption font-medium uppercase text-fg-subtle">
               {mode}
             </p>
             <ThemeGrid>
@@ -430,7 +430,7 @@ export default function AppearanceSection() {
           </div>
         }
       >
-        <p className="text-xs text-fg/60">
+        <p className="text-xs text-fg-muted">
           {isCustom
             ? 'Editing your custom theme.'
             : `Showing ${active.name}. Edit to copy it into your custom theme and unlock these controls.`}
@@ -503,7 +503,7 @@ export default function AppearanceSection() {
                     className="h-7 w-10 cursor-pointer rounded-control border border-surface-2 bg-transparent p-0 disabled:cursor-not-allowed disabled:opacity-50"
                   />
                   {SEED_LABELS[key]}
-                  <span className="font-mono text-xs text-fg/50">
+                  <span className="font-mono text-xs text-fg-subtle">
                     {active[key]}
                   </span>
                 </label>
@@ -595,12 +595,12 @@ export default function AppearanceSection() {
               <div className="flex-1">
                 <Swatch theme={custom} />
               </div>
-              <ArrowRight size={16} className="shrink-0 text-fg/50" />
+              <ArrowRight size={16} className="shrink-0 text-fg-subtle" />
               <div className="flex-1">
                 <Swatch theme={pending} />
               </div>
             </div>
-            <p className="text-sm text-fg/70">
+            <p className="text-sm text-fg-muted">
               Your custom theme&apos;s colors will be overwritten with{' '}
               {pending.name}&apos;s. This can&apos;t be undone.
             </p>

@@ -61,7 +61,7 @@ export default function ArtifactPage({
         size="sm"
       >
         <div className="space-y-4">
-          <p className="text-sm text-fg/70">
+          <p className="text-sm text-fg-muted">
             Delete <span className="font-medium">{artifact?.title}</span> and
             all {artifact?.versionCount} of its versions? This cannot be undone.
           </p>

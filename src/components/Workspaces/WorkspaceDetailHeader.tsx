@@ -31,14 +31,14 @@ const WorkspaceDetailHeader = ({
       <div className={cn('pt-4 flex flex-col', contentClassName)}>
         <Link
           href="/workspaces"
-          className="text-xs text-fg/50 hover:text-fg transition w-fit"
+          className="border border-transparent text-xs text-fg-muted hover:text-fg transition-colors duration-150 w-fit focus-border-neutral"
         >
           Workspaces
         </Link>
         <div className="mt-1 flex items-center justify-between gap-3">
           <Link
             href={`/workspaces/${workspace.id}`}
-            className="flex items-center gap-3 min-w-0"
+            className="flex items-center gap-3 min-w-0 border border-transparent focus-border-neutral"
           >
             <span
               className={cn(
@@ -58,13 +58,13 @@ const WorkspaceDetailHeader = ({
                 {workspace.name}
               </h1>
               {workspace.description && (
-                <span className="text-xs text-fg/50 truncate leading-4">
+                <span className="text-xs text-fg-muted truncate leading-4">
                   {workspace.description}
                 </span>
               )}
             </div>
             {workspace.archivedAt && (
-              <span className="px-2 py-0.5 rounded-pill text-xs bg-surface-2 text-fg/50 shrink-0">
+              <span className="px-2 py-0.5 rounded-pill text-xs bg-surface-2 text-fg-subtle shrink-0">
                 Archived
               </span>
             )}

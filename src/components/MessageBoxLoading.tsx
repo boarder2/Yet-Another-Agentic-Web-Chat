@@ -32,10 +32,10 @@ const MessageBoxLoading = ({
               <button
                 type="button"
                 onClick={() => setIsSourcesExpanded(!isSourcesExpanded)}
-                className="flex items-center gap-1 text-sm font-semibold text-fg/90 hover:text-fg transition-colors"
+                className="flex items-center gap-1 border border-transparent text-sm font-semibold text-fg/90 hover:text-fg transition-colors duration-150 focus-border-neutral"
               >
                 <svg
-                  className={`w-4 h-4 transition-transform ${isSourcesExpanded ? 'rotate-90' : ''}`}
+                  className={`w-4 h-4 transition-transform duration-150 ${isSourcesExpanded ? 'rotate-90' : ''}`}
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -91,7 +91,7 @@ const MessageBoxLoading = ({
             <div className="mt-4 space-y-4">
               {gatheringSources.map((group, groupIndex) => (
                 <div key={groupIndex} className="space-y-2">
-                  <div className="text-xs font-medium text-fg/70 bg-surface-2 px-2 py-1 rounded-control">
+                  <div className="text-xs font-medium text-fg-muted bg-surface-2 px-2 py-1 rounded-control">
                     Search: &quot;{group.searchQuery}&quot;
                   </div>
                   <div className="grid gap-2">

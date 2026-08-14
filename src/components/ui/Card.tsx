@@ -70,7 +70,7 @@ const CardDescription = React.forwardRef<
   HTMLParagraphElement,
   CardDescriptionProps
 >(({ className, children, ...props }, ref) => (
-  <p ref={ref} className={cn('text-sm text-fg/70', className)} {...props}>
+  <p ref={ref} className={cn('text-sm text-fg-muted', className)} {...props}>
     {children}
   </p>
 ));

@@ -140,7 +140,7 @@ export const SubagentExecution: React.FC<SubagentExecutionProps> = ({
       case 'Content Synthesizer':
         return <Globe size={16} className="text-accent" />;
       default:
-        return <Bot size={16} className="text-fg/70" />;
+        return <Bot size={16} className="text-fg-muted" />;
     }
   };
 
@@ -150,7 +150,7 @@ export const SubagentExecution: React.FC<SubagentExecutionProps> = ({
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="w-full px-4 py-3 flex items-center gap-3 hover:bg-surface-2/50 transition-colors"
+        className="w-full border border-transparent px-4 py-3 flex items-center gap-3 hover:bg-surface-2/50 transition-colors duration-150 focus-border-neutral"
       >
         {/* Status icon */}
         <div className="shrink-0">{getStatusIcon()}</div>
@@ -163,7 +163,10 @@ export const SubagentExecution: React.FC<SubagentExecutionProps> = ({
           </div>
           {task && (
             <div
-              className={cn('text-xs text-fg/70 mt-1', !expanded && 'truncate')}
+              className={cn(
+                'text-xs text-fg-muted mt-1',
+                !expanded && 'truncate',
+              )}
             >
               {decodeHtmlEntities(task)}
             </div>
@@ -174,7 +177,7 @@ export const SubagentExecution: React.FC<SubagentExecutionProps> = ({
         <div className="shrink-0">
           <ChevronRight
             size={16}
-            className={`text-fg/70 transition-transform ${expanded ? 'rotate-90' : ''}`}
+            className={`text-fg-muted transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`}
           />
         </div>
       </button>
@@ -185,7 +188,7 @@ export const SubagentExecution: React.FC<SubagentExecutionProps> = ({
           {/* Show tool calls - always visible when present */}
           {hasActivity && (
             <div className="space-y-2">
-              <div className="text-xs font-semibold text-fg/70 uppercase tracking-wide">
+              <div className="text-xs font-semibold text-fg-muted uppercase tracking-wide">
                 Activity
               </div>
               <div className="space-y-1">
@@ -205,7 +208,7 @@ export const SubagentExecution: React.FC<SubagentExecutionProps> = ({
                   e.stopPropagation();
                   setResponseExpanded(!responseExpanded);
                 }}
-                className="flex items-center gap-2 text-xs font-semibold text-fg/70 uppercase tracking-wide hover:text-fg/90 transition-colors"
+                className="flex items-center gap-2 border border-transparent text-xs font-semibold text-fg-muted uppercase tracking-wide hover:text-fg/90 transition-colors duration-150 focus-border-neutral"
               >
                 {responseExpanded ? (
                   <ChevronDown size={12} />
@@ -249,7 +252,7 @@ export const SubagentExecution: React.FC<SubagentExecutionProps> = ({
 
           {/* Show "no activity" if running with no nested data or response */}
           {status === 'running' && !hasActivity && !responseContent && (
-            <div className="text-xs text-fg/50 italic">Starting...</div>
+            <div className="text-xs text-fg-muted italic">Starting...</div>
           )}
         </div>
       )}

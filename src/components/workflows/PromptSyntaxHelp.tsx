@@ -84,16 +84,16 @@ const sections: { title: string; rows: Row[] }[] = [
 export default function PromptSyntaxHelp() {
   return (
     <details className="rounded-control border border-surface-2 bg-surface/50 text-sm">
-      <summary className="cursor-pointer select-none px-3 py-2 text-fg/70 font-medium">
+      <summary className="cursor-pointer select-none px-3 py-2 text-fg-muted font-medium">
         Prompt syntax
       </summary>
       <div className="flex flex-col gap-4 px-3 pb-3">
-        <pre className="font-mono text-xs text-fg/70 bg-surface rounded-control border border-surface-2 p-2 overflow-x-auto whitespace-pre">
+        <pre className="font-mono text-xs text-fg-muted bg-surface rounded-control border border-surface-2 p-2 overflow-x-auto whitespace-pre">
           {example}
         </pre>
         {sections.map((section) => (
           <div key={section.title} className="flex flex-col gap-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-fg/50">
+            <p className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
               {section.title}
             </p>
             <dl className="flex flex-col gap-2">
@@ -105,7 +105,7 @@ export default function PromptSyntaxHelp() {
                   <dt className="font-mono text-xs text-accent whitespace-nowrap sm:w-44 sm:shrink-0">
                     {r.code}
                   </dt>
-                  <dd className="text-xs text-fg/60">{r.desc}</dd>
+                  <dd className="text-xs text-fg-muted">{r.desc}</dd>
                 </div>
               ))}
             </dl>

@@ -2,10 +2,11 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { FolderOpen, LoaderCircle } from 'lucide-react';
+import { FolderOpen } from 'lucide-react';
 import { useWorkspace } from '@/lib/hooks/api/useWorkspaces';
 import { useLocalStorageBoolean } from '@/lib/hooks/useLocalStorage';
 import { cn } from '@/lib/utils';
+import { ListEmptyState, ListLoading } from '@/components/ui/List';
 import WorkspaceDetailHeader from './WorkspaceDetailHeader';
 import WorkspaceSidebar from './WorkspaceSidebar';
 import { ArtifactBridgeProvider } from '@/lib/artifacts/ArtifactBridgeContext';
@@ -49,24 +50,26 @@ export default function WorkspaceShell({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-bg">
-        <LoaderCircle size={24} className="animate-spin text-accent" />
-      </div>
+      <ListLoading layout="page" size={24} className="min-h-screen bg-bg" />
     );
   }
 
   if (!workspace) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-bg gap-4">
-        <FolderOpen size={48} className="text-fg/20" />
-        <h2 className="text-lg font-medium text-fg/60">Workspace not found</h2>
-        <Link
-          href="/workspaces"
-          className="text-accent text-sm hover:underline"
-        >
-          Back to workspaces
-        </Link>
-      </div>
+      <ListEmptyState
+        layout="page"
+        icon={FolderOpen}
+        title="Workspace not found"
+        className="min-h-screen bg-bg"
+        action={
+          <Link
+            href="/workspaces"
+            className="border border-transparent text-accent text-sm hover:underline focus-border-neutral"
+          >
+            Back to workspaces
+          </Link>
+        }
+      />
     );
   }
 
@@ -87,7 +90,7 @@ export default function WorkspaceShell({
           <div className="flex-1 min-w-0">{children}</div>
           <div
             className={cn(
-              'hidden lg:block shrink-0 border-l border-surface-2 transition-all duration-200',
+              'hidden lg:block shrink-0 border-l border-surface-2 transition-[width] duration-200',
               collapsed ? 'w-16' : 'w-96',
             )}
           >

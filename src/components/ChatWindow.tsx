@@ -64,7 +64,9 @@ import { useSkills } from '@/lib/hooks/api/useSkills';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { getSuggestions } from '@/lib/actions';
 import { SKILL_TOKEN_SCAN_REGEX } from '@/lib/skills/validation';
-import { LoaderCircle, Settings } from 'lucide-react';
+import { Settings } from 'lucide-react';
+import { IconButton } from '@/components/ui/IconButton';
+import { ListEmptyState, ListLoading } from '@/components/ui/List';
 import { useSettingsModal } from '@/components/settings/SettingsModalProvider';
 import { subscribeSettingsHydrated } from '@/lib/settings/persist';
 import NextError from 'next/error';
@@ -1619,20 +1621,19 @@ const ChatWindow = ({
   if (hasError) {
     return (
       <div className="relative">
-        <div className="absolute w-full flex flex-row items-center justify-end mr-5 mt-5">
-          <button
-            type="button"
-            onClick={() => openSettings()}
-            aria-label="Settings"
-          >
-            <Settings className="cursor-pointer lg:hidden" />
-          </button>
-        </div>
-        <div className="flex flex-col items-center justify-center min-h-screen">
-          <p className="text-sm">
-            Failed to connect to the server. Please try again later.
-          </p>
-        </div>
+        <ListEmptyState
+          layout="page"
+          className="min-h-screen"
+          body="Failed to connect to the server. Please try again later."
+          action={
+            <IconButton
+              icon={Settings}
+              label="Settings"
+              onClick={() => openSettings()}
+              className="absolute right-5 top-5 lg:hidden"
+            />
+          }
+        />
       </div>
     );
   }
@@ -2116,9 +2117,7 @@ const ChatWindow = ({
             </>
           )
         ) : (
-          <div className="flex flex-row items-center justify-center min-h-screen">
-            <LoaderCircle size={32} className="animate-spin text-accent" />
-          </div>
+          <ListLoading layout="page" size={32} className="min-h-screen" />
         )}
       </ArtifactViewerContext.Provider>
     </ChartSpecContext.Provider>

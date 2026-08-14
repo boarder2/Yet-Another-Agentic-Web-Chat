@@ -26,7 +26,7 @@ export default function CompactionIndicator({
             Conversation compacted
           </span>
         </div>
-        <p className="text-xs text-fg opacity-75 mt-1 mb-1">
+        <p className="text-xs text-fg-subtle mt-1 mb-1">
           Compacted {compaction.compactedMessageCount} messages
           {' • '}
           {formatTokens(compaction.tokensBefore)} →{' '}
@@ -38,7 +38,7 @@ export default function CompactionIndicator({
             <button
               type="button"
               onClick={() => setExpanded(!expanded)}
-              className="text-xs text-accent transition-colors duration-150 flex items-center gap-1 mb-1"
+              className="border border-transparent text-xs text-accent transition-colors duration-150 flex items-center gap-1 mb-1 focus-border-neutral"
             >
               {expanded ? (
                 <>

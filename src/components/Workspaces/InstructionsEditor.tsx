@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { LoaderCircle } from 'lucide-react';
 import MarkdownRenderer from '@/components/MarkdownRenderer';
 import { Card } from '@/components/ui/Card';
+import { ListEmptyState, ListLoading } from '@/components/ui/List';
 import DocEditActions from './DocEditActions';
 import { useWorkspace, usePatchWorkspace } from '@/lib/hooks/api/useWorkspaces';
 
@@ -41,11 +41,7 @@ export default function InstructionsEditor({
   /* eslint-enable react-hooks/set-state-in-effect */
 
   if (!workspace) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <LoaderCircle size={24} className="animate-spin text-accent" />
-      </div>
-    );
+    return <ListLoading layout="section" size={24} />;
   }
 
   return (
@@ -86,10 +82,10 @@ export default function InstructionsEditor({
           <MarkdownRenderer content={draft} />
         </Card>
       ) : (
-        <Card radius="floating" className="text-fg/50 text-sm p-6">
-          No instructions yet. These are appended to the system prompt for every
-          chat in this workspace.
-        </Card>
+        <ListEmptyState
+          layout="section"
+          body="No instructions yet. These are appended to the system prompt for every chat in this workspace."
+        />
       )}
     </div>
   );

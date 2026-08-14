@@ -23,7 +23,7 @@ export default function PresetOption({
     <button
       type="button"
       onClick={onClick}
-      className="w-full text-left pl-2 pr-3 py-2.5 flex items-start gap-2 hover:bg-surface-2 transition-colors duration-100"
+      className="w-full border border-transparent text-left pl-2 pr-3 py-2.5 flex items-start gap-2 hover:bg-surface-2 transition-colors duration-100 focus-border-neutral"
     >
       <span
         className={cn(
@@ -43,12 +43,12 @@ export default function PresetOption({
             </span>
           )}
         </div>
-        <p className="text-[10px] text-fg/50 mt-0.5 truncate">
+        <p className="text-[10px] text-fg-subtle mt-0.5 truncate">
           {presetSummary(preset)}
         </p>
       </div>
       {preset.imageCapable && (
-        <Eye size={12} className="text-fg/40 mt-0.5 shrink-0" />
+        <Eye size={12} className="text-fg-subtle mt-0.5 shrink-0" />
       )}
     </button>
   );

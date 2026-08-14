@@ -61,7 +61,7 @@ function DiffView({
   return (
     <div className="font-mono text-xs overflow-x-auto">
       {replaceAll && occurrences && occurrences > 1 && (
-        <div className="px-3 py-1 text-fg/50 bg-surface-2/30 border-b border-surface-2 italic">
+        <div className="px-3 py-1 text-fg-subtle bg-surface-2/30 border-b border-surface-2 italic">
           Showing 1 of {occurrences} replacements
         </div>
       )}
@@ -78,7 +78,7 @@ function DiffView({
                     : ''
               }
             >
-              <td className="select-none w-10 px-2 py-0.5 text-right text-fg/30 border-r border-surface-2 align-top">
+              <td className="select-none w-10 px-2 py-0.5 text-right text-fg-subtle border-r border-surface-2 align-top">
                 {line.type === 'removed'
                   ? line.lineNo
                   : line.type === 'added'
@@ -92,7 +92,7 @@ function DiffView({
                       ? 'text-danger'
                       : line.type === 'added'
                         ? 'text-success'
-                        : 'text-fg/70'
+                        : 'text-fg-muted'
                   }
                 >
                   {line.type === 'removed'
@@ -119,7 +119,7 @@ function ContentPreview({ content }: { content: string }) {
         <tbody>
           {lines.map((line, idx) => (
             <tr key={idx} className="bg-success-soft">
-              <td className="select-none w-10 px-2 py-0.5 text-right text-fg/30 border-r border-surface-2 align-top">
+              <td className="select-none w-10 px-2 py-0.5 text-right text-fg-subtle border-r border-surface-2 align-top">
                 {idx + 1}
               </td>
               <td className="px-2 py-0.5 whitespace-pre-wrap break-all text-fg">
@@ -209,7 +209,7 @@ export function WorkspaceEditApproval({
             <button
               type="button"
               onClick={handleRejectSubmit}
-              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-surface bg-danger-soft text-danger hover:bg-danger-soft border border-danger transition-colors"
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-surface bg-danger-soft text-danger hover:bg-danger-soft border border-danger transition-colors duration-150 focus-border-contrast"
             >
               <Ban size={14} />
               Send rejection
@@ -246,7 +246,7 @@ export function WorkspaceEditApproval({
           <button
             type="button"
             onClick={() => handleDecide('accept_always')}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-surface border border-accent/40 text-accent hover:bg-accent/10 transition-colors"
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-surface border border-accent/40 text-accent hover:bg-accent/10 transition-colors duration-150 focus-border-neutral"
             title="Always accept edits to this file without prompting"
           >
             <CheckCheck size={14} />
@@ -286,7 +286,7 @@ export function WorkspaceEditApproval({
               if (e.key === 'Escape') setShowRejectInput(false);
             }}
             placeholder="Optional: tell the agent why you rejected this…"
-            className="bg-surface-2/50 rounded-surface placeholder:text-fg/30 resize-none"
+            className="bg-surface-2/50 rounded-surface placeholder:text-fg-subtle resize-none"
             rows={2}
           />
         </div>

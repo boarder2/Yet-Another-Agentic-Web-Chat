@@ -19,6 +19,7 @@ import Select from '@/components/ui/Select';
 import { Prompt } from '@/lib/types/prompt';
 import { builtinMethodologyTemplates } from '@/lib/prompts/methodologyTemplates';
 import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
 
 const AVAILABLE_TOOLS = [
   { name: 'web_search', description: 'Search the web for information' },
@@ -105,7 +106,7 @@ export default function ResearchMethodologiesSection({
 
   return (
     <SettingsSection title="Research Methodologies">
-      <p className="text-xs text-fg/60">
+      <p className="text-xs text-fg-muted">
         Methodologies control <strong>how </strong> the AI researches - the
         steps it follows, what to prioritize, and how to structure its
         investigation. When active, a methodology replaces the default research
@@ -123,20 +124,18 @@ export default function ResearchMethodologiesSection({
               onChange={(e) => setSelectedTemplate(e.target.value)}
               options={BUILTIN_TEMPLATES}
             />
-            <button
-              type="button"
+            <Button
+              size="sm"
+              icon={copiedTemplate ? undefined : Clipboard}
               onClick={handleCopyTemplate}
-              className={`px-3 py-2 text-sm rounded-control border border-surface-2 hover:bg-surface-2 flex items-center gap-1.5 ${copiedTemplate ? 'bg-success-soft text-success border-success' : ''}`}
-              title="Copy selected template"
+              className={
+                copiedTemplate
+                  ? 'bg-success-soft text-success border-success'
+                  : ''
+              }
             >
-              {copiedTemplate ? (
-                <span>Copied</span>
-              ) : (
-                <>
-                  <Clipboard size={16} /> Copy
-                </>
-              )}
-            </button>
+              {copiedTemplate ? 'Copied' : 'Copy'}
+            </Button>
           </div>
         </Card>
 
@@ -145,7 +144,7 @@ export default function ResearchMethodologiesSection({
           <button
             type="button"
             onClick={() => setToolRefOpen(!toolRefOpen)}
-            className="flex items-center gap-2 w-full p-3 text-sm text-fg/70 hover:text-fg/90"
+            className="flex items-center gap-2 w-full border border-transparent p-3 text-sm text-fg-muted hover:text-fg/90 focus-border-neutral"
           >
             {toolRefOpen ? (
               <ChevronDown size={16} />
@@ -156,7 +155,7 @@ export default function ResearchMethodologiesSection({
           </button>
           {toolRefOpen && (
             <div className="px-3 pb-3 space-y-1">
-              <p className="text-xs text-fg/50 mb-2">
+              <p className="text-xs text-fg-muted mb-2">
                 Reference these tool names in your methodology instructions to
                 guide the AI&apos;s tool usage.
               </p>
@@ -165,7 +164,7 @@ export default function ResearchMethodologiesSection({
                   <code className="font-mono text-accent bg-surface-2 px-1 rounded-control whitespace-nowrap">
                     {tool.name}
                   </code>
-                  <span className="text-fg/60">{tool.description}</span>
+                  <span className="text-fg-muted">{tool.description}</span>
                 </div>
               ))}
             </div>
@@ -238,22 +237,17 @@ export default function ResearchMethodologiesSection({
                     </p>
                   </div>
                   <div className="flex space-x-1 flex-shrink-0 ml-2">
-                    <button
-                      type="button"
+                    <IconButton
+                      icon={Edit3}
+                      label="Edit"
                       onClick={() => setEditingMethodology({ ...methodology })}
-                      title="Edit"
-                      className="p-1.5 rounded-control hover:bg-surface-2"
-                    >
-                      <Edit3 size={18} />
-                    </button>
-                    <button
-                      type="button"
+                    />
+                    <IconButton
+                      icon={Trash2}
+                      label="Delete"
+                      tone="danger"
                       onClick={() => onDelete(methodology.id)}
-                      title="Delete"
-                      className="p-1.5 rounded-control hover:bg-surface-2 text-danger hover:text-danger"
-                    >
-                      <Trash2 size={18} />
-                    </button>
+                    />
                   </div>
                 </div>
               )}

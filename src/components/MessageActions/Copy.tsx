@@ -1,4 +1,5 @@
 import { Check, ClipboardList } from 'lucide-react';
+import { IconButton } from '@/components/ui/IconButton';
 import { Message } from '../ChatWindow';
 import { useState } from 'react';
 
@@ -12,18 +13,17 @@ const Copy = ({
   const [copied, setCopied] = useState(false);
 
   return (
-    <button
-      type="button"
+    <IconButton
+      icon={copied ? Check : ClipboardList}
+      label={copied ? 'Copied' : 'Copy response'}
       onClick={() => {
         const contentToCopy = `${initialMessage}${message.sources && message.sources.length > 0 && `\n\nCitations:\n${message.sources?.map((source, i: number) => `[${i + 1}] ${source.metadata.url}`).join(`\n`)}`}`;
         navigator.clipboard.writeText(contentToCopy);
         setCopied(true);
         setTimeout(() => setCopied(false), 1000);
       }}
-      className="p-2 rounded-floating transition duration-200"
-    >
-      {copied ? <Check size={18} /> : <ClipboardList size={18} />}
-    </button>
+      className="rounded-floating p-2"
+    />
   );
 };
 

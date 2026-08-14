@@ -8,6 +8,7 @@ import {
 } from '@headlessui/react';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { IconButton } from '@/components/ui/IconButton';
 
 export type ModalSize = 'sm' | 'md' | 'lg' | 'xl' | 'full';
 
@@ -61,7 +62,7 @@ export default function Modal({
     >
       <DialogBackdrop
         transition
-        className="fixed inset-0 bg-overlay transition duration-200 data-closed:opacity-0"
+        className="fixed inset-0 bg-overlay transition-opacity duration-200 data-closed:opacity-0"
       />
       <div
         className={cn(
@@ -75,7 +76,7 @@ export default function Modal({
         <DialogPanel
           transition
           className={cn(
-            'flex flex-col overflow-hidden bg-surface transition duration-200 data-closed:opacity-0 data-closed:scale-95',
+            'flex flex-col overflow-hidden bg-surface transition-[opacity,transform] duration-200 ease-standard data-closed:opacity-0 data-closed:scale-95',
             sizes[size],
             className,
           )}
@@ -85,14 +86,7 @@ export default function Modal({
               <DialogTitle className="flex min-w-0 items-center gap-2 truncate font-medium">
                 {title}
               </DialogTitle>
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-control p-1 text-fg/60 transition-colors duration-150 hover:bg-surface-2"
-                aria-label="Close"
-              >
-                <X size={16} />
-              </button>
+              <IconButton icon={X} label="Close" onClick={onClose} />
             </div>
           )}
           <div

@@ -8,14 +8,28 @@ import { controlClasses } from './Input';
 export type TextareaProps = React.TextareaHTMLAttributes<HTMLTextAreaElement>;
 
 const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
-  ({ className, ...props }, ref) => {
-    const { describedBy, invalid } = useFieldControl();
+  (
+    {
+      className,
+      'aria-label': ariaLabel,
+      'aria-labelledby': ariaLabelledBy,
+      'aria-describedby': ariaDescribedBy,
+      'aria-invalid': ariaInvalid,
+      ...props
+    },
+    ref,
+  ) => {
+    const { describedBy, invalid, labelId, grouped } = useFieldControl();
 
     return (
       <textarea
         ref={ref}
-        aria-describedby={describedBy}
-        aria-invalid={invalid || undefined}
+        aria-label={ariaLabel}
+        aria-labelledby={
+          ariaLabelledBy ?? (ariaLabel || grouped ? undefined : labelId)
+        }
+        aria-describedby={ariaDescribedBy ?? describedBy}
+        aria-invalid={ariaInvalid ?? (invalid ? true : undefined)}
         className={cn('w-full resize-y', controlClasses, className)}
         {...props}
       />

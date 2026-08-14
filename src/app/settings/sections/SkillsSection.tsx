@@ -6,6 +6,8 @@ import SettingsSection from '../components/SettingsSection';
 import SkillForm, { type SkillFormValue } from '../components/SkillForm';
 import AppSwitch from '@/components/ui/AppSwitch';
 import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
+import { ListEmptyState, ListLoading } from '@/components/ui/List';
 import { toast } from 'sonner';
 import {
   useSkills,
@@ -133,7 +135,7 @@ export default function SkillsSection() {
         </Button>
       }
     >
-      <p className="text-xs text-fg/60">
+      <p className="text-xs text-fg-muted">
         Skills provide on-demand instructions to the agent. Create global skills
         or workspace-scoped skills that the agent can load when needed.
       </p>
@@ -154,18 +156,19 @@ export default function SkillsSection() {
       )}
 
       {loading ? (
-        <p className="text-sm text-fg/50">Loading skills…</p>
+        <ListLoading layout="compact" size={20} status="Loading skills…" />
       ) : skills.length === 0 && !isAddingNew ? (
-        <div className="flex items-center gap-2 text-sm text-fg/50 py-2">
-          <BookOpen size={16} />
-          No skills yet. Create one to get started.
-        </div>
+        <ListEmptyState
+          layout="compact"
+          icon={BookOpen}
+          body="No skills yet. Create one to get started."
+        />
       ) : (
         <div className="flex flex-col space-y-2">
           {skills.map((skill) => (
             <div
               key={skill.id}
-              className={`p-3 border border-surface-2 rounded-control bg-surface-2 transition-opacity ${
+              className={`p-3 border border-surface-2 rounded-control bg-surface-2 transition-opacity duration-150 ${
                 !skill.enabled ? 'opacity-50' : ''
               }`}
             >
@@ -184,19 +187,19 @@ export default function SkillsSection() {
                 <div className="flex justify-between items-start gap-2">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <code className="text-xs font-mono text-fg/80">
+                      <code className="text-xs font-mono text-fg-muted">
                         {skill.name}
                       </code>
-                      <span className="text-xs text-fg/50 bg-surface px-1.5 py-0.5 rounded-pill border border-surface-2">
+                      <span className="text-xs text-fg-subtle bg-surface px-1.5 py-0.5 rounded-pill border border-surface-2">
                         {getScopeBadge(skill)}
                       </span>
                       {skill.disableModelInvocation && (
-                        <span className="text-xs text-fg/50 bg-surface px-1.5 py-0.5 rounded-pill border border-surface-2">
+                        <span className="text-xs text-fg-subtle bg-surface px-1.5 py-0.5 rounded-pill border border-surface-2">
                           Slash-only
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-fg/60 mt-0.5 truncate">
+                    <p className="text-xs text-fg-muted mt-0.5 truncate">
                       {skill.description}
                     </p>
                   </div>
@@ -205,26 +208,21 @@ export default function SkillsSection() {
                       checked={skill.enabled}
                       onChange={(val: boolean) => handleToggle(skill, val)}
                     />
-                    <button
-                      type="button"
+                    <IconButton
+                      icon={Edit3}
+                      label="Edit"
                       onClick={() => {
                         setIsAddingNew(false);
                         setEditingId(skill.id);
                         setForm(toFormValue(skill));
                       }}
-                      title="Edit"
-                      className="p-1.5 rounded-control hover:bg-surface"
-                    >
-                      <Edit3 size={14} />
-                    </button>
-                    <button
-                      type="button"
+                    />
+                    <IconButton
+                      icon={Trash2}
+                      label="Delete"
+                      tone="danger"
                       onClick={() => handleDelete(skill)}
-                      title="Delete"
-                      className="p-1.5 rounded-control hover:bg-surface text-danger"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                    />
                   </div>
                 </div>
               )}

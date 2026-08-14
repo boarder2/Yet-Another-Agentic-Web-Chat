@@ -59,7 +59,7 @@ test.describe('smoke: public routes render', () => {
 
     // The subtitle should show "1 workspace" (not "0 workspaces")
     await expect(
-      page.locator('span.text-sm.text-fg\\/50.shrink-0'),
+      page.locator('span.text-sm.text-fg-subtle.shrink-0'),
     ).toBeVisible({
       timeout: 10000,
     });

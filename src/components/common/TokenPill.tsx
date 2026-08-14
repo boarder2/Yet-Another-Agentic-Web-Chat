@@ -23,7 +23,7 @@ export default function TokenPill({
       )}
       title={title ?? `${label} tokens`}
     >
-      <span className="mr-1 opacity-75">{label}:</span>
+      <span className="mr-1 text-fg-subtle">{label}:</span>
       <span className="tabular-nums">{display}</span>
     </div>
   );

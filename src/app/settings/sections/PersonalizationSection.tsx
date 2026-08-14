@@ -17,7 +17,7 @@ export default function PersonalizationSection({
   return (
     <div id="personalization">
       <SettingsSection title="Personalization">
-        <p className="text-xs text-fg/60">
+        <p className="text-xs text-fg-muted">
           Saved to your account and synced across devices. You can choose to
           send this info per message.
         </p>

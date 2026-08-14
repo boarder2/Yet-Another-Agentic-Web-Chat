@@ -9,6 +9,7 @@ import {
   useSaveWorkspaceSystemPromptLinks,
 } from '@/lib/hooks/api/useWorkspaceSystemPrompts';
 import Modal from '@/components/ui/Modal';
+import { IconButton } from '@/components/ui/IconButton';
 import InstructionsEditor from './InstructionsEditor';
 
 export default function InstructionsTab({
@@ -48,23 +49,20 @@ export default function InstructionsTab({
           <label className="text-sm font-medium flex-1">
             Workspace instructions
           </label>
-          <button
-            type="button"
+          <IconButton
+            icon={Edit3}
+            label="Edit"
             onClick={() => setOpen({ edit: true })}
-            className="p-1 rounded-control text-fg/40 hover:text-fg hover:bg-surface-2 transition-colors duration-150"
-            title="Edit"
-          >
-            <Edit3 size={14} />
-          </button>
+          />
         </div>
         <button
           type="button"
           onClick={() => setOpen({ edit: !instructions })}
           aria-label="Open workspace instructions"
-          className="w-full text-left text-sm whitespace-pre-wrap line-clamp-6 border border-surface-2 rounded-surface p-3 bg-surface hover:bg-surface-2 transition-colors duration-150"
+          className="w-full border border-surface-2 text-left text-sm whitespace-pre-wrap line-clamp-6 rounded-surface p-3 bg-surface hover:bg-surface-2 transition-colors duration-150 focus-border-neutral"
         >
           {instructions || (
-            <span className="text-fg/50">
+            <span className="text-fg-muted">
               Free-text instructions appended to the system prompt for every
               chat in this workspace.
             </span>
@@ -76,8 +74,8 @@ export default function InstructionsTab({
           <div className="flex items-center gap-1.5">
             <label className="text-sm font-medium">Linked system prompts</label>
             <div className="group relative">
-              <Info size={14} className="text-fg/40 cursor-help" />
-              <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover:block w-64 p-2 bg-surface border border-surface-2 rounded-surface text-xs text-fg/70 shadow-xl z-50 pointer-events-none">
+              <Info size={14} className="text-fg-subtle cursor-help" />
+              <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover:block w-64 p-2 bg-surface border border-surface-2 rounded-surface text-xs text-fg-muted shadow-xl z-50 pointer-events-none">
                 These are pre-defined global prompts that are appended to the
                 system prompt for every chat in this workspace. They are added
                 in addition to any prompts selected directly in the message
@@ -91,12 +89,14 @@ export default function InstructionsTab({
                 <input
                   type="checkbox"
                   aria-label={`Link system prompt: ${p.name}`}
+                  className="accent-accent border border-transparent focus-border-neutral"
                   checked={linkedIds.includes(p.id)}
                   onChange={() => toggleLink(p.id)}
-                  className="accent-accent"
                 />
                 <span className="flex-1">{p.name}</span>
-                {p.type && <span className="text-xs text-fg/40">{p.type}</span>}
+                {p.type && (
+                  <span className="text-xs text-fg-subtle">{p.type}</span>
+                )}
               </li>
             ))}
           </ul>

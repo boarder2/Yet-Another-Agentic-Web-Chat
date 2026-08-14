@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   CalendarClock,
-  LoaderCircle,
   Pencil,
   Play,
   Plus,
@@ -15,11 +14,13 @@ import {
 import PageHeader from '@/components/PageHeader';
 import Modal from '@/components/ui/Modal';
 import { Button, buttonClasses } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
 import {
   ListCount,
+  ListEmptyState,
+  ListLoading,
   ListRow,
   ListRowAction,
-  listRowActionClasses,
 } from '@/components/ui/List';
 import DynamicIcon from '@/components/workflows/DynamicIcon';
 import FillForm from '@/components/workflows/FillForm';
@@ -86,7 +87,7 @@ function DeleteModal({
       title={`Delete “${workflow.name}”`}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose} className="text-fg/60">
+          <Button variant="ghost" onClick={onClose} className="text-fg-muted">
             Cancel
           </Button>
           <Button
@@ -102,11 +103,11 @@ function DeleteModal({
         </>
       }
     >
-      <p className="text-sm text-fg/70 mb-3">
+      <p className="text-sm text-fg-muted mb-3">
         This permanently deletes the workflow. Past run chats are kept.
       </p>
       {isLoading ? (
-        <LoaderCircle size={20} className="animate-spin text-accent" />
+        <ListLoading layout="compact" size={20} />
       ) : schedules.length > 0 ? (
         <div className="mb-4">
           <p className="text-sm font-medium text-warning mb-2">
@@ -115,7 +116,7 @@ function DeleteModal({
           </p>
           <ul className="flex flex-col gap-1">
             {schedules.map((s) => (
-              <li key={s.id} className="text-sm text-fg/70">
+              <li key={s.id} className="text-sm text-fg-muted">
                 • {s.label}
               </li>
             ))}
@@ -147,27 +148,24 @@ export default function WorkflowsPage() {
         }
       />
 
-      {isLoading && (
-        <div className="flex items-center justify-center min-h-[40vh]">
-          <LoaderCircle size={32} className="animate-spin text-accent" />
-        </div>
-      )}
+      {isLoading && <ListLoading layout="page" size={32} />}
 
       {!isLoading && workflows.length === 0 && (
-        <div className="flex flex-col items-center justify-center min-h-[40vh] text-fg/60">
-          <WorkflowIcon size={48} className="mb-4 opacity-50" />
-          <p className="text-lg mb-2">No workflows yet</p>
-          <p className="text-sm mb-4">
-            Build a reusable, parameterized prompt to get started.
-          </p>
-          <Link
-            href="/automations/workflows/new"
-            className={buttonClasses('primary', 'md')}
-          >
-            <Plus size={16} />
-            Create your first workflow
-          </Link>
-        </div>
+        <ListEmptyState
+          layout="page"
+          icon={WorkflowIcon}
+          title="No workflows yet"
+          body="Build a reusable, parameterized prompt to get started."
+          action={
+            <Link
+              href="/automations/workflows/new"
+              className={buttonClasses('primary', 'md')}
+            >
+              <Plus size={16} />
+              Create your first workflow
+            </Link>
+          }
+        />
       )}
 
       {!isLoading && workflows.length > 0 && (
@@ -188,7 +186,7 @@ export default function WorkflowsPage() {
                 }
                 title={w.name}
                 body={
-                  <p className="h-5 overflow-hidden text-sm leading-5 text-fg/60 line-clamp-1">
+                  <p className="h-5 overflow-hidden text-sm leading-5 text-fg-muted line-clamp-1">
                     {w.description ?? ''}
                   </p>
                 }
@@ -202,22 +200,16 @@ export default function WorkflowsPage() {
                     >
                       Run
                     </Button>
-                    <Link
+                    <IconButton
                       href={`/automations/schedules/new?workflow=${w.id}`}
-                      className={listRowActionClasses()}
-                      title="Add schedule"
-                      aria-label="Schedule"
-                    >
-                      <CalendarClock size={15} />
-                    </Link>
-                    <Link
+                      icon={CalendarClock}
+                      label="Schedule"
+                    />
+                    <IconButton
                       href={`/automations/workflows/${w.id}`}
-                      className={listRowActionClasses()}
-                      title="Edit"
-                      aria-label="Edit"
-                    >
-                      <Pencil size={15} />
-                    </Link>
+                      icon={Pencil}
+                      label="Edit"
+                    />
                     <ListRowAction
                       icon={Trash2}
                       label="Delete"

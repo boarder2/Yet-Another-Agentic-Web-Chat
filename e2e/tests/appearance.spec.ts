@@ -21,6 +21,23 @@ const cssVar = (page: SettingsPage['page'], name: string) =>
 const themeAttr = (page: SettingsPage['page'], name: string) =>
   page.evaluate((n) => document.documentElement.getAttribute(n), name);
 
+async function semanticForegroundStyles(page: SettingsPage['page']) {
+  return page.evaluate(() => {
+    const probes = ['text-fg', 'text-fg-muted', 'text-fg-subtle'].map(
+      (className) => {
+        const probe = document.createElement('span');
+        probe.className = className;
+        document.body.appendChild(probe);
+        const color = getComputedStyle(probe).color;
+        probe.remove();
+        return [className, color] as const;
+      },
+    );
+
+    return Object.fromEntries(probes) as Record<string, string>;
+  });
+}
+
 async function openAppearance(page: SettingsPage['page']) {
   const settings = new SettingsPage(page);
   await settings.goto();
@@ -75,6 +92,25 @@ test.describe('appearance', () => {
       'content',
       '#fdf6e3',
     );
+  });
+
+  test('semantic muted and subtle foregrounds resolve distinctly in both modes', async ({
+    page,
+  }) => {
+    await openAppearance(page);
+
+    for (const [name, mode] of [
+      ['Nord', 'dark'],
+      ['Solarized Light', 'light'],
+    ] as const) {
+      await page.getByRole('button', { name, exact: true }).click();
+      await expect.poll(() => themeAttr(page, 'data-theme')).toBe(mode);
+
+      const styles = await semanticForegroundStyles(page);
+      expect(styles['text-fg-muted']).not.toBe(styles['text-fg']);
+      expect(styles['text-fg-subtle']).not.toBe(styles['text-fg-muted']);
+      expect(styles['text-fg-subtle']).not.toBe(styles['text-fg']);
+    }
   });
 
   test('a built-in theme cannot be edited in place', async ({ page }) => {

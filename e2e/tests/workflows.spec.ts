@@ -255,4 +255,165 @@ test.describe('automations: Workflows browse list', () => {
       await cleanupWorkflows(request, [id]);
     }
   });
+
+  test('uses the page loading state before preserving the rich workflow empty state', async ({
+    page,
+  }) => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let requestStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      requestStarted = resolve;
+    });
+
+    await page.route('**/api/workflows', async (route) => {
+      if (new URL(route.request().url()).pathname !== '/api/workflows') {
+        await route.fallback();
+        return;
+      }
+      requestStarted();
+      await held;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: '[]',
+      });
+    });
+
+    await page.goto('/automations');
+    await expect(
+      page.getByRole('heading', { name: 'Workflows', exact: true }),
+    ).toBeVisible();
+    await started;
+
+    const loading = page.locator(
+      '[data-list-state="loading"][data-list-layout="page"]',
+    );
+    await expect(loading).toBeVisible();
+    await expect(loading.locator('svg')).toHaveAttribute('width', '32');
+    await expect(loading.locator('svg')).toHaveAttribute('height', '32');
+
+    release();
+    await expect(loading).toBeHidden();
+
+    const empty = page.locator(
+      '[data-list-state="empty"][data-list-layout="page"]',
+    );
+    await expect(empty).toBeVisible();
+    await expect(
+      empty.getByRole('heading', { name: 'No workflows yet', exact: true }),
+    ).toBeVisible();
+    await expect(
+      empty.getByText(
+        'Build a reusable, parameterized prompt to get started.',
+        { exact: true },
+      ),
+    ).toBeVisible();
+    await expect(
+      empty.getByRole('link', {
+        name: 'Create your first workflow',
+        exact: true,
+      }),
+    ).toHaveAttribute('href', '/automations/workflows/new');
+  });
+
+  test('workflow and schedule editors expose grouped legends and inner names', async ({
+    page,
+    request,
+  }) => {
+    const workflowId = await seedWorkflow(request, {
+      name: uniq('workflow-fields'),
+      prompt: '---\ncompany:\n---\nResearch {{company}}',
+    });
+
+    try {
+      await page.goto(`/automations/workflows/${workflowId}`);
+      await expect(
+        page.getByRole('heading', { name: 'Edit Workflow', exact: true }),
+      ).toBeVisible();
+
+      const promptGroup = page.locator('fieldset').filter({
+        has: page.locator('legend', { hasText: 'Prompt' }),
+      });
+      const modelsGroup = page.locator('fieldset').filter({
+        has: page.locator('legend', { hasText: 'Models' }),
+      });
+      await expect(promptGroup.locator('legend')).toContainText('Prompt');
+      await expect(modelsGroup.locator('legend')).toHaveText('Models');
+      await expect(promptGroup.locator('label')).toHaveCount(0);
+      await expect(page.getByLabel('Prompt', { exact: true })).toHaveAttribute(
+        'aria-label',
+        'Prompt',
+      );
+      await expect(
+        page.getByRole('combobox', { name: 'Focus Mode', exact: true }),
+      ).toBeVisible();
+
+      await page.goto(`/automations/schedules/new?workflow=${workflowId}`);
+      await expect(
+        page.getByRole('heading', { name: 'New Schedule', exact: true }),
+      ).toBeVisible();
+
+      const scheduleGroup = page.locator('fieldset').filter({
+        has: page.locator('legend', { hasText: 'Schedule' }),
+      });
+      const inputsGroup = page.locator('fieldset').filter({
+        has: page.locator('legend', { hasText: 'Inputs' }),
+      });
+      const retentionGroup = page.locator('fieldset').filter({
+        has: page.locator('legend', { hasText: 'Retention (optional)' }),
+      });
+      await expect(scheduleGroup.locator('legend')).toHaveText('Schedule');
+      await expect(inputsGroup.locator('legend')).toHaveText('Inputs');
+      await expect(retentionGroup.locator('legend')).toHaveText(
+        'Retention (optional)',
+      );
+      await expect(scheduleGroup.locator('label')).toHaveCount(0);
+      await expect(
+        page.getByLabel('Schedule kind', { exact: true }),
+      ).toBeVisible();
+      await expect(page.getByLabel('Hour', { exact: true })).toBeVisible();
+      await expect(page.getByLabel('Minute', { exact: true })).toBeVisible();
+      await expect(page.getByLabel(/Company/)).toBeVisible();
+      await expect(
+        page.getByLabel('Retention scope', { exact: true }),
+      ).toBeVisible();
+      const enabledGroup = page.locator('fieldset').filter({
+        has: page.locator('legend', { hasText: 'Enabled' }),
+      });
+      await expect(enabledGroup).toHaveCSS('flex-direction', 'row');
+      await expect(
+        enabledGroup.getByRole('switch', { name: 'Toggle enabled' }),
+      ).toBeVisible();
+    } finally {
+      await cleanupWorkflows(request, [workflowId]);
+    }
+  });
+
+  test('workflow prompt errors are attached to the grouped field caption', async ({
+    page,
+  }) => {
+    await page.goto('/automations/workflows/new');
+    const prompt = page.getByLabel('Prompt', { exact: true });
+    await expect(prompt).toBeVisible();
+    await prompt.fill('Hello {{unclosed');
+
+    const promptGroup = page.locator('fieldset').filter({
+      has: page.locator('legend', { hasText: 'Prompt' }),
+    });
+    await expect(promptGroup).toHaveAttribute('aria-invalid', 'true');
+    const describedBy = await promptGroup.getAttribute('aria-describedby');
+    expect(describedBy).not.toBeNull();
+    await expect(page.locator(`[id="${describedBy}"]`)).toContainText(
+      'Unclosed placeholder',
+    );
+    await expect(
+      page.getByText('Unclosed placeholder ({{ … }})', { exact: true }),
+    ).toHaveCount(1);
+    await expect(
+      page.getByRole('button', { name: 'Create Workflow', exact: true }),
+    ).toBeDisabled();
+  });
 });

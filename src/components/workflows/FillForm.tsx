@@ -89,7 +89,7 @@ export default function FillForm({
   if (fields.length === 0) {
     return (
       <Wrapper {...wrapperProps} className="flex flex-col gap-4">
-        <p className="text-sm text-fg/60">
+        <p className="text-sm text-fg-muted">
           This workflow takes no inputs — run it as-is.
         </p>
         {submitBtn}
@@ -110,7 +110,7 @@ export default function FillForm({
                 {f.required && <span className="text-danger"> *</span>}
               </span>
               {f.description && (
-                <p className="text-xs text-fg/60">{f.description}</p>
+                <p className="text-xs text-fg-muted">{f.description}</p>
               )}
               <div className="flex flex-wrap gap-2">
                 {(f.options ?? []).map((opt) => {
@@ -131,7 +131,7 @@ export default function FillForm({
                       className={`px-3 py-1 rounded-pill text-xs font-medium border transition-colors duration-150 ${
                         selected
                           ? 'bg-accent/10 border-accent text-accent'
-                          : 'bg-surface border-surface-2 text-fg/60'
+                          : 'bg-surface border-surface-2 text-fg-muted'
                       }`}
                     >
                       {opt}

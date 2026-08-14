@@ -1,8 +1,10 @@
 'use client';
 
 import { PROVIDER_METADATA } from '@/lib/providers/metadata';
-import { LoaderCircle, RefreshCw } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import SettingsSection from '../components/SettingsSection';
+import { Button } from '@/components/ui/Button';
+import { Field } from '@/components/ui/Field';
 import Select from '@/components/ui/Select';
 import InputComponent from '../components/InputComponent';
 import { SettingsType } from '../types';
@@ -43,23 +45,18 @@ export default function ModelSettingsSection({
     <SettingsSection
       title="Model Settings"
       headerAction={
-        <button
-          type="button"
-          className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-control border border-surface-2 hover:bg-surface-2 transition disabled:opacity-60"
+        <Button
+          size="sm"
+          icon={RefreshCw}
+          loading={refreshing}
           onClick={() => refresh({ reload: true })}
-          disabled={refreshing}
           title="Refresh models from providers"
         >
-          {refreshing ? (
-            <LoaderCircle size={12} className="animate-spin text-accent" />
-          ) : (
-            <RefreshCw size={12} />
-          )}
           {refreshing ? 'Refreshing…' : 'Refresh models'}
-        </button>
+        </Button>
       }
     >
-      <p className="text-xs text-fg/60">
+      <p className="text-xs text-fg-muted">
         The chat and system models are chosen from the chat input&apos;s model
         picker. These settings configure the embedding model and custom OpenAI
         credentials. The memory-processing model lives in the Memory section.
@@ -68,8 +65,7 @@ export default function ModelSettingsSection({
       {/* Custom OpenAI credentials (provider configuration) */}
       <div className="flex flex-col space-y-4 pt-4 border-t border-surface-2">
         <p className="text-sm font-medium">Custom OpenAI</p>
-        <div className="flex flex-col space-y-1">
-          <p className="text-sm">Model Name</p>
+        <Field label="Model Name">
           <InputComponent
             type="text"
             placeholder="Model name"
@@ -79,9 +75,8 @@ export default function ModelSettingsSection({
             }
             onSave={() => refresh({ reload: true })}
           />
-        </div>
-        <div className="flex flex-col space-y-1">
-          <p className="text-sm">Custom OpenAI API Key</p>
+        </Field>
+        <Field label="Custom OpenAI API Key">
           <InputComponent
             type="password"
             placeholder="Custom OpenAI API Key"
@@ -95,9 +90,8 @@ export default function ModelSettingsSection({
             }}
             onSave={(value) => saveConfig('customOpenaiApiKey', value)}
           />
-        </div>
-        <div className="flex flex-col space-y-1">
-          <p className="text-sm">Custom OpenAI Base URL</p>
+        </Field>
+        <Field label="Custom OpenAI Base URL">
           <InputComponent
             type="text"
             placeholder="Custom OpenAI Base URL"
@@ -107,13 +101,12 @@ export default function ModelSettingsSection({
             }
             onSave={() => refresh({ reload: true })}
           />
-        </div>
+        </Field>
       </div>
 
       {config.embeddingModelProviders && (
         <div className="flex flex-col space-y-4 mt-4 pt-4 border-t border-surface-2">
-          <div className="flex flex-col space-y-1">
-            <p className="text-sm">Embedding Model Provider</p>
+          <Field label="Embedding Model Provider">
             <Select
               value={selectedEmbeddingModelProvider ?? undefined}
               onChange={(e) => {
@@ -141,11 +134,10 @@ export default function ModelSettingsSection({
                 }),
               )}
             />
-          </div>
+          </Field>
 
           {selectedEmbeddingModelProvider && (
-            <div className="flex flex-col space-y-1">
-              <p className="text-sm">Embedding Model</p>
+            <Field label="Embedding Model">
               <Select
                 value={selectedEmbeddingModel ?? undefined}
                 onChange={(e) => {
@@ -180,7 +172,7 @@ export default function ModelSettingsSection({
                       ];
                 })()}
               />
-            </div>
+            </Field>
           )}
         </div>
       )}

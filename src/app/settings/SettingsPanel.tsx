@@ -1,12 +1,7 @@
 'use client';
 
-import {
-  LoaderCircle,
-  Settings as SettingsIcon,
-  ArrowLeft,
-} from 'lucide-react';
+import { Settings as SettingsIcon, ArrowLeft } from 'lucide-react';
 import { useEffect, useRef, useState, useCallback } from 'react';
-import Link from 'next/link';
 import { toast } from 'sonner';
 import { Prompt } from '@/lib/types/prompt';
 import {
@@ -53,6 +48,8 @@ import ImageGenerationSection from './sections/ImageGenerationSection';
 import ApiKeysSection from './sections/ApiKeysSection';
 import SkillsSection from './sections/SkillsSection';
 import McpServersSection from './sections/McpServersSection';
+import { IconButton } from '@/components/ui/IconButton';
+import { ListLoading } from '@/components/ui/List';
 
 // Stable default reference for useLocalStorageJSON (required by useSyncExternalStore).
 const EMPTY_HIDDEN_MODELS: string[] = [];
@@ -723,9 +720,12 @@ export default function SettingsPanel({
       {variant === 'page' && (
         <div className="flex flex-col pt-4">
           <div className="flex items-center space-x-2">
-            <Link href="/" className="lg:hidden">
-              <ArrowLeft />
-            </Link>
+            <IconButton
+              href="/"
+              icon={ArrowLeft}
+              label="Back to chat"
+              className="lg:hidden"
+            />
             <div className="flex flex-row space-x-0.5 items-center">
               <SettingsIcon size={23} />
               <h1 className="text-3xl font-medium p-2">Settings</h1>
@@ -736,9 +736,10 @@ export default function SettingsPanel({
       )}
 
       {isLoading ? (
-        <div className="flex flex-row items-center justify-center min-h-[50vh]">
-          <LoaderCircle size={32} className="animate-spin text-accent" />
-        </div>
+        <ListLoading
+          layout={variant === 'page' ? 'page' : 'section'}
+          size={32}
+        />
       ) : (
         config && (
           <>

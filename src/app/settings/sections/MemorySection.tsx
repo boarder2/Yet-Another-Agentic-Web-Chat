@@ -9,12 +9,13 @@ import {
   X,
   Edit3,
   RefreshCw,
-  LoaderCircle,
   Brain,
   Link as LinkIcon,
 } from 'lucide-react';
 import AppSwitch from '@/components/ui/AppSwitch';
 import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
+import { ListEmptyState, ListLoading } from '@/components/ui/List';
 import { Input } from '@/components/ui/Input';
 import { Textarea } from '@/components/ui/Textarea';
 import Select from '@/components/ui/Select';
@@ -203,7 +204,7 @@ export default function MemorySection({
         </div>
       }
     >
-      <p className="text-xs text-fg/60">
+      <p className="text-xs text-fg-muted">
         When enabled, YAAWC can remember facts about you across conversations to
         provide more personalized responses. Memories are stored separately from
         chat history. Automatic detection uses additional LLM tokens.
@@ -213,7 +214,7 @@ export default function MemorySection({
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium">Memory</p>
-            <p className="text-xs text-fg/60">
+            <p className="text-xs text-fg-muted">
               Enable cross-conversation memory
             </p>
           </div>
@@ -233,7 +234,7 @@ export default function MemorySection({
                 <p className="text-sm font-medium">
                   Use saved memories in chats
                 </p>
-                <p className="text-xs text-fg/60">
+                <p className="text-xs text-fg-muted">
                   Include relevant memories to personalize responses
                 </p>
               </div>
@@ -251,7 +252,7 @@ export default function MemorySection({
                 <p className="text-sm font-medium">
                   Automatic memory detection
                 </p>
-                <p className="text-xs text-fg/60">
+                <p className="text-xs text-fg-muted">
                   Analyze conversations to identify facts worth remembering.
                   Uses additional calls to the memory processing model below.
                 </p>
@@ -284,7 +285,7 @@ export default function MemorySection({
                     panelPosition="below"
                   />
                 </div>
-                <p className="text-xs text-fg/60">
+                <p className="text-xs text-fg-muted">
                   Used to extract, deduplicate, and process memories.
                   Independent from the chat/system model chosen in the chat
                   model picker. You may want a faster/cheaper model here.
@@ -299,7 +300,7 @@ export default function MemorySection({
 
       <div className="flex items-center justify-between">
         <p className="text-sm font-medium">Stored memories</p>
-        <span className="text-xs text-fg/50">{total} total</span>
+        <span className="text-xs text-fg-subtle">{total} total</span>
       </div>
 
       {/* Search and filters */}
@@ -307,7 +308,7 @@ export default function MemorySection({
         <div className="relative flex-1">
           <Search
             size={16}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-fg/40"
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-subtle"
           />
           <Input
             type="text"
@@ -318,13 +319,12 @@ export default function MemorySection({
             className="pl-9 pr-8 bg-surface-2"
           />
           {searchQuery && (
-            <button
-              type="button"
+            <IconButton
+              icon={X}
+              label="Clear search"
               onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-fg/40 hover:text-fg"
-            >
-              <X size={14} />
-            </button>
+              className="absolute right-3 top-1/2 -translate-y-1/2"
+            />
           )}
         </div>
 
@@ -407,20 +407,19 @@ export default function MemorySection({
 
       {/* Memory list */}
       {loading ? (
-        <div className="flex items-center justify-center py-10">
-          <LoaderCircle size={24} className="animate-spin text-accent" />
-        </div>
+        <ListLoading layout="compact" size={24} />
       ) : memories.length === 0 ? (
-        <div className="flex items-center gap-2 text-sm text-fg/50 py-2">
-          <Brain size={16} />
-          No memories yet. Add one above, or enable automatic detection.
-        </div>
+        <ListEmptyState
+          layout="compact"
+          icon={Brain}
+          body="No memories yet. Add one above, or enable automatic detection."
+        />
       ) : (
         <div className="flex flex-col gap-2">
           {memories.map((memory) => (
             <div
               key={memory.id}
-              className="group p-3 bg-surface-2 rounded-control border border-surface-2 transition"
+              className="group p-3 bg-surface-2 rounded-control border border-surface-2"
             >
               {editingId === memory.id ? (
                 <div>
@@ -466,23 +465,18 @@ export default function MemorySection({
                     >
                       {memory.content}
                     </p>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition shrink-0">
-                      <button
-                        type="button"
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150 shrink-0">
+                      <IconButton
+                        icon={Edit3}
+                        label="Edit"
                         onClick={() => startEditing(memory)}
-                        className="p-1.5 rounded-control hover:bg-surface transition"
-                        title="Edit"
-                      >
-                        <Edit3 size={14} />
-                      </button>
-                      <button
-                        type="button"
+                      />
+                      <IconButton
+                        icon={Trash2}
+                        label="Delete"
+                        tone="danger"
                         onClick={() => handleDelete(memory.id)}
-                        className="p-1.5 rounded-control hover:bg-danger-soft text-danger transition"
-                        title="Delete"
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                      />
                     </div>
                   </div>
                   <div className="flex items-center gap-3 mt-2 flex-wrap">
@@ -491,13 +485,13 @@ export default function MemorySection({
                         className={cn(
                           'px-2 py-0.5 rounded-pill text-xs',
                           categoryColors[memory.category] ||
-                            'bg-surface text-fg/60',
+                            'bg-surface text-fg-muted',
                         )}
                       >
                         {memory.category}
                       </span>
                     )}
-                    <span className="text-xs text-fg/40">
+                    <span className="text-xs text-fg-subtle">
                       Created{' '}
                       {formatTimeDifference(
                         new Date(),
@@ -505,7 +499,7 @@ export default function MemorySection({
                       )}{' '}
                       ago
                     </span>
-                    <span className="text-xs text-fg/40">
+                    <span className="text-xs text-fg-subtle">
                       {memory.lastAccessedAt
                         ? `Last used ${formatTimeDifference(new Date(), new Date(memory.lastAccessedAt))} ago`
                         : 'Never used'}
@@ -520,22 +514,24 @@ export default function MemorySection({
                           From conversation
                         </Link>
                       ) : (
-                        <span className="text-xs text-fg/40 italic">
+                        <span className="text-xs text-fg-subtle italic">
                           Source chat no longer exists
                         </span>
                       ))}
                     {memory.sourceType === 'manual' && (
-                      <span className="text-xs text-fg/40">Manually added</span>
+                      <span className="text-xs text-fg-subtle">
+                        Manually added
+                      </span>
                     )}
                     {memory.accessCount > 0 && (
-                      <span className="text-xs text-fg/40">
+                      <span className="text-xs text-fg-subtle">
                         Used {memory.accessCount}×
                       </span>
                     )}
                     {memory.workspaceId && (
                       <Link
                         href={`/workspaces/${memory.workspaceId}`}
-                        className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-control bg-accent/20 text-accent hover:bg-accent/30 transition"
+                        className="flex items-center gap-1 border border-transparent text-xs px-1.5 py-0.5 rounded-control bg-accent/20 text-accent hover:bg-accent/30 transition-colors duration-150 focus-border-neutral"
                       >
                         workspace
                       </Link>

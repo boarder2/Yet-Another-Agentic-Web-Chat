@@ -129,13 +129,24 @@ export default function PromptEditor({
   value,
   onChange,
   minHeight = '320px',
+  ariaLabel,
+  ariaDescribedBy,
 }: {
   value: string;
   onChange: (v: string) => void;
   minHeight?: string;
+  ariaLabel?: string;
+  ariaDescribedBy?: string;
 }) {
   const { syntax, mode } = useActiveTheme();
   const theme = useMemo(() => codeMirrorTheme(syntax, mode), [syntax, mode]);
+  const contentAttributes =
+    ariaLabel || ariaDescribedBy
+      ? EditorView.contentAttributes.of({
+          ...(ariaLabel ? { 'aria-label': ariaLabel } : {}),
+          ...(ariaDescribedBy ? { 'aria-describedby': ariaDescribedBy } : {}),
+        })
+      : null;
 
   return (
     <CodeMirror
@@ -143,8 +154,10 @@ export default function PromptEditor({
       onChange={onChange}
       minHeight={minHeight}
       theme={theme}
-      extensions={extensions}
       basicSetup={{ lineNumbers: false, foldGutter: false }}
+      extensions={
+        contentAttributes ? [...extensions, contentAttributes] : extensions
+      }
       className="text-sm border border-surface-2 rounded-control overflow-hidden"
     />
   );

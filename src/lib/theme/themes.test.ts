@@ -262,10 +262,14 @@ describe.each(THEMES.map((t) => [t.id, t] as const))('%s', (id, theme) => {
     expect(contrastRatio(theme.fg, theme.surface)).toBeGreaterThanOrEqual(4.0);
   });
 
-  it('keeps secondary text (the text-fg/60 ramp) legible', () => {
-    expect(
-      contrastRatio(mix(theme.fg, theme.bg, 0.6), theme.bg),
-    ).toBeGreaterThanOrEqual(2.3);
+  it('keeps semantic muted and subtle text distinguishable', () => {
+    const mutedContrast = contrastRatio(mix(theme.fg, theme.bg, 0.7), theme.bg);
+    const subtleContrast = contrastRatio(
+      mix(theme.fg, theme.bg, 0.5),
+      theme.bg,
+    );
+    expect(mutedContrast).toBeGreaterThanOrEqual(2.3);
+    expect(mutedContrast).toBeGreaterThan(subtleContrast);
   });
 
   // Floor is low on purpose: several palettes' status colors are pale by design

@@ -23,6 +23,8 @@
   /* === SURFACE === (seeds: bg, fg, surface) */
   --color-bg: #1c1c1c; /* canvas/background */
   --color-fg: #f2f2f2; /* text */
+  --color-fg-muted: color-mix(in oklch, var(--color-fg), transparent 30%);
+  --color-fg-subtle: color-mix(in oklch, var(--color-fg), transparent 50%);
   --color-surface: #2e2e2e; /* panels, cards, raised chrome */
   --color-surface-2: color-mix(
     in oklch,
@@ -265,6 +267,26 @@
   .text-fg {
     color: var(--color-fg);
   }
+
+  .focus-border-neutral,
+  .focus-border-contrast {
+    border-width: 1px;
+    border-style: solid;
+  }
+
+  .focus-border-neutral:focus-visible,
+  .focus-border-contrast:focus-visible {
+    outline: none;
+  }
+
+  .focus-border-neutral:focus-visible {
+    border-color: var(--color-accent);
+  }
+
+  .focus-border-contrast:focus-visible {
+    border-color: currentColor;
+  }
+
   .border-surface-2 {
     border-color: var(--color-surface-2);
   }

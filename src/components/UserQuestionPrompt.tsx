@@ -139,7 +139,7 @@ export function UserQuestionPrompt({
       {/* Question */}
       <div className="px-5 py-3 border-b border-surface-2">
         <p className="text-sm text-fg font-medium">{question}</p>
-        {context && <p className="text-xs text-fg/50 mt-1">{context}</p>}
+        {context && <p className="text-xs text-fg-muted mt-1">{context}</p>}
       </div>
 
       {/* Options */}
@@ -152,10 +152,10 @@ export function UserQuestionPrompt({
                 type="button"
                 key={opt.label}
                 onClick={() => handleOptionToggle(opt.label)}
-                className={`w-full text-left px-4 py-2.5 rounded-surface border transition-colors text-sm ${
+                className={`w-full text-left px-4 py-2.5 rounded-surface border border-transparent transition-colors duration-150 text-sm focus-border-neutral ${
                   isSelected
                     ? 'border-accent bg-accent/10 text-fg'
-                    : 'border-surface-2 hover:border-fg/20 text-fg/80 hover:text-fg'
+                    : 'border-surface-2 hover:border-fg/20 text-fg hover:text-fg'
                 }`}
               >
                 <div className="flex items-center gap-3">
@@ -174,7 +174,7 @@ export function UserQuestionPrompt({
                   <div>
                     <span className="font-medium">{opt.label}</span>
                     {opt.description && (
-                      <p className="text-xs text-fg/50 mt-0.5">
+                      <p className="text-xs text-fg-muted mt-0.5">
                         {opt.description}
                       </p>
                     )}
@@ -200,7 +200,7 @@ export function UserQuestionPrompt({
                 ? 'Type additional context or an alternative response...'
                 : 'Type your response...'
             }
-            className="bg-surface-2/50 rounded-surface placeholder:text-fg/30 resize-none"
+            className="bg-surface-2/50 rounded-surface placeholder:text-fg-subtle resize-none"
             rows={2}
           />
         </div>

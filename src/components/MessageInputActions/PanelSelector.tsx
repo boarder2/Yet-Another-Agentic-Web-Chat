@@ -17,6 +17,7 @@ import {
 } from '@headlessui/react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
 import { Input } from '@/components/ui/Input';
 import AppSwitch from '@/components/ui/AppSwitch';
 import ComposerActionButton from '@/components/MessageInputActions/ComposerActionButton';
@@ -229,10 +230,10 @@ const PanelSelector = ({ focusMode }: { focusMode: string }) => {
           </div>
           <Transition
             as={Fragment}
-            enter="transition ease-out duration-200"
+            enter="transition-[opacity,transform] ease-out duration-200"
             enterFrom="opacity-0 translate-y-1"
             enterTo="opacity-100 translate-y-0"
-            leave="transition ease-in duration-150"
+            leave="transition-[opacity,transform] ease-in duration-150"
             leaveFrom="opacity-100 translate-y-0"
             leaveTo="opacity-0 translate-y-1"
           >
@@ -251,7 +252,7 @@ const PanelSelector = ({ focusMode }: { focusMode: string }) => {
                         'hidden sm:inline-flex shrink-0 text-xs font-medium px-2 py-0.5 rounded-pill',
                         active
                           ? 'bg-accent/10 text-accent'
-                          : 'bg-surface-2 text-fg/60',
+                          : 'bg-surface-2 text-fg-muted',
                       )}
                     >
                       {active ? 'On' : 'Off'}
@@ -268,7 +269,7 @@ const PanelSelector = ({ focusMode }: { focusMode: string }) => {
                 }
               >
                 {!supported ? (
-                  <div className="px-4 py-4 text-xs text-fg/60">
+                  <div className="px-4 py-4 text-xs text-fg-muted">
                     The agent panel is only available in Web Search and Local
                     Research focus modes.
                   </div>
@@ -276,7 +277,7 @@ const PanelSelector = ({ focusMode }: { focusMode: string }) => {
                   <div className="px-4 py-3 space-y-4">
                     {/* Presets — dropdown switcher (mirrors the model presets popover) */}
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-fg/70 uppercase tracking-wide">
+                      <span className="text-xs font-semibold text-fg-muted uppercase tracking-wide">
                         Presets
                       </span>
                       <Popover className="relative">
@@ -285,10 +286,10 @@ const PanelSelector = ({ focusMode }: { focusMode: string }) => {
                             <PopoverButton
                               type="button"
                               className={cn(
-                                'flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-control border transition-colors duration-150',
+                                'flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-control border transition-colors duration-150 focus-border-neutral',
                                 open
                                   ? 'bg-surface-2 border-border-strong text-fg'
-                                  : 'bg-surface border-surface-2 text-fg/70 hover:bg-surface-2 hover:text-fg',
+                                  : 'bg-surface border-surface-2 text-fg-muted hover:bg-surface-2 hover:text-fg',
                               )}
                               aria-label="Select panel preset"
                             >
@@ -309,17 +310,17 @@ const PanelSelector = ({ focusMode }: { focusMode: string }) => {
 
                             <Transition
                               as={Fragment}
-                              enter="transition ease-out duration-100"
+                              enter="transition-[opacity,transform] ease-out duration-100"
                               enterFrom="opacity-0 scale-95"
                               enterTo="opacity-100 scale-100"
-                              leave="transition ease-in duration-75"
+                              leave="transition-[opacity,transform] ease-in duration-100"
                               leaveFrom="opacity-100 scale-100"
                               leaveTo="opacity-0 scale-95"
                             >
                               <PopoverPanel className="absolute right-0 z-50 mt-1 w-64 rounded-floating bg-surface border border-surface-2 shadow-floating overflow-hidden">
                                 <div className="max-h-64 overflow-y-auto">
                                   {presets.length === 0 ? (
-                                    <div className="px-3 py-4 text-center text-xs text-fg/50">
+                                    <div className="px-3 py-4 text-center text-xs text-fg-muted">
                                       No presets yet. Save the current panel to
                                       create one.
                                     </div>
@@ -340,7 +341,7 @@ const PanelSelector = ({ focusMode }: { focusMode: string }) => {
                                             applyPreset(p.id);
                                             close();
                                           }}
-                                          className="w-full text-left pl-2 pr-3 py-2.5 flex items-start gap-2 hover:bg-surface-2 transition-colors duration-100"
+                                          className="w-full border border-transparent text-left pl-2 pr-3 py-2.5 flex items-start gap-2 hover:bg-surface-2 transition-colors duration-100 focus-border-neutral"
                                         >
                                           <span
                                             className={cn(
@@ -362,7 +363,7 @@ const PanelSelector = ({ focusMode }: { focusMode: string }) => {
                                                 </span>
                                               )}
                                             </div>
-                                            <p className="text-[10px] text-fg/50 mt-0.5 truncate">
+                                            <p className="text-[10px] text-fg-subtle mt-0.5 truncate">
                                               {panelPresetSummary(p)}
                                             </p>
                                           </div>
@@ -420,7 +421,7 @@ const PanelSelector = ({ focusMode }: { focusMode: string }) => {
                                         type="button"
                                         disabled={!configured}
                                         onClick={() => setSavingName(true)}
-                                        className="text-xs text-fg/60 hover:text-fg transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+                                        className="border border-transparent text-xs text-fg-muted hover:text-fg transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed focus-border-neutral"
                                         title={
                                           configured
                                             ? 'Save the current panel as a preset'
@@ -435,7 +436,7 @@ const PanelSelector = ({ focusMode }: { focusMode: string }) => {
                                           close();
                                           openSettings('panel-presets');
                                         }}
-                                        className="flex items-center gap-1 text-xs text-fg/40 hover:text-fg/70 transition-colors duration-150"
+                                        className="flex items-center gap-1 border border-transparent text-xs text-fg-muted hover:text-fg transition-colors duration-150 focus-border-neutral"
                                       >
                                         Manage
                                         <ExternalLink size={10} />
@@ -453,12 +454,12 @@ const PanelSelector = ({ focusMode }: { focusMode: string }) => {
                     {/* Executors */}
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-fg/70 uppercase tracking-wide">
+                        <span className="text-xs font-semibold text-fg-muted uppercase tracking-wide">
                           Executors ({selection.executors.length}/{PANEL_MAX})
                         </span>
                       </div>
                       {!configured && (
-                        <p className="text-xs text-fg/50">
+                        <p className="text-xs text-fg-muted">
                           Add at least {PANEL_MIN} models to enable the panel.
                         </p>
                       )}
@@ -471,19 +472,18 @@ const PanelSelector = ({ focusMode }: { focusMode: string }) => {
                             <span className="truncate max-w-[140px]">
                               {displayName(e)}
                             </span>
-                            <button
-                              type="button"
+                            <IconButton
+                              icon={X}
+                              label={`Remove ${displayName(e)}`}
+                              tone="danger"
                               onClick={() => removeExecutor(e)}
-                              className="p-0.5 rounded-control hover:bg-surface text-fg/60 hover:text-danger transition-colors duration-150"
-                              title="Remove"
-                            >
-                              <X size={12} />
-                            </button>
+                              className="p-0.5"
+                            />
                           </span>
                         ))}
                       </div>
                       {selection.executors.length < PANEL_MAX && (
-                        <div className="flex items-center gap-1 text-fg/70">
+                        <div className="flex items-center gap-1 text-fg-muted">
                           <Plus size={14} className="text-accent" />
                           <ModelField
                             role="chat"
@@ -500,7 +500,7 @@ const PanelSelector = ({ focusMode }: { focusMode: string }) => {
 
                     {/* The synthesizer is the turn's chat model, not chosen here —
                     make that explicit so users don't go hunting for it. */}
-                    <div className="rounded-control bg-surface-2/60 px-3 py-2 text-xs text-fg/60">
+                    <div className="rounded-control bg-surface-2/60 px-3 py-2 text-xs text-fg-muted">
                       Your chat model reads every model&apos;s answer and writes
                       the single final response.
                     </div>

@@ -90,7 +90,7 @@ export function CodeExecutionApproval({
                 setDenying(false);
                 setDenyReason('');
               }}
-              className="px-5 py-2 text-sm font-medium rounded-surface bg-surface-2 text-fg/70 hover:text-fg hover:bg-surface-2/80 transition-colors"
+              className="px-5 py-2 text-sm font-medium rounded-surface border border-transparent bg-surface-2 text-fg-muted hover:text-fg hover:bg-surface-2/80 transition-colors duration-150 focus-border-neutral"
             >
               Cancel
             </button>
@@ -99,7 +99,7 @@ export function CodeExecutionApproval({
               onClick={() =>
                 sendApproval(false, denyReason.trim() || undefined)
               }
-              className="px-5 py-2 text-sm font-medium rounded-surface bg-danger-soft text-danger hover:bg-danger-soft border border-danger transition-colors"
+              className="px-5 py-2 text-sm font-medium rounded-surface bg-danger-soft text-danger hover:bg-danger-soft border border-danger transition-colors duration-150 focus-border-contrast"
             >
               Deny
             </button>
@@ -109,14 +109,14 @@ export function CodeExecutionApproval({
             <button
               type="button"
               onClick={() => setDenying(true)}
-              className="px-5 py-2 text-sm font-medium rounded-surface bg-danger-soft text-danger hover:bg-danger-soft border border-danger transition-colors"
+              className="px-5 py-2 text-sm font-medium rounded-surface bg-danger-soft text-danger hover:bg-danger-soft border border-danger transition-colors duration-150 focus-border-contrast"
             >
               Deny
             </button>
             <button
               type="button"
               onClick={() => sendApproval(true)}
-              className="px-5 py-2 text-sm font-medium rounded-surface bg-success-soft text-success hover:bg-success-soft border border-success transition-colors"
+              className="px-5 py-2 text-sm font-medium rounded-surface bg-success-soft text-success hover:bg-success-soft border border-success transition-colors duration-150 focus-border-contrast"
             >
               Run
             </button>
@@ -125,14 +125,14 @@ export function CodeExecutionApproval({
       }
     >
       {description && (
-        <div className="px-5 py-2 text-sm text-fg/70 border-b border-surface-2 bg-surface-2/30">
+        <div className="px-5 py-2 text-sm text-fg-muted border-b border-surface-2 bg-surface-2/30">
           {description}
         </div>
       )}
       <CodeBlock className="language-javascript">{code}</CodeBlock>
       {denying && (
         <div className="px-5 py-3 border-t border-surface-2 bg-surface-2/30">
-          <label className="block text-xs font-medium text-fg/70 mb-1.5">
+          <label className="block text-xs font-medium text-fg-muted mb-1.5">
             Tell the assistant what to do differently (optional)
           </label>
           <Textarea
@@ -147,7 +147,7 @@ export function CodeExecutionApproval({
               }
             }}
             placeholder="e.g. don't fetch from the network; use a smaller input; try a different approach..."
-            className="rounded-surface placeholder:text-fg/30 resize-none"
+            className="rounded-surface placeholder:text-fg-subtle resize-none"
             rows={3}
           />
         </div>

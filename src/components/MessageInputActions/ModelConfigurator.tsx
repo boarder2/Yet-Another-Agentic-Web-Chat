@@ -184,10 +184,10 @@ export default function ModelConfigurator({
 
             <Transition
               as={Fragment}
-              enter="transition ease-out duration-100"
+              enter="transition-[opacity,transform] ease-out duration-100"
               enterFrom="opacity-0 scale-95"
               enterTo="opacity-100 scale-100"
-              leave="transition ease-in duration-75"
+              leave="transition-[opacity,transform] ease-in duration-100"
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
@@ -195,19 +195,19 @@ export default function ModelConfigurator({
                 <ComposerPopover title="Models · set by workspace">
                   <div className="px-3 py-2 space-y-1 text-xs">
                     <div className="flex justify-between gap-3">
-                      <span className="text-fg/50">Chat</span>
+                      <span className="text-fg-subtle">Chat</span>
                       <span className="text-fg/90 text-right truncate">
                         {chatName} · {modelOverride.chatProvider}
                       </span>
                     </div>
                     <div className="flex justify-between gap-3">
-                      <span className="text-fg/50">System</span>
+                      <span className="text-fg-subtle">System</span>
                       <span className="text-fg/90 text-right truncate">
                         {systemName} · {modelOverride.systemProvider}
                       </span>
                     </div>
                   </div>
-                  <div className="border-t border-surface-2 px-3 py-2 text-xs text-fg/50">
+                  <div className="border-t border-surface-2 px-3 py-2 text-xs text-fg-subtle">
                     Change this in the workspace&apos;s settings.
                   </div>
                 </ComposerPopover>
@@ -238,10 +238,10 @@ export default function ModelConfigurator({
 
               <Transition
                 as={Fragment}
-                enter="transition ease-out duration-100"
+                enter="transition-[opacity,transform] ease-out duration-100"
                 enterFrom="opacity-0 scale-95"
                 enterTo="opacity-100 scale-100"
-                leave="transition ease-in duration-75"
+                leave="transition-[opacity,transform] ease-in duration-100"
                 leaveFrom="opacity-100 scale-100"
                 leaveTo="opacity-0 scale-95"
               >
@@ -265,7 +265,7 @@ export default function ModelConfigurator({
                           close();
                           setOpen(true);
                         }}
-                        className="flex items-center gap-1.5 text-xs text-fg/60 hover:text-fg transition-colors duration-150"
+                        className="flex items-center gap-1.5 border border-transparent text-xs text-fg-muted hover:text-fg transition-colors duration-150 focus-border-neutral"
                       >
                         <SlidersHorizontal size={12} />
                         Configure models…
@@ -297,7 +297,7 @@ export default function ModelConfigurator({
           </Button>
         }
       >
-        <p className="text-xs text-fg/60 mb-4">
+        <p className="text-xs text-fg-muted mb-4">
           Choose the Chat and System models, or apply a preset.
         </p>
         <ModelPicker

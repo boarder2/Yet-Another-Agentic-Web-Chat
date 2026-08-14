@@ -2,6 +2,7 @@ import React from 'react';
 import Link from 'next/link';
 import { LoaderCircle, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { IconButton } from '@/components/ui/IconButton';
 
 /**
  * A navigable `ListRow` stretches its title link across the whole row via an
@@ -10,13 +11,6 @@ import { cn } from '@/lib/utils';
  * this class.
  */
 export const listRowInteractive = 'relative z-10';
-
-export const listRowActionClasses = (danger?: boolean) =>
-  cn(
-    'p-1.5 rounded-control text-fg/60 transition-colors duration-150',
-    'hover:bg-surface disabled:opacity-40 disabled:cursor-not-allowed',
-    danger ? 'hover:text-danger' : 'hover:text-fg',
-  );
 
 interface ListRowProps extends Omit<
   React.HTMLAttributes<HTMLDivElement>,
@@ -61,7 +55,7 @@ const ListRow = ({
           <Link
             href={href}
             data-list-row-title
-            className="min-w-0 truncate text-base font-medium after:absolute after:inset-0"
+            className="min-w-0 truncate border border-transparent text-base font-medium after:absolute after:inset-0 focus-border-neutral"
           >
             {title}
           </Link>
@@ -76,7 +70,7 @@ const ListRow = ({
       </div>
       {body}
       {meta && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg/60">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-subtle">
           {meta}
         </div>
       )}
@@ -91,7 +85,10 @@ const ListRow = ({
   </div>
 );
 
-interface ListRowActionProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+interface ListRowActionProps extends Omit<
+  React.ButtonHTMLAttributes<HTMLButtonElement>,
+  'aria-label' | 'children' | 'title' | 'type'
+> {
   icon: LucideIcon;
   /** Accessible name and tooltip. */
   label: string;
@@ -100,7 +97,7 @@ interface ListRowActionProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 }
 
 const ListRowAction = ({
-  icon: Icon,
+  icon,
   label,
   danger,
   loading,
@@ -108,36 +105,138 @@ const ListRowAction = ({
   disabled,
   ...props
 }: ListRowActionProps) => (
-  <button
-    type="button"
-    title={label}
-    aria-label={label}
-    disabled={disabled || loading}
-    className={cn(listRowActionClasses(danger), className)}
+  <IconButton
     {...props}
-  >
-    {loading ? (
-      <LoaderCircle size={15} className="animate-spin" />
-    ) : (
-      <Icon size={15} />
-    )}
-  </button>
+    icon={icon}
+    label={label}
+    tone={danger ? 'danger' : 'default'}
+    loading={loading}
+    disabled={disabled}
+    className={className}
+  />
 );
 
-const ListLoading = () => (
-  <div className="flex min-h-[30vh] items-center justify-center">
-    <LoaderCircle size={32} className="animate-spin text-accent" />
-  </div>
-);
+export type ListStateLayout = 'compact' | 'section' | 'page';
+export type ListSpinnerSize = 20 | 24 | 32;
 
-const ListEmptyState = ({ children }: { children: React.ReactNode }) => (
-  <div className="flex min-h-[30vh] items-center justify-center">
-    <p className="text-center text-sm text-fg/70">{children}</p>
-  </div>
-);
+type ListStateProps = {
+  layout?: ListStateLayout;
+  className?: string;
+};
+
+const stateLayoutClasses: Record<ListStateLayout, string> = {
+  compact: 'flex items-center justify-center gap-2 py-2',
+  section: 'flex min-h-32 items-center justify-center gap-2 px-4 py-8',
+  page: 'flex min-h-[30vh] items-center justify-center gap-2 px-4 py-8',
+};
+
+interface ListLoadingProps extends ListStateProps {
+  /** Accessible status text displayed beside the spinner. */
+  status?: React.ReactNode;
+  /** Children remain a compatible way to provide status text. */
+  children?: React.ReactNode;
+  /** Spinner size is restricted to the design-system state sizes. */
+  size?: ListSpinnerSize;
+  /** Alias for callers that want to name the spinner size explicitly. */
+  spinnerSize?: ListSpinnerSize;
+}
+
+const ListLoading = ({
+  layout = 'page',
+  status,
+  children,
+  size = 32,
+  spinnerSize,
+  className,
+}: ListLoadingProps) => {
+  const message = status ?? children;
+  const resolvedSize = spinnerSize ?? size;
+
+  return (
+    <div
+      data-list-state="loading"
+      data-list-layout={layout}
+      className={cn(stateLayoutClasses[layout], className)}
+    >
+      <LoaderCircle size={resolvedSize} className="animate-spin text-accent" />
+      {message !== undefined && message !== null && (
+        <span role="status" className="text-sm text-fg-muted">
+          {message}
+        </span>
+      )}
+    </div>
+  );
+};
+
+interface ListEmptyStateProps extends ListStateProps {
+  icon?: LucideIcon;
+  title?: React.ReactNode;
+  body?: React.ReactNode;
+  action?: React.ReactNode;
+  children?: React.ReactNode;
+}
+
+const ListEmptyState = ({
+  layout = 'page',
+  icon: Icon,
+  title,
+  body,
+  action,
+  children,
+  className,
+}: ListEmptyStateProps) => {
+  const hasStructuredContent =
+    Icon !== undefined ||
+    title !== undefined ||
+    body !== undefined ||
+    action !== undefined;
+
+  if (!hasStructuredContent) {
+    return (
+      <div
+        data-list-state="empty"
+        data-list-layout={layout}
+        className={cn(stateLayoutClasses[layout], className)}
+      >
+        <p className="text-center text-sm text-fg-muted">{children}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      data-list-state="empty"
+      data-list-layout={layout}
+      className={cn(
+        stateLayoutClasses[layout],
+        layout === 'compact' ? 'text-center' : 'flex-col text-center',
+        className,
+      )}
+    >
+      {Icon && (
+        <Icon size={layout === 'page' ? 48 : 32} className="text-fg-subtle" />
+      )}
+      {(title !== undefined ||
+        body !== undefined ||
+        children !== undefined) && (
+        <div className="space-y-1">
+          {title !== undefined && (
+            <h2 className="text-base font-medium text-fg">{title}</h2>
+          )}
+          {(body !== undefined || children !== undefined) && (
+            <div className="max-w-md text-sm text-fg-muted">
+              {body ?? children}
+            </div>
+          )}
+        </div>
+      )}
+      {action !== undefined && action}
+    </div>
+  );
+};
 
 const ListCount = ({ children }: { children: React.ReactNode }) => (
-  <div className="mb-2 text-xs text-fg/50">{children}</div>
+  <div className="mb-2 text-xs text-fg-subtle">{children}</div>
 );
 
 export { ListRow, ListRowAction, ListLoading, ListEmptyState, ListCount };

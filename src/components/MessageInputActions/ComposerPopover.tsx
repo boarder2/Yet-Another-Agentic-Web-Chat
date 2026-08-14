@@ -31,7 +31,7 @@ const ComposerPopover = ({
               <h3 className="text-sm font-medium text-fg/90">{title}</h3>
             )}
             {description !== undefined && (
-              <p className="mt-0.5 text-xs text-fg/60">{description}</p>
+              <p className="mt-0.5 text-xs text-fg-muted">{description}</p>
             )}
           </div>
           {action !== undefined && <div className="shrink-0">{action}</div>}

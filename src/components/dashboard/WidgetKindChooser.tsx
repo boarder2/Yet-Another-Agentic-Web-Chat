@@ -24,20 +24,20 @@ const WidgetKindChooser = ({
   onAddExisting,
 }: WidgetKindChooserProps) => (
   <Modal open={isOpen} onClose={onClose} title="Add a Widget">
-    <p className="text-xs font-medium uppercase tracking-wide text-fg/50 mb-2">
+    <p className="text-xs font-medium uppercase tracking-wide text-fg-subtle mb-2">
       Create new
     </p>
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <button
         type="button"
         onClick={() => onChoose('llm')}
-        className="text-left p-4 rounded-surface border-2 border-accent bg-surface hover:bg-surface-2 transition"
+        className="text-left p-4 rounded-surface border border-accent bg-surface hover:bg-surface-2 transition-colors duration-150 focus-border-neutral"
       >
         <div className="flex items-center gap-2 text-fg font-medium mb-2">
           <Sparkles size={18} className="text-accent" />
           AI Widget
         </div>
-        <p className="text-sm text-fg/70">
+        <p className="text-sm text-fg-muted">
           Describe what you want in plain English. Costs tokens each refresh.
         </p>
       </button>
@@ -45,13 +45,13 @@ const WidgetKindChooser = ({
         <button
           type="button"
           onClick={() => onChoose('code')}
-          className="text-left p-4 rounded-surface border border-surface-2 bg-surface hover:bg-surface-2 transition"
+          className="text-left p-4 rounded-surface border border-surface-2 bg-surface hover:bg-surface-2 transition-colors duration-150 focus-border-neutral"
         >
           <div className="flex items-center gap-2 text-fg font-medium mb-2">
             <Code2 size={18} />
             Code Widget
           </div>
-          <p className="text-sm text-fg/70">
+          <p className="text-sm text-fg-muted">
             Write JavaScript for exact, free, fast output. For developers.
           </p>
         </button>
@@ -60,7 +60,7 @@ const WidgetKindChooser = ({
 
     {existingWidgets.length > 0 && onAddExisting && (
       <>
-        <p className="text-xs font-medium uppercase tracking-wide text-fg/50 mt-6 mb-2">
+        <p className="text-xs font-medium uppercase tracking-wide text-fg-subtle mt-6 mb-2">
           Add existing
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -69,18 +69,18 @@ const WidgetKindChooser = ({
               key={widget.id}
               type="button"
               onClick={() => onAddExisting(widget)}
-              className="flex items-center justify-between gap-2 text-left px-3 py-2 rounded-surface border border-surface-2 bg-surface hover:bg-surface-2 transition"
+              className="flex items-center justify-between gap-2 text-left px-3 py-2 rounded-surface border border-surface-2 bg-surface hover:bg-surface-2 transition-colors duration-150 focus-border-neutral"
               title={`Add "${widget.title}" to this page`}
             >
               <span className="flex items-center gap-2 min-w-0">
                 {widget.widgetType === 'code' ? (
-                  <Code2 size={15} className="shrink-0 text-fg/60" />
+                  <Code2 size={15} className="shrink-0 text-fg-muted" />
                 ) : (
                   <Sparkles size={15} className="shrink-0 text-accent" />
                 )}
                 <span className="truncate text-sm text-fg">{widget.title}</span>
               </span>
-              <Plus size={15} className="shrink-0 text-fg/50" />
+              <Plus size={15} className="shrink-0 text-fg-subtle" />
             </button>
           ))}
         </div>

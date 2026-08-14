@@ -112,10 +112,10 @@ export default function ArtifactBrowser() {
         </ListCount>
       )}
 
-      {isLoading && <ListLoading />}
+      {isLoading && <ListLoading layout="page" size={32} />}
 
       {!isLoading && artifacts && artifacts.length === 0 && (
-        <ListEmptyState>
+        <ListEmptyState layout="page">
           {selectedType === 'all'
             ? 'No artifacts yet.'
             : `No ${itemName}s yet.`}
@@ -154,7 +154,7 @@ export default function ArtifactBrowser() {
                   role="button"
                   tabIndex={0}
                   aria-label={`Preview ${a.title}`}
-                  className="cursor-pointer transition-colors duration-150 hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
+                  className="cursor-pointer border border-transparent transition-colors duration-150 hover:bg-surface-2 focus-border-neutral"
                   onClick={() => setSelectedImage(a)}
                   onKeyDown={(event) => handleImageKeyDown(event, a)}
                   leading={

@@ -8,14 +8,13 @@ import {
   BookOpen,
   Brain,
   Settings as SettingsIcon,
-  LoaderCircle,
   Plus,
   PanelRightClose,
   PanelRightOpen,
 } from 'lucide-react';
 import { useState } from 'react';
-import Link from 'next/link';
 import { cn } from '@/lib/utils';
+import { IconButton } from '@/components/ui/IconButton';
 import FilesTab from './FilesTab';
 import ArtifactsTab from './ArtifactsTab';
 import InstructionsTab from './InstructionsTab';
@@ -24,6 +23,7 @@ import SettingsTab from './SettingsTab';
 import FileViewer from './FileViewer';
 import Modal from '@/components/ui/Modal';
 import { Card } from '@/components/ui/Card';
+import { ListLoading } from '@/components/ui/List';
 import { useWorkspace } from '@/lib/hooks/api/useWorkspaces';
 import { useWorkspaceFiles } from '@/lib/hooks/api/useWorkspaceFiles';
 import { useWorkspaceArtifacts } from '@/lib/hooks/api/useArtifacts';
@@ -52,16 +52,16 @@ function CollapsibleSection({
       <button
         type="button"
         onClick={onToggle}
-        className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-surface-2 transition text-left"
+        className="w-full border border-transparent flex items-center gap-2 px-3 py-2.5 hover:bg-surface-2 transition-colors duration-150 text-left focus-border-neutral"
       >
         {open ? (
-          <ChevronDown size={14} className="text-fg/40 shrink-0" />
+          <ChevronDown size={14} className="text-fg-subtle shrink-0" />
         ) : (
-          <ChevronRight size={14} className="text-fg/40 shrink-0" />
+          <ChevronRight size={14} className="text-fg-subtle shrink-0" />
         )}
-        <Icon size={14} className="text-fg/60 shrink-0" />
+        <Icon size={14} className="text-fg-muted shrink-0" />
         <span className="text-sm font-medium flex-1 truncate">{title}</span>
-        <span className="text-xs text-fg/50 shrink-0">{summary}</span>
+        <span className="text-xs text-fg-subtle shrink-0">{summary}</span>
       </button>
       {open && (
         <div className="px-3 pb-3 pt-1 border-t border-surface-2">
@@ -142,9 +142,7 @@ export default function WorkspaceSidebar({
       {workspace ? (
         <SettingsTab workspace={workspace} />
       ) : (
-        <div className="flex items-center justify-center py-8">
-          <LoaderCircle size={20} className="animate-spin text-accent" />
-        </div>
+        <ListLoading layout="section" size={20} />
       )}
     </Modal>
   );
@@ -161,33 +159,26 @@ export default function WorkspaceSidebar({
           <div className="pt-3 flex flex-col items-center gap-1.5">
             {/* Absent when the caller has no room to expand into. */}
             {onToggleCollapse && (
-              <button
-                type="button"
+              <IconButton
+                icon={PanelRightOpen}
+                label="Expand sidebar"
                 onClick={onToggleCollapse}
-                className="p-1.5 rounded-control hover:bg-surface-2 transition text-fg/60"
-                title="Expand sidebar"
-              >
-                <PanelRightOpen size={16} />
-              </button>
+              />
             )}
-            <Link
+            <IconButton
               href={`/workspaces/${workspaceId}/c/new`}
-              className="p-1.5 rounded-control bg-accent hover:bg-accent-700 transition-colors duration-150 text-accent-fg"
-              title="New chat"
-            >
-              <Plus size={16} />
-            </Link>
+              icon={Plus}
+              label="New chat"
+              tone="primary"
+            />
           </div>
 
           <div className="mt-auto pb-4">
-            <button
-              type="button"
+            <IconButton
+              icon={SettingsIcon}
+              label="Workspace settings"
               onClick={() => setSettingsOpen(true)}
-              className="p-1.5 rounded-control hover:bg-surface-2 transition text-fg/60"
-              title="Workspace settings"
-            >
-              <SettingsIcon size={16} />
-            </button>
+            />
           </div>
         </aside>
       ) : (
@@ -198,31 +189,27 @@ export default function WorkspaceSidebar({
           )}
         >
           <div className="flex justify-between items-center gap-2 px-4 py-2">
-            <Link
+            <IconButton
               href={`/workspaces/${workspaceId}/c/new`}
-              className="p-2 rounded-control bg-accent hover:bg-accent-700 transition-colors duration-150 text-accent-fg"
-              title="New chat"
-            >
-              <Plus size={17} />
-            </Link>
+              icon={Plus}
+              label="New chat"
+              tone="primary"
+              className="p-2"
+            />
 
             <div className="flex gap-2 items-center">
-              <button
-                type="button"
+              <IconButton
+                icon={SettingsIcon}
+                label="Workspace settings"
                 onClick={() => setSettingsOpen(true)}
-                className="p-2 rounded-control hover:bg-surface-2 transition text-fg/60"
-                title="Workspace settings"
-              >
-                <SettingsIcon size={17} />
-              </button>
-              <button
-                type="button"
+                className="p-2"
+              />
+              <IconButton
+                icon={PanelRightClose}
+                label="Collapse sidebar"
                 onClick={onToggleCollapse}
-                className="p-2 rounded-control hover:bg-surface-2 transition text-fg/60"
-                title="Collapse sidebar"
-              >
-                <PanelRightClose size={17} />
-              </button>
+                className="p-2"
+              />
             </div>
           </div>
 

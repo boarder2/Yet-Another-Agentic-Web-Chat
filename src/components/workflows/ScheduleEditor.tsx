@@ -22,6 +22,7 @@ import { Button, buttonClasses } from '@/components/ui/Button';
 import AppSwitch from '@/components/ui/AppSwitch';
 import Select from '@/components/ui/Select';
 import { cn } from '@/lib/utils';
+import { IconButton } from '@/components/ui/IconButton';
 
 type Values = Record<string, string | string[]>;
 
@@ -84,18 +85,17 @@ export default function ScheduleEditor({
   return (
     <div className="flex flex-col pt-4 max-w-2xl">
       <div className="flex items-center gap-3 px-1 mb-6">
-        <Link
+        <IconButton
           href="/automations/scheduled"
-          className="text-fg/60 hover:text-fg transition-colors duration-150"
-        >
-          <ArrowLeft size={20} />
-        </Link>
+          icon={ArrowLeft}
+          label="Back to scheduled tasks"
+        />
         <CalendarClock className="text-accent" />
         <div className="flex flex-col">
           <h2 className="text-2xl font-medium">
             {schedule ? 'Edit Schedule' : 'New Schedule'}
           </h2>
-          <span className="text-sm text-fg/50">{workflow.name}</span>
+          <span className="text-sm text-fg-subtle">{workflow.name}</span>
         </div>
       </div>
 
@@ -115,7 +115,6 @@ export default function ScheduleEditor({
         <Field label="Label">
           <Input
             type="text"
-            aria-label="Schedule label"
             value={label}
             onChange={(e) => setLabel(e.target.value)}
             placeholder="Acme — Mondays"
@@ -123,15 +122,13 @@ export default function ScheduleEditor({
           />
         </Field>
 
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-fg/70">Schedule</label>
+        <Field grouped label="Schedule">
           <CronPicker value={cron} onChange={setCron} />
-        </div>
+        </Field>
 
         <Field label="Timezone (optional)">
           <Input
             type="text"
-            aria-label="Timezone"
             value={timezone}
             onChange={(e) => setTimezone(e.target.value)}
             placeholder="e.g. America/New_York (empty = system timezone)"
@@ -139,8 +136,7 @@ export default function ScheduleEditor({
         </Field>
 
         {fields.length > 0 && (
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-fg/70">Inputs</label>
+          <Field grouped label="Inputs">
             <div className="rounded-surface border border-surface-2 p-4">
               <FillForm
                 prompt={workflow.prompt}
@@ -150,14 +146,12 @@ export default function ScheduleEditor({
                 onChange={setValues}
               />
             </div>
-          </div>
+          </Field>
         )}
 
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-fg/70">
-            Retention (optional)
-          </label>
+        <Field grouped label="Retention (optional)">
           <Select
+            aria-label="Retention scope"
             value={retentionMode === null ? 'global' : 'override'}
             onChange={(e) => {
               if (e.target.value === 'global') {
@@ -175,6 +169,7 @@ export default function ScheduleEditor({
           {retentionMode !== null && (
             <div className="flex items-center gap-2">
               <Select
+                aria-label="Retention mode"
                 value={retentionMode}
                 onChange={(e) => setRetentionMode(e.target.value)}
               >
@@ -196,16 +191,19 @@ export default function ScheduleEditor({
               )}
             </div>
           )}
-        </div>
+        </Field>
 
-        <div className="flex items-center gap-3">
-          <label className="text-sm font-medium text-fg/70">Enabled</label>
+        <Field
+          grouped
+          label="Enabled"
+          className="flex-row items-center justify-between"
+        >
           <AppSwitch
             checked={enabled}
             onChange={setEnabled}
             aria-label="Toggle enabled"
           />
-        </div>
+        </Field>
 
         <div className="flex items-center gap-3 pt-2">
           <Button type="submit" variant="primary" size="lg" loading={saving}>
@@ -217,7 +215,7 @@ export default function ScheduleEditor({
           </Button>
           <Link
             href="/automations/scheduled"
-            className={cn(buttonClasses('ghost', 'md'), 'text-fg/60')}
+            className={cn(buttonClasses('ghost', 'md'), 'text-fg-muted')}
           >
             Cancel
           </Link>

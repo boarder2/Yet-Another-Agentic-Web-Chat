@@ -11,9 +11,8 @@ export class HistoryPage extends BasePage {
   private readonly chatRows = this.page.locator('[data-list-row]');
 
   /** The summary line: "N message(s) in N conversation(s)". Matched by text,
-   * not its (shared) utility classes — chat rows render status pill badges
-   * with the same `text-xs text-fg/50` classes, which a class locator would
-   * also match. */
+   * not shared utility classes, because chat rows also contain metadata labels.
+   */
   private readonly summary = this.page.getByText(
     /\d+\s+messages?\s+in\s+\d+\s+conversations?/,
   );

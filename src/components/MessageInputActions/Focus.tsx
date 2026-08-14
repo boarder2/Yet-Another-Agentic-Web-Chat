@@ -17,9 +17,9 @@ const focusModes = focusModeDefinitions.map((mode) => ({
     mode.key === 'webSearch' ? (
       <Globe size={20} className="text-accent" />
     ) : mode.key === 'chat' ? (
-      <MessageCircle size={20} className="text-[#10B981]" />
+      <MessageCircle size={20} className="text-accent" />
     ) : (
-      <Pencil size={20} className="text-[#8B5CF6]" />
+      <Pencil size={20} className="text-accent" />
     ),
 }));
 
@@ -42,15 +42,16 @@ const Focus = ({
             configured={focusMode !== 'webSearch'}
             open={open}
             title="Focus Mode"
+            aria-label="Focus mode"
           >
             {currentMode?.icon ?? <Globe size={18} />}
           </PopoverButton>
           <Transition
             as={Fragment}
-            enter="transition ease-out duration-200"
+            enter="transition-[opacity,transform] ease-out duration-200"
             enterFrom="opacity-0 translate-y-1"
             enterTo="opacity-100 translate-y-0"
-            leave="transition ease-in duration-150"
+            leave="transition-[opacity,transform] ease-in duration-150"
             leaveFrom="opacity-100 translate-y-0"
             leaveTo="opacity-0 translate-y-1"
           >
@@ -66,13 +67,17 @@ const Focus = ({
                       onClick={() => setFocusMode(mode.key)}
                       className={cn(
                         'flex items-center gap-3 p-2.5 rounded-control hover:bg-surface-2 cursor-pointer',
-                        focusMode === mode.key ? 'text-accent' : 'text-fg/70',
+                        focusMode === mode.key
+                          ? 'text-accent'
+                          : 'text-fg-muted',
                       )}
                     >
                       <div className="flex-shrink-0">{mode.icon}</div>
                       <div>
                         <p className="text-sm font-medium">{mode.title}</p>
-                        <p className="text-xs text-fg/50">{mode.description}</p>
+                        <p className="text-xs text-fg-muted">
+                          {mode.description}
+                        </p>
                       </div>
                     </div>
                   ))}

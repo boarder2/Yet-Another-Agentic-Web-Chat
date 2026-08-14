@@ -23,7 +23,7 @@ const PageHeader = ({
         <Icon className="text-accent shrink-0" size={24} />
         <h1 className="text-2xl font-medium truncate">{title}</h1>
         {subtitle && (
-          <span className="text-sm text-fg/50 shrink-0">{subtitle}</span>
+          <span className="text-sm text-fg-subtle shrink-0">{subtitle}</span>
         )}
       </div>
       {actions && (

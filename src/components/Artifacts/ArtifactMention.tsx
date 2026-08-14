@@ -26,7 +26,7 @@ export default function ArtifactMention({
   if (isError) {
     return (
       <span
-        className={cn(base, 'bg-surface-2 text-fg/40 line-through')}
+        className={cn(base, 'bg-surface-2 text-fg-subtle line-through')}
         title="This artifact no longer exists"
       >
         <FileText size={12} className="self-center shrink-0" />
@@ -41,7 +41,7 @@ export default function ArtifactMention({
       onClick={() => openArtifact(artifactId)}
       className={cn(
         base,
-        'bg-surface-2 text-accent hover:bg-surface transition cursor-pointer',
+        'bg-surface-2 text-accent hover:bg-surface transition-colors duration-150 cursor-pointer border border-transparent focus-border-neutral',
       )}
     >
       <FileText size={12} className="self-center shrink-0" />

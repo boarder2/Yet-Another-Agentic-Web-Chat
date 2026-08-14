@@ -25,6 +25,7 @@ import { useInlineRename } from '@/lib/hooks/useInlineRename';
 import { useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api/client';
 import { qk } from '@/lib/api/keys';
+import { IconButton } from '@/components/ui/IconButton';
 
 const ChatActions = ({
   chatId,
@@ -118,9 +119,10 @@ const ChatActions = ({
         </div>
       )}
 
-      <button
-        type="button"
-        aria-label={pinned ? 'Unpin chat' : 'Pin chat'}
+      <IconButton
+        icon={Pin}
+        label={pinned ? 'Unpin chat' : 'Pin chat'}
+        aria-pressed={pinned}
         onClick={async () => {
           const next = !pinned;
           if (setPinned) setPinned(next);
@@ -135,21 +137,22 @@ const ChatActions = ({
             if (setPinned) setPinned(!next);
           }
         }}
-        className="active:scale-95 transition duration-100 cursor-pointer p-2 rounded-pill hover:bg-surface-2"
-      >
-        <Pin size={17} className={pinned ? 'fill-current' : ''} />
-      </button>
+        className={`active:scale-95 rounded-pill p-2 ${pinned ? '[&_svg]:fill-current' : ''}`}
+      />
 
       <Popover className="relative">
-        <PopoverButton className="active:scale-95 transition duration-100 cursor-pointer p-2 rounded-pill hover:bg-surface-2">
-          <MoreHorizontal size={17} />
-        </PopoverButton>
+        <PopoverButton
+          as={IconButton}
+          icon={MoreHorizontal}
+          label="More chat actions"
+          className="active:scale-95 rounded-pill p-2"
+        />
         <Transition
           as={Fragment}
-          enter="transition ease-out duration-100"
+          enter="transition-[opacity,transform] ease-out duration-100"
           enterFrom="opacity-0 translate-y-1"
           enterTo="opacity-100 translate-y-0"
-          leave="transition ease-in duration-75"
+          leave="transition-[opacity,transform] ease-in duration-100"
           leaveFrom="opacity-100 translate-y-0"
           leaveTo="opacity-0 translate-y-1"
         >
@@ -178,7 +181,9 @@ const ChatActions = ({
                 )}
                 <div className="flex items-center gap-2">
                   {timeAgo && (
-                    <span className="text-xs text-fg/50">{timeAgo} ago</span>
+                    <span className="text-xs text-fg-subtle">
+                      {timeAgo} ago
+                    </span>
                   )}
                   {isPrivateSession && expiresIn && (
                     <span className="text-xs text-warning">
@@ -191,7 +196,7 @@ const ChatActions = ({
               <div className="flex flex-col gap-1">
                 <button
                   type="button"
-                  className="flex items-center gap-2 px-4 py-2 text-left hover:bg-surface-2 transition-colors rounded-surface font-medium text-sm"
+                  className="flex items-center gap-2 border border-transparent px-4 py-2 text-left hover:bg-surface-2 transition-colors duration-150 rounded-surface font-medium text-sm focus-border-neutral"
                   onClick={beginEdit}
                 >
                   <Pencil size={17} className="text-accent shrink-0" />
@@ -199,7 +204,7 @@ const ChatActions = ({
                 </button>
                 <button
                   type="button"
-                  className="flex items-center gap-2 px-4 py-2 text-left hover:bg-surface-2 transition-colors rounded-surface font-medium text-sm"
+                  className="flex items-center gap-2 border border-transparent px-4 py-2 text-left hover:bg-surface-2 transition-colors duration-150 rounded-surface font-medium text-sm focus-border-neutral"
                   onClick={() => exportAsMarkdown(messages, displayTitle || '')}
                 >
                   <FileText size={17} className="text-accent shrink-0" />
@@ -207,7 +212,7 @@ const ChatActions = ({
                 </button>
                 <button
                   type="button"
-                  className="flex items-center gap-2 px-4 py-2 text-left hover:bg-surface-2 transition-colors rounded-surface font-medium text-sm"
+                  className="flex items-center gap-2 border border-transparent px-4 py-2 text-left hover:bg-surface-2 transition-colors duration-150 rounded-surface font-medium text-sm focus-border-neutral"
                   onClick={() => exportAsPDF(messages, displayTitle || '')}
                 >
                   <FileDown size={17} className="text-accent shrink-0" />

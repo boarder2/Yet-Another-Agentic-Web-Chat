@@ -31,7 +31,7 @@ export default function TokenPopover({
             choice.onSelect();
           }}
           className={cn(
-            'w-full text-left px-3 py-2 text-sm flex flex-col gap-0.5 hover:bg-surface-2 transition-colors',
+            'w-full border border-transparent text-left px-3 py-2 text-sm flex flex-col gap-0.5 hover:bg-surface-2 transition-colors duration-150 focus-border-neutral',
             idx === activeIndex && 'bg-surface-2',
           )}
         >
@@ -39,7 +39,7 @@ export default function TokenPopover({
             {choice.primary}
           </span>
           {choice.secondary && (
-            <span className="text-xs text-fg/50">{choice.secondary}</span>
+            <span className="text-xs text-fg-subtle">{choice.secondary}</span>
           )}
         </button>
       ))}

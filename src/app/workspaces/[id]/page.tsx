@@ -6,7 +6,6 @@ import {
   FileText,
   Brain,
   Settings,
-  LoaderCircle,
   BookOpen,
   type LucideIcon,
 } from 'lucide-react';
@@ -19,6 +18,7 @@ import InstructionsTab from '@/components/Workspaces/InstructionsTab';
 import SettingsTab from '@/components/Workspaces/SettingsTab';
 import WorkspaceMemoryTab from '@/components/Workspaces/WorkspaceMemoryTab';
 import { Tabs } from '@/components/ui/Tabs';
+import { ListEmptyState, ListLoading } from '@/components/ui/List';
 import { useWorkspace } from '@/lib/hooks/api/useWorkspaces';
 
 type TabId = 'chats' | 'files' | 'instructions' | 'memory' | 'settings';
@@ -39,25 +39,24 @@ const WorkspaceDetailPage = () => {
   const [activeTab, setActiveTab] = useState<TabId>('chats');
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <LoaderCircle size={24} className="animate-spin text-accent" />
-      </div>
-    );
+    return <ListLoading layout="page" size={24} />;
   }
 
   if (!workspace) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-        <FolderOpen size={48} className="text-fg/20" />
-        <h2 className="text-lg font-medium text-fg/60">Workspace not found</h2>
-        <Link
-          href="/workspaces"
-          className="text-accent text-sm hover:underline"
-        >
-          Back to workspaces
-        </Link>
-      </div>
+      <ListEmptyState
+        layout="page"
+        icon={FolderOpen}
+        title="Workspace not found"
+        action={
+          <Link
+            href="/workspaces"
+            className="border border-transparent text-accent text-sm hover:underline focus-border-neutral"
+          >
+            Back to workspaces
+          </Link>
+        }
+      />
     );
   }
 

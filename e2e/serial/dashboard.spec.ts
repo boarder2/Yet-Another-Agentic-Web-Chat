@@ -1,4 +1,5 @@
 import { test, expect } from '../fixtures';
+import type { APIRequestContext, Page } from '@playwright/test';
 import { DashboardPage } from '../pages/DashboardPage';
 
 const WIDGET_ALPHA = {
@@ -26,6 +27,20 @@ const WIDGET_BETA = {
   content: '<p>Beta content</p>',
   layout: { x: 2, y: 0, w: 2, h: 2 },
 };
+
+async function openWidgetCreator(
+  page: Page,
+  request: APIRequestContext,
+): Promise<void> {
+  const response = await request.patch('/api/settings', {
+    data: { yaawc_dashboard_widgets: '[]', yaawc_dashboard_cache: '{}' },
+  });
+  expect(response.status()).toBe(204);
+
+  const dashboard = new DashboardPage(page);
+  await dashboard.goto();
+  await page.getByRole('button', { name: 'Create Your First Widget' }).click();
+}
 
 test.describe('dashboard', () => {
   // Both tests mutate the global, DB-backed dashboard settings keys (a real
@@ -63,6 +78,247 @@ test.describe('dashboard', () => {
     await expect(dashboard.heading).toBeVisible();
     // The isolated test DB has no widgets, so the welcome/empty state shows.
     await expect(dashboard.emptyTitle).toBeVisible();
+
+    const empty = page.locator(
+      '[data-list-state="empty"][data-list-layout="page"]',
+    );
+    await expect(empty).toBeVisible();
+    await expect(
+      empty.getByRole('heading', {
+        name: 'Welcome to your Dashboard',
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(empty).toContainText(
+      'Create your first widget to get started with personalized information',
+    );
+    await expect(empty).toContainText(
+      'Widgets let you fetch content from any URL and process it with AI to show exactly what you need.',
+    );
+    await expect(
+      empty.getByRole('button', { name: 'Create Your First Widget' }),
+    ).toBeVisible();
+  });
+
+  test('code widget fields wire title and code validation captions', async ({
+    page,
+  }) => {
+    await page.route('**/api/config', async (route) => {
+      const response = await route.fetch();
+      const body = await response.json();
+      await route.fulfill({
+        response,
+        json: {
+          ...body,
+          codeExecution: { ...(body.codeExecution ?? {}), enabled: true },
+        },
+      });
+    });
+    await page.addInitScript(() => {
+      localStorage.setItem('codeExecutionWarningAccepted', 'true');
+    });
+
+    const dashboard = new DashboardPage(page);
+    await dashboard.goto();
+    await page
+      .getByRole('button', { name: 'Create Your First Widget' })
+      .click();
+
+    const chooser = page.getByRole('dialog');
+    await chooser.getByRole('button', { name: /^Code Widget/ }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(
+      dialog.getByRole('heading', { name: 'Create Code Widget', exact: true }),
+    ).toBeVisible();
+
+    const code = dialog.getByLabel('Code', { exact: true });
+    await expect(code).toBeVisible();
+
+    const refreshGroup = dialog.getByRole('group', {
+      name: 'Refresh Frequency',
+      exact: true,
+    });
+    await expect(
+      refreshGroup.getByRole('spinbutton', {
+        name: 'Refresh frequency',
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(
+      refreshGroup.getByRole('combobox', {
+        name: 'Refresh unit',
+        exact: true,
+      }),
+    ).toBeVisible();
+
+    const sources = dialog.getByRole('group', {
+      name: 'Widget sources',
+      exact: true,
+    });
+    await dialog
+      .getByRole('button', { name: 'Add Source', exact: true })
+      .click();
+    await expect(
+      sources.getByRole('textbox', { name: 'Source URL 1', exact: true }),
+    ).toBeVisible();
+    await expect(
+      sources.getByRole('combobox', {
+        name: 'Source type 1',
+        exact: true,
+      }),
+    ).toBeVisible();
+
+    await code.fill('');
+    await dialog
+      .getByRole('button', { name: 'Create Widget', exact: true })
+      .click();
+
+    const title = dialog.getByLabel('Widget Title', { exact: true });
+    await expect(title).toHaveAttribute('aria-invalid', 'true');
+    const titleDescribedBy = await title.getAttribute('aria-describedby');
+    expect(titleDescribedBy).not.toBeNull();
+    await expect(dialog.locator(`[id="${titleDescribedBy}"]`)).toHaveText(
+      'Title is required.',
+    );
+
+    const codeGroup = dialog.getByRole('group', {
+      name: 'Code',
+      exact: true,
+    });
+    await expect(codeGroup.locator('legend')).toHaveText('Code');
+    await expect(codeGroup).toHaveAttribute('aria-invalid', 'true');
+    const codeDescribedBy = await codeGroup.getAttribute('aria-describedby');
+    expect(codeDescribedBy).not.toBeNull();
+    await expect(dialog.locator(`[id="${codeDescribedBy}"]`)).toHaveText(
+      'Code is required.',
+    );
+  });
+
+  test('LLM widget composite fields name every source and refresh control', async ({
+    page,
+    request,
+  }) => {
+    await openWidgetCreator(page, request);
+
+    const dialog = page.getByRole('dialog');
+    await expect(
+      dialog.getByRole('heading', {
+        name: 'Create New Widget',
+        exact: true,
+      }),
+    ).toBeVisible();
+
+    const sourceField = dialog.getByRole('group', {
+      name: 'Source URLs',
+      exact: true,
+    });
+    const sources = sourceField.getByRole('group', {
+      name: 'Widget sources',
+      exact: true,
+    });
+    await expect(
+      sources.getByRole('textbox', { name: 'Source URL 1', exact: true }),
+    ).toBeVisible();
+    await expect(
+      sources.getByRole('combobox', {
+        name: 'Source type 1',
+        exact: true,
+      }),
+    ).toBeVisible();
+
+    const refreshField = dialog.getByRole('group', {
+      name: 'Refresh Frequency',
+      exact: true,
+    });
+    await expect(
+      refreshField.getByRole('spinbutton', {
+        name: 'Refresh frequency',
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(
+      refreshField.getByRole('combobox', {
+        name: 'Refresh unit',
+        exact: true,
+      }),
+    ).toBeVisible();
+
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(dialog).toBeHidden();
+  });
+
+  test('shows a compact widget loading state during refresh and restores content afterward', async ({
+    page,
+    request,
+  }) => {
+    const farFuture = new Date(Date.now() + 3_600_000).toISOString();
+    const now = new Date().toISOString();
+    const widgetsJson = JSON.stringify([WIDGET_ALPHA]);
+    const cacheJson = JSON.stringify({
+      [WIDGET_ALPHA.id]: {
+        content: '<p>Alpha content</p>',
+        lastFetched: now,
+        expiresAt: farFuture,
+      },
+    });
+    await request.patch('/api/settings', {
+      data: {
+        yaawc_dashboard_widgets: widgetsJson,
+        yaawc_dashboard_cache: cacheJson,
+      },
+    });
+    await page.addInitScript(
+      ([widgets, cache]) => {
+        localStorage.setItem('yaawc_dashboard_widgets', widgets);
+        localStorage.setItem('yaawc_dashboard_cache', cache);
+      },
+      [widgetsJson, cacheJson],
+    );
+
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route('**/api/dashboard/process-widget', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.fallback();
+        return;
+      }
+      await held;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          content: '<p>Refreshed alpha content</p>',
+          charts: [],
+        }),
+      });
+    });
+
+    try {
+      const dashboard = new DashboardPage(page);
+      await dashboard.goto();
+      await expect(page.getByText('Alpha content')).toBeVisible();
+
+      await page
+        .getByRole('button', { name: 'Refresh All Widgets', exact: true })
+        .click();
+
+      const loading = page.locator(
+        '[data-list-state="loading"][data-list-layout="compact"]',
+      );
+      await expect(loading).toBeVisible();
+      await expect(loading).toContainText('Loading content...');
+      await expect(loading.locator('svg')).toHaveAttribute('width', '20');
+      await expect(loading.locator('svg')).toHaveAttribute('height', '20');
+
+      release();
+      await expect(loading).toBeHidden();
+      await expect(page.getByText('Refreshed alpha content')).toBeVisible();
+    } finally {
+      release();
+    }
   });
 
   test('renders seeded widgets with content and hides empty state', async ({

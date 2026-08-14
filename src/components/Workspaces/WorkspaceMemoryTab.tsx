@@ -1,18 +1,12 @@
 'use client';
 
-import {
-  Brain,
-  Plus,
-  Trash2,
-  LoaderCircle,
-  Pencil,
-  Check,
-  X,
-} from 'lucide-react';
+import { Brain, Plus, Trash2, Pencil, Check, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { formatTimeDifference } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
 import { Textarea } from '@/components/ui/Textarea';
+import { ListEmptyState, ListLoading } from '@/components/ui/List';
 import {
   useWorkspaceMemory,
   useAddMemory,
@@ -85,18 +79,19 @@ export default function WorkspaceMemoryTab({
             : 'flex items-center justify-between gap-3'
         }
       >
-        <p className="text-sm text-fg/50">
+        <p className="text-sm text-fg-muted">
           Memories scoped to this workspace. These are retrieved only in
           workspace chats.
         </p>
-        <button
-          type="button"
+        <Button
+          variant="primary"
+          size="sm"
+          icon={Plus}
           onClick={() => setIsAdding(true)}
-          className={`flex items-center justify-center gap-1.5 px-3 py-1.5 text-sm rounded-surface bg-accent text-accent-fg hover:bg-accent/90 transition shrink-0 ${compact ? 'w-full' : ''}`}
+          className={`rounded-surface px-3 py-1.5 text-sm shrink-0 ${compact ? 'w-full' : ''}`}
         >
-          <Plus size={14} />
           Add memory
-        </button>
+        </Button>
       </div>
 
       {isAdding && (
@@ -145,14 +140,13 @@ export default function WorkspaceMemoryTab({
       )}
 
       {isLoading ? (
-        <div className="flex justify-center py-12">
-          <LoaderCircle size={20} className="animate-spin text-accent" />
-        </div>
+        <ListLoading layout="section" size={20} />
       ) : memories.length === 0 ? (
-        <div className="text-center py-12">
-          <Brain size={36} className="mx-auto mb-3 text-fg/20" />
-          <p className="text-sm text-fg/40">No workspace memories yet.</p>
-        </div>
+        <ListEmptyState
+          layout="section"
+          icon={Brain}
+          title="No workspace memories yet."
+        />
       ) : (
         <ul className="divide-y divide-surface-2 border border-surface-2 rounded-floating">
           {memories.map((m) => {
@@ -185,9 +179,11 @@ export default function WorkspaceMemoryTab({
                       workspace
                     </span>
                     {m.sourceType && (
-                      <span className="text-xs text-fg/40">{m.sourceType}</span>
+                      <span className="text-xs text-fg-subtle">
+                        {m.sourceType}
+                      </span>
                     )}
-                    <span className="text-xs text-fg/40">
+                    <span className="text-xs text-fg-subtle">
                       {m.lastAccessedAt
                         ? `Last used ${formatTimeDifference(new Date(), new Date(m.lastAccessedAt))} ago`
                         : 'Never used'}
@@ -197,49 +193,32 @@ export default function WorkspaceMemoryTab({
                 <div className="flex items-center gap-1 shrink-0 mt-0.5">
                   {isEditing ? (
                     <>
-                      <button
-                        type="button"
+                      <IconButton
+                        icon={Check}
+                        label="Save"
+                        loading={editMemory.isPending}
+                        disabled={!editContent.trim()}
                         onClick={() => saveEdit(m.id)}
-                        disabled={editMemory.isPending || !editContent.trim()}
-                        className="text-fg/40 hover:text-accent transition disabled:opacity-40"
-                        title="Save"
-                      >
-                        {editMemory.isPending ? (
-                          <LoaderCircle
-                            size={14}
-                            className="animate-spin text-accent"
-                          />
-                        ) : (
-                          <Check size={14} />
-                        )}
-                      </button>
-                      <button
-                        type="button"
+                      />
+                      <IconButton
+                        icon={X}
+                        label="Cancel"
                         onClick={cancelEdit}
-                        className="text-fg/40 hover:text-fg transition"
-                        title="Cancel"
-                      >
-                        <X size={14} />
-                      </button>
+                      />
                     </>
                   ) : (
                     <>
-                      <button
-                        type="button"
+                      <IconButton
+                        icon={Pencil}
+                        label="Edit"
                         onClick={() => startEdit(m.id, m.content)}
-                        className="text-fg/30 hover:text-fg transition"
-                        title="Edit"
-                      >
-                        <Pencil size={14} />
-                      </button>
-                      <button
-                        type="button"
+                      />
+                      <IconButton
+                        icon={Trash2}
+                        label="Delete"
+                        tone="danger"
                         onClick={() => handleDelete(m.id)}
-                        className="text-fg/30 hover:text-danger transition"
-                        title="Delete"
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                      />
                     </>
                   )}
                 </div>

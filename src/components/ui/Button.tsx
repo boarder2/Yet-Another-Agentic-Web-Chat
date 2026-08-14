@@ -6,18 +6,19 @@ export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
 const base =
-  'inline-flex items-center justify-center gap-1.5 rounded-control transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2';
+  'inline-flex items-center justify-center gap-1.5 rounded-control border border-transparent transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed';
 
 /* Hover text colors are pinned because globals.css sets `color: accent` on every enabled button:hover. */
 const variants: Record<ButtonVariant, string> = {
   primary:
-    'bg-accent text-accent-fg enabled:hover:bg-accent-700 enabled:hover:text-accent-fg',
+    'bg-accent text-accent-fg enabled:hover:bg-accent-700 enabled:hover:text-accent-fg focus-border-contrast',
   /* surface-2, not surface: these sit on bg-bg pages *and* on bg-surface cards. */
   secondary:
-    'bg-surface-2 text-fg enabled:hover:bg-surface enabled:hover:text-fg',
-  ghost: 'text-fg enabled:hover:bg-surface-2 enabled:hover:text-fg',
+    'bg-surface-2 text-fg enabled:hover:bg-surface enabled:hover:text-fg focus-border-neutral',
+  ghost:
+    'text-fg enabled:hover:bg-surface-2 enabled:hover:text-fg focus-border-neutral',
   danger:
-    'bg-danger text-danger-fg enabled:hover:bg-danger-700 enabled:hover:text-danger-fg',
+    'bg-danger text-danger-fg enabled:hover:bg-danger-700 enabled:hover:text-danger-fg focus-border-contrast',
 };
 
 const sizes: Record<ButtonSize, string> = {

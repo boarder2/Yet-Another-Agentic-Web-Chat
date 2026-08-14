@@ -218,10 +218,9 @@ const WidgetConfigModal = ({
         {/* Left Column - Configuration */}
         <div className="flex flex-col min-h-0 overflow-y-auto space-y-4 pr-2">
           {/* Widget Title */}
-          <Field label="Widget Title">
+          <Field label="Widget Title" error={errors.title}>
             <Input
               type="text"
-              aria-label="Widget title"
               value={config.title}
               onChange={(e) =>
                 setConfig((prev) => ({
@@ -232,27 +231,20 @@ const WidgetConfigModal = ({
               placeholder="Enter widget title..."
             />
           </Field>
-          {errors.title && (
-            <p className="text-xs text-danger mt-1">{errors.title}</p>
-          )}
 
           {/* Source URLs */}
-          <div>
-            <label className="block text-sm font-medium text-fg mb-1">
-              Source URLs
-            </label>
+          <Field grouped label="Source URLs">
             <SourceListEditor
               sources={config.sources}
               onChange={(sources) =>
                 setConfig((prev) => ({ ...prev, sources }))
               }
             />
-          </div>
+          </Field>
 
           {/* LLM Prompt */}
-          <Field label="LLM Prompt">
+          <Field label="LLM Prompt" error={errors.prompt}>
             <Textarea
-              aria-label="LLM prompt"
               value={config.prompt}
               onChange={(e) =>
                 setConfig((prev) => ({
@@ -264,15 +256,9 @@ const WidgetConfigModal = ({
               placeholder="Enter your prompt here..."
             />
           </Field>
-          {errors.prompt && (
-            <p className="text-xs text-danger mt-1">{errors.prompt}</p>
-          )}
 
           {/* Provider and Model Selection */}
-          <div>
-            <label className="block text-sm font-medium text-fg mb-2">
-              Model & Provider
-            </label>
+          <Field grouped label="Model & Provider">
             <ModelPicker
               value={
                 {
@@ -289,31 +275,25 @@ const WidgetConfigModal = ({
                 })
               }
             />
-            <p className="text-xs text-fg/60 mt-1">
+            <p className="text-xs text-fg-muted mt-1">
               Select the AI model and provider to process your widget content
             </p>
-          </div>
+          </Field>
 
           {/* Tool Selection */}
-          <div>
-            <label className="block text-sm font-medium text-fg mb-2">
-              Available Tools
-            </label>
+          <Field
+            grouped
+            label="Available Tools"
+            hint="Select tools to assist the AI in processing your widget. Your model must support tool calling."
+          >
             <ToolSelector
               selectedToolNames={selectedTools}
               onSelectedToolNamesChange={setSelectedTools}
             />
-            <p className="text-xs text-fg/60 mt-1">
-              Select tools to assist the AI in processing your widget. Your
-              model must support tool calling.
-            </p>
-          </div>
+          </Field>
 
           {/* Refresh Frequency */}
-          <div>
-            <label className="block text-sm font-medium text-fg mb-1">
-              Refresh Frequency
-            </label>
+          <Field grouped label="Refresh Frequency">
             <div className="flex gap-2">
               <Input
                 type="number"
@@ -328,6 +308,7 @@ const WidgetConfigModal = ({
                 }
               />
               <Select
+                aria-label="Refresh unit"
                 value={config.refreshUnit}
                 onChange={(e) =>
                   setConfig((prev) => ({
@@ -340,7 +321,7 @@ const WidgetConfigModal = ({
                 <option value="hours">Hours</option>
               </Select>
             </div>
-          </div>
+          </Field>
         </div>
 
         {/* Right Column - Preview */}
@@ -349,8 +330,8 @@ const WidgetConfigModal = ({
             <h4 className="text-sm font-medium text-fg">Preview</h4>
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-2">
-                <Brain size={16} className="text-fg/70" />
-                <span className="text-sm text-fg/80">Thinking</span>
+                <Brain size={16} className="text-fg-muted" />
+                <span className="text-sm text-fg-muted">Thinking</span>
                 <AppSwitch
                   checked={showThinking}
                   onChange={setShowThinking}
@@ -376,14 +357,14 @@ const WidgetConfigModal = ({
                 className="max-w-full"
               />
             ) : (
-              <div className="text-sm text-fg/50 italic">
+              <div className="text-sm text-fg-muted italic">
                 Click &quot;Run Preview&quot; to see how your widget will look
               </div>
             )}
           </div>
 
           {/* Variable Legend */}
-          <div className="shrink-0 max-h-44 overflow-y-auto text-xs text-fg/70">
+          <div className="shrink-0 max-h-44 overflow-y-auto text-xs text-fg-muted">
             <h5 className="font-medium mb-2">Available Variables:</h5>
             <div className="space-y-1">
               <div>

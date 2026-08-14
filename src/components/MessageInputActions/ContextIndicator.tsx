@@ -43,7 +43,7 @@ export default function ContextIndicator({
 
   // Color coding
   const ringColor =
-    pct > 75 ? 'text-danger' : pct >= 60 ? 'text-warning' : 'text-fg/40';
+    pct > 75 ? 'text-danger' : pct >= 60 ? 'text-warning' : 'text-fg-subtle';
 
   // SVG arc parameters
   const size = 28;
@@ -104,10 +104,10 @@ export default function ContextIndicator({
 
           <Transition
             as={Fragment}
-            enter="transition ease-out duration-150"
+            enter="transition-[opacity,transform] ease-out duration-150"
             enterFrom="opacity-0 scale-95"
             enterTo="opacity-100 scale-100"
-            leave="transition ease-in duration-100"
+            leave="transition-[opacity,transform] ease-in duration-100"
             leaveFrom="opacity-100 scale-100"
             leaveTo="opacity-0 scale-95"
           >
@@ -120,7 +120,7 @@ export default function ContextIndicator({
                     <div className="flex-1 h-2 bg-surface-2 rounded-pill overflow-hidden">
                       <div
                         className={cn(
-                          'h-full rounded-pill transition-all duration-200',
+                          'h-full rounded-pill transition-[width] duration-200',
                           pct > 75
                             ? 'bg-danger'
                             : pct >= 60
@@ -144,8 +144,8 @@ export default function ContextIndicator({
                     </span>
                   </div>
                   <div className="flex justify-between text-xs">
-                    <span className="text-fg/60">Used</span>
-                    <span className="text-fg/60">Free</span>
+                    <span className="text-fg-subtle">Used</span>
+                    <span className="text-fg-subtle">Free</span>
                   </div>
                   <div className="flex justify-between text-xs">
                     <span className="text-fg font-semibold tabular-nums">
@@ -183,10 +183,10 @@ export default function ContextIndicator({
                     messageCount < MIN_MESSAGES_FOR_COMPACTION || compacting
                   }
                   className={cn(
-                    'w-full py-1.5 text-xs font-semibold rounded-control transition-colors duration-150 flex items-center justify-center gap-1.5',
+                    'w-full border border-transparent py-1.5 text-xs font-semibold rounded-control transition-colors duration-150 flex items-center justify-center gap-1.5 focus-border-contrast',
                     messageCount >= MIN_MESSAGES_FOR_COMPACTION && !compacting
                       ? 'bg-accent text-accent-fg hover:bg-accent-700'
-                      : 'bg-surface-2 text-fg/30 cursor-not-allowed',
+                      : 'bg-surface-2 text-fg-subtle cursor-not-allowed',
                   )}
                   onClick={() => {
                     onCompact(compactInstructions.trim() || undefined);
@@ -202,7 +202,7 @@ export default function ContextIndicator({
                     'Compact conversation'
                   )}
                 </button>
-                <p className="text-xs text-fg/40">
+                <p className="text-xs text-fg-muted">
                   {messageCount < MIN_MESSAGES_FOR_COMPACTION
                     ? `At least ${MIN_MESSAGES_FOR_COMPACTION} messages are needed before compaction is available.`
                     : 'Summarizes old messages to free up context space. The most recent messages are kept verbatim.'}

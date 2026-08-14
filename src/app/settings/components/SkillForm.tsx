@@ -67,7 +67,7 @@ export default function SkillForm({
         placeholder="Full skill body (markdown supported)"
       />
       <div className="flex items-center gap-2">
-        <label htmlFor="skill-scope" className="text-xs text-fg/60">
+        <label htmlFor="skill-scope" className="text-xs text-fg-muted">
           Scope:
         </label>
         <Select
@@ -86,7 +86,7 @@ export default function SkillForm({
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs font-medium">Disable model auto-invocation</p>
-          <p className="text-xs text-fg/50">
+          <p className="text-xs text-fg-muted">
             Slash-command only — hidden from model&apos;s available skills list
           </p>
         </div>

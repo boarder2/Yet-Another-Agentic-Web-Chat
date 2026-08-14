@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { LoaderCircle, TriangleAlert } from 'lucide-react';
+import { TriangleAlert } from 'lucide-react';
 import { prismStyleFor } from '@/lib/theme/syntax';
 import { useActiveTheme } from '@/lib/theme/useActiveTheme';
 import MarkdownRenderer from '@/components/MarkdownRenderer';
 import { Card } from '@/components/ui/Card';
+import { ListEmptyState, ListLoading } from '@/components/ui/List';
 import { Button } from '@/components/ui/Button';
 import DocEditActions from './DocEditActions';
 
@@ -122,15 +123,11 @@ export default function FileViewer({
   }
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <LoaderCircle size={24} className="animate-spin text-accent" />
-      </div>
-    );
+    return <ListLoading layout="section" size={24} />;
   }
 
   if (!data?.file) {
-    return <p className="text-fg/50 text-sm">File not found.</p>;
+    return <ListEmptyState layout="compact">File not found.</ListEmptyState>;
   }
 
   const { file: meta, content, isBinary } = data;
@@ -140,7 +137,9 @@ export default function FileViewer({
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <h1 className="text-xl font-semibold">{meta.name}</h1>
-          {meta.mime && <span className="text-xs text-fg/40">{meta.mime}</span>}
+          {meta.mime && (
+            <span className="text-xs text-fg-subtle">{meta.mime}</span>
+          )}
         </div>
         <div className="flex gap-2">
           {!isBinary && (
@@ -195,7 +194,7 @@ export default function FileViewer({
             />
           </Card>
         ) : (
-          <Card radius="floating" className="text-fg/50 text-sm p-4">
+          <Card radius="floating" className="text-fg-muted text-sm p-4">
             Binary file ({meta.mime ?? 'unknown'}). Editing not supported.
             Replace by deleting and re-uploading with the same name.
           </Card>

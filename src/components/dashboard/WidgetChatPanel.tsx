@@ -231,14 +231,14 @@ const WidgetChatPanel = ({
         className="flex-1 overflow-y-auto space-y-3 pr-1"
       >
         {messages.length === 0 && (
-          <p className="text-sm text-fg/50 italic">
+          <p className="text-sm text-fg-muted italic">
             Ask the assistant to build or fix this widget — e.g. “show the top 5
             items as a table” or “this stopped working, fix it.”
           </p>
         )}
         {messages.map((m, i) => (
           <div key={i} className={m.role === 'user' ? 'text-fg' : 'text-fg/90'}>
-            <div className="text-[10px] uppercase tracking-wide text-fg/40 mb-0.5">
+            <div className="text-[10px] uppercase tracking-wide text-fg-subtle mb-0.5">
               {m.role}
             </div>
             {m.role === 'assistant' ? (
@@ -269,7 +269,7 @@ const WidgetChatPanel = ({
           />
         )}
         {streaming && (
-          <div className="flex items-center gap-2 text-fg/50 text-xs">
+          <div className="flex items-center gap-2 text-fg-subtle text-xs">
             <LoaderCircle size={14} className="animate-spin" /> Thinking…
           </div>
         )}
@@ -281,7 +281,7 @@ const WidgetChatPanel = ({
             <button
               type="button"
               onClick={() => setShowModel((v) => !v)}
-              className="text-fg/60 hover:text-fg"
+              className="border border-transparent text-fg-muted hover:text-fg focus-border-neutral"
               title="Choose the model the assistant uses"
             >
               Model: {selection.chatModel || 'default'}
@@ -304,10 +304,11 @@ const WidgetChatPanel = ({
             )}
           </div>
         )}
-        <label className="flex items-center gap-2 text-xs text-fg/60">
+        <label className="flex items-center gap-2 text-xs text-fg-muted">
           <input
             type="checkbox"
             aria-label="Auto-apply proposals"
+            className="border border-transparent focus-border-neutral"
             checked={autoAccept}
             onChange={(e) => onToggleAutoAccept(e.target.checked)}
           />
@@ -333,7 +334,7 @@ const WidgetChatPanel = ({
             onClick={handleSubmit}
             aria-label="Send message"
             disabled={streaming || !input.trim()}
-            className="px-3 self-end py-2 bg-accent text-accent-fg rounded-control hover:bg-accent-700 disabled:opacity-50"
+            className="px-3 self-end py-2 bg-accent text-accent-fg rounded-control border border-transparent hover:bg-accent-700 disabled:opacity-50 focus-border-contrast"
           >
             <Send size={16} />
           </button>

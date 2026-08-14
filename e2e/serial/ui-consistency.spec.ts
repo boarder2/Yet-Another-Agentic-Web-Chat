@@ -2,7 +2,10 @@ import { test, expect } from '../fixtures';
 import { ChatPage } from '../pages/ChatPage';
 import { SettingsPage } from '../pages/SettingsPage';
 import {
+  cancelAwaitingRun,
+  seedAwaitingApproval,
   seedChat,
+  seedSchedule,
   seedSystemPrompt,
   seedWorkflow,
   seedWorkspace,
@@ -68,17 +71,57 @@ async function resolvedBackgroundClass(page: Page, className: string) {
   }, className);
 }
 
+async function resolvedTextClass(page: Page, className: string) {
+  return page.evaluate((className) => {
+    const probe = document.createElement('span');
+    probe.className = className;
+    document.body.appendChild(probe);
+    const value = getComputedStyle(probe).color;
+    probe.remove();
+    return value;
+  }, className);
+}
+
+async function expectPrimaryButtonColors(page: Page, button: Locator) {
+  const expected = {
+    background: await resolvedBackgroundClass(page, 'bg-accent'),
+    hoverBackground: await resolvedBackgroundClass(page, 'bg-accent-700'),
+    color: await resolvedTextClass(page, 'text-accent-fg'),
+  };
+
+  await expect
+    .poll(() =>
+      button.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return { background: style.backgroundColor, color: style.color };
+      }),
+    )
+    .toEqual({ background: expected.background, color: expected.color });
+
+  await button.hover();
+  await expect
+    .poll(() =>
+      button.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return { background: style.backgroundColor, color: style.color };
+      }),
+    )
+    .toEqual({
+      background: expected.hoverBackground,
+      color: expected.color,
+    });
+}
+
 async function expectComposerActionButton(
   button: Locator,
   geometry: 'compact' | 'content',
 ) {
   await expect(button).toHaveClass(/(^|\s)rounded-control(\s|$)/);
+  await expect(button).toHaveClass(/(^|\s)border(\s|$)/);
+  await expect(button).toHaveClass(/(^|\s)border-transparent(\s|$)/);
   await expect(button).toHaveClass(/(^|\s)active:scale-95(\s|$)/);
-  await expect(button).toHaveClass(/(^|\s)focus-visible:outline-2(\s|$)/);
-  await expect(button).toHaveClass(/(^|\s)focus-visible:outline-accent(\s|$)/);
-  await expect(button).toHaveClass(
-    /(^|\s)focus-visible:outline-offset-2(\s|$)/,
-  );
+  await expect(button).toHaveClass(/(^|\s)focus-border-neutral(\s|$)/);
+  await expect(button).not.toHaveClass(/(^|\s)focus-visible:outline/);
 
   if (geometry === 'compact') {
     await expect(button).toHaveClass(/(^|\s)h-8(\s|$)/);
@@ -98,7 +141,7 @@ async function expectComposerActionState(
   if (configured || open) {
     await expect(button).toHaveClass(/(^|\s)text-accent(\s|$)/);
   } else {
-    await expect(button).toHaveClass(/(^|\s)text-fg\/60(\s|$)/);
+    await expect(button).toHaveClass(/(^|\s)text-fg-muted(\s|$)/);
   }
 
   if (open) {
@@ -117,10 +160,10 @@ async function switchStyles(toggle: Locator) {
       width: track.width,
       height: track.height,
       background: track.backgroundColor,
-      outlineWidth: track.outlineWidth,
+      color: track.color,
+      borderWidth: track.borderTopWidth,
+      borderColor: track.borderTopColor,
       outlineStyle: track.outlineStyle,
-      outlineColor: track.outlineColor,
-      outlineOffset: track.outlineOffset,
       thumbWidth: thumbStyle?.width,
       thumbHeight: thumbStyle?.height,
       thumbBackground: thumbStyle?.backgroundColor,
@@ -149,44 +192,46 @@ async function expectCanonicalSwitch(
   expect(styles.height).toBe('20px');
   expect(styles.thumbWidth).toBe('16px');
   expect(styles.thumbHeight).toBe('16px');
+  expect(styles.borderWidth).toBe('1px');
   expect(styles.thumbBackground).toBe(
     await resolvedBackgroundClass(page, 'bg-bg'),
   );
 }
 
-async function expectKeyboardFocusOutline(
+async function expectKeyboardFocusBorder(
   page: Page,
   previous: Locator,
   toggle: Locator,
+  tone: 'neutral' | 'contrast',
 ) {
-  for (const control of [previous, toggle]) {
-    await expect(control).toHaveClass(/focus-visible:outline-2/);
-    await expect(control).toHaveClass(/focus-visible:outline-accent/);
-    await expect(control).toHaveClass(/focus-visible:outline-offset-2/);
-  }
+  await expect(toggle).toHaveClass(
+    tone === 'neutral' ? /focus-border-neutral/ : /focus-border-contrast/,
+  );
+  await expect(toggle).not.toHaveClass(/focus-visible:outline/);
 
   await previous.focus();
   await page.keyboard.press('Tab');
   await expect(toggle).toBeFocused();
 
-  const styles = await switchStyles(toggle);
-  await previous.focus();
-  const buttonFocus = await previous.evaluate((element) => {
-    const style = getComputedStyle(element);
-    return {
-      width: style.outlineWidth,
-      offset: style.outlineOffset,
-      style: style.outlineStyle,
-      color: style.outlineColor,
-    };
-  });
-  await toggle.focus();
-  await expect(toggle).toBeFocused();
+  const expectedBorder =
+    tone === 'neutral'
+      ? await page.evaluate(() => {
+          const probe = document.createElement('span');
+          probe.style.border = '1px solid var(--color-accent)';
+          document.body.appendChild(probe);
+          const color = getComputedStyle(probe).borderTopColor;
+          probe.remove();
+          return color;
+        })
+      : (await switchStyles(toggle)).color;
+  await expect
+    .poll(async () => (await switchStyles(toggle)).borderColor)
+    .toBe(expectedBorder);
 
-  expect(styles.outlineStyle).not.toBe('none');
-  expect(styles.outlineWidth).toBe('2px');
-  expect(styles.outlineOffset).toBe('2px');
-  expect(styles.outlineColor).toBe(buttonFocus.color);
+  const styles = await switchStyles(toggle);
+  expect(styles.outlineStyle).toBe('none');
+  expect(styles.borderWidth).toBe('1px');
+  expect(styles.borderColor).toBe(expectedBorder);
 }
 
 test.describe('canonical AppSwitch migrations', () => {
@@ -211,16 +256,23 @@ test.describe('canonical AppSwitch migrations', () => {
       await expect(toggle).toBeVisible();
       await expect(toggle).toHaveAttribute('title', 'Enable image generation');
       await expectCanonicalSwitch(page, toggle, false);
-      await expectKeyboardFocusOutline(
+      await expectKeyboardFocusBorder(
         page,
         dialog.getByRole('button', { name: 'Refresh', exact: true }),
         toggle,
+        'neutral',
       );
 
       // Pointer activation is the public callback seam: it changes the switch
       // state and preserves the existing success toast.
       await toggle.click();
       await expectCanonicalSwitch(page, toggle, true);
+      await expectKeyboardFocusBorder(
+        page,
+        dialog.getByRole('button', { name: 'Refresh', exact: true }),
+        toggle,
+        'contrast',
+      );
       await expect(
         page.getByText(
           'Image generation enabled. Configure your model below.',
@@ -359,6 +411,70 @@ test.describe('canonical AppSwitch migrations', () => {
 
       await widgetDialog.getByRole('button', { name: 'Cancel' }).click();
       await expect(widgetDialog).toBeHidden();
+
+      await openWidgetCreator(page, request);
+      const validationDialog = page.getByRole('dialog');
+      await validationDialog
+        .getByRole('button', { name: 'Create Widget' })
+        .click();
+      const title = validationDialog.getByLabel('Widget Title', {
+        exact: true,
+      });
+      const prompt = validationDialog.getByLabel('LLM Prompt', { exact: true });
+      await expect(title).toHaveAttribute('aria-invalid', 'true');
+      await expect(prompt).toHaveAttribute('aria-invalid', 'true');
+      expect(await title.getAttribute('aria-label')).toBeNull();
+      expect(await prompt.getAttribute('aria-label')).toBeNull();
+      const titleDescribedBy = await title.getAttribute('aria-describedby');
+      const promptDescribedBy = await prompt.getAttribute('aria-describedby');
+      expect(titleDescribedBy).not.toBeNull();
+      expect(promptDescribedBy).not.toBeNull();
+      await expect(
+        validationDialog.locator(`[id="${titleDescribedBy}"]`),
+      ).toContainText('Title is required');
+      await expect(
+        validationDialog.locator(`[id="${promptDescribedBy}"]`),
+      ).toContainText('Prompt is required');
+
+      const sources = validationDialog.getByRole('group', {
+        name: 'Source URLs',
+        exact: true,
+      });
+      const models = validationDialog.getByRole('group', {
+        name: 'Model & Provider',
+        exact: true,
+      });
+      const tools = validationDialog.getByRole('group', {
+        name: 'Available Tools',
+        exact: true,
+      });
+      const refresh = validationDialog.getByRole('group', {
+        name: 'Refresh Frequency',
+        exact: true,
+      });
+      for (const group of [sources, models, tools, refresh]) {
+        await expect(group.locator('legend')).toHaveCount(1);
+      }
+      await expect(sources.locator('label')).toHaveCount(0);
+      await expect(refresh.locator('label')).toHaveCount(0);
+      await expect(
+        validationDialog.getByLabel('Source URL 1', { exact: true }),
+      ).toBeVisible();
+      await expect(
+        validationDialog.getByRole('combobox', { name: 'Refresh unit' }),
+      ).toBeVisible();
+      await expect(
+        validationDialog.locator('input[type="number"]'),
+      ).toBeVisible();
+      const toolsDescribedBy = await tools.getAttribute('aria-describedby');
+      expect(toolsDescribedBy).not.toBeNull();
+      await expect(
+        validationDialog.locator(`[id="${toolsDescribedBy}"]`),
+      ).toContainText(
+        'Select tools to assist the AI in processing your widget.',
+      );
+      await validationDialog.getByRole('button', { name: 'Cancel' }).click();
+      await expect(validationDialog).toBeHidden();
 
       await page.goto(`/automations/schedules/new?workflow=${workflowId}`);
       await expect(
@@ -565,26 +681,61 @@ test.describe('composer action triggers', () => {
       await page.keyboard.press('Escape');
 
       // The shared keyboard treatment is present on the real action, not only
-      // on a wrapper: Tab from the composer input produces the 2px accent ring.
+      // on a wrapper: Tab from the composer input changes one reserved border
+      // pixel without drawing an outline or moving the control.
       await page.locator('#message-input').focus();
+      const focusBefore = await focus.boundingBox();
+      expect(focusBefore).not.toBeNull();
       await page.keyboard.press('Tab');
       await expect(focus).toBeFocused();
-      const outline = await focus.evaluate((element) => {
+      const focusStyle = await focus.evaluate((element) => {
         const style = getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
         return {
-          width: style.outlineWidth,
-          offset: style.outlineOffset,
-          style: style.outlineStyle,
-          color: style.outlineColor,
+          width: style.borderTopWidth,
+          color: style.borderTopColor,
+          outline: style.outlineStyle,
+          rect: {
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height,
+          },
         };
       });
-      expect(outline).toMatchObject({
-        width: '2px',
-        offset: '2px',
+      const accent = await page.evaluate(() => {
+        const probe = document.createElement('span');
+        probe.style.border = '1px solid var(--color-accent)';
+        document.body.appendChild(probe);
+        const color = getComputedStyle(probe).borderTopColor;
+        probe.remove();
+        return color;
       });
-      expect(outline.style).not.toBe('none');
-      expect(outline.color).not.toBe('transparent');
-      expect(outline.color).not.toBe('rgba(0, 0, 0, 0)');
+      await expect
+        .poll(async () =>
+          focus.evaluate((element) => getComputedStyle(element).borderTopColor),
+        )
+        .toBe(accent);
+      const settledFocusStyle = await focus.evaluate((element) => {
+        const style = getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        return {
+          width: style.borderTopWidth,
+          color: style.borderTopColor,
+          outline: style.outlineStyle,
+          rect: {
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height,
+          },
+        };
+      });
+      expect(settledFocusStyle.width).toBe('1px');
+      expect(settledFocusStyle.color).toBe(accent);
+      expect(settledFocusStyle.outline).toBe('none');
+      expect(settledFocusStyle.rect).toEqual(focusBefore);
+      expect(focusStyle.rect).toEqual(focusBefore);
 
       // Pointer activation exposes the explicit active:scale-95 state and
       // still invokes Auto-read's existing aria/localStorage callback.
@@ -628,7 +779,9 @@ test.describe('composer action triggers', () => {
       await expect(panelConfig).toBeDisabled();
       await expect(panelConfig).toHaveCSS('cursor', 'not-allowed');
       await expect(panelConfig).toHaveClass(/(^|\s)disabled:opacity-40(\s|$)/);
-      await expect(panelConfig).toHaveClass(/(^|\s)disabled:text-fg\/30(\s|$)/);
+      await expect(panelConfig).toHaveClass(
+        /(^|\s)disabled:text-fg-subtle(\s|$)/,
+      );
     } finally {
       await page.waitForTimeout(600);
       await patchSettings(request, original);
@@ -775,6 +928,563 @@ test.describe('composer action triggers', () => {
         open: true,
       });
       await page.keyboard.press('Escape');
+    } finally {
+      const response = await request.delete(`/api/chats/${chatId}`);
+      expect([200, 204, 404]).toContain(response.status());
+    }
+  });
+});
+
+test.describe('IconButton primitive', () => {
+  test('dashboard primary and active icon actions keep contrast foreground and focus in place', async ({
+    page,
+    request,
+  }) => {
+    const before = await readSettings(request);
+    const original = {
+      widgets: before.yaawc_dashboard_widgets ?? null,
+      cache: before.yaawc_dashboard_cache ?? null,
+    };
+    await page.goto('/');
+    const originalLocal = await page.evaluate(() => ({
+      widgets: localStorage.getItem('yaawc_dashboard_widgets'),
+      cache: localStorage.getItem('yaawc_dashboard_cache'),
+    }));
+
+    try {
+      await patchSettings(request, {
+        yaawc_dashboard_widgets: '[]',
+        yaawc_dashboard_cache: '{}',
+      });
+      await page.evaluate(() => {
+        localStorage.setItem('yaawc_dashboard_widgets', '[]');
+        localStorage.setItem('yaawc_dashboard_cache', '{}');
+      });
+      await page.goto('/dashboard');
+      await expect(
+        page.getByRole('heading', { name: 'Dashboard', exact: true }),
+      ).toBeVisible();
+
+      const editMode = page.getByRole('button', {
+        name: 'Switch to Edit Mode',
+        exact: true,
+      });
+      const refresh = page.getByRole('button', {
+        name: 'Refresh All Widgets',
+        exact: true,
+      });
+      await expect(editMode).toHaveClass(/focus-border-neutral/);
+      await expect(refresh).toHaveClass(/focus-border-neutral/);
+      await expect(refresh).toHaveClass(/text-fg-muted/);
+
+      // Enter edit mode through the keyboard so the following focus traversal
+      // exercises the same modality users use for the icon actions.
+      await editMode.focus();
+      await page.keyboard.press('Enter');
+      const viewMode = page.getByRole('button', {
+        name: 'Switch to View Mode',
+        exact: true,
+      });
+      const addWidget = page.getByRole('button', {
+        name: 'Add New Widget',
+        exact: true,
+      });
+      await expect(viewMode).toHaveAttribute('aria-pressed', 'true');
+      await expect(viewMode).toHaveClass(/(^|\s)bg-surface-2(\s|$)/);
+      await expect(viewMode).toHaveClass(/(^|\s)text-accent(\s|$)/);
+      await expect(viewMode).toHaveClass(/focus-border-neutral/);
+
+      await expect(addWidget).toHaveClass(/(^|\s)bg-accent(\s|$)/);
+      await expect(addWidget).toHaveClass(/(^|\s)text-accent-fg(\s|$)/);
+      await expect(addWidget).toHaveClass(/(^|\s)hover:bg-accent-700(\s|$)/);
+      await expect(addWidget).toHaveClass(/(^|\s)hover:text-accent-fg(\s|$)/);
+      await expect(addWidget).toHaveClass(/focus-border-contrast/);
+      await expect(addWidget.locator('svg')).toHaveAttribute('width', '15');
+      await expect(addWidget.locator('svg')).toHaveAttribute('height', '15');
+
+      const accentBackground = await resolvedBackgroundClass(page, 'bg-accent');
+      const accentHoverBackground = await resolvedBackgroundClass(
+        page,
+        'bg-accent-700',
+      );
+      const accentForeground = await resolvedTextClass(page, 'text-accent-fg');
+      await expect
+        .poll(() =>
+          addWidget.evaluate((element) => {
+            const style = getComputedStyle(element);
+            return { background: style.backgroundColor, color: style.color };
+          }),
+        )
+        .toEqual({
+          background: accentBackground,
+          color: accentForeground,
+        });
+
+      const beforeFocus = await addWidget.boundingBox();
+      expect(beforeFocus).not.toBeNull();
+      const importDashboard = page.getByRole('button', {
+        name: 'Import Dashboard Configuration',
+        exact: true,
+      });
+      // Navigate through the real action cluster so :focus-visible is driven by
+      // keyboard input rather than a script-assigned focus.
+      await expect(viewMode).toBeFocused();
+      for (const control of [
+        refresh,
+        page.getByRole('button', {
+          name: /Switch to (Sequential|Parallel) Processing/,
+        }),
+        page.getByRole('button', {
+          name: 'Export Dashboard Configuration',
+          exact: true,
+        }),
+        importDashboard,
+        addWidget,
+      ]) {
+        await page.keyboard.press('Tab');
+        await expect(control).toBeFocused();
+      }
+      await expect
+        .poll(() =>
+          addWidget.evaluate(
+            (element) => getComputedStyle(element).borderTopColor,
+          ),
+        )
+        .toBe(accentForeground);
+      const settledFocused = await addWidget.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return {
+          borderWidth: style.borderTopWidth,
+          borderColor: style.borderTopColor,
+          outline: style.outlineStyle,
+          rect: {
+            x: element.getBoundingClientRect().x,
+            y: element.getBoundingClientRect().y,
+            width: element.getBoundingClientRect().width,
+            height: element.getBoundingClientRect().height,
+          },
+        };
+      });
+      expect(settledFocused.borderWidth).toBe('1px');
+      expect(settledFocused.borderColor).toBe(accentForeground);
+      expect(settledFocused.outline).toBe('none');
+      expect(settledFocused.rect).toEqual(beforeFocus);
+
+      await addWidget.hover();
+      await expect
+        .poll(() =>
+          addWidget.evaluate((element) => {
+            const style = getComputedStyle(element);
+            return { background: style.backgroundColor, color: style.color };
+          }),
+        )
+        .toEqual({
+          background: accentHoverBackground,
+          color: accentForeground,
+        });
+
+      await addWidget.click();
+      await expect(
+        page.getByRole('heading', { name: 'Create New Widget', exact: true }),
+      ).toBeVisible();
+      await page.getByLabel('Close').click();
+    } finally {
+      await page.evaluate(({ widgets, cache }) => {
+        for (const [key, value] of [
+          ['yaawc_dashboard_widgets', widgets],
+          ['yaawc_dashboard_cache', cache],
+        ] as const) {
+          if (value === null) localStorage.removeItem(key);
+          else localStorage.setItem(key, value);
+        }
+      }, originalLocal);
+      await page.waitForTimeout(600);
+      await patchSettings(request, {
+        yaawc_dashboard_widgets: original.widgets,
+        yaawc_dashboard_cache: original.cache,
+      });
+    }
+  });
+
+  test('workspace labeled create and add actions use the primary Button contract', async ({
+    page,
+    request,
+  }) => {
+    const workspaceId = await seedWorkspace(request, {
+      name: uniq('icon-button-workspace'),
+    });
+
+    try {
+      await page.goto(`/workspaces/${workspaceId}`);
+      await expect(
+        page.getByRole('heading', { name: /icon-button-workspace/ }),
+      ).toBeVisible();
+
+      const memorySection = page
+        .locator('[data-workspace-section]')
+        .filter({ hasText: 'Memory' })
+        .last();
+      await memorySection.getByRole('button').first().click();
+      const addMemory = memorySection.getByRole('button', {
+        name: 'Add memory',
+        exact: true,
+      });
+      await expect(addMemory).toBeVisible();
+      await expect(addMemory).toHaveClass(/(^|\s)bg-accent(\s|$)/);
+      await expect(addMemory).toHaveClass(/(^|\s)text-accent-fg(\s|$)/);
+      await expect(addMemory).toHaveClass(/focus-border-contrast/);
+      await expectPrimaryButtonColors(page, addMemory);
+      await addMemory.click();
+      await expect(
+        memorySection.getByRole('button', { name: 'Save to workspace' }),
+      ).toBeVisible();
+      await memorySection.getByRole('button', { name: 'Cancel' }).click();
+
+      const filesSection = page
+        .locator('[data-workspace-section]')
+        .filter({ hasText: 'Files' })
+        .first();
+      await filesSection.getByRole('button').first().click();
+      await filesSection.getByRole('button', { name: 'New file' }).click();
+      const create = filesSection.getByRole('button', {
+        name: 'Create',
+        exact: true,
+      });
+      await expect(create).toHaveClass(/(^|\s)bg-accent(\s|$)/);
+      await expect(create).toHaveClass(/(^|\s)text-accent-fg(\s|$)/);
+      await expect(create).toHaveClass(/focus-border-contrast/);
+      await expectPrimaryButtonColors(page, create);
+      await filesSection.getByRole('button', { name: 'Cancel' }).click();
+    } finally {
+      const response = await request.delete(`/api/workspaces/${workspaceId}`);
+      expect([200, 204, 404]).toContain(response.status());
+    }
+  });
+
+  test('list icon links and danger actions expose labels, 15px icons, and disabled state', async ({
+    page,
+    request,
+  }) => {
+    const workflowId = await seedWorkflow(request, {
+      name: uniq('icon-button-workflow'),
+    });
+    const scheduleId = await seedSchedule(request, workflowId, {
+      label: uniq('icon-button-schedule'),
+    });
+
+    try {
+      await page.goto('/automations/scheduled');
+      const row = page.locator(`[data-schedule-id="${scheduleId}"]`);
+      await expect(row).toBeVisible();
+
+      const edit = row.getByRole('link', { name: 'Edit', exact: true });
+      await expect(edit).toHaveAttribute('title', 'Edit');
+      await expect(edit).toHaveAttribute(
+        'href',
+        `/automations/schedules/${scheduleId}`,
+      );
+      await expect(edit).toHaveClass(/focus-border-neutral/);
+      await expect(edit.locator('svg')).toHaveAttribute('width', '15');
+      await expect(edit.locator('svg')).toHaveAttribute('height', '15');
+
+      const remove = row.getByRole('button', { name: 'Delete', exact: true });
+      await expect(remove).toHaveAttribute('title', 'Delete');
+      await expect(remove).toHaveClass(/focus-border-contrast/);
+      await expect(remove).toHaveClass(/text-danger/);
+      await expect(remove.locator('svg')).toHaveAttribute('width', '15');
+      await expect(remove.locator('svg')).toHaveAttribute('height', '15');
+
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      await page.route(`**/api/schedules/${scheduleId}/run`, async (route) => {
+        if (route.request().method() !== 'POST') return route.fallback();
+        await held;
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ status: 'started' }),
+        });
+      });
+
+      const run = row.getByRole('button', { name: 'Run now', exact: true });
+      await run.click();
+      await expect(run).toBeDisabled();
+      await expect(run).not.toHaveAttribute('aria-busy');
+      await expect(run.locator('svg.animate-spin')).toHaveCount(0);
+      await expect(run).toHaveClass(/focus-border-neutral/);
+
+      release();
+      await expect(run).toBeEnabled();
+
+      // The shared primitive must preserve real link navigation, not only its
+      // accessible name and href attributes.
+      await edit.click();
+      await expect(page).toHaveURL(
+        new RegExp(`/automations/schedules/${scheduleId}$`),
+      );
+    } finally {
+      const scheduleDelete = await request.delete(
+        `/api/schedules/${scheduleId}`,
+      );
+      expect([200, 404]).toContain(scheduleDelete.status());
+      const workflowDelete = await request.delete(
+        `/api/workflows/${workflowId}`,
+      );
+      expect([200, 404]).toContain(workflowDelete.status());
+    }
+  });
+
+  test('a loading list action is busy, disabled, and shows the 15px spinner', async ({
+    page,
+    request,
+  }) => {
+    const content = uniq('icon-button-loading');
+    const awaiting = await seedAwaitingApproval({ content });
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    try {
+      await page.route('**/api/chat/cancel', async (route) => {
+        if (route.request().method() !== 'POST') return route.fallback();
+        await held;
+        await route.fallback();
+      });
+      await page.goto('/history');
+      const row = page.locator('[data-list-row]').filter({ hasText: content });
+      await expect(row).toBeVisible();
+
+      const stop = row.getByRole('button', { name: 'Stop run', exact: true });
+      await expect(stop).toHaveAttribute('title', 'Stop run');
+      await expect(stop).toHaveClass(/focus-border-contrast/);
+      await stop.click();
+      await expect(stop).toBeDisabled();
+      await expect(stop).toHaveAttribute('aria-busy', 'true');
+      await expect(stop.locator('svg.animate-spin')).toBeVisible();
+      await expect(stop.locator('svg.animate-spin')).toHaveAttribute(
+        'width',
+        '15',
+      );
+
+      release();
+      await expect(stop).toBeHidden();
+    } finally {
+      release();
+      await cancelAwaitingRun(request, {
+        chatId: awaiting.chatId,
+        messageId: awaiting.messageId,
+      });
+      const chatDelete = await request.delete(`/api/chats/${awaiting.chatId}`);
+      expect([200, 204, 404]).toContain(chatDelete.status());
+    }
+  });
+
+  test('danger icon actions keep danger hover and contrast focus without reflow', async ({
+    page,
+    request,
+  }) => {
+    const workflowId = await seedWorkflow(request, {
+      name: uniq('icon-button-danger-workflow'),
+    });
+    const scheduleId = await seedSchedule(request, workflowId, {
+      label: uniq('icon-button-danger-schedule'),
+    });
+
+    try {
+      await page.goto('/automations/scheduled');
+      const row = page.locator(`[data-schedule-id="${scheduleId}"]`);
+      await expect(row).toBeVisible();
+
+      const remove = row.getByRole('button', { name: 'Delete', exact: true });
+      const edit = row.getByRole('link', { name: 'Edit', exact: true });
+      const danger = await resolvedTextClass(page, 'text-danger');
+      const dangerSoft = await resolvedBackgroundClass(page, 'bg-danger-soft');
+      const before = await remove.boundingBox();
+      expect(before).not.toBeNull();
+
+      await expect(remove).toHaveClass(/focus-border-contrast/);
+      await expect(remove).toHaveClass(/text-danger/);
+      await remove.hover();
+      await expect
+        .poll(() =>
+          remove.evaluate((element) => {
+            const style = getComputedStyle(element);
+            return { background: style.backgroundColor, color: style.color };
+          }),
+        )
+        .toEqual({ background: dangerSoft, color: danger });
+
+      await page.mouse.move(0, 0);
+      await edit.focus();
+      await page.keyboard.press('Tab');
+      await expect(remove).toBeFocused();
+      await expect
+        .poll(() =>
+          remove.evaluate(
+            (element) => getComputedStyle(element).borderTopColor,
+          ),
+        )
+        .toBe(danger);
+      await expect(remove).toHaveCSS('border-top-width', '1px');
+      await expect(remove).toHaveCSS('outline-style', 'none');
+      expect(await remove.boundingBox()).toEqual(before);
+    } finally {
+      const scheduleDelete = await request.delete(
+        `/api/schedules/${scheduleId}`,
+      );
+      expect([200, 404]).toContain(scheduleDelete.status());
+      const workflowDelete = await request.delete(
+        `/api/workflows/${workflowId}`,
+      );
+      expect([200, 404]).toContain(workflowDelete.status());
+    }
+  });
+});
+
+test.describe('canonical loading and empty states', () => {
+  test('settings preserves compact list empty states and their actions', async ({
+    page,
+  }) => {
+    await page.route('**/api/mcp/servers', async (route) => {
+      const url = new URL(route.request().url());
+      if (
+        url.pathname === '/api/mcp/servers' &&
+        route.request().method() === 'GET'
+      ) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ servers: [] }),
+        });
+        return;
+      }
+      await route.fallback();
+    });
+    await page.route('**/api/memories**', async (route) => {
+      const url = new URL(route.request().url());
+      if (
+        url.pathname === '/api/memories' &&
+        !url.searchParams.has('workspaceId')
+      ) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ data: [], total: 0 }),
+        });
+        return;
+      }
+      await route.fallback();
+    });
+
+    const settings = new SettingsPage(page);
+    await settings.goto();
+
+    const dialog = page.getByRole('dialog');
+    await settings.openSection('MCP Servers');
+    let empty = dialog.locator(
+      '[data-list-state="empty"][data-list-layout="compact"]',
+    );
+    await expect(empty).toBeVisible();
+    await expect(empty).toContainText('No MCP servers configured yet.');
+    await expect(
+      dialog.getByRole('button', { name: 'Add MCP Server', exact: true }),
+    ).toBeVisible();
+
+    await settings.openSection('Memory');
+    empty = dialog.locator(
+      '[data-list-state="empty"][data-list-layout="compact"]',
+    );
+    await expect(empty).toBeVisible();
+    await expect(empty).toContainText(
+      'No memories yet. Add one above, or enable automatic detection.',
+    );
+  });
+});
+
+test.describe('explicit motion contracts', () => {
+  test('names modal, switch, and context-meter motion properties', async ({
+    page,
+    request,
+  }) => {
+    const settings = new SettingsPage(page);
+    await settings.goto();
+
+    const dialog = page.getByRole('dialog');
+    const backdrop = page.locator('[class~="transition-opacity"]').first();
+    const panel = dialog
+      .locator('[class~="transition-[opacity,transform]"]')
+      .first();
+    await expect(backdrop).toBeVisible();
+    await expect(panel).toBeVisible();
+    await expect(backdrop).toHaveClass(/duration-200/);
+    await expect(panel).toHaveClass(/duration-200/);
+    await expect(panel).toHaveClass(/ease-standard/);
+
+    const computedTransition = (locator: Locator) =>
+      locator.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return {
+          properties: style.transitionProperty
+            .split(',')
+            .map((property) => property.trim()),
+          duration: style.transitionDuration,
+        };
+      });
+    const backdropTransition = await computedTransition(backdrop);
+    const panelTransition = await computedTransition(panel);
+    expect(backdropTransition).toMatchObject({
+      properties: expect.arrayContaining(['opacity']),
+      duration: '0.2s',
+    });
+    expect(panelTransition).toMatchObject({
+      properties: expect.arrayContaining(['opacity', 'transform']),
+      duration: '0.2s',
+    });
+
+    await settings.openSection('Image Generation');
+    const toggle = dialog.getByRole('switch', {
+      name: 'Enable image generation',
+    });
+    const thumb = toggle.locator('span');
+    await expect(toggle).toHaveClass(/duration-150/);
+    await expect(thumb).toHaveClass(/transition-transform/);
+    await expect(thumb).toHaveClass(/duration-200/);
+    await expect(thumb).toHaveClass(/ease-standard/);
+    const switchTransition = await computedTransition(toggle);
+    const thumbTransition = await computedTransition(thumb);
+    expect(switchTransition).toMatchObject({
+      properties: expect.arrayContaining(['background-color']),
+      duration: '0.15s',
+    });
+    expect(thumbTransition).toMatchObject({
+      properties: expect.arrayContaining(['transform']),
+      duration: '0.2s',
+    });
+
+    await settings.close();
+
+    const chatId = await seedChat(request, {
+      content: uniq('motion-context-meter'),
+      focusMode: 'webSearch',
+    });
+    try {
+      await page.goto(`/c/${chatId}`);
+      await expect(page.locator('#message-input')).toBeVisible();
+      const context = page.locator('button[title^="Context usage:"]');
+      await expect(context).toHaveCount(1);
+      await context.click();
+      const meter = page.locator('[class~="transition-[width]"]');
+      await expect(meter).toHaveCount(1);
+      await expect(meter).toHaveClass(/duration-200/);
+      await expect
+        .poll(() => computedTransition(meter))
+        .toMatchObject({
+          properties: expect.arrayContaining(['width']),
+          duration: '0.2s',
+        });
     } finally {
       const response = await request.delete(`/api/chats/${chatId}`);
       expect([200, 204, 404]).toContain(response.status());

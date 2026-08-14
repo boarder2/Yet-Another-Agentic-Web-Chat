@@ -89,7 +89,7 @@ function DiffView({
                     : ''
               }
             >
-              <td className="select-none w-10 px-2 py-0.5 text-right text-fg/30 border-r border-surface-2 align-top">
+              <td className="select-none w-10 px-2 py-0.5 text-right text-fg-subtle border-r border-surface-2 align-top">
                 {line.type === 'removed'
                   ? line.lineNo
                   : line.type === 'added'
@@ -103,7 +103,7 @@ function DiffView({
                       ? 'text-danger'
                       : line.type === 'added'
                         ? 'text-success'
-                        : 'text-fg/70'
+                        : 'text-fg-muted'
                   }
                 >
                   {line.type === 'removed'
@@ -214,7 +214,7 @@ export function SkillEditApproval({
       chips={
         <>
           <ApprovalChip>{name}</ApprovalChip>
-          <span className="shrink-0 text-xs text-fg/50 bg-surface-2 px-2 py-0.5 rounded-pill">
+          <span className="shrink-0 text-xs text-fg-subtle bg-surface-2 px-2 py-0.5 rounded-pill">
             {scope}
           </span>
         </>
@@ -226,7 +226,7 @@ export function SkillEditApproval({
             <button
               type="button"
               onClick={handleRejectSubmit}
-              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-surface bg-danger-soft text-danger hover:bg-danger-soft border border-danger transition-colors"
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-surface bg-danger-soft text-danger hover:bg-danger-soft border border-danger transition-colors duration-150 focus-border-contrast"
             >
               <Ban size={14} />
               Send rejection
@@ -248,7 +248,7 @@ export function SkillEditApproval({
       }
     >
       {action === 'delete' ? (
-        <div className="px-5 py-4 text-sm text-fg/70 border-b border-surface-2">
+        <div className="px-5 py-4 text-sm text-fg-muted border-b border-surface-2">
           This will permanently delete the skill <strong>{name}</strong>.
         </div>
       ) : null}
@@ -257,7 +257,7 @@ export function SkillEditApproval({
         <dl className="px-5 py-3 border-b border-surface-2 space-y-1">
           {changes.map(({ label, value }) => (
             <div key={label} className="flex items-baseline gap-2 text-sm">
-              <dt className="text-xs text-fg/50 w-20 shrink-0">{label}</dt>
+              <dt className="text-xs text-fg-subtle w-20 shrink-0">{label}</dt>
               <dd className="text-fg">{value}</dd>
             </div>
           ))}
@@ -265,7 +265,7 @@ export function SkillEditApproval({
       )}
 
       {action !== 'delete' && !showDiff && changes.length === 0 && (
-        <div className="px-5 py-4 text-sm text-fg/60 border-b border-surface-2">
+        <div className="px-5 py-4 text-sm text-fg-muted border-b border-surface-2">
           No changes — <strong className="text-fg">{name}</strong> already
           matches this proposal.
         </div>
@@ -275,13 +275,13 @@ export function SkillEditApproval({
         <div className="border-b border-surface-2">
           {oldDescription !== newDescription && (
             <div className="px-5 py-2 border-b border-surface-2">
-              <p className="text-xs text-fg/50 mb-1">Description</p>
+              <p className="text-xs text-fg-subtle mb-1">Description</p>
               <DiffView oldString={oldDescription} newString={newDescription} />
             </div>
           )}
           {oldContent !== newContent && (
             <div>
-              <p className="text-xs text-fg/50 px-5 pt-2">Content</p>
+              <p className="text-xs text-fg-subtle px-5 pt-2">Content</p>
               <DiffView oldString={oldContent} newString={newContent} />
             </div>
           )}
@@ -303,7 +303,7 @@ export function SkillEditApproval({
               if (e.key === 'Escape') setShowRejectInput(false);
             }}
             placeholder="Optional: tell the agent why you rejected this…"
-            className="bg-surface-2/50 rounded-surface placeholder:text-fg/30 resize-none"
+            className="bg-surface-2/50 rounded-surface placeholder:text-fg-subtle resize-none"
             rows={2}
           />
         </div>

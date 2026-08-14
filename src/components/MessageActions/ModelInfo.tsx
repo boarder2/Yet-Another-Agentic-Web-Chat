@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Info } from 'lucide-react';
 import { ModelStats } from '../ChatWindow';
 import TokenPill from '@/components/common/TokenPill';
+import { IconButton } from '@/components/ui/IconButton';
 
 interface ModelInfoButtonProps {
   modelStats: ModelStats | null;
@@ -14,7 +15,7 @@ const SharedRows: React.FC<{ modelStats: ModelStats }> = ({ modelStats }) => (
   <>
     {modelStats.responseTime && (
       <>
-        <div className="opacity-70">Response time</div>
+        <div className="text-fg-subtle">Response time</div>
         <div className="font-medium">
           {(modelStats.responseTime / 1000).toFixed(2)}s
         </div>
@@ -23,7 +24,7 @@ const SharedRows: React.FC<{ modelStats: ModelStats }> = ({ modelStats }) => (
 
     {modelStats.usedLocation !== undefined && (
       <>
-        <div className="opacity-70">Used location</div>
+        <div className="text-fg-subtle">Used location</div>
         <div className="font-medium">
           {modelStats.usedLocation ? 'Yes' : 'No'}
         </div>
@@ -32,7 +33,7 @@ const SharedRows: React.FC<{ modelStats: ModelStats }> = ({ modelStats }) => (
 
     {modelStats.usedPersonalization !== undefined && (
       <>
-        <div className="opacity-70">Used personalization</div>
+        <div className="text-fg-subtle">Used personalization</div>
         <div className="font-medium">
           {modelStats.usedPersonalization ? 'Yes' : 'No'}
         </div>
@@ -41,7 +42,7 @@ const SharedRows: React.FC<{ modelStats: ModelStats }> = ({ modelStats }) => (
 
     {modelStats.memoriesUsed !== undefined && modelStats.memoriesUsed > 0 && (
       <>
-        <div className="opacity-70">Memories used</div>
+        <div className="text-fg-subtle">Memories used</div>
         <div className="font-medium">{modelStats.memoriesUsed}</div>
       </>
     )}
@@ -64,7 +65,7 @@ const ModelInfoRowsV2: React.FC<{
     <>
       {modelStats.perModel.length === 0 && (
         <>
-          <div className="opacity-70">Model</div>
+          <div className="text-fg-subtle">Model</div>
           <div className="font-medium truncate">Unknown</div>
         </>
       )}
@@ -73,14 +74,14 @@ const ModelInfoRowsV2: React.FC<{
         const title = `${row.provider}/${row.model}`;
         return (
           <React.Fragment key={title}>
-            <div className="opacity-70">Model</div>
+            <div className="text-fg-subtle">Model</div>
             <div className="font-medium truncate" title={title}>
               {row.model}
               {showProvider && (
-                <span className="opacity-60"> ·{row.provider}</span>
+                <span className="text-fg-subtle"> ·{row.provider}</span>
               )}
             </div>
-            <div className="opacity-70">Tokens (est)</div>
+            <div className="text-fg-subtle">Tokens (est)</div>
             <div className="flex flex-wrap gap-2">
               <TokenPill label="In" value={row.usage.input_tokens} />
               <TokenPill label="Out" value={row.usage.output_tokens} />
@@ -109,7 +110,7 @@ const ModelInfoRowsV1: React.FC<{
       {/* Legacy single-name fallback */}
       {!modelStats.modelNameChat && modelName && (
         <>
-          <div className="opacity-70">Model</div>
+          <div className="text-fg-subtle">Model</div>
           <div className="font-medium truncate" title={modelName}>
             {modelName}
           </div>
@@ -119,7 +120,7 @@ const ModelInfoRowsV1: React.FC<{
       {/* Chat row */}
       {modelStats.modelNameChat && (
         <>
-          <div className="opacity-70">Chat model</div>
+          <div className="text-fg-subtle">Chat model</div>
           <div
             className="font-medium truncate"
             title={modelStats.modelNameChat}
@@ -130,7 +131,7 @@ const ModelInfoRowsV1: React.FC<{
       )}
       {modelStats.usageChat && (
         <>
-          <div className="opacity-70">Chat tokens (est)</div>
+          <div className="text-fg-subtle">Chat tokens (est)</div>
           <div className="flex flex-wrap gap-2">
             <TokenPill label="In" value={modelStats.usageChat.input_tokens} />
             <TokenPill label="Out" value={modelStats.usageChat.output_tokens} />
@@ -146,7 +147,7 @@ const ModelInfoRowsV1: React.FC<{
       {/* System row */}
       {modelStats.modelNameSystem && (
         <>
-          <div className="opacity-70">System model</div>
+          <div className="text-fg-subtle">System model</div>
           <div
             className="font-medium truncate"
             title={modelStats.modelNameSystem}
@@ -157,7 +158,7 @@ const ModelInfoRowsV1: React.FC<{
       )}
       {modelStats.usageSystem && (
         <>
-          <div className="opacity-70">System tokens (est)</div>
+          <div className="text-fg-subtle">System tokens (est)</div>
           <div className="flex flex-wrap gap-2">
             <TokenPill label="In" value={modelStats.usageSystem.input_tokens} />
             <TokenPill
@@ -176,7 +177,7 @@ const ModelInfoRowsV1: React.FC<{
       {/* Image generation row */}
       {modelStats.usageImageGen && (
         <>
-          <div className="opacity-70">Image gen model</div>
+          <div className="text-fg-subtle">Image gen model</div>
           <div
             className="font-medium truncate"
             title={
@@ -191,7 +192,7 @@ const ModelInfoRowsV1: React.FC<{
         (modelStats.usageImageGen.input_tokens > 0 ||
           modelStats.usageImageGen.output_tokens > 0) && (
           <>
-            <div className="opacity-70">Image gen tokens (est)</div>
+            <div className="text-fg-subtle">Image gen tokens (est)</div>
             <div className="flex flex-wrap gap-2">
               <TokenPill
                 label="In"
@@ -213,7 +214,7 @@ const ModelInfoRowsV1: React.FC<{
       {/* Legacy single-usage fallback */}
       {!modelStats.usageChat && !modelStats.usageSystem && modelStats.usage && (
         <>
-          <div className="opacity-70">Tokens (est)</div>
+          <div className="text-fg-subtle">Tokens (est)</div>
           <div className="flex flex-wrap gap-2">
             <TokenPill label="In" value={modelStats.usage.input_tokens} />
             <TokenPill label="Out" value={modelStats.usage.output_tokens} />
@@ -256,15 +257,13 @@ const ModelInfoButton: React.FC<ModelInfoButtonProps> = ({ modelStats }) => {
 
   return (
     <div className="relative">
-      <button
-        type="button"
+      <IconButton
         ref={buttonRef}
-        className="p-1 ml-1 rounded-pill hover:bg-surface-2 transition duration-200"
+        icon={Info}
+        label="Show model information"
         onClick={() => setShowPopover(!showPopover)}
-        aria-label="Show model information"
-      >
-        <Info size={18} />
-      </button>
+        className="ml-1 rounded-pill p-1"
+      />
       {showPopover && (
         <div
           ref={popoverRef}

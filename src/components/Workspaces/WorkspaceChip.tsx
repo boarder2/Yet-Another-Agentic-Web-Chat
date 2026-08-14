@@ -20,9 +20,9 @@ const WorkspaceChip = ({ id, name, icon, color, muted, inert }: Props) => {
     <Link
       href={`/workspaces/${id}`}
       className={cn(
-        'inline-flex items-center gap-1 px-2 py-0.5 rounded-pill text-xs transition-colors',
+        'inline-flex items-center gap-1 border border-transparent px-2 py-0.5 rounded-pill text-xs transition-opacity duration-150 focus-border-neutral',
         muted
-          ? 'bg-surface text-fg/30 hover:text-fg/50'
+          ? 'bg-surface text-fg-subtle hover:text-fg-subtle'
           : cn(c.bgTint, c.text, 'hover:opacity-80'),
       )}
       onClick={inert ? undefined : (e) => e.stopPropagation()}

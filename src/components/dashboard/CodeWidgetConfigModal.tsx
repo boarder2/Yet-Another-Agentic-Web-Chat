@@ -13,6 +13,7 @@ import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
 import WidgetContent from '@/components/dashboard/WidgetContent';
 import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
 import { Field } from '@/components/ui/Field';
 import { Input } from '@/components/ui/Input';
 import Modal from '@/components/ui/Modal';
@@ -245,7 +246,7 @@ const CodeWidgetConfigModal = ({
           </>
         }
       >
-        <p className="text-sm text-fg/80">
+        <p className="text-sm text-fg-muted">
           A code widget runs the JavaScript you write inside the sandboxed
           Docker runtime on <strong>every refresh</strong>. Source data is
           fetched server-side and passed to your code. The sandbox has no
@@ -293,10 +294,10 @@ const CodeWidgetConfigModal = ({
                   key={tab}
                   type="button"
                   onClick={() => setLeftTab(tab)}
-                  className={`flex items-center gap-1.5 px-3 py-2 text-sm capitalize border-b-2 -mb-px ${
+                  className={`flex items-center gap-1.5 px-3 py-2 text-sm capitalize border border-transparent border-b-2 -mb-px focus-border-neutral ${
                     leftTab === tab
                       ? 'border-accent text-fg'
-                      : 'border-transparent text-fg/60 hover:text-fg'
+                      : 'border-transparent text-fg-muted hover:text-fg'
                   }`}
                 >
                   {tab === 'chat' ? 'Assistant' : 'Editor'}
@@ -310,14 +311,9 @@ const CodeWidgetConfigModal = ({
               ))}
             </div>
             {undoStack.length > 0 && (
-              <button
-                type="button"
-                onClick={undo}
-                className="flex items-center gap-1 px-2 py-1 text-xs text-fg/60 hover:bg-surface-2 rounded-control"
-                title="Undo last applied proposal"
-              >
-                <Undo2 size={13} /> Undo
-              </button>
+              <Button variant="ghost" size="sm" icon={Undo2} onClick={undo}>
+                Undo
+              </Button>
             )}
           </div>
 
@@ -339,10 +335,9 @@ const CodeWidgetConfigModal = ({
                 : 'hidden'
             }
           >
-            <Field label="Widget Title">
+            <Field label="Widget Title" error={errors.title}>
               <Input
                 type="text"
-                aria-label="Widget title"
                 value={config.title}
                 onChange={(e) => {
                   setConfig((p) => ({ ...p, title: e.target.value }));
@@ -353,15 +348,16 @@ const CodeWidgetConfigModal = ({
                 placeholder="Enter widget title..."
               />
             </Field>
-            {errors.title && (
-              <p className="text-xs text-danger mt-1">{errors.title}</p>
-            )}
 
-            <div>
-              <label className="block text-sm font-medium text-fg mb-1">
-                Sources{' '}
-                <span className="text-fg/50 font-normal">(optional)</span>
-              </label>
+            <Field
+              grouped
+              label={
+                <>
+                  Sources{' '}
+                  <span className="text-fg-subtle font-normal">(optional)</span>
+                </>
+              }
+            >
               <SourceListEditor
                 sources={config.sources}
                 onChange={(sources) => {
@@ -369,12 +365,9 @@ const CodeWidgetConfigModal = ({
                   markRevision();
                 }}
               />
-            </div>
+            </Field>
 
-            <div>
-              <label className="block text-sm font-medium text-fg mb-1">
-                Refresh Frequency
-              </label>
+            <Field grouped label="Refresh Frequency">
               <div className="flex gap-2">
                 <Input
                   type="number"
@@ -389,6 +382,7 @@ const CodeWidgetConfigModal = ({
                   }
                 />
                 <Select
+                  aria-label="Refresh unit"
                   value={config.refreshUnit}
                   onChange={(e) =>
                     setConfig((p) => ({
@@ -401,21 +395,16 @@ const CodeWidgetConfigModal = ({
                   <option value="hours">Hours</option>
                 </Select>
               </div>
-            </div>
+            </Field>
 
-            <div>
-              <label className="block text-sm font-medium text-fg mb-1">
-                Code
-              </label>
+            <Field grouped label="Code" error={errors.code}>
               <CodeEditor
                 value={config.code}
                 onChange={onCodeEdit}
                 height="48vh"
+                ariaLabel="Code"
               />
-              {errors.code && (
-                <p className="text-xs text-danger mt-1">{errors.code}</p>
-              )}
-            </div>
+            </Field>
 
             <RuntimeHelp
               open={showHelp}
@@ -429,7 +418,7 @@ const CodeWidgetConfigModal = ({
           <div className="shrink-0 flex items-center justify-between">
             <h4 className="text-sm font-medium text-fg">
               Preview{' '}
-              <span className="text-fg/50 font-normal">— not saved</span>
+              <span className="text-fg-subtle font-normal">— not saved</span>
             </h4>
             <Button
               variant="primary"
@@ -449,7 +438,7 @@ const CodeWidgetConfigModal = ({
                 className="max-w-full"
               />
             ) : (
-              <div className="text-sm text-fg/50 italic">
+              <div className="text-sm text-fg-muted italic">
                 Click &quot;Run Preview&quot; to test your code.
               </div>
             )}
@@ -464,8 +453,10 @@ const CodeWidgetConfigModal = ({
             ))}
             {preview && (preview.logs.stdout || preview.logs.stderr) && (
               <details className="text-xs">
-                <summary className="cursor-pointer text-fg/60">Logs</summary>
-                <pre className="mt-1 p-2 bg-bg rounded-control overflow-x-auto whitespace-pre-wrap text-fg/80">
+                <summary className="cursor-pointer border border-transparent rounded-control text-fg-muted focus-border-neutral">
+                  Logs
+                </summary>
+                <pre className="mt-1 p-2 bg-bg rounded-control overflow-x-auto whitespace-pre-wrap text-fg">
                   {preview.logs.stderr || preview.logs.stdout}
                 </pre>
               </details>
@@ -486,14 +477,12 @@ const PreviewError = ({ preview }: { preview: CodeWidgetProcessResponse }) => {
     <div className="p-3 bg-danger-soft rounded-control border border-danger space-y-2">
       <div className="flex items-center justify-between">
         <p className="text-sm font-medium text-danger">{preview.error}</p>
-        <button
-          type="button"
+        <IconButton
+          icon={Copy}
+          label="Copy error"
+          tone="danger"
           onClick={copy}
-          className="text-danger/80 hover:text-danger"
-          title="Copy error"
-        >
-          <Copy size={14} />
-        </button>
+        />
       </div>
       {preview.logs.stderr && (
         <pre className="text-xs text-danger/90 overflow-x-auto whitespace-pre-wrap">
@@ -515,13 +504,13 @@ const RuntimeHelp = ({
     <button
       type="button"
       onClick={onToggle}
-      className="w-full px-3 py-2 flex items-center gap-2 text-sm text-fg/70 hover:bg-surface-2"
+      className="w-full border border-transparent px-3 py-2 flex items-center gap-2 text-sm text-fg-muted hover:bg-surface-2 focus-border-neutral"
     >
       {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
       Runtime &amp; API
     </button>
     {open && (
-      <div className="px-3 pb-3 text-xs text-fg/70 space-y-2">
+      <div className="px-3 pb-3 text-xs text-fg-muted space-y-2">
         <p>
           Define{' '}
           <code>

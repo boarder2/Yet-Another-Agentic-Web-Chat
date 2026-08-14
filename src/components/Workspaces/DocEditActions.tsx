@@ -21,14 +21,9 @@ export default function DocEditActions({
 }) {
   if (!editing) {
     return (
-      <button
-        type="button"
-        onClick={onEdit}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-surface border border-surface-2 bg-surface hover:bg-surface-2 transition-colors duration-150"
-      >
-        <Edit3 size={14} />
+      <Button size="sm" icon={Edit3} onClick={onEdit}>
         Edit
-      </button>
+      </Button>
     );
   }
   return (

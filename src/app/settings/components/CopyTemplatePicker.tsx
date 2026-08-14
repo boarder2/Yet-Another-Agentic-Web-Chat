@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { PlusCircle } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/Button';
 import Select from '@/components/ui/Select';
 import {
   formattingAndCitationsLocal,
@@ -51,23 +51,15 @@ export default function CopyTemplatePicker() {
           { value: 'scholarly', label: 'Scholarly (academic)' },
         ]}
       />
-      <button
-        type="button"
+      <Button
+        size="sm"
+        icon={copied ? undefined : PlusCircle}
         onClick={handleCopy}
-        className={cn(
-          'px-3 py-2 text-sm rounded-control border border-surface-2 hover:bg-surface-2 flex items-center gap-1.5',
-          copied && 'bg-success-soft text-success border-success',
-        )}
+        className={copied ? 'bg-success-soft text-success border-success' : ''}
         title="Copy selected template"
       >
-        {copied ? (
-          <span>Copied</span>
-        ) : (
-          <>
-            <PlusCircle size={16} /> Copy
-          </>
-        )}
-      </button>
+        {copied ? 'Copied' : 'Copy'}
+      </Button>
     </div>
   );
 }

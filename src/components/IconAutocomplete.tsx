@@ -162,7 +162,7 @@ const IconAutocomplete = ({
                   selectSuggestion(name);
                 }}
                 className={cn(
-                  'w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-left transition-colors duration-100',
+                  'w-full border border-transparent flex items-center gap-2 px-2.5 py-1.5 text-xs text-left transition-colors duration-100 focus-border-neutral',
                   i === activeIndex ? 'bg-surface-2' : 'hover:bg-surface-2',
                 )}
               >
@@ -172,7 +172,7 @@ const IconAutocomplete = ({
                   applyColor={applyColor}
                   size={16}
                 />
-                <span className="font-mono text-fg/80">{name}</span>
+                <span className="font-mono text-fg">{name}</span>
               </button>
             </li>
           ))}

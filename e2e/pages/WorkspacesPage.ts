@@ -16,7 +16,7 @@ export class WorkspacesPage extends BasePage {
 
   /** The "N workspace(s)" subtitle; only rendered once the list query settles. */
   private readonly countSubtitle = this.page.locator(
-    'span.text-sm.text-fg\\/50.shrink-0',
+    'span.text-sm.text-fg-subtle.shrink-0',
   );
 
   /** Wait until the workspace list has finished loading (isLoading === false). */
@@ -85,7 +85,7 @@ export class WorkspacesPage extends BasePage {
 
   /** Read the "N workspace(s)" subtitle count. Returns -1 if unreadable. */
   async workspaceCount(): Promise<number> {
-    const subtitle = this.page.locator('span.text-sm.text-fg\\/50.shrink-0');
+    const subtitle = this.page.locator('span.text-sm.text-fg-subtle.shrink-0');
     const text = await subtitle.textContent();
     if (!text) return -1;
     const match = text.match(/^(\d+)/);

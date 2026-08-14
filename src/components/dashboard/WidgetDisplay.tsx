@@ -2,7 +2,6 @@
 
 import {
   RefreshCw,
-  LoaderCircle,
   Edit,
   Trash2,
   AlertCircle,
@@ -15,10 +14,12 @@ import { Description } from '@headlessui/react';
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
 import Modal from '@/components/ui/Modal';
 import { Widget } from '@/lib/types/widget';
 import { useConfig } from '@/lib/hooks/api/useConfig';
 import WidgetContent from './WidgetContent';
+import { ListEmptyState, ListLoading } from '@/components/ui/List';
 
 interface WidgetDisplayProps {
   widget: Widget;
@@ -92,16 +93,16 @@ const WidgetDisplay = ({
             <div className="flex items-center space-x-2 flex-1 min-w-0">
               {/* Drag Handle */}
               <div
-                className="widget-drag-handle shrink-0 p-1 rounded-control hover:bg-surface-2 cursor-move transition-colors"
+                className="widget-drag-handle shrink-0 p-1 rounded-control hover:bg-surface-2 cursor-move transition-colors duration-150"
                 title="Drag to move widget"
               >
-                <GripVertical size={16} className="text-fg/50" />
+                <GripVertical size={16} className="text-fg-subtle" />
               </div>
 
               <CardTitle className="truncate">{widget.title}</CardTitle>
               {isCode && (
                 <span
-                  className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-control bg-surface-2 text-fg/60 text-[10px]"
+                  className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-control bg-surface-2 text-fg-subtle text-[10px]"
                   title="Code widget"
                 >
                   <Code2 size={11} />
@@ -113,103 +114,78 @@ const WidgetDisplay = ({
             <div className="flex items-center space-x-2 shrink-0">
               {/* Last updated date with refresh frequency tooltip */}
               <span
-                className="text-xs text-fg/60"
+                className="text-xs text-fg-subtle"
                 title={getRefreshFrequencyText()}
               >
                 {formatLastUpdated(widget.lastUpdated)}
               </span>
 
               {/* Refresh button */}
-              <button
-                type="button"
-                onClick={() => onRefresh(widget.id)}
-                disabled={widget.isLoading || inert}
-                className="p-1.5 hover:bg-surface-2 rounded-control transition-colors disabled:opacity-50"
-                title={
+              <IconButton
+                icon={RefreshCw}
+                label={
                   inert
                     ? 'Code execution is disabled — cannot refresh'
                     : 'Refresh Widget'
                 }
-              >
-                {widget.isLoading ? (
-                  <LoaderCircle
-                    size={16}
-                    className="animate-spin text-accent"
-                  />
-                ) : (
-                  <RefreshCw size={16} className="text-fg/70" />
-                )}
-              </button>
+                loading={widget.isLoading}
+                disabled={inert}
+                onClick={() => onRefresh(widget.id)}
+              />
 
               {/* Placement toggles — which surface(s) the widget appears on */}
               {onTogglePlacement && (
                 <>
-                  <button
-                    type="button"
-                    onClick={() => onTogglePlacement(widget, 'home')}
-                    className={`p-1.5 rounded-control transition-colors ${
-                      widget.showOnHome
-                        ? 'bg-accent text-accent-fg hover:bg-accent-700'
-                        : 'hover:bg-surface-2 text-fg/70'
-                    }`}
-                    title={
+                  <IconButton
+                    icon={Home}
+                    label={
                       widget.showOnHome
                         ? 'Showing on home — click to hide'
                         : 'Show on home page'
                     }
-                  >
-                    <Home size={16} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onTogglePlacement(widget, 'dashboard')}
-                    className={`p-1.5 rounded-control transition-colors ${
-                      widget.showOnDashboard !== false
-                        ? 'bg-accent text-accent-fg hover:bg-accent-700'
-                        : 'hover:bg-surface-2 text-fg/70'
-                    }`}
-                    title={
+                    tone={widget.showOnHome ? 'active' : 'default'}
+                    aria-pressed={widget.showOnHome}
+                    onClick={() => onTogglePlacement(widget, 'home')}
+                  />
+                  <IconButton
+                    icon={LayoutDashboard}
+                    label={
                       widget.showOnDashboard !== false
                         ? 'Showing on dashboard — click to hide'
                         : 'Show on dashboard'
                     }
-                  >
-                    <LayoutDashboard size={16} />
-                  </button>
+                    tone={
+                      widget.showOnDashboard !== false ? 'active' : 'default'
+                    }
+                    aria-pressed={widget.showOnDashboard !== false}
+                    onClick={() => onTogglePlacement(widget, 'dashboard')}
+                  />
                 </>
               )}
 
               {/* Edit */}
-              <button
-                type="button"
+              <IconButton
+                icon={Edit}
+                label="Edit Widget"
                 onClick={() => onEdit(widget)}
-                className="p-1.5 hover:bg-surface-2 rounded-control transition-colors"
-                title="Edit Widget"
-              >
-                <Edit size={16} className="text-fg/70" />
-              </button>
+              />
 
               {/* Convert AI → Code */}
               {!isCode && ceEnabled && onConvert && (
-                <button
-                  type="button"
+                <IconButton
+                  icon={Code2}
+                  label="Convert to Code Widget"
                   onClick={() => onConvert(widget)}
-                  className="p-1.5 hover:bg-surface-2 rounded-control transition-colors"
-                  title="Convert to Code Widget"
-                >
-                  <Code2 size={16} className="text-fg/70" />
-                </button>
+                />
               )}
 
               {/* Delete */}
-              <button
-                type="button"
+              <IconButton
+                icon={Trash2}
+                label="Delete Widget"
+                tone="danger"
                 onClick={() => setConfirmDeleteOpen(true)}
-                className="p-1.5 hover:bg-surface-2 rounded-control transition-colors"
-                title="Delete Widget"
-              >
-                <Trash2 size={16} className="text-danger" />
-              </button>
+              />
             </div>
           </div>
         </CardHeader>
@@ -220,13 +196,11 @@ const WidgetDisplay = ({
       >
         <div className="h-full overflow-y-auto">
           {widget.isLoading ? (
-            <div className="flex items-center justify-center py-8 text-fg/60">
-              <LoaderCircle
-                size={20}
-                className="animate-spin mr-2 text-accent"
-              />
-              <span>Loading content...</span>
-            </div>
+            <ListLoading
+              layout="compact"
+              size={20}
+              status="Loading content..."
+            />
           ) : widget.error ? (
             <div className="flex items-start space-x-2 p-3 bg-danger-soft rounded-control border border-danger">
               <AlertCircle size={16} className="text-danger mt-0.5 shrink-0" />
@@ -245,23 +219,23 @@ const WidgetDisplay = ({
                 className="max-w-none"
               />
               {inert && (
-                <p className="mt-3 text-xs text-fg/50 italic">
+                <p className="mt-3 text-xs text-fg-muted italic">
                   Code execution disabled — showing last result from{' '}
                   {formatLastUpdated(widget.lastUpdated)}.
                 </p>
               )}
             </>
           ) : inert ? (
-            <div className="flex items-center justify-center py-8 text-fg/60 text-center text-sm">
-              Code execution is disabled — this widget cannot run.
-            </div>
+            <ListEmptyState
+              layout="compact"
+              body="Code execution is disabled — this widget cannot run."
+            />
           ) : (
-            <div className="flex items-center justify-center py-8 text-fg/60">
-              <div className="text-center">
-                <p className="text-sm">No content yet</p>
-                <p className="text-xs mt-1">Click refresh to load content</p>
-              </div>
-            </div>
+            <ListEmptyState
+              layout="compact"
+              title="No content yet"
+              body="Click refresh to load content"
+            />
           )}
         </div>
       </CardContent>
@@ -288,7 +262,7 @@ const WidgetDisplay = ({
           </>
         }
       >
-        <Description className="text-sm text-fg/70">
+        <Description className="text-sm text-fg-muted">
           Permanently delete{' '}
           <span className="font-medium text-fg">{widget.title}</span>? It
           currently appears on {surfacesText}, and deleting removes it

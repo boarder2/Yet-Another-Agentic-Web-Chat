@@ -32,7 +32,7 @@ export default function ContextWindowField({
   ];
   return (
     <div className="flex items-center justify-between gap-2">
-      <span className="text-xs text-fg/60">{label}</span>
+      <span className="text-xs text-fg-muted">{label}</span>
       <div className="flex items-center gap-2">
         {customMode && (
           <Input

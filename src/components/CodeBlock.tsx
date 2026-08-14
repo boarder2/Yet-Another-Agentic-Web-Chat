@@ -5,6 +5,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { CheckCheck, Copy as CopyIcon } from 'lucide-react';
 import { prismStyleFor } from '@/lib/theme/syntax';
 import { useActiveTheme } from '@/lib/theme/useActiveTheme';
+import { IconButton } from '@/components/ui/IconButton';
 
 export const CodeBlock = ({
   className,
@@ -47,20 +48,14 @@ export const CodeBlock = ({
       className={`rounded-control overflow-hidden ${hideChrome ? '' : 'my-4 border border-surface-2'} relative group`}
     >
       {!hideChrome && (
-        <div className="flex justify-between items-center px-4 py-2 bg-surface-2 border-b border-surface-2 text-xs text-fg/70 font-mono">
+        <div className="flex justify-between items-center px-4 py-2 bg-surface-2 border-b border-surface-2 text-xs text-fg-subtle font-mono">
           <span>{language}</span>
-          <button
-            type="button"
+          <IconButton
+            icon={isCopied ? CheckCheck : CopyIcon}
+            label="Copy code to clipboard"
             onClick={handleCopyCode}
-            className="p-1 rounded-control hover:bg-surface transition duration-200"
-            aria-label="Copy code to clipboard"
-          >
-            {isCopied ? (
-              <CheckCheck size={14} className="text-success" />
-            ) : (
-              <CopyIcon size={14} className="text-fg" />
-            )}
-          </button>
+            className={`rounded-control p-1 ${isCopied ? '[&_svg]:text-success' : ''}`}
+          />
         </div>
       )}
       <SyntaxHighlighter

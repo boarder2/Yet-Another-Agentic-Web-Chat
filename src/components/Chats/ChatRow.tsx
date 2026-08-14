@@ -202,7 +202,7 @@ const ChatRow = ({
             <span className="h-2.5 w-2.5 shrink-0 rounded-pill bg-accent" />
           )}
           {chat.pinned === 1 && (
-            <Pin size={12} className="shrink-0 fill-current text-fg/50" />
+            <Pin size={12} className="shrink-0 fill-current text-fg-subtle" />
           )}
         </>
       }
@@ -228,7 +228,7 @@ const ChatRow = ({
       }
       body={
         isSearchMode && chat.matchExcerpt ? (
-          <p className="line-clamp-2 text-sm text-fg/60">
+          <p className="line-clamp-2 text-sm text-fg-muted">
             <HighlightedExcerpt text={chat.matchExcerpt} terms={searchTerms} />
           </p>
         ) : undefined
@@ -256,7 +256,7 @@ const ChatRow = ({
             <Link
               href={`/automations/schedules/${chat.scheduleId}`}
               className={cn(
-                'flex items-center gap-1 whitespace-nowrap rounded-pill border border-info bg-info-soft px-2 py-0.5 font-medium text-info transition-opacity hover:opacity-80',
+                'flex items-center gap-1 whitespace-nowrap rounded-pill border border-info bg-info-soft px-2 py-0.5 font-medium text-info transition-opacity duration-150 hover:opacity-80 focus-border-neutral',
                 listRowInteractive,
               )}
             >

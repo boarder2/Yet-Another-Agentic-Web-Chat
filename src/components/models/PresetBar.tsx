@@ -29,6 +29,7 @@ import {
 } from '@/lib/models/presets';
 import { useModels } from '@/lib/hooks/api/useModels';
 import PresetOption from './PresetOption';
+import { ListEmptyState } from '@/components/ui/List';
 
 const EMPTY_PRESETS: ModelPresetList = [];
 
@@ -102,7 +103,7 @@ export default function PresetBar({
 
   return (
     <div className="flex items-center justify-between">
-      <span className="text-xs text-fg/80">Presets</span>
+      <span className="text-xs text-fg">Presets</span>
       <div className="flex items-center gap-2">
         <Popover className="relative">
           {({ open, close }) => (
@@ -110,10 +111,10 @@ export default function PresetBar({
               <PopoverButton
                 type="button"
                 className={cn(
-                  'flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-control border transition-colors duration-150',
+                  'flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-control border transition-colors duration-150 focus-border-neutral',
                   open
                     ? 'bg-surface-2 border-border-strong text-fg'
-                    : 'bg-surface border-surface-2 text-fg/70 hover:bg-surface-2 hover:text-fg',
+                    : 'bg-surface border-surface-2 text-fg-muted hover:bg-surface-2 hover:text-fg',
                 )}
                 aria-label="Select preset"
               >
@@ -132,20 +133,21 @@ export default function PresetBar({
 
               <Transition
                 as={Fragment}
-                enter="transition ease-out duration-100"
+                enter="transition-[opacity,transform] ease-out duration-100"
                 enterFrom="opacity-0 scale-95"
                 enterTo="opacity-100 scale-100"
-                leave="transition ease-in duration-75"
+                leave="transition-[opacity,transform] ease-in duration-100"
                 leaveFrom="opacity-100 scale-100"
                 leaveTo="opacity-0 scale-95"
               >
                 <PopoverPanel className="absolute right-0 z-50 mt-1 w-72 rounded-floating bg-surface border border-surface-2 shadow-floating overflow-hidden">
                   <div className="max-h-64 overflow-y-auto">
                     {presets.length === 0 ? (
-                      <div className="px-3 py-4 text-center text-xs text-fg/50">
-                        No presets yet. Save the current selection to create
-                        one.
-                      </div>
+                      <ListEmptyState
+                        layout="compact"
+                        body="No presets yet. Save the current selection to create one."
+                        className="px-3 py-4"
+                      />
                     ) : (
                       presets.map((preset) => (
                         <PresetOption
@@ -200,11 +202,12 @@ export default function PresetBar({
                       </div>
                     ) : (
                       <>
-                        <button
-                          type="button"
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           disabled={!canSave}
                           onClick={() => setNamingPreset(true)}
-                          className="text-xs text-fg/60 hover:text-fg transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+                          className="px-0 py-0"
                           title={
                             canSave
                               ? 'Save current selection as preset'
@@ -212,19 +215,20 @@ export default function PresetBar({
                           }
                         >
                           Save current…
-                        </button>
+                        </Button>
                         {mode === 'full' && (
-                          <button
-                            type="button"
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            icon={ExternalLink}
                             onClick={() => {
                               close();
                               openSettings('model-presets');
                             }}
-                            className="flex items-center gap-1 text-xs text-fg/40 hover:text-fg/70 transition-colors duration-150"
+                            className="px-0 py-0"
                           >
                             Manage
-                            <ExternalLink size={10} />
-                          </button>
+                          </Button>
                         )}
                       </>
                     )}

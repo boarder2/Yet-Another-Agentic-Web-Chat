@@ -20,6 +20,7 @@ import { Button, buttonClasses } from '@/components/ui/Button';
 import Select from '@/components/ui/Select';
 import { cn } from '@/lib/utils';
 import { ArrowLeft, Workflow as WorkflowIcon } from 'lucide-react';
+import { IconButton } from '@/components/ui/IconButton';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
@@ -111,12 +112,11 @@ export default function WorkflowBuilder({ workflow }: { workflow?: Workflow }) {
   return (
     <div className="flex flex-col pt-4 max-w-7xl">
       <div className="flex items-center gap-3 px-1 mb-6">
-        <Link
+        <IconButton
           href="/automations"
-          className="text-fg/60 hover:text-fg transition-colors duration-150"
-        >
-          <ArrowLeft size={20} />
-        </Link>
+          icon={ArrowLeft}
+          label="Back to workflows"
+        />
         <WorkflowIcon className="text-accent" />
         <h2 className="text-2xl font-medium">
           {workflow ? 'Edit Workflow' : 'New Workflow'}
@@ -128,7 +128,6 @@ export default function WorkflowBuilder({ workflow }: { workflow?: Workflow }) {
           <Field label="Name">
             <Input
               type="text"
-              aria-label="Workflow name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Competitor Report"
@@ -139,7 +138,6 @@ export default function WorkflowBuilder({ workflow }: { workflow?: Workflow }) {
             <IconAutocomplete
               value={icon}
               onChange={setIcon}
-              ariaLabel="Workflow icon"
               placeholder="bar-chart"
             />
           </Field>
@@ -148,7 +146,6 @@ export default function WorkflowBuilder({ workflow }: { workflow?: Workflow }) {
         <Field label="Description">
           <Input
             type="text"
-            aria-label="Workflow description"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Shown in the workflow list"
@@ -157,42 +154,44 @@ export default function WorkflowBuilder({ workflow }: { workflow?: Workflow }) {
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-5 lg:items-start">
           <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-fg/70">
-                Prompt
-                <span className="ml-2 text-xs font-normal text-fg/40">
-                  Define inputs in frontmatter, reference with {'{{name}}'}
-                </span>
-              </label>
+            <Field
+              grouped
+              label={
+                <>
+                  Prompt
+                  <span className="ml-2 text-xs font-normal text-fg-subtle">
+                    Define inputs in frontmatter, reference with {'{{name}}'}
+                  </span>
+                </>
+              }
+              error={
+                hasErrors
+                  ? parse.errors.map((err) => err.message).join(' ')
+                  : undefined
+              }
+            >
               <PromptEditor
                 value={prompt}
                 onChange={setPrompt}
                 minHeight="60vh"
+                ariaLabel="Prompt"
               />
               <PromptSyntaxHelp />
-              {(hasErrors || parse.warnings.length > 0) && (
+              {parse.warnings.length > 0 && (
                 <ul className="flex flex-col gap-1 mt-1">
-                  {parse.errors.map((err, i) => (
-                    <li key={`e${i}`} className="text-xs text-danger">
-                      {err.message}
-                    </li>
-                  ))}
                   {parse.warnings.map((warn, i) => (
-                    <li key={`w${i}`} className="text-xs text-fg/50">
+                    <li key={`w${i}`} className="text-xs text-fg-subtle">
                       {warn.message}
                     </li>
                   ))}
                 </ul>
               )}
-            </div>
+            </Field>
 
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-fg/70">
-                Fill-form preview
-              </label>
+            <Field grouped label="Fill-form preview">
               <div className="rounded-surface border border-surface-2 bg-surface/50 p-4">
                 {hasErrors ? (
-                  <p className="text-sm text-fg/50">
+                  <p className="text-sm text-fg-muted">
                     Resolve the prompt errors to preview the inputs.
                   </p>
                 ) : (
@@ -204,14 +203,11 @@ export default function WorkflowBuilder({ workflow }: { workflow?: Workflow }) {
                   />
                 )}
               </div>
-            </div>
+            </Field>
           </div>
 
           <div className="flex flex-col gap-5 lg:sticky lg:top-4">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-fg/70">
-                Focus Mode
-              </label>
+            <Field label="Focus Mode">
               <Select
                 value={focusMode}
                 onChange={(e) => setFocusMode(e.target.value)}
@@ -222,23 +218,19 @@ export default function WorkflowBuilder({ workflow }: { workflow?: Workflow }) {
                   </option>
                 ))}
               </Select>
-            </div>
+            </Field>
 
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-fg/70">Models</label>
+            <Field grouped label="Models">
               <ModelPicker
                 value={modelValue}
                 onChange={handleModelChange}
                 fields={{ system: true }}
                 presets="apply-save"
               />
-            </div>
+            </Field>
 
             {personas.length > 0 && (
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-fg/70">
-                  Personas (optional)
-                </label>
+              <Field grouped label="Personas (optional)">
                 <div className="flex flex-wrap gap-2">
                   {personas.map((p) => {
                     const on = selectedSystemPromptIds.includes(p.id);
@@ -253,10 +245,10 @@ export default function WorkflowBuilder({ workflow }: { workflow?: Workflow }) {
                               : [...ids, p.id],
                           )
                         }
-                        className={`px-3 py-1 rounded-pill text-xs font-medium transition-colors duration-150 border ${
+                        className={`px-3 py-1 rounded-pill text-xs font-medium transition-colors duration-150 border focus-border-neutral ${
                           on
                             ? 'bg-accent/10 border-accent text-accent'
-                            : 'bg-surface border-surface-2 text-fg/60'
+                            : 'bg-surface border-surface-2 text-fg-muted'
                         }`}
                       >
                         {p.name}
@@ -264,14 +256,11 @@ export default function WorkflowBuilder({ workflow }: { workflow?: Workflow }) {
                     );
                   })}
                 </div>
-              </div>
+              </Field>
             )}
 
             {methodologies.length > 0 && (
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-fg/70">
-                  Methodology (optional)
-                </label>
+              <Field label="Methodology (optional)">
                 <Select
                   value={selectedMethodologyId || ''}
                   onChange={(e) =>
@@ -285,7 +274,7 @@ export default function WorkflowBuilder({ workflow }: { workflow?: Workflow }) {
                     </option>
                   ))}
                 </Select>
-              </div>
+              </Field>
             )}
           </div>
         </div>
@@ -312,7 +301,7 @@ export default function WorkflowBuilder({ workflow }: { workflow?: Workflow }) {
             </Button>
             <Link
               href="/automations"
-              className={cn(buttonClasses('ghost', 'md'), 'text-fg/60')}
+              className={cn(buttonClasses('ghost', 'md'), 'text-fg-muted')}
             >
               Cancel
             </Link>

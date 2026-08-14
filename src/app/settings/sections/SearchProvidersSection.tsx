@@ -1,6 +1,7 @@
 'use client';
 
 import SettingsSection from '../components/SettingsSection';
+import { Field } from '@/components/ui/Field';
 import InputComponent from '../components/InputComponent';
 import Select from '@/components/ui/Select';
 import { SettingsType } from '../types';
@@ -180,7 +181,7 @@ export default function SearchProvidersSection({
 
   return (
     <SettingsSection title="Search Providers">
-      <p className="text-xs text-fg/60">
+      <p className="text-xs text-fg-muted">
         Choose which search provider powers web, image, video, and autocomplete
         searches. Private chats can use a different primary provider. When a
         provider doesn&apos;t support a capability, the fallback provider is
@@ -189,17 +190,15 @@ export default function SearchProvidersSection({
       </p>
 
       <div className="flex flex-col space-y-4">
-        <div className="flex flex-col space-y-1">
-          <p className="text-sm">Regular chat provider</p>
+        <Field label="Regular chat provider">
           <Select
             value={provider}
             options={PROVIDER_OPTIONS}
             onChange={(e) => setProvider(e.target.value)}
           />
-        </div>
+        </Field>
 
-        <div className="flex flex-col space-y-1">
-          <p className="text-sm">Private chat provider</p>
+        <Field label="Private chat provider">
           <Select
             value={privateProvider}
             options={[
@@ -208,45 +207,45 @@ export default function SearchProvidersSection({
             ]}
             onChange={(e) => setPrivateProvider(e.target.value)}
           />
-        </div>
+        </Field>
 
-        <div className="flex flex-col space-y-1">
-          <p className="text-sm">Fallback provider</p>
+        <Field
+          label="Fallback provider"
+          hint={
+            <>
+              Used for any capability the chosen primary provider doesn&apos;t
+              support.
+            </>
+          }
+        >
           <Select
             value={fallbackProvider}
             options={PROVIDER_OPTIONS}
             onChange={(e) => setFallbackProvider(e.target.value)}
           />
-          <p className="text-xs text-fg/60">
-            Used for any capability the chosen primary provider doesn&apos;t
-            support.
-          </p>
-        </div>
+        </Field>
 
-        <div className="flex flex-col space-y-1">
-          <p className="text-sm">Search language</p>
+        <Field
+          label="Search language"
+          hint="Sent to providers as the preferred result language."
+        >
           <Select
             value={language}
             options={LANGUAGE_OPTIONS}
             onChange={(e) => setLanguage(e.target.value)}
           />
-          <p className="text-xs text-fg/60">
-            Sent to providers as the preferred result language.
-          </p>
-        </div>
+        </Field>
 
-        <div className="flex flex-col space-y-1">
-          <p className="text-sm">Search region</p>
+        <Field
+          label="Search region"
+          hint="ISO 3166-1 alpha-2 country code passed to providers (e.g. country for Brave, region for Mojeek)."
+        >
           <Select
             value={region}
             options={[{ value: '', label: 'No region' }, ...REGION_OPTIONS]}
             onChange={(e) => setRegion(e.target.value)}
           />
-          <p className="text-xs text-fg/60">
-            ISO 3166-1 alpha-2 country code passed to providers (e.g. country
-            for Brave, region for Mojeek).
-          </p>
-        </div>
+        </Field>
       </div>
 
       <div className="mt-6">
@@ -300,7 +299,7 @@ export default function SearchProvidersSection({
                     </td>
                     <td className="px-3 py-2">
                       {priv === null ? (
-                        <span className="text-fg/40">not applicable</span>
+                        <span className="text-fg-subtle">not applicable</span>
                       ) : (
                         <span
                           className={`px-2 py-0.5 rounded-pill ${BADGE_STYLES[priv]}`}
@@ -320,8 +319,7 @@ export default function SearchProvidersSection({
       <div className="mt-6 flex flex-col space-y-4">
         <p className="text-sm font-medium">Provider credentials</p>
 
-        <div className="flex flex-col space-y-1">
-          <p className="text-sm">SearXNG API URL</p>
+        <Field label="SearXNG API URL">
           <InputComponent
             type="text"
             placeholder="http://localhost:8080"
@@ -329,10 +327,9 @@ export default function SearchProvidersSection({
             onChange={(e) => setSearxngApiUrl(e.target.value)}
             onSave={handleSearxngUrlSaved}
           />
-        </div>
+        </Field>
 
-        <div className="flex flex-col space-y-1">
-          <p className="text-sm">Brave Search API key</p>
+        <Field label="Brave Search API key">
           <InputComponent
             type="password"
             placeholder="Brave Search API key"
@@ -346,10 +343,9 @@ export default function SearchProvidersSection({
             }
             onSave={(value) => saveConfig('braveSearchApiKey', value)}
           />
-        </div>
+        </Field>
 
-        <div className="flex flex-col space-y-1">
-          <p className="text-sm">Brave LLM Context API key</p>
+        <Field label="Brave LLM Context API key">
           <InputComponent
             type="password"
             placeholder="Brave LLM API key"
@@ -363,10 +359,9 @@ export default function SearchProvidersSection({
             }
             onSave={(value) => saveConfig('braveLLMApiKey', value)}
           />
-        </div>
+        </Field>
 
-        <div className="flex flex-col space-y-1">
-          <p className="text-sm">Mojeek API key</p>
+        <Field label="Mojeek API key">
           <InputComponent
             type="password"
             placeholder="Mojeek API key"
@@ -380,7 +375,7 @@ export default function SearchProvidersSection({
             }
             onSave={(value) => saveConfig('mojeekApiKey', value)}
           />
-        </div>
+        </Field>
       </div>
     </SettingsSection>
   );

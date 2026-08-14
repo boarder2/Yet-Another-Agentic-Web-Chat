@@ -90,14 +90,17 @@ export function McpToolApproval({
       {(description || hasArgs) && (
         <div className="px-5 py-3 space-y-2">
           {description && (
-            <p className="text-xs text-fg/60 line-clamp-3" title={description}>
+            <p
+              className="text-xs text-fg-muted line-clamp-3"
+              title={description}
+            >
               {description}
             </p>
           )}
           {hasArgs && (
             <div>
-              <p className="text-xs text-fg/50 mb-1">Arguments</p>
-              <pre className="text-xs bg-surface-2/50 border border-surface-2 rounded-surface px-3 py-2 overflow-x-auto text-fg/80 whitespace-pre-wrap break-all">
+              <p className="text-xs text-fg-subtle mb-1">Arguments</p>
+              <pre className="text-xs bg-surface-2/50 border border-surface-2 rounded-surface px-3 py-2 overflow-x-auto text-fg whitespace-pre-wrap break-all">
                 {JSON.stringify(args, null, 2)}
               </pre>
             </div>

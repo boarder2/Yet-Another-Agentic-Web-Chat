@@ -62,7 +62,7 @@ export class MemoryPage extends BasePage {
 
   /** "N total" count displayed in the header row. */
   async totalCount(): Promise<number> {
-    const el = this.page.locator('span.text-xs.text-fg\\/50');
+    const el = this.page.locator('span.text-xs.text-fg-subtle');
     const texts = await el.allTextContents();
     for (const t of texts) {
       const m = t.match(/^(\d+)\s+total$/);

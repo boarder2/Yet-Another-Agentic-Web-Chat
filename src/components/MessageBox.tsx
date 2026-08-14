@@ -174,7 +174,7 @@ const MessageBox = ({
                   onClick={startEditMessage}
                   disabled={loading}
                   className={cn(
-                    'absolute top-2 right-2 z-10 p-1.5 rounded-surface flex-shrink-0',
+                    'absolute top-2 right-2 z-10 border border-transparent p-1.5 rounded-surface flex-shrink-0 focus-border-neutral',
                     loading
                       ? 'opacity-40 cursor-not-allowed'
                       : 'hover:bg-surface',
@@ -215,7 +215,7 @@ const MessageBox = ({
                   <button
                     type="button"
                     onClick={() => setIsCollapsed(false)}
-                    className="-mx-4 -mb-3 mt-1 w-[calc(100%+2rem)] py-2 bg-surface-2 text-center text-xs font-medium text-accent hover:bg-surface transition-colors"
+                    className="-mx-4 -mb-3 mt-1 w-[calc(100%+2rem)] border border-transparent py-2 bg-surface-2 text-center text-xs font-medium text-accent hover:bg-surface transition-colors duration-150 focus-border-neutral"
                     aria-label="Show full message"
                   >
                     Show full
@@ -225,7 +225,7 @@ const MessageBox = ({
                   <button
                     type="button"
                     onClick={() => setIsCollapsed(true)}
-                    className="-mx-4 -mb-3 mt-2 w-[calc(100%+2rem)] py-2 bg-surface-2 text-center text-xs text-fg/50 hover:bg-surface hover:text-accent transition-colors"
+                    className="-mx-4 -mb-3 mt-2 w-[calc(100%+2rem)] border border-transparent py-2 bg-surface-2 text-center text-xs text-fg-subtle hover:bg-surface hover:text-accent transition-colors duration-150 focus-border-neutral"
                     aria-label="Collapse message"
                   >
                     Collapse
@@ -238,7 +238,7 @@ const MessageBox = ({
       )}
 
       {message.role === 'assistant' && message.runStatus === 'interrupted' && (
-        <p className="mt-2 text-xs text-fg/50 italic">
+        <p className="mt-2 text-xs text-fg-muted italic">
           (run interrupted — server was restarted mid-response)
         </p>
       )}

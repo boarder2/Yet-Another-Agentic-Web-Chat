@@ -13,6 +13,8 @@ import WidgetModals from './dashboard/WidgetModals';
 
 import WorkspacePicker from './Workspaces/WorkspacePicker';
 import { useSettingsModal } from '@/components/settings/SettingsModalProvider';
+import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
 
 // How much of the widget board peeks above the bottom of the screen in "peek"
 // mode — enough to signal there are widgets without being distracting. Larger
@@ -166,11 +168,14 @@ const EmptyChat = ({
           ? 'Private session — no personalization or memories'
           : 'Start private session'
       }
+      aria-label={
+        isPrivateSession ? 'Leave private session' : 'Start private session'
+      }
       className={cn(
-        'flex items-center px-3 h-8 rounded-pill border text-sm transition-colors',
+        'flex items-center px-3 h-8 rounded-pill border text-sm transition-colors duration-150 focus-border-neutral',
         isPrivateSession
           ? 'bg-warning-soft border-warning text-warning dark:text-warning'
-          : 'bg-transparent border-surface-2 text-fg/40 hover:text-fg/70 hover:border-fg/20',
+          : 'bg-transparent border-surface-2 text-fg-subtle hover:text-fg-muted hover:border-fg/20',
       )}
     >
       {isPrivateSession ? <EyeOff size={15} /> : <Eye size={15} />}
@@ -192,15 +197,15 @@ const EmptyChat = ({
       </div>
       {messageInput}
       {isHome && homeWidgets.length === 0 && (
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="sm"
+          icon={Plus}
           onClick={board.handleAddWidget}
-          className="flex items-center gap-1.5 text-sm text-fg/50 hover:text-fg/80 transition-colors px-3 py-1.5 rounded-pill"
           title="Add a widget to your home page"
         >
-          <Plus size={15} />
-          <span>Add widget</span>
-        </button>
+          Add widget
+        </Button>
       )}
     </div>
   );
@@ -210,13 +215,12 @@ const EmptyChat = ({
       {isHome && <WidgetModals board={board} />}
       <div className="absolute top-0 right-0 z-10 flex flex-row items-center justify-end gap-2 mr-5 mt-5">
         {showBoard && <HomeWidgetToolbar board={board} />}
-        <button
-          type="button"
+        <IconButton
+          icon={Settings}
+          label="Settings"
           onClick={() => openSettings()}
-          aria-label="Settings"
-        >
-          <Settings className="cursor-pointer lg:hidden" />
-        </button>
+          className="lg:hidden"
+        />
       </div>
 
       <div className="flex flex-col items-center min-h-screen">

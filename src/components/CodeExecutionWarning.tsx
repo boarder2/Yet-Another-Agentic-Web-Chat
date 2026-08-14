@@ -119,7 +119,7 @@ export function CodeExecutionWarning({ onAccept, onDecline }: Props) {
           </ul>
         </div>
 
-        <p className="text-fg/70 text-xs italic">
+        <p className="text-fg-muted text-xs italic">
           If you do not understand the risks described above, do not enable code
           execution. Click &quot;Decline&quot; to deny this and all future code
           execution requests.
@@ -131,7 +131,7 @@ export function CodeExecutionWarning({ onAccept, onDecline }: Props) {
           type="button"
           onClick={decline}
           disabled={declining}
-          className="px-4 py-2 text-sm rounded-control bg-danger-soft text-danger hover:bg-danger-soft border border-danger transition-colors disabled:opacity-50"
+          className="px-4 py-2 text-sm rounded-control bg-danger-soft text-danger hover:bg-danger-soft border border-danger transition-colors duration-150 focus-border-contrast disabled:opacity-50"
         >
           Decline
         </button>
@@ -141,7 +141,7 @@ export function CodeExecutionWarning({ onAccept, onDecline }: Props) {
             acceptWarning();
             onAccept();
           }}
-          className="px-4 py-2 text-sm rounded-control bg-success-soft text-success hover:bg-success-soft border border-success transition-colors"
+          className="px-4 py-2 text-sm rounded-control bg-success-soft text-success hover:bg-success-soft border border-success transition-colors duration-150 focus-border-contrast"
         >
           I understand the risks — Enable code execution
         </button>

@@ -16,18 +16,18 @@ const InputComponent = ({
   ...restProps
 }: InputComponentProps) => {
   return (
-    <div className="relative">
+    <span className="relative block">
       <Input
         {...restProps}
         className={cn(isSaving && 'pr-10', className)}
         onBlur={(e) => onSave?.(e.target.value)}
       />
       {isSaving && (
-        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+        <span className="absolute right-3 top-1/2 -translate-y-1/2">
           <LoaderCircle size={16} className="animate-spin text-accent" />
-        </div>
+        </span>
       )}
-    </div>
+    </span>
   );
 };
 

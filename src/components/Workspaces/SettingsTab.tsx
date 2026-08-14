@@ -160,7 +160,7 @@ export default function SettingsTab({ workspace }: { workspace: Workspace }) {
               <p className="text-sm font-medium">
                 {isArchived ? 'Unarchive workspace' : 'Archive workspace'}
               </p>
-              <p className="text-xs text-fg/60">
+              <p className="text-xs text-fg-muted">
                 {isArchived
                   ? 'Restore this workspace to active status'
                   : 'Hide from main list without deleting'}
@@ -170,7 +170,7 @@ export default function SettingsTab({ workspace }: { workspace: Workspace }) {
               type="button"
               onClick={toggleArchive}
               disabled={archive.isPending}
-              className="px-3 py-1.5 rounded-surface border border-surface-2 text-sm hover:bg-surface-2 disabled:opacity-50 transition-colors"
+              className="px-3 py-1.5 rounded-surface border border-surface-2 text-sm hover:bg-surface-2 disabled:opacity-50 transition-colors duration-150 focus-border-neutral"
             >
               {archive.isPending ? '…' : isArchived ? 'Unarchive' : 'Archive'}
             </button>
@@ -180,14 +180,14 @@ export default function SettingsTab({ workspace }: { workspace: Workspace }) {
               <p className="text-sm font-medium text-danger">
                 Delete workspace
               </p>
-              <p className="text-xs text-fg/60">
+              <p className="text-xs text-fg-muted">
                 Permanently delete this workspace and its files
               </p>
             </div>
             <button
               type="button"
               onClick={() => setShowDeleteConfirm(true)}
-              className="px-3 py-1.5 rounded-surface border border-danger text-danger text-sm hover:bg-danger-soft transition-colors"
+              className="px-3 py-1.5 rounded-surface border border-danger text-danger text-sm hover:bg-danger-soft transition-colors duration-150 focus-border-contrast"
             >
               Delete
             </button>
@@ -215,14 +215,14 @@ export default function SettingsTab({ workspace }: { workspace: Workspace }) {
         }
       >
         <div className="space-y-4">
-          <p className="text-sm text-fg/70">
+          <p className="text-sm text-fg-muted">
             This will permanently delete{' '}
             <strong>&ldquo;{workspace.name}&rdquo;</strong> and all its files.
             Chats and memories will be detached but not deleted. This cannot be
             undone.
           </p>
           <div className="space-y-1">
-            <label className="text-xs text-fg/60">
+            <label className="text-xs text-fg-muted">
               Type <strong>{workspace.name}</strong> to confirm
             </label>
             <Input

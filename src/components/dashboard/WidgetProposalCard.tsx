@@ -39,11 +39,11 @@ const WidgetProposalCard = ({
 
   return (
     <div className="rounded-control border border-accent/40 bg-surface-2/40 p-3 space-y-2 text-sm">
-      <p className="text-fg/80">{proposal.rationale}</p>
+      <p className="text-fg-muted">{proposal.rationale}</p>
 
       {titleChanged && (
         <p className="text-xs">
-          <span className="text-fg/60">Title: </span>
+          <span className="text-fg-muted">Title: </span>
           <span className="line-through text-danger/80">
             {current.title}
           </span> →{' '}
@@ -52,8 +52,8 @@ const WidgetProposalCard = ({
       )}
 
       {sourcesChanged && (
-        <div className="text-xs text-fg/70">
-          <span className="text-fg/60">Sources → </span>
+        <div className="text-xs text-fg-muted">
+          <span className="text-fg-muted">Sources → </span>
           {proposal.proposed.sources.length === 0
             ? '(none)'
             : proposal.proposed.sources
@@ -72,7 +72,7 @@ const WidgetProposalCard = ({
                   ? 'block bg-success-soft text-success'
                   : part.removed
                     ? 'block bg-danger-soft text-danger line-through'
-                    : 'block text-fg/60'
+                    : 'block text-fg-muted'
               }
             >
               {part.value.replace(/\n$/, '')}

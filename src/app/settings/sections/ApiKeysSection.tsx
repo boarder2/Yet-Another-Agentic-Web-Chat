@@ -1,7 +1,9 @@
 'use client';
 
-import { LoaderCircle, RefreshCw } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import SettingsSection from '../components/SettingsSection';
+import { Button } from '@/components/ui/Button';
+import { Field } from '@/components/ui/Field';
 import InputComponent from '../components/InputComponent';
 import { SettingsType } from '../types';
 import { useLocalStorageString } from '@/lib/hooks/useLocalStorage';
@@ -31,28 +33,22 @@ export default function ApiKeysSection({
     <SettingsSection
       title="API Keys"
       headerAction={
-        <button
-          type="button"
-          className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-control border border-surface-2 hover:bg-surface-2 transition disabled:opacity-60"
+        <Button
+          size="sm"
+          icon={RefreshCw}
+          loading={refreshing}
           onClick={() => refresh()}
-          disabled={refreshing}
           title="Refresh models from providers"
         >
-          {refreshing ? (
-            <LoaderCircle size={12} className="animate-spin text-accent" />
-          ) : (
-            <RefreshCw size={12} />
-          )}
           {refreshing ? 'Refreshing…' : 'Refresh models'}
-        </button>
+        </Button>
       }
     >
-      <p className="text-xs text-fg/60">
+      <p className="text-xs text-fg-muted">
         API keys are encrypted at rest in the database.
       </p>
       <div className="flex flex-col space-y-4">
-        <div className="flex flex-col space-y-1">
-          <p className="text-sm">OpenAI API Key</p>
+        <Field label="OpenAI API Key">
           <InputComponent
             type="password"
             placeholder="OpenAI API Key"
@@ -66,10 +62,9 @@ export default function ApiKeysSection({
             }}
             onSave={(value) => saveConfig('openaiApiKey', value)}
           />
-        </div>
+        </Field>
 
-        <div className="flex flex-col space-y-1">
-          <p className="text-sm">GROQ API Key</p>
+        <Field label="GROQ API Key">
           <InputComponent
             type="password"
             placeholder="GROQ API Key"
@@ -83,10 +78,9 @@ export default function ApiKeysSection({
             }}
             onSave={(value) => saveConfig('groqApiKey', value)}
           />
-        </div>
+        </Field>
 
-        <div className="flex flex-col space-y-1">
-          <p className="text-sm">OpenRouter API Key</p>
+        <Field label="OpenRouter API Key">
           <InputComponent
             type="password"
             placeholder="OpenRouter API Key"
@@ -100,10 +94,9 @@ export default function ApiKeysSection({
             }}
             onSave={(value) => saveConfig('openrouterApiKey', value)}
           />
-        </div>
+        </Field>
 
-        <div className="flex flex-col space-y-1">
-          <p className="text-sm">Anthropic API Key</p>
+        <Field label="Anthropic API Key">
           <InputComponent
             type="password"
             placeholder="Anthropic API key"
@@ -117,10 +110,9 @@ export default function ApiKeysSection({
             }}
             onSave={(value) => saveConfig('anthropicApiKey', value)}
           />
-        </div>
+        </Field>
 
-        <div className="flex flex-col space-y-1">
-          <p className="text-sm">Gemini API Key</p>
+        <Field label="Gemini API Key">
           <InputComponent
             type="password"
             placeholder="Gemini API key"
@@ -134,10 +126,9 @@ export default function ApiKeysSection({
             }}
             onSave={(value) => saveConfig('geminiApiKey', value)}
           />
-        </div>
+        </Field>
 
-        <div className="flex flex-col space-y-1">
-          <p className="text-sm">Deepseek API Key</p>
+        <Field label="Deepseek API Key">
           <InputComponent
             type="password"
             placeholder="Deepseek API Key"
@@ -151,10 +142,9 @@ export default function ApiKeysSection({
             }}
             onSave={(value) => saveConfig('deepseekApiKey', value)}
           />
-        </div>
+        </Field>
 
-        <div className="flex flex-col space-y-1">
-          <p className="text-sm">AI/ML API Key</p>
+        <Field label="AI/ML API Key">
           <InputComponent
             type="text"
             placeholder="AI/ML API Key"
@@ -168,10 +158,9 @@ export default function ApiKeysSection({
             }}
             onSave={(value) => saveConfig('aimlApiKey', value)}
           />
-        </div>
+        </Field>
 
-        <div className="flex flex-col space-y-1">
-          <p className="text-sm">LM Studio API URL</p>
+        <Field label="LM Studio API URL">
           <InputComponent
             type="text"
             placeholder="LM Studio API URL"
@@ -179,7 +168,7 @@ export default function ApiKeysSection({
             onChange={(e) => setLmStudioApiUrl(e.target.value)}
             onSave={() => refresh()}
           />
-        </div>
+        </Field>
       </div>
     </SettingsSection>
   );

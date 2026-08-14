@@ -4,6 +4,7 @@ import { RotateCcw } from 'lucide-react';
 import ModelPicker from '@/components/models/ModelPicker';
 import type { ModelSelection } from '@/lib/models/presets';
 import SettingsSection from '../components/SettingsSection';
+import { IconButton } from '@/components/ui/IconButton';
 
 export default function DefaultSearchSection({
   searchChatModelProvider,
@@ -25,7 +26,7 @@ export default function DefaultSearchSection({
 
   return (
     <SettingsSection title="Default Search Settings">
-      <p className="text-xs text-fg/60">
+      <p className="text-xs text-fg-muted">
         Settings used when navigating to the site with a search query (e.g.{' '}
         <code className="font-mono">?q=your+query</code>). These override global
         settings for that search. If not specified, global settings are used.
@@ -41,14 +42,12 @@ export default function DefaultSearchSection({
             />
           </div>
           {(searchChatModelProvider || searchChatModel) && (
-            <button
-              type="button"
+            <IconButton
+              icon={RotateCcw}
+              label="Reset chat model"
               onClick={onReset}
-              className="p-1.5 rounded-control hover:bg-surface-2 transition-colors self-start mt-5"
-              title="Reset chat model"
-            >
-              <RotateCcw size={16} />
-            </button>
+              className="self-start mt-5"
+            />
           )}
         </div>
       </div>

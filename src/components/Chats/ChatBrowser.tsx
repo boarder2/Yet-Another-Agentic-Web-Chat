@@ -27,6 +27,7 @@ import {
 import { qk } from '@/lib/api/keys';
 import { useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { useActiveRuns } from '@/lib/hooks/api/useActiveRuns';
+import { IconButton } from '@/components/ui/IconButton';
 
 interface Props {
   /** When set, scopes the browser to a single workspace; hides workspace UI. */
@@ -278,7 +279,7 @@ const ChatBrowser = ({ workspaceId }: Props) => {
       <div className="flex items-center gap-2 mb-4">
         <div className="relative flex-1">
           <Search
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-fg/40 pointer-events-none"
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-subtle pointer-events-none"
             size={15}
           />
           <Input
@@ -293,14 +294,12 @@ const ChatBrowser = ({ workspaceId }: Props) => {
             className="pl-9 pr-9 rounded-surface"
           />
           {searchQuery && (
-            <button
-              type="button"
+            <IconButton
+              icon={X}
+              label="Clear search"
               onClick={clearSearch}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-fg/40 hover:text-fg transition-colors"
-              aria-label="Clear search"
-            >
-              <X size={14} />
-            </button>
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1"
+            />
           )}
         </div>
         <button
@@ -309,8 +308,8 @@ const ChatBrowser = ({ workspaceId }: Props) => {
           disabled={!searchQuery.trim() || isLlmSearching}
           title="Search with AI"
           className={cn(
-            'flex items-center gap-1.5 px-3 py-2 rounded-surface text-sm border transition-colors',
-            'border-surface-2 bg-surface text-fg/70 hover:text-fg hover:border-fg/30',
+            'flex items-center gap-1.5 px-3 py-2 rounded-surface text-sm border transition-colors duration-150 focus-border-neutral',
+            'border-surface-2 bg-surface text-fg-muted hover:text-fg hover:border-fg/30',
             'disabled:opacity-40 disabled:cursor-not-allowed',
           )}
         >
@@ -329,10 +328,10 @@ const ChatBrowser = ({ workspaceId }: Props) => {
           type="button"
           onClick={() => setPinnedOnly((v) => !v)}
           className={cn(
-            'flex items-center gap-1 px-2.5 py-1 rounded-pill text-xs font-medium border transition-colors',
+            'flex items-center gap-1 px-2.5 py-1 rounded-pill text-xs font-medium border transition-colors duration-150 focus-border-neutral',
             pinnedOnly
               ? 'bg-accent/10 border-accent/30 text-accent'
-              : 'bg-surface border-surface-2 text-fg/60 hover:text-fg hover:border-fg/30',
+              : 'bg-surface border-surface-2 text-fg-muted hover:text-fg hover:border-fg/30',
           )}
         >
           <Pin size={11} className={pinnedOnly ? 'fill-current' : ''} />
@@ -350,10 +349,10 @@ const ChatBrowser = ({ workspaceId }: Props) => {
             );
           }}
           className={cn(
-            'flex items-center gap-1 px-2.5 py-1 rounded-pill text-xs font-medium border transition-colors',
+            'flex items-center gap-1 px-2.5 py-1 rounded-pill text-xs font-medium border transition-colors duration-150 focus-border-neutral',
             scheduledFilter !== 'all'
               ? 'bg-accent/10 border-accent/30 text-accent'
-              : 'bg-surface border-surface-2 text-fg/60 hover:text-fg hover:border-fg/30',
+              : 'bg-surface border-surface-2 text-fg-muted hover:text-fg hover:border-fg/30',
           )}
         >
           <CalendarClock size={11} />
@@ -371,7 +370,7 @@ const ChatBrowser = ({ workspaceId }: Props) => {
 
       {/* Search status */}
       {isSearchMode && (
-        <div className="mb-3 text-xs text-fg/50">
+        <div className="mb-3 text-xs text-fg-subtle">
           {isSearching ? (
             <span className="flex items-center gap-1.5">
               <LoaderCircle size={16} className="animate-spin text-accent" />
@@ -386,7 +385,7 @@ const ChatBrowser = ({ workspaceId }: Props) => {
                 {searchMode === 'llm' ? ' (AI search)' : ''}
               </span>
               {searchTerms.length > 0 && (
-                <span className="ml-1 text-fg/40">
+                <span className="ml-1 text-fg-subtle">
                   — searched for{' '}
                   {searchTerms.map((t, i) => (
                     <span key={i}>
@@ -401,16 +400,20 @@ const ChatBrowser = ({ workspaceId }: Props) => {
         </div>
       )}
 
-      {loading && browseChats.length === 0 && <ListLoading />}
+      {loading && browseChats.length === 0 && (
+        <ListLoading layout="section" size={24} />
+      )}
 
       {!loading && !isSearchMode && browseChats.length === 0 && (
-        <ListEmptyState>
+        <ListEmptyState layout="section">
           {scoped ? 'No chats in this workspace yet.' : 'No chats yet.'}
         </ListEmptyState>
       )}
 
       {isSearchMode && !isSearching && searchResults.length === 0 && (
-        <ListEmptyState>No conversations match your search.</ListEmptyState>
+        <ListEmptyState layout="section">
+          No conversations match your search.
+        </ListEmptyState>
       )}
 
       {displayedChats.length > 0 && (

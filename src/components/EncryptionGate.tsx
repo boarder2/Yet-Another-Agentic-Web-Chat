@@ -31,7 +31,7 @@ export default function EncryptionGate({
           <h1 className="text-lg font-semibold text-fg">
             Encryption not configured
           </h1>
-          <p className="text-sm text-fg/70">
+          <p className="text-sm text-fg-muted">
             YAAWC encrypts stored API keys and MCP credentials at rest and
             requires a passphrase to do so. Add one to{' '}
             <code className="font-mono">config.toml</code>, or set the{' '}
@@ -41,7 +41,7 @@ export default function EncryptionGate({
           <pre className="overflow-x-auto rounded-control bg-surface-2 p-3 text-left font-mono text-xs text-fg">
             {'[SECURITY]\nENCRYPTION_PASSPHRASE = "your-passphrase-here"'}
           </pre>
-          <p className="text-xs text-fg/50">or</p>
+          <p className="text-xs text-fg-subtle">or</p>
           <pre className="overflow-x-auto rounded-control bg-surface-2 p-3 text-left font-mono text-xs text-fg">
             {'ENCRYPTION_PASSPHRASE=your-passphrase-here'}
           </pre>

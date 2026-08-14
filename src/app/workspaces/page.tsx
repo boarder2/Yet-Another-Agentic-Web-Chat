@@ -1,12 +1,13 @@
 'use client';
 
-import { FolderOpen, Plus, LoaderCircle, Archive } from 'lucide-react';
+import { FolderOpen, Plus, Archive } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import PageHeader from '@/components/PageHeader';
 import { Button } from '@/components/ui/Button';
+import { ListEmptyState, ListLoading } from '@/components/ui/List';
 import Modal from '@/components/ui/Modal';
 import WorkspaceIcon from '@/components/Workspaces/WorkspaceIcon';
 import WorkspaceSettingsFields, {
@@ -150,7 +151,7 @@ const WorkspacesPage = () => {
               type="button"
               onClick={() => setShowArchived((v) => !v)}
               className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-surface border border-surface-2 transition duration-200',
+                'flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-surface border border-surface-2 transition-colors duration-150 focus-border-neutral',
                 showArchived
                   ? 'bg-accent/20 text-accent'
                   : 'bg-surface hover:bg-surface-2',
@@ -171,22 +172,18 @@ const WorkspacesPage = () => {
       />
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-16">
-          <LoaderCircle size={24} className="animate-spin text-accent" />
-        </div>
+        <ListLoading layout="page" size={24} />
       ) : workspaces.length === 0 ? (
-        <div className="text-center py-16">
-          <FolderOpen className="mx-auto mb-4 text-fg/20" size={48} />
-          <h2 className="text-lg font-medium text-fg/60 mb-2">
-            {showArchived ? 'No archived workspaces' : 'No workspaces yet'}
-          </h2>
-          {!showArchived && (
-            <p className="text-sm text-fg/40 max-w-md mx-auto">
-              Workspaces let you organize chats, files, and instructions for
-              specific projects.
-            </p>
-          )}
-        </div>
+        <ListEmptyState
+          layout="page"
+          icon={FolderOpen}
+          title={showArchived ? 'No archived workspaces' : 'No workspaces yet'}
+          body={
+            !showArchived
+              ? 'Workspaces let you organize chats, files, and instructions for specific projects.'
+              : undefined
+          }
+        />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {workspaces.map((ws) => {
@@ -196,7 +193,7 @@ const WorkspacesPage = () => {
                 key={ws.id}
                 href={`/workspaces/${ws.id}`}
                 className={cn(
-                  'flex flex-col gap-2 p-4 bg-surface rounded-floating border transition cursor-pointer',
+                  'flex flex-col gap-2 p-4 bg-surface rounded-floating border transition-opacity duration-150 cursor-pointer focus-border-neutral',
                   c.border,
                   'hover:opacity-90',
                 )}
@@ -218,7 +215,7 @@ const WorkspacesPage = () => {
                   <span className="font-medium truncate">{ws.name}</span>
                 </div>
                 {ws.description && (
-                  <p className="text-xs text-fg/50 line-clamp-2">
+                  <p className="text-xs text-fg-muted line-clamp-2">
                     {ws.description}
                   </p>
                 )}

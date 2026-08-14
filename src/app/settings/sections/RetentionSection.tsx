@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import SettingsSection from '../components/SettingsSection';
+import { Field } from '@/components/ui/Field';
 import Select from '@/components/ui/Select';
 import InputComponent from '../components/InputComponent';
 import { useLocalStorageString } from '@/lib/hooks/useLocalStorage';
@@ -43,9 +44,9 @@ function RetentionPanel({
   setValue: (v: string) => void;
 }) {
   return (
-    <div className="flex flex-col space-y-2">
-      <p className="text-sm font-medium">{label}</p>
+    <Field grouped label={label}>
       <Select
+        aria-label={`${label} retention mode`}
         value={mode}
         onChange={(e) => setMode(e.target.value)}
         options={MODES}
@@ -53,6 +54,7 @@ function RetentionPanel({
       {mode !== 'disabled' && (
         <InputComponent
           type="number"
+          aria-label={`${label} value`}
           min={1}
           value={value}
           placeholder={valueLabel}
@@ -60,7 +62,7 @@ function RetentionPanel({
           onSave={(next) => setValue(String(Math.max(1, parseInt(next) || 1)))}
         />
       )}
-    </div>
+    </Field>
   );
 }
 
@@ -97,7 +99,7 @@ export default function RetentionSection() {
 
   return (
     <SettingsSection title="Retention">
-      <p className="text-xs text-fg/60">
+      <p className="text-xs text-fg-muted">
         Automatically purge old chats and scheduled task runs. Pinned chats are
         never purged.
       </p>
@@ -117,13 +119,13 @@ export default function RetentionSection() {
         value={schedValue}
         setValue={setSchedValue}
       />
-      <div className="flex flex-col space-y-2">
-        <p className="text-sm font-medium">Private Session Duration</p>
-        <p className="text-xs text-fg/60">
-          Private sessions are automatically deleted after the configured
-          duration.
-        </p>
+      <Field
+        grouped
+        label="Private Session Duration"
+        hint="Private sessions are automatically deleted after the configured duration."
+      >
         <Select
+          aria-label="Private session duration preset"
           value={
             isCustomPrivateDuration
               ? '-1'
@@ -144,26 +146,21 @@ export default function RetentionSection() {
           }))}
         />
         {isCustomPrivateDuration && (
-          <div className="flex flex-col space-y-1">
-            <p className="text-sm">Custom duration (minutes)</p>
-            <InputComponent
-              type="number"
-              min={1}
-              value={privateDurationRaw}
-              placeholder="Duration in minutes"
-              onChange={(e) => setPrivateDurationRaw(e.target.value)}
-              onSave={(value) =>
-                setPrivateDurationRaw(
-                  String(Math.max(1, parseInt(value) || 1440)),
-                )
-              }
-            />
-            <p className="text-xs text-fg/60">
-              Enter a custom duration in minutes (minimum 1).
-            </p>
-          </div>
+          <InputComponent
+            type="number"
+            aria-label="Custom duration (minutes)"
+            min={1}
+            value={privateDurationRaw}
+            placeholder="Duration in minutes"
+            onChange={(e) => setPrivateDurationRaw(e.target.value)}
+            onSave={(value) =>
+              setPrivateDurationRaw(
+                String(Math.max(1, parseInt(value) || 1440)),
+              )
+            }
+          />
         )}
-      </div>
+      </Field>
     </SettingsSection>
   );
 }

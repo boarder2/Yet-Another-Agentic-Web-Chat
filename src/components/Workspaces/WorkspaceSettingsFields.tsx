@@ -96,7 +96,7 @@ export default function WorkspaceSettingsFields({
 
       {isSettings ? (
         <div className="space-y-2">
-          <label className="text-xs text-fg/60">Appearance</label>
+          <label className="text-xs text-fg-muted">Appearance</label>
           <AppearancePicker
             color={color}
             icon={icon}
@@ -105,7 +105,7 @@ export default function WorkspaceSettingsFields({
         </div>
       ) : (
         <div>
-          <label className="text-xs text-fg/60">Appearance</label>
+          <label className="text-xs text-fg-muted">Appearance</label>
           <div className="mt-1">
             <AppearancePicker
               color={color}
@@ -119,7 +119,7 @@ export default function WorkspaceSettingsFields({
       <Field className="flex items-center justify-between">
         <div>
           <Label className="text-sm font-medium">Auto-memory</Label>
-          <Description className="text-xs text-fg/60">
+          <Description className="text-xs text-fg-muted">
             Automatically extract memories from chats in this workspace
           </Description>
         </div>
@@ -129,7 +129,7 @@ export default function WorkspaceSettingsFields({
       <Field className="flex items-center justify-between">
         <div>
           <Label className="text-sm font-medium">Auto-accept file edits</Label>
-          <Description className="text-xs text-fg/60">
+          <Description className="text-xs text-fg-muted">
             When on, the agent can edit and create files in this workspace
             without asking. Per-file overrides still apply.
           </Description>
@@ -161,7 +161,7 @@ export function WorkspaceModelOverrideField({
           <Label className="text-sm font-medium">
             Use custom models for this workspace
           </Label>
-          <Description className="text-xs text-fg/60">
+          <Description className="text-xs text-fg-muted">
             Pin a chat and system model for every chat in this workspace,
             overriding the global selection.
           </Description>

@@ -28,7 +28,7 @@ export default function ArtifactCard({
       <FileCode2 size={20} className="shrink-0 text-accent" />
       <div className="min-w-0 flex-1">
         <div className="truncate font-medium">{title}</div>
-        <div className="text-xs text-fg/60">
+        <div className="text-xs text-fg-subtle">
           {action === 'create' ? 'Created' : 'Updated'} · v{version}
         </div>
       </div>

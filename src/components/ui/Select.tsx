@@ -14,14 +14,22 @@ export const Select = ({
   className,
   options,
   children,
+  'aria-label': ariaLabel,
+  'aria-labelledby': ariaLabelledBy,
+  'aria-describedby': ariaDescribedBy,
+  'aria-invalid': ariaInvalid,
   ...restProps
 }: SelectProps) => {
-  const { describedBy, invalid } = useFieldControl();
+  const { describedBy, invalid, labelId, grouped } = useFieldControl();
 
   return (
     <select
-      aria-describedby={describedBy}
-      aria-invalid={invalid || undefined}
+      aria-label={ariaLabel}
+      aria-labelledby={
+        ariaLabelledBy ?? (ariaLabel || grouped ? undefined : labelId)
+      }
+      aria-describedby={ariaDescribedBy ?? describedBy}
+      aria-invalid={ariaInvalid ?? (invalid ? true : undefined)}
       {...restProps}
       className={cn(controlClasses, className)}
     >

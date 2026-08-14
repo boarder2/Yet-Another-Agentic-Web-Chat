@@ -40,6 +40,8 @@ import SettingsSection from '../components/SettingsSection';
 import ModelPicker from '@/components/models/ModelPicker';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { IconButton } from '@/components/ui/IconButton';
+import { ListEmptyState } from '@/components/ui/List';
 
 const EMPTY_PRESETS: ModelPresetList = [];
 
@@ -262,12 +264,12 @@ export default function ModelPresetsSection({
     <SettingsSection
       title="Model Presets"
       headerAction={
-        <span className="text-xs text-fg/50">
+        <span className="text-xs text-fg-subtle">
           {presets.length}/{PRESET_MAX}
         </span>
       }
     >
-      <p className="text-xs text-fg/60">
+      <p className="text-xs text-fg-muted">
         Save named combinations of chat model, system model, vision, and context
         window. Switch between them from the chat input or here.
       </p>
@@ -313,14 +315,15 @@ export default function ModelPresetsSection({
           </div>
         ) : (
           <>
-            <p className="flex-1 text-xs text-fg/60">
+            <p className="flex-1 text-xs text-fg-muted">
               Current:{' '}
-              <span className="font-medium text-fg/80">
+              <span className="font-medium text-fg-muted">
                 {matchingPreset ? matchingPreset.name : 'Custom'}
               </span>
             </p>
-            <button
-              type="button"
+            <Button
+              size="sm"
+              icon={Plus}
               disabled={!selectedChatModel}
               onClick={() => {
                 setSavingCurrentName(true);
@@ -333,20 +336,19 @@ export default function ModelPresetsSection({
                   ? 'Save current selection as a new preset'
                   : 'Select a chat model first'
               }
-              className="text-xs px-2.5 py-1.5 rounded-control bg-surface-2 text-fg/70 hover:bg-surface-2/80 hover:text-fg transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
             >
-              <Plus size={12} />
               Save current as preset
-            </button>
+            </Button>
           </>
         )}
       </div>
 
       {/* Preset list */}
       {presets.length === 0 && !addingNew ? (
-        <div className="text-center py-6 text-xs text-fg/40">
-          No presets yet. Save the current selection or create one below.
-        </div>
+        <ListEmptyState
+          layout="compact"
+          body="No presets yet. Save the current selection or create one below."
+        />
       ) : (
         <div className="flex flex-col gap-2">
           {presets.map((preset, idx) => {
@@ -421,24 +423,20 @@ export default function ModelPresetsSection({
                   <div className="flex items-start gap-2">
                     {/* Reorder buttons */}
                     <div className="flex flex-col gap-0.5 shrink-0 pt-0.5">
-                      <button
-                        type="button"
+                      <IconButton
+                        icon={ChevronUp}
+                        label="Move preset up"
                         disabled={idx === 0}
                         onClick={() => handleMoveUp(idx)}
-                        className="p-0.5 rounded text-fg/30 hover:text-fg/70 disabled:opacity-20 transition-colors duration-150"
-                        aria-label="Move preset up"
-                      >
-                        <ChevronUp size={14} />
-                      </button>
-                      <button
-                        type="button"
+                        className="p-0.5"
+                      />
+                      <IconButton
+                        icon={ChevronDown}
+                        label="Move preset down"
                         disabled={idx === presets.length - 1}
                         onClick={() => handleMoveDown(idx)}
-                        className="p-0.5 rounded text-fg/30 hover:text-fg/70 disabled:opacity-20 transition-colors duration-150"
-                        aria-label="Move preset down"
-                      >
-                        <ChevronDown size={14} />
-                      </button>
+                        className="p-0.5"
+                      />
                     </div>
 
                     {/* Content */}
@@ -461,11 +459,11 @@ export default function ModelPresetsSection({
                         )}
                       </div>
                       <div className="flex items-center gap-1 mt-0.5">
-                        <p className="text-xs text-fg/50 truncate">
+                        <p className="text-xs text-fg-subtle truncate">
                           {presetSummary(preset)}
                         </p>
                         {preset.imageCapable && (
-                          <Eye size={10} className="text-fg/40 shrink-0" />
+                          <Eye size={10} className="text-fg-subtle shrink-0" />
                         )}
                       </div>
                     </div>
@@ -473,7 +471,7 @@ export default function ModelPresetsSection({
                     {/* Actions */}
                     {isDeleting ? (
                       <div className="flex items-center gap-1.5 shrink-0">
-                        <span className="text-xs text-fg/60">Delete?</span>
+                        <span className="text-xs text-fg-muted">Delete?</span>
                         <Button
                           variant="danger"
                           size="sm"
@@ -481,49 +479,39 @@ export default function ModelPresetsSection({
                         >
                           Yes
                         </Button>
-                        <button
-                          type="button"
-                          onClick={() => setDeletingId(null)}
-                          className="text-xs px-2 py-1 rounded-control bg-surface-2 text-fg/70 hover:bg-surface-2/80 transition-colors duration-150"
-                        >
+                        <Button size="sm" onClick={() => setDeletingId(null)}>
                           No
-                        </button>
+                        </Button>
                       </div>
                     ) : (
                       <div className="flex items-center gap-1 shrink-0">
-                        <button
-                          type="button"
+                        <Button
+                          size="sm"
                           onClick={() => handleApply(preset)}
                           disabled={isActive}
-                          className="text-xs px-2 py-1 rounded-control bg-surface-2 text-fg/70 hover:bg-accent hover:text-accent-fg disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-150"
                           aria-label="Apply preset"
                         >
                           Apply
-                        </button>
-                        <button
-                          type="button"
+                        </Button>
+                        <IconButton
+                          icon={Pencil}
+                          label="Edit preset"
                           onClick={() => startEdit(preset)}
-                          className="p-1.5 rounded-control text-fg/40 hover:text-fg/70 hover:bg-surface-2 transition-colors duration-150"
-                          aria-label="Edit preset"
-                        >
-                          <Pencil size={13} />
-                        </button>
-                        <button
-                          type="button"
+                          className="p-1.5"
+                        />
+                        <IconButton
+                          icon={Copy}
+                          label="Duplicate preset"
                           onClick={() => handleDuplicate(preset)}
-                          className="p-1.5 rounded-control text-fg/40 hover:text-fg/70 hover:bg-surface-2 transition-colors duration-150"
-                          aria-label="Duplicate preset"
-                        >
-                          <Copy size={13} />
-                        </button>
-                        <button
-                          type="button"
+                          className="p-1.5"
+                        />
+                        <IconButton
+                          icon={Trash2}
+                          label="Delete preset"
+                          tone="danger"
                           onClick={() => setDeletingId(preset.id)}
-                          className="p-1.5 rounded-control text-fg/40 hover:text-danger hover:bg-danger-soft transition-colors duration-150"
-                          aria-label="Delete preset"
-                        >
-                          <Trash2 size={13} />
-                        </button>
+                          className="p-1.5"
+                        />
                       </div>
                     )}
                   </div>
@@ -537,7 +525,7 @@ export default function ModelPresetsSection({
       {/* New preset form */}
       {addingNew ? (
         <div className="border border-surface-2 rounded-surface p-3 flex flex-col gap-3 bg-bg">
-          <p className="text-xs font-medium text-fg/70">New Preset</p>
+          <p className="text-xs font-medium text-fg-muted">New Preset</p>
           <Input
             autoFocus
             type="text"
@@ -636,8 +624,10 @@ export default function ModelPresetsSection({
           </div>
         </div>
       ) : (
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="sm"
+          icon={Plus}
           disabled={presets.length >= PRESET_MAX}
           onClick={() => {
             setAddingNew(true);
@@ -654,11 +644,10 @@ export default function ModelPresetsSection({
               contextWindowSize: contextWindowSize,
             });
           }}
-          className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-control border border-dashed border-surface-2 text-fg/50 hover:border-border-strong hover:text-fg/70 transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed w-full justify-center"
+          className="w-full border-dashed border-surface-2"
         >
-          <Plus size={13} />
           New preset from scratch
-        </button>
+        </Button>
       )}
     </SettingsSection>
   );

@@ -73,6 +73,20 @@ test.describe('form control primitives', () => {
     });
     expect(panel).not.toBeNull();
     expect(inputRecipe.background).not.toBe(panel);
+
+    // Placeholder text reads the semantic tertiary token rather than a
+    // call-site alpha rung.
+    const subtle = await page.evaluate(() => {
+      const probe = document.createElement('span');
+      probe.className = 'text-fg-subtle';
+      document.body.appendChild(probe);
+      const color = getComputedStyle(probe).color;
+      probe.remove();
+      return color;
+    });
+    expect(
+      await input.evaluate((el) => getComputedStyle(el, '::placeholder').color),
+    ).toBe(subtle);
   });
 
   test('focusing a control flips its border to accent in place', async ({
@@ -108,7 +122,10 @@ test.describe('form control primitives', () => {
     await page.getByRole('button', { name: 'Add memory' }).click();
 
     const textarea = page.locator('textarea[aria-label="New memory content"]');
-    await textarea.focus();
+    const cancel = page.getByRole('button', { name: 'Cancel' });
+    await cancel.focus();
+    await page.keyboard.press('Shift+Tab');
+    await expect(textarea).toBeFocused();
     await expect
       .poll(() =>
         textarea.evaluate((el) => getComputedStyle(el).borderTopColor),
@@ -129,6 +146,110 @@ test.describe('form control primitives', () => {
 
     await page.getByText('URL', { exact: true }).click();
     await expect(input).toBeFocused();
+  });
+
+  test('migrated settings fields keep their visible names', async ({
+    page,
+  }) => {
+    const settings = new SettingsPage(page);
+    await settings.goto();
+    await settings.openSection('API Keys');
+
+    const key = page.getByLabel('OpenAI API Key', { exact: true });
+    await expect(key).toBeVisible();
+    expect(await key.getAttribute('aria-label')).toBeNull();
+  });
+
+  test('grouped settings fields use legends and preserve inner control names', async ({
+    page,
+  }) => {
+    const settings = new SettingsPage(page);
+    await settings.goto();
+    await settings.openSection('Retention');
+
+    const regularChats = page.locator('fieldset').filter({
+      has: page.locator('legend', { hasText: 'Regular Chats' }),
+    });
+    const privateDuration = page.locator('fieldset').filter({
+      has: page.locator('legend', { hasText: 'Private Session Duration' }),
+    });
+
+    await expect(regularChats.locator('legend')).toHaveText('Regular Chats');
+    await expect(privateDuration.locator('legend')).toHaveText(
+      'Private Session Duration',
+    );
+    await expect(regularChats.locator('label')).toHaveCount(0);
+    await expect(privateDuration.locator('label')).toHaveCount(0);
+
+    const privateHintId =
+      await privateDuration.getAttribute('aria-describedby');
+    expect(privateHintId).not.toBeNull();
+    await expect(page.locator(`[id="${privateHintId}"]`)).toHaveText(
+      'Private sessions are automatically deleted after the configured duration.',
+    );
+    await expect(
+      page.getByLabel('Private session duration preset', { exact: true }),
+    ).toHaveAttribute('aria-describedby', privateHintId!);
+
+    await settings.openSection('Search Providers');
+    const fallback = page.getByRole('combobox', {
+      name: 'Fallback provider',
+      exact: true,
+    });
+    await expect(fallback).toBeVisible();
+    expect(await fallback.getAttribute('aria-label')).toBeNull();
+    const fallbackHintId = await fallback.getAttribute('aria-describedby');
+    expect(fallbackHintId).not.toBeNull();
+    await expect(page.locator(`[id="${fallbackHintId}"]`)).toContainText(
+      "Used for any capability the chosen primary provider doesn't support.",
+    );
+  });
+
+  test('grouped voice preview names its child and preserves the inline layout', async ({
+    page,
+  }) => {
+    const settings = new SettingsPage(page);
+    await settings.goto();
+    await settings.openSection('Voice');
+
+    // Keep the conditional preview branch deterministic even if a previous
+    // browser session persisted the system engine.
+    await page
+      .getByRole('combobox', { name: 'Read-aloud engine', exact: true })
+      .selectOption('kokoro');
+
+    const previewField = page.locator('fieldset').filter({
+      has: page.locator('legend', { hasText: 'Voice preview' }),
+    });
+    const preview = page.getByRole('textbox', {
+      name: 'Voice preview text',
+      exact: true,
+    });
+    await expect(preview).toBeVisible();
+    await expect(
+      previewField.getByRole('button', { name: 'Read aloud', exact: true }),
+    ).toBeVisible();
+
+    const layout = await previewField.evaluate((fieldset) => {
+      const wrapper = fieldset.parentElement!;
+      const captionId = fieldset.getAttribute('aria-describedby');
+      const caption = captionId ? document.getElementById(captionId) : null;
+      const fieldRect = fieldset.getBoundingClientRect();
+      const captionRect = caption?.getBoundingClientRect();
+      return {
+        fieldDirection: getComputedStyle(fieldset).flexDirection,
+        wrapperDirection: getComputedStyle(wrapper).flexDirection,
+        fieldX: fieldRect.x,
+        fieldBottom: fieldRect.bottom,
+        captionX: captionRect?.x ?? null,
+        captionTop: captionRect?.top ?? null,
+      };
+    });
+
+    expect(layout.fieldDirection).toBe('row');
+    expect(layout.wrapperDirection).toBe('column');
+    expect(layout.captionX).toBeCloseTo(layout.fieldX, 0);
+    expect(layout.captionTop).toBeGreaterThan(layout.fieldBottom);
   });
 
   test('the chat composer follows the recipe: inset well on its surface, accent border on focus', async ({

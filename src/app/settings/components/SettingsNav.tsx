@@ -55,10 +55,10 @@ export function DesktopSettingsNav({
                 key={section.key}
                 onClick={() => onSelect(section.key)}
                 className={cn(
-                  'w-full text-left px-3 py-2 rounded-surface text-sm transition-colors',
+                  'w-full border border-transparent text-left px-3 py-2 rounded-surface text-sm transition-colors duration-150 focus-border-neutral',
                   activeSection === section.key
                     ? 'bg-surface-2 text-fg font-medium'
-                    : 'text-fg/70 hover:bg-surface hover:text-fg',
+                    : 'text-fg-muted hover:bg-surface hover:text-fg',
                 )}
               >
                 {section.label}

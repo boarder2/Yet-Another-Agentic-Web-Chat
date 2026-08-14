@@ -30,21 +30,21 @@ const ThinkBox = ({ content, expanded, onToggle }: ThinkBoxProps) => {
       <button
         type="button"
         onClick={handleToggle}
-        className="w-full flex items-center justify-between px-4 py-4 text-fg/90 hover:bg-surface-2 transition duration-200"
+        className="w-full flex items-center justify-between border border-transparent px-4 py-4 text-fg/90 hover:bg-surface-2 transition-colors duration-150 focus-border-neutral"
       >
         <div className="flex items-center space-x-2">
-          <BrainCircuit size={20} className="text-[#9C27B0]" />
+          <BrainCircuit size={20} className="text-accent" />
           <span className="font-medium text-sm">Thinking Process</span>
         </div>
         {isExpanded ? (
-          <ChevronDown size={18} className="text-fg/70" />
+          <ChevronDown size={18} className="text-fg-muted" />
         ) : (
-          <ChevronRight size={18} className="text-fg/70" />
+          <ChevronRight size={18} className="text-fg-muted" />
         )}
       </button>
 
       {isExpanded && (
-        <div className="px-4 py-3 text-fg/80 text-sm border-t border-surface-2 bg-surface/50">
+        <div className="px-4 py-3 text-fg text-sm border-t border-surface-2 bg-surface/50">
           {content}
         </div>
       )}

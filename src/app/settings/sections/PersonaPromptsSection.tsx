@@ -8,6 +8,7 @@ import CopyTemplatePicker from '../components/CopyTemplatePicker';
 import { Prompt } from '@/lib/types/prompt';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { IconButton } from '@/components/ui/IconButton';
 
 export default function PersonaPromptsSection({
   userSystemPrompts,
@@ -36,7 +37,7 @@ export default function PersonaPromptsSection({
 }) {
   return (
     <SettingsSection title="Persona Prompts">
-      <p className="text-xs text-fg/60">
+      <p className="text-xs text-fg-muted">
         Persona prompts control <strong>what </strong> the response looks like -
         tone, style, formatting, and citation rules. When active, they override
         the default formatting instructions. Persona prompts do not affect the
@@ -111,22 +112,17 @@ export default function PersonaPromptsSection({
                     </p>
                   </div>
                   <div className="flex space-x-1 flex-shrink-0 ml-2">
-                    <button
-                      type="button"
+                    <IconButton
+                      icon={Edit3}
+                      label="Edit"
                       onClick={() => setEditingPrompt({ ...prompt })}
-                      title="Edit"
-                      className="p-1.5 rounded-control hover:bg-surface-2"
-                    >
-                      <Edit3 size={18} />
-                    </button>
-                    <button
-                      type="button"
+                    />
+                    <IconButton
+                      icon={Trash2}
+                      label="Delete"
+                      tone="danger"
                       onClick={() => onDelete(prompt.id)}
-                      title="Delete"
-                      className="p-1.5 rounded-control hover:bg-surface-2 text-danger hover:text-danger"
-                    >
-                      <Trash2 size={18} />
-                    </button>
+                    />
                   </div>
                 </div>
               )}

@@ -194,7 +194,7 @@ export const ToolCall = ({
       case 'read_artifact':
         return <FileCode size={16} className="text-accent" />;
       default:
-        return <Settings size={16} className="text-fg/70" />;
+        return <Settings size={16} className="text-fg-muted" />;
     }
   };
 
@@ -597,7 +597,7 @@ export const ToolCall = ({
             {mcpTool || type}
           </span>
           {mcpServer && (
-            <span className="ml-1 text-xs text-fg/50">on {mcpServer}</span>
+            <span className="ml-1 text-xs text-fg-subtle">on {mcpServer}</span>
           )}
         </>
       );
@@ -625,7 +625,7 @@ export const ToolCall = ({
       <div
         className={`flex items-start justify-between gap-2 text-sm font-medium px-4 py-3 ${
           isExpandable
-            ? 'cursor-pointer hover:bg-surface-2/50 transition-colors'
+            ? 'cursor-pointer hover:bg-surface-2/50 transition-colors duration-150'
             : ''
         }`}
         onClick={isExpandable ? () => setExpanded(!expanded) : undefined}
@@ -637,7 +637,7 @@ export const ToolCall = ({
           {isExpandable && (
             <ChevronRight
               size={16}
-              className={`text-fg/50 transition-transform ${expanded ? 'rotate-90' : ''}`}
+              className={`text-fg-subtle transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`}
             />
           )}
           {status === 'running' && (
@@ -667,7 +667,7 @@ export const ToolCall = ({
       {type === 'get_message' && expanded && (
         <div className="border-t border-surface-2 px-4 py-3 text-sm space-y-3">
           {fetchState.status === 'loading' && (
-            <div className="flex items-center gap-2 text-fg/60">
+            <div className="flex items-center gap-2 text-fg-muted">
               <LoaderCircle className="w-4 h-4 animate-spin" />
               <span>Loading message…</span>
             </div>
@@ -701,7 +701,7 @@ export const ToolCall = ({
           <CodeBlock className="language-javascript">{code}</CodeBlock>
           {stdout && (
             <div className="border-t border-surface-2">
-              <div className="px-4 py-1 text-xs text-fg/50 font-mono bg-surface-2/50">
+              <div className="px-4 py-1 text-xs text-fg-subtle font-mono bg-surface-2/50">
                 stdout
               </div>
               <CodeBlock className="language-text">{stdout}</CodeBlock>
@@ -721,7 +721,7 @@ export const ToolCall = ({
         <div className="border-t border-surface-2">
           {decodedMcpArgs && (
             <div>
-              <div className="px-4 py-1 text-xs text-fg/50 font-mono bg-surface-2/50">
+              <div className="px-4 py-1 text-xs text-fg-subtle font-mono bg-surface-2/50">
                 Arguments
               </div>
               <CodeBlock className="language-json">{decodedMcpArgs}</CodeBlock>
@@ -729,7 +729,7 @@ export const ToolCall = ({
           )}
           {decodedMcpResult && (
             <div className="border-t border-surface-2">
-              <div className="px-4 py-1 text-xs text-fg/50 font-mono bg-surface-2/50">
+              <div className="px-4 py-1 text-xs text-fg-subtle font-mono bg-surface-2/50">
                 Response
               </div>
               <CodeBlock className="language-text">

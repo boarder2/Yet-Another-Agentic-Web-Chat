@@ -1,7 +1,7 @@
 'use client';
 
 import { useParams } from 'next/navigation';
-import { LoaderCircle } from 'lucide-react';
+import { ListEmptyState, ListLoading } from '@/components/ui/List';
 import WorkflowBuilder from '@/components/workflows/WorkflowBuilder';
 import { useWorkflow } from '@/lib/hooks/api/useWorkflows';
 
@@ -10,14 +10,10 @@ export default function EditWorkflowPage() {
   const { data: workflow, isLoading } = useWorkflow(id);
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[50vh]">
-        <LoaderCircle size={32} className="animate-spin text-accent" />
-      </div>
-    );
+    return <ListLoading layout="page" size={32} />;
   }
   if (!workflow)
-    return <div className="p-8 text-fg/60">Workflow not found.</div>;
+    return <ListEmptyState layout="page">Workflow not found.</ListEmptyState>;
 
   return <WorkflowBuilder workflow={workflow} />;
 }

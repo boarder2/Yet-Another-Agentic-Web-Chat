@@ -20,6 +20,7 @@ import { useActiveRuns } from '@/lib/hooks/api/useActiveRuns';
 import { qk } from '@/lib/api/keys';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSettingsModal } from '@/components/settings/SettingsModalProvider';
+import { IconButton } from '@/components/ui/IconButton';
 
 const VerticalIconContainer = ({ children }: { children: ReactNode }) => {
   return (
@@ -27,10 +28,15 @@ const VerticalIconContainer = ({ children }: { children: ReactNode }) => {
   );
 };
 
+const SIDEBAR_ICON_SIZE = 24;
+
 const NewChatButton = () => (
-  <Link href="/" className="cursor-pointer">
-    <SquarePen />
-  </Link>
+  <IconButton
+    href="/"
+    icon={SquarePen}
+    iconSize={SIDEBAR_ICON_SIZE}
+    label="New chat"
+  />
 );
 
 // A single rounded pill that can carry up to two counts: an "attention"
@@ -82,15 +88,13 @@ const WidthToggle = () => {
   if (!isChat) return null;
 
   return (
-    <button
-      type="button"
+    <IconButton
+      icon={wide ? Minimize2 : Maximize2}
+      iconSize={SIDEBAR_ICON_SIZE}
+      label={wide ? 'Switch to narrow width' : 'Switch to full width'}
       onClick={() => setWideWidth(!wide)}
-      aria-label={wide ? 'Switch to narrow width' : 'Switch to full width'}
-      title={wide ? 'Narrow width' : 'Full width'}
-      className="flex items-center justify-center w-full py-2 rounded-surface text-fg/70 hover:text-fg hover:bg-surface-2 duration-150 transition"
-    >
-      {wide ? <Minimize2 /> : <Maximize2 />}
-    </button>
+      className="w-full rounded-surface py-2"
+    />
   );
 };
 
@@ -217,10 +221,10 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
                   key={i}
                   href={link.href}
                   className={cn(
-                    'relative flex flex-row items-center justify-center cursor-pointer duration-150 transition-colors w-full py-2 rounded-surface',
+                    'relative flex flex-row items-center justify-center cursor-pointer border border-transparent duration-150 transition-colors w-full py-2 rounded-surface focus-border-neutral',
                     link.active
                       ? 'bg-surface-2 text-accent'
-                      : 'text-fg/70 hover:bg-surface-2/50 hover:text-fg',
+                      : 'text-fg-muted hover:bg-surface-2/50 hover:text-fg',
                   )}
                 >
                   {link.label === 'History' && historyInProgress ? (
@@ -252,14 +256,13 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
           <div className="flex-1 flex items-end justify-center w-full">
             <div className="flex flex-col items-center gap-y-3 w-full -mb-2">
               <WidthToggle />
-              <button
-                type="button"
+              <IconButton
+                icon={Settings}
+                iconSize={SIDEBAR_ICON_SIZE}
+                label="Settings"
                 onClick={() => openSettings()}
-                aria-label="Settings"
-                className="flex items-center justify-center w-full py-2 rounded-surface text-fg/70 hover:text-fg hover:bg-surface-2 duration-150 transition"
-              >
-                <Settings />
-              </button>
+                className="w-full rounded-surface py-2"
+              />
             </div>
           </div>
         </div>
@@ -273,8 +276,8 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
             href={link.href}
             key={i}
             className={cn(
-              'relative flex flex-col items-center space-y-1 text-center w-full',
-              link.active ? 'text-fg' : 'text-fg/70',
+              'relative flex flex-col items-center space-y-1 text-center w-full border border-transparent focus-border-neutral',
+              link.active ? 'text-fg' : 'text-fg-muted',
             )}
           >
             {link.active && (

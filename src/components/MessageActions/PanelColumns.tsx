@@ -94,12 +94,12 @@ const Column: React.FC<{ ex: PanelColumnPayload }> = ({ ex }) => {
           {ex.model}
         </span>
         {ex.sourceCount !== undefined && ex.sourceCount > 0 && (
-          <span className="text-[10px] text-fg/60 shrink-0">
+          <span className="text-[10px] text-fg-subtle shrink-0">
             {ex.sourceCount} src
           </span>
         )}
         {ex.tokens !== undefined && ex.tokens > 0 && (
-          <span className="text-[10px] text-fg/50 shrink-0">
+          <span className="text-[10px] text-fg-subtle shrink-0">
             {ex.tokens >= 1000
               ? `${(ex.tokens / 1000).toFixed(1)}k tok`
               : `${ex.tokens} tok`}
@@ -126,7 +126,7 @@ const Column: React.FC<{ ex: PanelColumnPayload }> = ({ ex }) => {
             <Markdown options={columnMarkdownOptions}>{text}</Markdown>
           </div>
         ) : (
-          <div className="text-xs text-fg/50 italic">Researching…</div>
+          <div className="text-xs text-fg-muted italic">Researching…</div>
         )}
       </div>
     </Card>
@@ -164,13 +164,13 @@ export const PanelColumns: React.FC<PanelColumnsProps> = ({
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
-        className="w-full flex items-center gap-2 mb-2 text-xs font-semibold text-fg/70 uppercase tracking-wide hover:text-fg transition-colors duration-150"
+        className="w-full border border-transparent flex items-center gap-2 mb-2 text-xs font-semibold text-fg-muted uppercase tracking-wide hover:text-fg transition-colors duration-150 focus-border-neutral"
       >
         <Users size={14} className="text-accent shrink-0" />
         <span className="shrink-0">
           Agent Panel · {executors.length} models
         </span>
-        <span className="text-fg/40 normal-case font-normal tracking-normal shrink-0">
+        <span className="text-fg-subtle normal-case font-normal tracking-normal shrink-0">
           {summary}
         </span>
         {/* Collapsed: inline per-model status chips */}
@@ -183,7 +183,7 @@ export const PanelColumns: React.FC<PanelColumnsProps> = ({
                 title={ex.model}
               >
                 <StatusIcon status={ex.status} />
-                <span className="truncate max-w-[120px] text-fg/60">
+                <span className="truncate max-w-[120px] text-fg-muted">
                   {ex.model}
                 </span>
               </span>
@@ -210,10 +210,10 @@ export const PanelColumns: React.FC<PanelColumnsProps> = ({
                   type="button"
                   onClick={() => setActiveIdx(ex.idx)}
                   className={cn(
-                    'flex items-center gap-1.5 px-2.5 py-1 rounded-control text-xs whitespace-nowrap transition-colors duration-150',
+                    'flex items-center gap-1.5 px-2.5 py-1 rounded-control border border-transparent text-xs whitespace-nowrap transition-colors duration-150',
                     ex.idx === active.idx
-                      ? 'bg-accent text-accent-fg'
-                      : 'bg-surface-2 text-fg/70 hover:text-fg',
+                      ? 'bg-accent text-accent-fg focus-border-contrast'
+                      : 'bg-surface-2 text-fg-muted hover:text-fg focus-border-neutral',
                   )}
                 >
                   <StatusIcon status={ex.status} />

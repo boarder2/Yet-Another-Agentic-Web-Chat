@@ -19,7 +19,7 @@ const CitationLink = ({ number, source, url }: CitationLinkProps) => {
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="bg-surface px-1 rounded-control ml-1 no-underline text-xs text-fg/70 relative hover:bg-surface-2 transition-colors duration-200 border border-surface-2"
+      className="bg-surface px-1 rounded-control ml-1 no-underline text-xs text-fg-muted relative hover:bg-surface-2 transition-colors duration-150 border border-surface-2"
     >
       {number}
     </a>

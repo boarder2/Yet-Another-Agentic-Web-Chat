@@ -4,6 +4,7 @@ import AppSwitch from '@/components/ui/AppSwitch';
 import { ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react';
 import { PROVIDER_METADATA } from '@/lib/providers/metadata';
 import SettingsSection from '../components/SettingsSection';
+import { ListEmptyState } from '@/components/ui/List';
 
 export default function ModelVisibilitySection({
   allModels,
@@ -28,7 +29,7 @@ export default function ModelVisibilitySection({
 }) {
   return (
     <SettingsSection title="Model Visibility">
-      <p className="text-xs text-fg/60">
+      <p className="text-xs text-fg-muted">
         Hide models from appearing in selection lists. Useful for disabling
         models that incur high costs or aren&apos;t compatible with this
         application.
@@ -76,7 +77,7 @@ export default function ModelVisibilitySection({
                   <button
                     type="button"
                     onClick={() => onToggleExpand(providerId)}
-                    className="w-full p-3 bg-surface hover:bg-surface-2 transition-colors flex items-center justify-between"
+                    className="w-full border border-transparent p-3 bg-surface hover:bg-surface-2 transition-colors duration-150 flex items-center justify-between focus-border-neutral"
                   >
                     <div className="flex items-center space-x-3">
                       {isExpanded ? (
@@ -113,7 +114,7 @@ export default function ModelVisibilitySection({
                             e.stopPropagation();
                             onToggleProvider(models, true);
                           }}
-                          className="px-3 py-1.5 text-xs rounded-control bg-success-soft hover:bg-success-soft text-success flex items-center gap-1.5 transition-colors"
+                          className="px-3 py-1.5 text-xs rounded-control bg-success-soft hover:bg-success-soft text-success flex items-center gap-1.5 transition-colors duration-150 border border-transparent focus-border-contrast"
                           title="Show all models in this provider"
                         >
                           <Eye size={14} />
@@ -125,7 +126,7 @@ export default function ModelVisibilitySection({
                             e.stopPropagation();
                             onToggleProvider(models, false);
                           }}
-                          className="px-3 py-1.5 text-xs rounded-control bg-danger-soft hover:bg-danger-soft text-danger flex items-center gap-1.5 transition-colors"
+                          className="px-3 py-1.5 text-xs rounded-control bg-danger-soft hover:bg-danger-soft text-danger flex items-center gap-1.5 transition-colors duration-150 border border-transparent focus-border-contrast"
                           title="Hide all models in this provider"
                         >
                           <EyeOff size={14} />
@@ -156,7 +157,9 @@ export default function ModelVisibilitySection({
               );
             })
           ) : (
-            <p className="text-sm italic">No models available</p>
+            <ListEmptyState layout="compact">
+              No models available
+            </ListEmptyState>
           );
         })()}
       </div>

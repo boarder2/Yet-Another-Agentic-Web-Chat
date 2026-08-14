@@ -94,7 +94,7 @@ export default function ImageGenerationSection() {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium">Enable Image Generation</p>
-            <p className="text-xs text-fg/50">
+            <p className="text-xs text-fg-muted">
               Allow the agent to generate images from text prompts via
               OpenRouter
             </p>
@@ -120,10 +120,10 @@ export default function ImageGenerationSection() {
               />
             </Field>
             {loadingModels && (
-              <p className="text-xs text-fg/50">Loading models...</p>
+              <p className="text-xs text-fg-muted">Loading models...</p>
             )}
             {!loadingModels && imageGenModels.length === 0 && (
-              <p className="text-xs text-fg/50">
+              <p className="text-xs text-fg-muted">
                 No models available — check your API key.
               </p>
             )}

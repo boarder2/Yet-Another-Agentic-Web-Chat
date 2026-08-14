@@ -19,6 +19,7 @@ interface CodeEditorProps {
   // Accessible name for the editable surface (CodeMirror renders no label of
   // its own).
   ariaLabel?: string;
+  ariaDescribedBy?: string;
 }
 
 // CodeMirror 6 touches window/document at module load, so this component is
@@ -30,6 +31,7 @@ const CodeEditor = ({
   readOnly = false,
   filename,
   ariaLabel,
+  ariaDescribedBy,
 }: CodeEditorProps) => {
   const { syntax, mode } = useActiveTheme();
   const theme = useMemo(() => codeMirrorTheme(syntax, mode), [syntax, mode]);
@@ -61,10 +63,15 @@ const CodeEditor = ({
       theme={theme}
       readOnly={readOnly}
       extensions={
-        ariaLabel
+        ariaLabel || ariaDescribedBy
           ? [
               language,
-              EditorView.contentAttributes.of({ 'aria-label': ariaLabel }),
+              EditorView.contentAttributes.of({
+                ...(ariaLabel ? { 'aria-label': ariaLabel } : {}),
+                ...(ariaDescribedBy
+                  ? { 'aria-describedby': ariaDescribedBy }
+                  : {}),
+              }),
             ]
           : [language]
       }

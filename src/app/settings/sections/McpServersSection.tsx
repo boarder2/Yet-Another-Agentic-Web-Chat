@@ -11,7 +11,6 @@ import {
   Edit3,
   X,
   Save,
-  LoaderCircle,
   CheckCircle,
   AlertCircle,
   WifiOff,
@@ -22,6 +21,8 @@ import {
 } from 'lucide-react';
 import SettingsSection from '../components/SettingsSection';
 import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
+import { ListEmptyState, ListLoading } from '@/components/ui/List';
 import { Card } from '@/components/ui/Card';
 import { Field } from '@/components/ui/Field';
 import { Input } from '@/components/ui/Input';
@@ -142,7 +143,7 @@ function ExtraHeadersEditor({
 
   return (
     <div className="flex flex-col gap-2">
-      <span className="text-xs text-fg/60">Extra headers</span>
+      <span className="text-xs text-fg-muted">Extra headers</span>
       {rows.map((row, i) => (
         <div key={i} className="flex items-center gap-2">
           <Input
@@ -160,24 +161,24 @@ function ExtraHeadersEditor({
             value={row.value}
             onChange={(e) => update(i, { value: e.target.value })}
           />
-          <button
-            type="button"
-            aria-label={`Remove header ${row.name || i + 1}`}
-            className="p-2 text-fg/50 hover:text-red-400 transition-colors duration-150"
+          <IconButton
+            icon={Trash2}
+            label={`Remove header ${row.name || i + 1}`}
+            tone="danger"
             onClick={() => onChange(rows.filter((_, j) => j !== i))}
-          >
-            <Trash2 size={14} />
-          </button>
+          />
         </div>
       ))}
-      <button
-        type="button"
-        className="self-start flex items-center gap-1 text-xs text-fg/60 hover:text-fg transition-colors duration-150"
+      <Button
+        variant="ghost"
+        size="sm"
+        icon={PlusCircle}
+        className="self-start"
         onClick={() => onChange([...rows, { name: '', value: '' }])}
       >
-        <PlusCircle size={14} /> Add header
-      </button>
-      <p className="text-xs text-fg/50">
+        Add header
+      </Button>
+      <p className="text-xs text-fg-muted">
         Sent on every request, alongside the auth type above. Use for servers
         needing a second credential header. Saved values stay hidden — leave one
         blank to keep it as is.
@@ -190,7 +191,7 @@ function statusBadge(server: McpServer) {
   const { status } = server;
   if (!server.enabled) {
     return (
-      <span className="flex items-center gap-1 text-xs text-fg/40">
+      <span className="flex items-center gap-1 text-xs text-fg-subtle">
         <WifiOff size={12} /> Disabled
       </span>
     );
@@ -219,7 +220,7 @@ function statusBadge(server: McpServer) {
       </span>
     );
   }
-  return <span className="text-xs text-fg/40">Unknown</span>;
+  return <span className="text-xs text-fg-subtle">Unknown</span>;
 }
 
 function ToolsPanel({ server }: { server: McpServer }) {
@@ -240,16 +241,18 @@ function ToolsPanel({ server }: { server: McpServer }) {
 
   if (isLoading) {
     return (
-      <div className="mt-3 border-t border-surface-2 pt-3 flex items-center gap-2 text-xs text-fg/50">
-        <LoaderCircle size={14} className="animate-spin text-accent" />
-        Discovering tools…
-      </div>
+      <ListLoading
+        layout="compact"
+        size={20}
+        status="Discovering tools…"
+        className="mt-3 border-t border-surface-2 pt-3 text-xs"
+      />
     );
   }
 
   if (isError) {
     return (
-      <div className="mt-3 border-t border-surface-2 pt-3 text-xs text-fg/50">
+      <div className="mt-3 border-t border-surface-2 pt-3 text-xs text-fg-muted">
         Couldn&apos;t load tools. Make sure the server is enabled and connected
         (use Test / Authorize), then Refresh tools.
       </div>
@@ -258,15 +261,17 @@ function ToolsPanel({ server }: { server: McpServer }) {
 
   if (tools.length === 0) {
     return (
-      <div className="mt-3 border-t border-surface-2 pt-3 text-xs text-fg/50">
-        No tools discovered yet. Enable the server and use Test to connect.
-      </div>
+      <ListEmptyState
+        layout="compact"
+        body="No tools discovered yet. Enable the server and use Test to connect."
+        className="mt-3 border-t border-surface-2 pt-3 text-xs"
+      />
     );
   }
 
   return (
     <div className="mt-3 border-t border-surface-2 pt-3 space-y-2">
-      <div className="flex items-center justify-between text-xs text-fg/40 px-1">
+      <div className="flex items-center justify-between text-xs text-fg-subtle px-1">
         <span>Enabled · Tool</span>
         <span>Auto-run</span>
       </div>
@@ -299,7 +304,7 @@ function ToolsPanel({ server }: { server: McpServer }) {
                 </span>
                 {t.description && (
                   <p
-                    className="text-xs text-fg/50 line-clamp-2"
+                    className="text-xs text-fg-muted line-clamp-2"
                     title={t.description}
                   >
                     {t.description}
@@ -314,7 +319,7 @@ function ToolsPanel({ server }: { server: McpServer }) {
                     : 'Asks for approval before each call'
                 }
               >
-                <span className="text-xs text-fg/50 w-14 text-right">
+                <span className="text-xs text-fg-subtle w-14 text-right">
                   {enabled ? (autoRun ? 'Auto-run' : 'Ask') : ''}
                 </span>
                 <AppSwitch
@@ -371,15 +376,17 @@ function WorkspaceScopePanel({
 
   if (workspaces.length === 0) {
     return (
-      <div className="mt-3 border-t border-surface-2 pt-3 text-xs text-fg/50">
-        No workspaces exist yet. This server is available in every chat.
-      </div>
+      <ListEmptyState
+        layout="compact"
+        body="No workspaces exist yet. This server is available in every chat."
+        className="mt-3 border-t border-surface-2 pt-3 text-xs"
+      />
     );
   }
 
   return (
     <div className="mt-3 border-t border-surface-2 pt-3 space-y-3">
-      <p className="text-xs text-fg/50">
+      <p className="text-xs text-fg-muted">
         Leave everything unchecked to keep this server available in every chat.
         Check workspaces to restrict it to only those chats.
       </p>
@@ -389,20 +396,20 @@ function WorkspaceScopePanel({
             <input
               type="checkbox"
               aria-label={`Scope to workspace: ${w.name}`}
+              className="accent-accent border border-transparent focus-border-neutral"
               checked={scopedIds.includes(w.id)}
               onChange={() => toggleWorkspace(w.id)}
-              className="accent-accent"
             />
             <span className="flex-1 text-sm truncate">{w.name}</span>
             {w.archivedAt && (
-              <span className="text-xs text-fg/40">Archived</span>
+              <span className="text-xs text-fg-subtle">Archived</span>
             )}
           </li>
         ))}
       </ul>
       {scopedIds.length > 0 && (
         <div className="flex items-center justify-between gap-3 px-1">
-          <span className="text-xs text-fg/70">
+          <span className="text-xs text-fg-muted">
             Also show in chats with no workspace
           </span>
           <AppSwitch
@@ -422,10 +429,10 @@ function WorkspaceScopePanel({
 
 function scopeBadge(server: McpServer, scopedCount: number) {
   if (scopedCount === 0) {
-    return <span className="text-xs text-fg/40">All workspaces</span>;
+    return <span className="text-xs text-fg-subtle">All workspaces</span>;
   }
   return (
-    <span className="text-xs text-fg/40">
+    <span className="text-xs text-fg-subtle">
       Scoped: {scopedCount}
       {server.visibleInGeneralChat ? ' + general' : ''}
     </span>
@@ -726,8 +733,8 @@ function ServerRow({ server }: { server: McpServer }) {
             </span>
             {statusBadge(server)}
           </div>
-          <p className="text-xs text-fg/50 truncate ml-5">{server.url}</p>
-          <p className="text-xs text-fg/40 ml-5 mt-0.5">
+          <p className="text-xs text-fg-subtle truncate ml-5">{server.url}</p>
+          <p className="text-xs text-fg-subtle ml-5 mt-0.5">
             {server.authType === 'none'
               ? 'No auth'
               : server.authType.replace(/_/g, ' ')}
@@ -758,43 +765,38 @@ function ServerRow({ server }: { server: McpServer }) {
           Test
         </Button>
         {server.authType === 'oauth' && (
-          <button
-            type="button"
+          <Button
+            size="sm"
+            loading={authorize.isPending}
+            icon={LogIn}
             onClick={handleAuthorize}
-            disabled={authorize.isPending}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-control bg-info-soft text-info hover:bg-info-soft/80 border border-info transition-colors duration-150 disabled:opacity-50"
           >
-            {authorize.isPending ? (
-              <LoaderCircle size={12} className="animate-spin" />
-            ) : (
-              <LogIn size={12} />
-            )}
             Authorize
-          </button>
+          </Button>
         )}
-        <button
-          type="button"
+        <Button
+          size="sm"
+          icon={showTools ? ChevronDown : ChevronRight}
           onClick={() => setShowTools((v) => !v)}
           aria-expanded={showTools}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-control bg-surface-2 text-fg/70 hover:text-fg transition-colors duration-150"
         >
-          {showTools ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
           <Wrench size={12} /> Tools
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          size="sm"
+          icon={showScope ? ChevronDown : ChevronRight}
           onClick={() => setShowScope((v) => !v)}
           aria-expanded={showScope}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-control bg-surface-2 text-fg/70 hover:text-fg transition-colors duration-150"
         >
-          {showScope ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
           <FolderOpen size={12} /> Workspaces
-        </button>
+        </Button>
         <Button size="sm" icon={RefreshCw} onClick={handleRefresh}>
           Refresh tools
         </Button>
-        <button
-          type="button"
+        <Button
+          size="sm"
+          variant="danger"
+          icon={Trash2}
           onClick={() => {
             if (!confirm(`Delete server "${server.name}"?`)) return;
             del.mutate(undefined, {
@@ -802,10 +804,9 @@ function ServerRow({ server }: { server: McpServer }) {
               onError: () => toast.error('Failed to delete server'),
             });
           }}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-control bg-danger-soft text-danger hover:bg-danger-soft/80 border border-danger transition-colors duration-150"
         >
-          <Trash2 size={12} /> Delete
-        </button>
+          Delete
+        </Button>
       </div>
       {server.lastError && server.status === 'error' && (
         <p
@@ -1008,22 +1009,20 @@ export default function McpServersSection() {
   return (
     <SettingsSection title="MCP Servers">
       <div className="space-y-3">
-        <p className="text-sm text-fg/60">
+        <p className="text-sm text-fg-muted">
           Connect to remote MCP servers to give the agent access to additional
           tools. Expand a server&apos;s Tools to choose which tools the agent
           can use and whether each one asks for approval or auto-runs. New tools
           default to enabled and ask every time.
         </p>
         {isLoading && (
-          <div className="flex items-center gap-2 text-sm text-fg/50 py-4">
-            <LoaderCircle size={16} className="animate-spin text-accent" />
-            Loading servers…
-          </div>
+          <ListLoading layout="compact" size={20} status="Loading servers…" />
         )}
         {!isLoading && servers.length === 0 && !adding && (
-          <p className="text-sm text-fg/50 py-2">
-            No MCP servers configured yet.
-          </p>
+          <ListEmptyState
+            layout="compact"
+            body="No MCP servers configured yet."
+          />
         )}
         {servers.map((server) => (
           <ServerRow key={server.id} server={server} />

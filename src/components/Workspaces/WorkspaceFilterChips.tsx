@@ -7,10 +7,10 @@ import { useWorkspacesList } from '@/lib/hooks/api/useWorkspaces';
 
 const chipClasses = (selected: boolean, tint?: string) =>
   cn(
-    'flex items-center gap-1 whitespace-nowrap rounded-pill border px-2.5 py-1 text-xs font-medium transition-colors duration-150',
+    'flex items-center gap-1 whitespace-nowrap rounded-pill border px-2.5 py-1 text-xs font-medium transition-colors duration-150 focus-border-neutral',
     selected
       ? (tint ?? 'bg-accent/10 border-accent/30 text-accent')
-      : 'bg-surface border-surface-2 text-fg/60 hover:text-fg hover:border-fg/30',
+      : 'bg-surface border-surface-2 text-fg-muted hover:text-fg hover:border-fg/30',
   );
 
 interface Props {

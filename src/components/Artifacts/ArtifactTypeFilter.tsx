@@ -35,10 +35,10 @@ export default function ArtifactTypeFilter({
             onClick={() => onChange(type)}
             className={cn(
               'shrink-0 rounded-pill border px-2.5 py-1 text-xs font-medium transition-colors duration-150',
-              'focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2',
+              'border border-transparent focus-border-neutral',
               selected
                 ? 'border-accent/30 bg-accent/10 text-accent'
-                : 'border-surface-2 bg-surface text-fg/60 hover:border-fg/30 hover:text-fg',
+                : 'border-surface-2 bg-surface text-fg-muted hover:border-fg/30 hover:text-fg',
             )}
           >
             {labels[type]}

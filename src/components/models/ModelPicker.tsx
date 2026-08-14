@@ -64,7 +64,7 @@ export default function ModelPicker({
 
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <span className="text-xs text-fg/70">Chat Model</span>
+          <span className="text-xs text-fg-muted">Chat Model</span>
           <ModelField
             role="chat"
             selectedModel={chatModel}
@@ -79,7 +79,7 @@ export default function ModelPicker({
 
         {fields.system && (
           <div className="flex items-center justify-between">
-            <span className="text-xs text-fg/70">System Model</span>
+            <span className="text-xs text-fg-muted">System Model</span>
             <ModelField
               role="system"
               selectedModel={systemModel}

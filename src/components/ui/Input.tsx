@@ -6,19 +6,33 @@ import { useFieldControl } from './Field';
 
 /* Focus flips the border in place rather than drawing an outline, so the control never shifts. */
 export const controlClasses =
-  'px-3 py-2 rounded-control bg-well border border-surface-2 text-sm text-fg placeholder:text-fg/40 transition-colors duration-150 focus-visible:outline-none focus-visible:border-accent disabled:opacity-50 disabled:cursor-not-allowed';
+  'px-3 py-2 rounded-control bg-well border border-surface-2 text-sm text-fg placeholder:text-fg-subtle transition-colors duration-150 focus-border-neutral disabled:opacity-50 disabled:cursor-not-allowed';
 
 export type InputProps = React.InputHTMLAttributes<HTMLInputElement>;
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, ...props }, ref) => {
-    const { describedBy, invalid } = useFieldControl();
+  (
+    {
+      className,
+      'aria-label': ariaLabel,
+      'aria-labelledby': ariaLabelledBy,
+      'aria-describedby': ariaDescribedBy,
+      'aria-invalid': ariaInvalid,
+      ...props
+    },
+    ref,
+  ) => {
+    const { describedBy, invalid, labelId, grouped } = useFieldControl();
 
     return (
       <input
         ref={ref}
-        aria-describedby={describedBy}
-        aria-invalid={invalid || undefined}
+        aria-label={ariaLabel}
+        aria-labelledby={
+          ariaLabelledBy ?? (ariaLabel || grouped ? undefined : labelId)
+        }
+        aria-describedby={ariaDescribedBy ?? describedBy}
+        aria-invalid={ariaInvalid ?? (invalid ? true : undefined)}
         className={cn('w-full', controlClasses, className)}
         {...props}
       />

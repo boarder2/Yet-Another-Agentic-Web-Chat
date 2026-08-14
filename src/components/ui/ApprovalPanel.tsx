@@ -1,10 +1,11 @@
 import { X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
+import { IconButton } from '@/components/ui/IconButton';
 
 /** Monospace identifier chip for an approval header (a file path, a tool name). */
 export const ApprovalChip = ({ children }: { children: React.ReactNode }) => (
-  <code className="text-xs bg-surface px-1.5 py-0.5 rounded-control text-fg/80 border border-surface-2 truncate">
+  <code className="text-xs bg-surface px-1.5 py-0.5 rounded-control text-fg border border-surface-2 truncate">
     {children}
   </code>
 );
@@ -44,21 +45,14 @@ const ApprovalPanel = ({
         <span className="text-sm font-semibold text-fg">{title}</span>
         {chips}
         {queueTotal && queueTotal > 1 ? (
-          <span className="shrink-0 text-xs font-medium text-fg/60 bg-surface-2 px-2 py-0.5 rounded-pill">
+          <span className="shrink-0 text-xs font-medium text-fg-muted bg-surface-2 px-2 py-0.5 rounded-pill">
             {queuePosition} of {queueTotal}
           </span>
         ) : null}
       </div>
       <div className="flex items-center gap-2 shrink-0">
-        <span className="text-xs text-fg/40">Waiting on input</span>
-        <button
-          type="button"
-          onClick={onDismiss}
-          className="p-1 rounded-control hover:bg-surface-2 transition-colors duration-150 text-fg/50 hover:text-fg"
-          aria-label={dismissLabel}
-        >
-          <X size={14} />
-        </button>
+        <span className="text-xs text-fg-subtle">Waiting on input</span>
+        <IconButton icon={X} label={dismissLabel} onClick={onDismiss} />
       </div>
     </div>
 

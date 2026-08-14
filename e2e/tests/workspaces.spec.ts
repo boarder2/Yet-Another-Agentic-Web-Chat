@@ -216,4 +216,217 @@ test.describe('workspaces CRUD', () => {
       })
       .toBeNull();
   });
+
+  test('uses the page loading state and preserves active versus archived empty copy', async ({
+    page,
+  }) => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let requestStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      requestStarted = resolve;
+    });
+
+    await page.route('**/api/workspaces**', async (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname !== '/api/workspaces') {
+        await route.fallback();
+        return;
+      }
+      if (!url.searchParams.has('archived')) {
+        requestStarted();
+        await held;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ workspaces: [] }),
+      });
+    });
+
+    await page.goto('/workspaces');
+    await expect(
+      page.getByRole('heading', { name: 'Workspaces', exact: true }),
+    ).toBeVisible();
+    await started;
+
+    const loading = page.locator(
+      '[data-list-state="loading"][data-list-layout="page"]',
+    );
+    await expect(loading).toBeVisible();
+    await expect(loading.locator('svg')).toHaveAttribute('width', '24');
+    await expect(loading.locator('svg')).toHaveAttribute('height', '24');
+
+    release();
+    await expect(loading).toBeHidden();
+
+    let empty = page.locator(
+      '[data-list-state="empty"][data-list-layout="page"]',
+    );
+    await expect(empty).toBeVisible();
+    await expect(
+      empty.getByRole('heading', { name: 'No workspaces yet', exact: true }),
+    ).toBeVisible();
+    await expect(
+      empty.getByText(
+        'Workspaces let you organize chats, files, and instructions for specific projects.',
+        { exact: true },
+      ),
+    ).toBeVisible();
+
+    await page.getByRole('button', { name: 'Archived', exact: true }).click();
+    empty = page.locator('[data-list-state="empty"][data-list-layout="page"]');
+    await expect(
+      empty.getByRole('heading', {
+        name: 'No archived workspaces',
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(
+      empty.getByText(
+        'Workspaces let you organize chats, files, and instructions for specific projects.',
+        { exact: true },
+      ),
+    ).toHaveCount(0);
+  });
+
+  test('uses section and compact states for empty workspace panels', async ({
+    page,
+    request,
+  }) => {
+    const workspaceId = await seedWorkspace(request, {
+      name: `ws-state-layout-${Date.now()}`,
+    });
+
+    try {
+      await page.setViewportSize({ width: 375, height: 800 });
+      let releaseFiles!: () => void;
+      const heldFiles = new Promise<void>((resolve) => {
+        releaseFiles = resolve;
+      });
+      let filesRequestStarted!: () => void;
+      const filesStarted = new Promise<void>((resolve) => {
+        filesRequestStarted = resolve;
+      });
+
+      await page.route('**/api/workspaces/**/files', async (route) => {
+        const url = new URL(route.request().url());
+        if (
+          url.pathname === `/api/workspaces/${workspaceId}/files` &&
+          route.request().method() === 'GET'
+        ) {
+          filesRequestStarted();
+          await heldFiles;
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({ files: [] }),
+          });
+          return;
+        }
+        await route.fallback();
+      });
+      await page.route('**/api/memories**', async (route) => {
+        const url = new URL(route.request().url());
+        if (
+          url.pathname === '/api/memories' &&
+          url.searchParams.get('workspaceId') === workspaceId
+        ) {
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({ data: [], total: 0 }),
+          });
+          return;
+        }
+        await route.fallback();
+      });
+
+      await page.goto(`/workspaces/${workspaceId}`);
+      await expect(
+        page.getByRole('heading', { name: /ws-state-layout/ }),
+      ).toBeVisible();
+      await page.getByRole('tab', { name: 'Files', exact: true }).click();
+      await filesStarted;
+
+      const loading = page.locator(
+        '[data-list-state="loading"][data-list-layout="section"]',
+      );
+      await expect(loading).toBeVisible();
+      await expect(loading.locator('svg')).toHaveAttribute('width', '20');
+      await expect(loading.locator('svg')).toHaveAttribute('height', '20');
+
+      releaseFiles();
+      await expect(loading).toBeHidden();
+      let empty = page.locator(
+        '[data-list-state="empty"][data-list-layout="section"]',
+      );
+      await expect(
+        empty.getByRole('heading', { name: 'No files yet.' }),
+      ).toBeVisible();
+
+      await page.getByRole('tab', { name: 'Memory', exact: true }).click();
+      empty = page.locator(
+        '[data-list-state="empty"][data-list-layout="section"]',
+      );
+      await expect(
+        empty.getByRole('heading', { name: 'No workspace memories yet.' }),
+      ).toBeVisible();
+
+      // The empty instructions branch immediately opens the editor (so users
+      // can start typing), while InstructionsEditor still owns the section
+      // empty state for its read-only path. Verify the public empty-panel
+      // states here; the editor's editable seam is covered by the existing
+      // workspace-instructions flow.
+    } finally {
+      const response = await request.delete(`/api/workspaces/${workspaceId}`);
+      expect([200, 204, 404]).toContain(response.status());
+    }
+  });
+
+  test('uses a compact artifact empty state in the desktop workspace sidebar', async ({
+    page,
+    request,
+  }) => {
+    const workspaceId = await seedWorkspace(request, {
+      name: `ws-sidebar-state-${Date.now()}`,
+    });
+
+    try {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.route('**/api/artifacts**', async (route) => {
+        const url = new URL(route.request().url());
+        if (
+          url.pathname === '/api/artifacts' &&
+          url.searchParams.get('workspaceId') === workspaceId
+        ) {
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: '[]',
+          });
+          return;
+        }
+        await route.fallback();
+      });
+
+      await page.goto(`/workspaces/${workspaceId}`);
+      const artifacts = page.getByRole('button', { name: /Artifacts/ }).last();
+      await expect(artifacts).toBeVisible();
+      await artifacts.click();
+
+      const empty = page.locator(
+        '[data-list-state="empty"][data-list-layout="compact"]',
+      );
+      await expect(empty).toBeVisible();
+      await expect(empty).toContainText(
+        'No artifacts yet. Ask a chat in this workspace to build one.',
+      );
+    } finally {
+      const response = await request.delete(`/api/workspaces/${workspaceId}`);
+      expect([200, 204, 404]).toContain(response.status());
+    }
+  });
 });

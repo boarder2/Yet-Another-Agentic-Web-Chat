@@ -43,7 +43,7 @@ const TodoWidget = ({ items }: TodoWidgetProps) => {
         );
       case 'pending':
       default:
-        return <Circle size={14} className="text-fg/30 shrink-0" />;
+        return <Circle size={14} className="text-fg-subtle shrink-0" />;
     }
   };
 
@@ -53,24 +53,24 @@ const TodoWidget = ({ items }: TodoWidgetProps) => {
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="w-full px-3 py-2 flex items-center gap-2 hover:bg-surface-2/50 transition-colors text-sm"
+        className="w-full border border-transparent px-3 py-2 flex items-center gap-2 hover:bg-surface-2/50 transition-colors duration-150 text-sm focus-border-neutral"
       >
         <ListTodo size={14} className="text-accent shrink-0" />
-        <span className="font-medium text-fg/70">Tasks</span>
-        <span className="text-fg/50">
+        <span className="font-medium text-fg-muted">Tasks</span>
+        <span className="text-fg-subtle">
           {completed}/{items.length}
         </span>
         {summary && (
           <>
-            <span className="text-fg/30">-</span>
-            <span className="text-fg/50 truncate text-left flex-1">
+            <span className="text-fg-subtle">-</span>
+            <span className="text-fg-muted truncate text-left flex-1">
               {summary}
             </span>
           </>
         )}
         <ChevronRight
           size={14}
-          className={`text-fg/50 shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`}
+          className={`text-fg-subtle shrink-0 transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`}
         />
       </button>
 
@@ -83,8 +83,8 @@ const TodoWidget = ({ items }: TodoWidgetProps) => {
               <span
                 className={`text-sm ${
                   item.status === 'completed'
-                    ? 'text-fg/40 line-through'
-                    : 'text-fg/80'
+                    ? 'text-fg-subtle line-through'
+                    : 'text-fg'
                 }`}
               >
                 {item.content}

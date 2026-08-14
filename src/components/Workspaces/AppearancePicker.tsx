@@ -67,7 +67,7 @@ const AppearancePicker = ({ color, icon, onChange }: Props) => {
   return (
     <div className="space-y-3">
       <div className="space-y-1.5">
-        <label className="text-xs text-fg/60">Color</label>
+        <label className="text-xs text-fg-muted">Color</label>
         <div className="flex flex-wrap gap-2">
           {WORKSPACE_COLOR_TOKENS.map((token) => {
             const c = workspaceColorClasses(token);
@@ -79,7 +79,7 @@ const AppearancePicker = ({ color, icon, onChange }: Props) => {
                 aria-label={`Color ${token}`}
                 onClick={() => onChange({ color: token, icon })}
                 className={cn(
-                  'h-6 w-6 rounded-pill transition-transform',
+                  'h-6 w-6 rounded-pill border border-transparent transition-transform duration-150 focus-border-neutral',
                   c.swatch,
                   selected
                     ? 'ring-2 ring-offset-2 ring-offset-surface ring-fg/60 scale-110'
@@ -92,7 +92,7 @@ const AppearancePicker = ({ color, icon, onChange }: Props) => {
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-xs text-fg/60">Icon</label>
+        <label className="text-xs text-fg-muted">Icon</label>
         <div className="grid grid-cols-10 gap-1.5">
           {CURATED_WORKSPACE_ICONS.map((name) => {
             const selected = icon === name;
@@ -103,7 +103,7 @@ const AppearancePicker = ({ color, icon, onChange }: Props) => {
                 aria-label={`Icon ${name}`}
                 onClick={() => onChange({ color, icon: name })}
                 className={cn(
-                  'flex items-center justify-center h-8 w-8 rounded-surface border transition-colors',
+                  'flex items-center justify-center h-8 w-8 rounded-surface border transition-colors duration-150 focus-border-neutral',
                   selected
                     ? cn(
                         workspaceColorClasses(color).bgTint,

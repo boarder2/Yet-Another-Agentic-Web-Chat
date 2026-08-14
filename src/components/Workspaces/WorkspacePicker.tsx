@@ -93,10 +93,10 @@ const WorkspacePicker = ({ value, onChange }: Props) => {
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          'flex items-center gap-1.5 px-3 py-1.5 h-8 rounded-pill border text-sm transition-colors',
+          'flex items-center gap-1.5 px-3 py-1.5 h-8 rounded-pill border text-sm transition-colors duration-150 focus-border-neutral',
           selected
             ? cn(c.bgTint, c.border, c.text)
-            : 'bg-surface border-surface-2 text-fg/60 hover:text-fg hover:border-fg/30',
+            : 'bg-surface border-surface-2 text-fg-muted hover:text-fg hover:border-fg/30',
         )}
       >
         {selected ? (
@@ -106,10 +106,10 @@ const WorkspacePicker = ({ value, onChange }: Props) => {
             size={13}
           />
         ) : (
-          <FolderOpen size={13} className="text-fg/50" />
+          <FolderOpen size={13} className="text-fg-subtle" />
         )}
         <span>{selected ? selected.name : 'Workspace'}</span>
-        <ChevronDown size={13} className="opacity-60" />
+        <ChevronDown size={13} className="text-fg-subtle" />
       </button>
 
       {open && (
@@ -119,7 +119,7 @@ const WorkspacePicker = ({ value, onChange }: Props) => {
         >
           <div className="relative border-b border-surface-2">
             <Search
-              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-fg/40"
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-fg-subtle"
               size={13}
             />
             <Input
@@ -149,7 +149,7 @@ const WorkspacePicker = ({ value, onChange }: Props) => {
                       setOpen(false);
                     }}
                     className={cn(
-                      'w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-left',
+                      'w-full flex items-center gap-2 border border-transparent px-2.5 py-1.5 text-xs text-left focus-border-neutral',
                       active ? 'bg-surface-2' : '',
                     )}
                   >
@@ -168,7 +168,7 @@ const WorkspacePicker = ({ value, onChange }: Props) => {
                         />
                       </>
                     ) : (
-                      <FolderOpen size={13} className="text-fg/40" />
+                      <FolderOpen size={13} className="text-fg-subtle" />
                     )}
                     <span className="flex-1 truncate">{entry.label}</span>
                     {isSelected && <Check size={12} className="text-accent" />}
@@ -177,7 +177,7 @@ const WorkspacePicker = ({ value, onChange }: Props) => {
               );
             })}
             {entries.length === 1 && filter && (
-              <li className="px-3 py-2 text-xs text-fg/40">No matches.</li>
+              <li className="px-3 py-2 text-xs text-fg-muted">No matches.</li>
             )}
           </ul>
         </div>

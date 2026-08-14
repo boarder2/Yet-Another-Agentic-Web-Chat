@@ -1,4 +1,5 @@
 import { ArrowLeftRight } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
 
 const Rewrite = ({
   rewrite,
@@ -8,14 +9,14 @@ const Rewrite = ({
   messageId: string;
 }) => {
   return (
-    <button
-      type="button"
+    <Button
+      variant="ghost"
+      icon={ArrowLeftRight}
       onClick={() => rewrite(messageId)}
-      className="py-2 px-3 rounded-floating hover:bg-secondary transition duration-200 flex flex-row items-center space-x-1"
+      className="rounded-floating px-3 py-2"
     >
-      <ArrowLeftRight size={18} />
-      <p className="text-xs font-medium">Rewrite</p>
-    </button>
+      Rewrite
+    </Button>
   );
 };
 

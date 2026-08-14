@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useSpeech } from 'react-text-to-speech';
 import { toSpeechText } from '@/lib/utils/contentStripping';
 import Select from '@/components/ui/Select';
+import { IconButton } from '@/components/ui/IconButton';
 
 type Status = 'idle' | 'loading' | 'playing' | 'paused';
 type Engine = 'kokoro' | 'browser';
@@ -307,39 +308,33 @@ const Speak = ({
     <div className="flex flex-row items-center gap-1">
       {/* In-DOM (not detached) so browser playback-speed extensions discover it. */}
       <audio ref={audioRef} hidden aria-label="Read-aloud audio" />
-      <button
-        type="button"
+      <IconButton
+        icon={
+          isLoading
+            ? LoaderCircle
+            : isPlaying
+              ? Pause
+              : isPaused
+                ? Play
+                : Volume2
+        }
+        label={label}
         onClick={onClick}
-        className="p-2 opacity-70 rounded-floating hover:bg-surface-2 transition duration-200"
-        title={label}
-        aria-label={label}
-      >
-        {isLoading ? (
-          <LoaderCircle size={18} className="animate-spin" />
-        ) : isPlaying ? (
-          <Pause size={18} />
-        ) : isPaused ? (
-          <Play size={18} />
-        ) : (
-          <Volume2 size={18} />
-        )}
-      </button>
+        className={`rounded-floating p-2 ${isLoading ? '[&_svg]:animate-spin' : ''}`}
+      />
       {isActive && (
-        <button
-          type="button"
+        <IconButton
+          icon={Square}
+          label="Stop"
           onClick={stop}
-          className="p-2 opacity-70 rounded-floating hover:bg-surface-2 transition duration-200"
-          title="Stop"
-          aria-label="Stop"
-        >
-          <Square size={16} />
-        </button>
+          className="rounded-floating p-2"
+        />
       )}
       {kokoroActive && (
         <Select
           value={String(rate)}
           onChange={(e) => changeRate(parseFloat(e.target.value))}
-          className="text-xs py-1 pl-1.5 pr-1 opacity-70 hover:opacity-100 cursor-pointer rounded-floating"
+          className="text-xs py-1 pl-1.5 pr-1 text-fg-muted hover:text-fg cursor-pointer rounded-floating"
           title="Playback speed"
           aria-label="Playback speed"
         >

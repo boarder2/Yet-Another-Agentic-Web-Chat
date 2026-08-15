@@ -608,14 +608,7 @@ export default function SettingsPanel({
           },
         },
         {
-          onSuccess: (saved) => {
-            setUserSystemPrompts(
-              userSystemPrompts.map((p) =>
-                p.id === saved.id ? (saved as unknown as Prompt) : p,
-              ),
-            );
-            setEditingPrompt(null);
-          },
+          onSuccess: () => setEditingPrompt(null),
           onError: () => console.error('Failed to update prompt.'),
         },
       );
@@ -627,11 +620,7 @@ export default function SettingsPanel({
           type: currentPrompt.type,
         },
         {
-          onSuccess: (saved) => {
-            setUserSystemPrompts([
-              ...userSystemPrompts,
-              saved as unknown as Prompt,
-            ]);
+          onSuccess: () => {
             setNewPromptName('');
             setNewPromptContent('');
             setNewPromptType('persona');
@@ -669,14 +658,7 @@ export default function SettingsPanel({
           },
         },
         {
-          onSuccess: (saved) => {
-            setUserMethodologies(
-              userMethodologies.map((m) =>
-                m.id === saved.id ? (saved as unknown as Prompt) : m,
-              ),
-            );
-            setEditingMethodology(null);
-          },
+          onSuccess: () => setEditingMethodology(null),
           onError: () => console.error('Failed to update methodology.'),
         },
       );
@@ -688,11 +670,7 @@ export default function SettingsPanel({
           type: 'methodology',
         },
         {
-          onSuccess: (saved) => {
-            setUserMethodologies([
-              ...userMethodologies,
-              saved as unknown as Prompt,
-            ]);
+          onSuccess: () => {
             setNewMethodologyName('');
             setNewMethodologyContent('');
             setIsAddingNewMethodology(false);
@@ -951,18 +929,7 @@ export default function SettingsPanel({
           if (!pendingPromptDelete) return;
           const { kind, prompt } = pendingPromptDelete;
           deleteSystemPromptMutation.mutate(prompt.id, {
-            onSuccess: () => {
-              if (kind === 'methodology') {
-                setUserMethodologies((items) =>
-                  items.filter((item) => item.id !== prompt.id),
-                );
-              } else {
-                setUserSystemPrompts((items) =>
-                  items.filter((item) => item.id !== prompt.id),
-                );
-              }
-              setPendingPromptDelete(null);
-            },
+            onSuccess: () => setPendingPromptDelete(null),
             onError: () =>
               console.error(
                 kind === 'methodology'

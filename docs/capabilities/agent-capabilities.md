@@ -54,7 +54,7 @@ Subagents, panels, and scheduled runs do not have an interactive user approval s
 
 Enable code execution in `config.toml` under `[TOOLS.CODE_EXECUTION]` and provide a reachable Docker daemon. The default limits are a 30-second timeout, 128 MB memory, and 50,000 output characters; code input is limited to 50,000 characters. The runtime uses an official Node image, drops Linux capabilities, runs without network access, and does not give user code access to the host filesystem.
 
-Every top-level interactive call shows the JavaScript and asks for approval before running. Code execution is unavailable in subagents and non-interactive workflow or scheduled contexts. Docker being configured is not the same as Docker being reachable; the tool checks the daemon when a call is requested. Detailed deployment settings are in the [configuration guide](https://github.com/boarder2/Yet-Another-Agentic-Web-Chat/blob/main/docs/installation/configuration.md).
+Every top-level interactive call shows the JavaScript and asks for approval before running. Code execution is unavailable in subagents and non-interactive workflow or scheduled contexts. Docker being configured is not the same as Docker being reachable; the tool checks the daemon when a call is requested. Detailed deployment settings are in the [Configuration](./configuration.md) guide.
 
 ## MCP tools
 

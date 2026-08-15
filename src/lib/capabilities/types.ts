@@ -8,10 +8,12 @@ export const CAPABILITY_DOC_FILENAMES = [
   'artifacts-and-dashboards.md',
   'automation.md',
   'chat-and-research.md',
+  'configuration.md',
   'files-and-workspaces.md',
   'models-and-providers.md',
   'personalization-and-memory.md',
   'privacy-and-data.md',
+  'updating.md',
 ] as const;
 
 export const CAPABILITY_DOC_MAX_QUERY_LENGTH = 500;

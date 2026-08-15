@@ -35,7 +35,7 @@ export function CapabilityDocsShell({
         </p>
       </header>
 
-      <div className="mb-4 lg:hidden">
+      <div className="mb-4 xl:hidden">
         <CapabilityCategoryNavigation
           pages={navigationPages}
           currentSlug={currentSlug}

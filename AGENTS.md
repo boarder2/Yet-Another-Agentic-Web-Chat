@@ -7,7 +7,7 @@ Stack: Next.js App Router + React 19 + Tailwind 4, TanStack Query, LangChain/Lan
 ## Commands
 
 - `npm run dev` — dev server on :5005 (auto-bumps if taken — read the bound port from the log)
-- `npm run build` — db:push then next build; `npm start` serves it
+- `DATA_DIR=/path/to/data npm run build` — db:push then next build; `DATA_DIR=/path/to/data npm start` serves it. Keep one explicit `DATA_DIR` across Drizzle, build, dev, and runtime commands because the runtime and Drizzle defaults differ when it is unset.
 - `npm run lint` / `npm run format:write` / `npx tsc --noEmit`
 - `npm run test` — all tests (the CI gate); `npm run test:unit` — vitest, pure modules only
 - `npm run test:e2e` — Playwright suite in `e2e/` (`--project=chromium|api|smoke|serial`); mocked LLM, isolated test DB. See `e2e/CLAUDE.md`; coverage matrix in `e2e/COVERAGE.md`
@@ -50,5 +50,4 @@ Subsystem detail lives in the `.claude/skills/yaawc-*` skills — read the relev
 
 - Domain glossary: `CONTEXT.md` — use its terms, not its listed "avoid" synonyms. ADRs in `docs/adr/` (lazily created); see `docs/agents/domain.md`
 - Issues: GitHub Issues on `boarder2/Yet-Another-Agentic-Web-Chat` via `gh`; labels per `docs/agents/triage-labels.md`
-- Architecture docs: `docs/architecture/`
 - External docs: context7 (`/vercel/next.js`, `/tailwindlabs/tailwindcss.com`, `/quantizor/markdown-to-jsx`, `/context7/headlessui_com`); `docs-langchain` tool for LangChain/LangGraph

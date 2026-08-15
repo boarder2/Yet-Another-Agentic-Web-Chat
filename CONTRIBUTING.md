@@ -1,45 +1,48 @@
-# How to Contribute to YAAWC
+# Contributing
 
-Thanks for your interest in contributing to YAAWC! Your help makes this project better. This guide explains how to contribute effectively.
+Thanks for helping improve YAAWC. Keep changes focused, describe the user
+impact, and do not commit local configuration or data.
 
-YAAWC is a modern AI chat application with advanced search capabilities.
+## Set up
 
-## Project Structure
+Use Node 24 and npm. From a checkout:
 
-YAAWC's codebase is organized as follows:
+```bash
+cp sample.config.toml config.toml  # only when config.toml does not exist
+npm install
+export DATA_DIR="$PWD/data"
+npm run db:push
+npm run dev
+```
 
-- **UI Components and Pages**:
-  - **Components (`src/components`)**: Reusable UI components.
-  - **Pages and Routes (`src/app`)**: Next.js app directory structure with page components.
-    - Main app routes include: home (`/`), chat (`/c`), discover (`/discover`), history (`/history`), and settings (`/settings`).
-  - **API Routes (`src/app/api`)**: API endpoints implemented with Next.js API routes.
-    - `/api/chat`: Handles chat interactions.
-    - Other endpoints for models, files, and suggestions.
-- **Backend Logic (`src/lib`)**: Contains all the backend functionality including search, database, and API logic.
-  - The search functionality is present inside `src/lib/search` directory.
-  - Focus modes are handled by `SimplifiedAgent` in `src/lib/search/simplifiedAgent.ts`, which selects tools and prompts based on the mode.
-  - Database functionality is in `src/lib/db`.
-  - Chat model and embedding model providers are managed in `src/lib/providers`.
-  - Prompt templates and LLM chain definitions are in `src/lib/prompts` and `src/lib/chains` respectively.
+Never overwrite an existing `config.toml`; set a non-empty
+`[SECURITY].ENCRYPTION_PASSPHRASE` before saving provider credentials. Keep the
+same explicit `DATA_DIR` for Drizzle, build, development, and runtime commands:
+the application and `drizzle-kit` have different defaults when it is unset.
+Docker and a reachable SearXNG service are needed for the corresponding
+features. Local `config.toml` is intentionally ignored; do not add
+secrets, database files, uploads, or workspace blobs to a change.
 
-## Setting Up Your Environment
+## Required workflow
 
-Before diving into coding, setting up your local environment is key. Here's what you need to do:
+- Review the relevant [capability documentation](docs/capabilities/README.md)
+  for every user-visible change. Update the authoritative page when behavior,
+  prerequisites, limits, privacy, availability, or failure states change; do
+  not add roadmap or history prose.
+- Run `npm run format:write`, `npm run lint`, and `npx tsc --noEmit`.
+- Run the applicable tests. Use `npm run test:unit` for pure modules and
+  `npm run test:e2e` for browser or API behavior; `npm run test` is the full
+  configured gate. If a check is not applicable or cannot run, explain why in
+  the pull request.
+- For a database schema change, edit `src/lib/db/schema.ts`, run
+  `npm run db:generate`, and include the generated migration. Never hand-write
+  files in `drizzle/`.
+- For a UI change, include a screenshot in the pull request. For documentation
+  changes, check links, commands, and rendered pages as applicable.
 
-1. In the root directory, locate the `sample.config.toml` file.
-2. Rename it to `config.toml` and fill in the necessary configuration fields.
-3. Run `npm install` to install all dependencies.
-4. Run `npm run db:push` to set up the local sqlite database.
-5. Use `npm run dev` to start the application in development mode.
+## Pull requests
 
-**Please note**: Docker configurations are present for setting up production environments, whereas `npm run dev` is used for development purposes.
-
-## Coding and Contribution Practices
-
-Before committing changes:
-
-1. Ensure that your code functions correctly by thorough testing.
-2. Always run `npm run format:write` to format your code according to the project's coding standards. This helps maintain consistency and code quality.
-3. We currently do not have a code of conduct, but it is in the works. In the meantime, please be mindful of how you engage with the project and its community.
-
-Following these steps will help maintain the integrity of YAAWC's codebase and facilitate a smoother integration of your valuable contributions. Thank you for your support and commitment to improving YAAWC.
+Use the repository pull-request template. Include a concise summary and
+validation results. A related issue is encouraged but optional. Mark the
+conditional tests, documentation, UI screenshot, and schema-migration items
+that apply, and call out any skipped check or migration risk.

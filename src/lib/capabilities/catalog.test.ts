@@ -108,6 +108,87 @@ describe('capability docs catalog', () => {
     });
   });
 
+  it('retrieves Configuration and Updating guidance with bounded in-app URLs', async () => {
+    const catalog = createCapabilityCatalog(filesystemCapabilityDocsLoader);
+
+    const configurationPage = await catalog.getPage('configuration');
+    expect(configurationPage.ok).toBe(true);
+    if (!configurationPage.ok) return;
+    expect(configurationPage.value.title).toBe('Configuration');
+    expect(capabilityPageUrl(configurationPage.value)).toBe(
+      '/docs/capabilities/configuration',
+    );
+
+    const configurationSearch = await catalog.search(
+      'DATA_DIR Drizzle runtime defaults',
+      {
+        pageSlug: 'configuration',
+        maxResults: 3,
+        maxContentChars: 320,
+      },
+    );
+    expect(configurationSearch.ok).toBe(true);
+    if (!configurationSearch.ok) return;
+    expect(
+      configurationSearch.value.some(
+        ({ section }) => section.anchor === 'data-directory',
+      ),
+    ).toBe(true);
+    expect(
+      configurationSearch.value.every(
+        ({ section }) => section.content.length <= 320,
+      ),
+    ).toBe(true);
+
+    const dataDirectory = await catalog.getSection(
+      'configuration',
+      'data-directory',
+    );
+    expect(dataDirectory.ok).toBe(true);
+    if (!dataDirectory.ok) return;
+    expect(dataDirectory.value.content).toContain('DATA_DIR');
+    expect(
+      capabilitySectionUrl(configurationPage.value, dataDirectory.value.anchor),
+    ).toBe('/docs/capabilities/configuration#data-directory');
+
+    const updatingPage = await catalog.getPage('updating');
+    expect(updatingPage.ok).toBe(true);
+    if (!updatingPage.ok) return;
+    expect(updatingPage.value.title).toBe('Updating YAAWC');
+
+    const updatingSearch = await catalog.search(
+      'rollback after database migration',
+      {
+        pageSlug: 'updating',
+        maxResults: 3,
+        maxContentChars: 320,
+      },
+    );
+    expect(updatingSearch.ok).toBe(true);
+    if (!updatingSearch.ok) return;
+    expect(
+      updatingSearch.value.some(
+        ({ section }) => section.anchor === 'verify-and-recover',
+      ),
+    ).toBe(true);
+    expect(
+      updatingSearch.value.every(
+        ({ section }) => section.content.length <= 320,
+      ),
+    ).toBe(true);
+
+    const beforeUpdate = await catalog.getSection(
+      'updating',
+      'before-an-update',
+    );
+    expect(beforeUpdate.ok).toBe(true);
+    if (!beforeUpdate.ok) return;
+    expect(beforeUpdate.value.content).toMatch(/backup/i);
+    expect(
+      capabilitySectionUrl(updatingPage.value, beforeUpdate.value.anchor),
+    ).toBe('/docs/capabilities/updating#before-an-update');
+  });
+
   it('searches the shipped corpus for the public code-widget construction contract', async () => {
     const catalog = createCapabilityCatalog(filesystemCapabilityDocsLoader);
     const result = await catalog.search(

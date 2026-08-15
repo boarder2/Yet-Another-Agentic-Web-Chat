@@ -1,127 +1,154 @@
 # Built-in themes
 
-The catalogue lives in `src/lib/theme/themes.ts`, which is the single source of
-truth. Each entry carries a `source` URL and per-value comments naming the
-upstream token it came from, so any colour can be re-verified without guesswork.
+This is the maintainer and contributor reference for theme provenance. The
+runtime catalogue lives in `src/lib/theme/themes.ts`; it is the single source
+of truth for built-in palettes. The in-app user guide is
+[Administration and settings](https://github.com/boarder2/Yet-Another-Agentic-Web-Chat/blob/main/docs/capabilities/administration-and-settings.md).
+This page stays GitHub-only because it documents source and contribution
+workflow rather than an application capability.
 
-A theme declares seven seeds (`bg`, `fg`, `surface`, `accent`, `danger`,
-`success`, `warning`) plus a mode; everything else derives from those in
-`globals.css`. `src/lib/theme/themes.test.ts` asserts every entry parses, is
-distinct, and meets the contrast floors.
+## Catalogue
 
-## Fidelity
+A theme is seven seeds (`bg`, `fg`, `surface`, `accent`, `danger`, `success`,
+and `warning`) plus a `mode`. The rest of the UI palette derives from those
+seeds in `src/app/globals.css`. At the current catalogue size there are 87 built-ins:
+66 dark and 21 light.
 
-Palettes are transcribed faithfully rather than adjusted to hit WCAG AA. Several
-canonical palettes are lower-contrast by design, so the invariants assert "no
-worse than the palettes we chose to ship", not "every theme is AA". Where a
-value deviates from its spec, the reason is in a comment next to it — currently
-only Solarized Light, whose spec body text (`base00`) falls below the 4.5:1
-floor for text on background, so `base01` ("emphasized content") is used.
+The catalogue has eight multi-member families:
+
+- Catppuccin — 56 generated entries (four flavours × fourteen accents)
+- GitHub — 3 variants
+- Material — 3 variants
+- Rosé Pine — 3 variants
+- Tokyo Night — 3 variants
+- Everforest, Gruvbox, and Solarized — 2 variants each
+
+The remaining entries are standalone: Dark, Light, Nord, Dracula, One Dark,
+Ayu Dark, Night Owl, Kanagawa Dragon, Synthwave '84, Shades of Purple,
+Tomorrow Night, Atom Dark, and Yoncé. Generated Catppuccin variants are kept in
+shared palette data; do not duplicate all 56 entries in documentation or add
+hand-written variants when extending that family.
+
+Third-party entries carry a canonical `source` URL. Hand-authored values in
+`themes.ts` name the upstream token in comments. Catppuccin values are generated
+from `src/lib/theme/catppuccinPalette.ts`, whose shared table is pinned by a
+unit test; Rosé Pine's syntax palette has the same package-backed check. Dark
+and Light are YAAWC's stock themes and intentionally have no upstream source.
+
+## Fidelity and tests
+
+Palettes are transcribed faithfully rather than adjusted to reach WCAG AA.
+The catalogue tests assert valid hex seeds, declared modes, unique IDs and
+names, readable text, status-colour floors, and distinct surfaces. The floors
+mean “no worse than the palettes we chose to ship”, not “every theme is AA”.
+Solarized Light is the deliberate exception to literal body-text transcription:
+its `base00` is below the 4.5:1 text-on-background floor, so the catalogue uses
+`base01` (`#586e75`) for `fg` and records that reason beside the value.
 
 ## Syntax styles
 
-A theme's `syntax` key names a code style bound to both renderers at once. Some
-come from `react-syntax-highlighter`; the rest are authored in
-`src/lib/theme/syntax/`, one file per family, because those projects ship no
-Prism port. Only the two stock themes (Dark, Light) have no style of their own —
-they use the One Dark / One Light fallback, and a unit test asserts every other
-theme names one.
+`Theme.syntax` is the shared key for Markdown fences and CodeMirror editors.
+The registry currently contains 85 keys in both `PRISM_STYLES` and
+`SYNTAX_STYLES`, grouped into `SYNTAX_FAMILIES`. Fifteen styles come from
+`react-syntax-highlighter`; the remaining styles are authored under
+`src/lib/theme/syntax/` because their projects do not ship a Prism port. The
+two stock themes omit `syntax` and fall back to One Dark or One Light by mode.
 
-Palette specs rarely say how to colour a token, so the source for a syntax style
-is picked by this ladder:
+The source ladder for an authored syntax style is:
 
-1. The project's own syntax-highlighter port, if it has one.
-2. Its own editor theme — VS Code or Neovim — where the project publishes one.
-   This is where syntax styles depart from the palette rule above: for several
-   families the editor theme _is_ the only spec there is.
-3. Its palette spec plus our inference, commented as such at each value.
+1. The project's own syntax-highlighter port, when one exists.
+2. Its own editor theme — VS Code or Neovim — when that is the published
+   specification.
+3. Its palette specification plus a documented inference when neither exists.
 
-| Family      | Source                                                                                                 | Rung |
-| ----------- | ------------------------------------------------------------------------------------------------------ | ---- |
-| Catppuccin  | [catppuccin/highlightjs](https://github.com/catppuccin/highlightjs) role map + `@catppuccin/palette`   | 1    |
-| Rosé Pine   | [rose-pine/neovim](https://github.com/rose-pine/neovim) highlight groups + `@rose-pine/palette`        | 2    |
-| GitHub      | [primer/primitives](https://github.com/primer/primitives) `prettylights.syntax.*` tokens               | 1    |
-| Tokyo Night | [enkia/tokyo-night-vscode-theme](https://github.com/enkia/tokyo-night-vscode-theme) `tokenColors`      | 2    |
-| Yoncé       | [minamarkham/yonce-vscode](https://github.com/minamarkham/yonce-vscode) `tokenColors`                  | 2    |
-| Everforest  | [sainnhe/everforest](https://github.com/sainnhe/everforest) `colors/everforest.vim` groups             | 2    |
-| Kanagawa    | [rebelot/kanagawa.nvim](https://github.com/rebelot/kanagawa.nvim) `syn` table                          | 2    |
-| Ayu         | [ayu-theme/ayu-colors](https://github.com/ayu-theme/ayu-colors) — its spec names syntax roles directly | 1    |
+| Family      | Current source                                                                               | Rung |
+| ----------- | -------------------------------------------------------------------------------------------- | ---: |
+| Catppuccin  | [highlightjs role map](https://github.com/catppuccin/highlightjs) plus `@catppuccin/palette` |    1 |
+| Rosé Pine   | [Neovim highlight groups](https://github.com/rose-pine/neovim) plus `@rose-pine/palette`     |    2 |
+| GitHub      | [Primer syntax tokens](https://github.com/primer/primitives)                                 |    1 |
+| Tokyo Night | [VS Code token colours](https://github.com/enkia/tokyo-night-vscode-theme)                   |    2 |
+| Yoncé       | [VS Code token colours](https://github.com/minamarkham/yonce-vscode)                         |    2 |
+| Everforest  | [Vim highlight groups](https://github.com/sainnhe/everforest)                                |    2 |
+| Kanagawa    | [Neovim syntax groups](https://github.com/rebelot/kanagawa.nvim)                             |    2 |
+| Ayu         | [Ayu's syntax-role palette](https://github.com/ayu-theme/ayu-colors)                         |    1 |
 
-The Catppuccin and Rosé Pine palette tables are pinned to their npm packages by
-a unit test; both are devDependencies only, so neither reaches the bundle.
+Catppuccin provides four flavours in all fourteen accents in both the theme and
+syntax catalogues. The default mauve accent keeps the existing base key; other
+accents are generated from the same table. Changing an accent moves the theme's
+`accent` seed and replaces mauve in the syntax roles that the port assigns to
+keywords, variables, tags, and at-rules; the remaining flavour values stay the
+same.
 
-Catppuccin ships each of its four flavours in all fourteen palette accents, as
-its ports do — in the theme catalogue and the syntax styles alike, generated
-from one shared table in `catppuccinPalette.ts`. The accent moves the theme's
-`accent` seed and, in the syntax style, replaces mauve — the port's colour for
-keywords, variables and tag names. Nothing else changes. That gives Catppuccin
-two axes, so both pickers group its accents under their flavour.
+Two implementation choices are deliberate:
 
-Two deliberate deviations:
+- **Fill:** authored styles use the palette's raised tone for the fence fill,
+  rather than the canvas fill used by some upstream ports, so a matching fence
+  still reads as a slab.
+- **Font:** authored styles omit `fontFamily`, and bundled font declarations
+  are stripped. Selecting a syntax style therefore does not change the app's
+  code font, and fences and editors stay on the same mono stack.
 
-- **Fill.** Upstream ports paint a fence with the palette's canvas. These use its
-  raised tone instead — the same one `themes.ts` picks for `surface` — so a fence
-  still reads as a slab when the theme and the style match.
-- **Font.** Authored styles name no font, and the bundled ones have theirs
-  stripped, so picking a style no longer changes the code font as a side effect
-  and fences match the editors, which never saw it.
-
-Where a Prism token has no upstream analogue (`atrule`, `entity`), the nearest
-one is used and the comment says it is our inference. Tokens a project leaves at
-the default foreground stay uncoloured — GitHub's punctuation and properties, for
-instance — rather than being given an invented colour.
+The syntax tests pin the Catppuccin and Rosé Pine package tables, check authored
+foregrounds and fills, and keep the Prism and CodeMirror bindings complete.
+They also assert that `PRISM_STYLES` and `SYNTAX_STYLES` have the same keys,
+that every non-stock theme names a registered style, and that every registered
+style is reachable through `SYNTAX_FAMILIES`. A missing colour is left at the
+renderer default when the upstream project leaves that token uncoloured; an
+inferred mapping is called out beside the mapping.
 
 ## Attribution
 
-Colour values are facts and aren't themselves copyrightable, but the projects
-they come from deserve credit. All of the below are MIT except where noted; the
-permissive licences here are all compatible with this project's MIT licence.
+The table credits the upstream palette or editor project. All listed projects
+are MIT except Gruvbox, whose upstream has no license file, and Material, whose
+source fork is Apache-2.0. The entries use the upstream values as data; they do
+not copy upstream implementation code.
 
-Material's original upstream (`equinusocio` / `material-theme`) was rebranded and
-no longer publishes a palette, so its entry points at the maintained Apache-2.0
-fork the values were actually read from.
+| Theme(s)                                 | Upstream project                                                                            | License                  |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------ |
+| Nord                                     | [nordtheme.com](https://www.nordtheme.com/docs/colors-and-palettes)                         | MIT                      |
+| Dracula                                  | [dracula-theme](https://github.com/dracula/dracula-theme)                                   | MIT                      |
+| Gruvbox Dark / Light                     | [morhetz/gruvbox](https://github.com/morhetz/gruvbox)                                       | No license file upstream |
+| Solarized Dark / Light                   | [Solarized](https://ethanschoonover.com/solarized/)                                         | MIT                      |
+| Catppuccin                               | [catppuccin/catppuccin](https://github.com/catppuccin/catppuccin)                           | MIT                      |
+| Tokyo Night / Storm / Day                | [enkia/tokyo-night-vscode-theme](https://github.com/enkia/tokyo-night-vscode-theme)         | MIT                      |
+| One Dark                                 | [atom/one-dark-syntax](https://github.com/atom/one-dark-syntax)                             | MIT                      |
+| Rosé Pine / Moon / Dawn                  | [rose-pine/rose-pine-theme](https://github.com/rose-pine/rose-pine-theme)                   | MIT                      |
+| Everforest Dark / Light                  | [sainnhe/everforest](https://github.com/sainnhe/everforest)                                 | MIT                      |
+| GitHub Dark / Light / Dark High Contrast | [primer/primitives](https://github.com/primer/primitives)                                   | MIT                      |
+| Ayu Dark                                 | [ayu-theme/ayu-colors](https://github.com/ayu-theme/ayu-colors)                             | MIT                      |
+| Night Owl                                | [sdras/night-owl-vscode-theme](https://github.com/sdras/night-owl-vscode-theme)             | MIT                      |
+| Kanagawa Dragon                          | [rebelot/kanagawa.nvim](https://github.com/rebelot/kanagawa.nvim)                           | MIT                      |
+| Yoncé                                    | [minamarkham/yonce-vscode](https://github.com/minamarkham/yonce-vscode)                     | MIT                      |
+| Synthwave '84                            | [robb0wen/synthwave-vscode](https://github.com/robb0wen/synthwave-vscode)                   | MIT                      |
+| Shades of Purple                         | [ahmadawais/shades-of-purple-vscode](https://github.com/ahmadawais/shades-of-purple-vscode) | MIT                      |
+| Tomorrow Night                           | [chriskempson/tomorrow-theme](https://github.com/chriskempson/tomorrow-theme)               | MIT                      |
+| Atom Dark                                | [atom/atom-dark-syntax](https://github.com/atom/atom-dark-syntax)                           | MIT                      |
+| Material Ocean / Palenight / Darker      | [Dramaga11/vsc-material-theme](https://github.com/Dramaga11/vsc-material-theme)             | Apache-2.0               |
 
-| Theme(s)                                      | Project                                                                                     | License                  |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------ |
-| Nord                                          | [arcticicestudio/nord](https://github.com/arcticicestudio/nord)                             | MIT                      |
-| Dracula                                       | [dracula/dracula-theme](https://github.com/dracula/dracula-theme)                           | MIT                      |
-| Gruvbox Dark / Light                          | [morhetz/gruvbox](https://github.com/morhetz/gruvbox)                                       | No license file upstream |
-| Solarized Dark / Light                        | [altercation/solarized](https://github.com/altercation/solarized)                           | MIT                      |
-| Catppuccin Mocha / Macchiato / Frappé / Latte | [catppuccin/catppuccin](https://github.com/catppuccin/catppuccin)                           | MIT                      |
-| Tokyo Night / Storm / Day                     | [enkia/tokyo-night-vscode-theme](https://github.com/enkia/tokyo-night-vscode-theme)         | MIT                      |
-| One Dark                                      | [atom/one-dark-syntax](https://github.com/atom/one-dark-syntax)                             | MIT                      |
-| Rosé Pine / Moon / Dawn                       | [rose-pine/rose-pine-theme](https://github.com/rose-pine/rose-pine-theme)                   | MIT                      |
-| Everforest Dark / Light                       | [sainnhe/everforest](https://github.com/sainnhe/everforest)                                 | MIT                      |
-| GitHub Dark / Light / Dark High Contrast      | [primer/primitives](https://github.com/primer/primitives)                                   | MIT                      |
-| Ayu Dark                                      | [ayu-theme/ayu-colors](https://github.com/ayu-theme/ayu-colors)                             | MIT                      |
-| Night Owl                                     | [sdras/night-owl-vscode-theme](https://github.com/sdras/night-owl-vscode-theme)             | MIT                      |
-| Kanagawa Dragon                               | [rebelot/kanagawa.nvim](https://github.com/rebelot/kanagawa.nvim)                           | MIT                      |
-| Yoncé                                         | [minamarkham/yonce-vscode](https://github.com/minamarkham/yonce-vscode)                     | MIT                      |
-| Synthwave '84                                 | [robb0wen/synthwave-vscode](https://github.com/robb0wen/synthwave-vscode)                   | MIT                      |
-| Shades of Purple                              | [ahmadawais/shades-of-purple-vscode](https://github.com/ahmadawais/shades-of-purple-vscode) | MIT                      |
-| Tomorrow Night                                | [chriskempson/tomorrow-theme](https://github.com/chriskempson/tomorrow-theme)               | MIT                      |
-| Atom Dark                                     | [atom/atom-dark-syntax](https://github.com/atom/atom-dark-syntax)                           | MIT                      |
-| Material Ocean / Palenight / Darker           | [Dramaga11/vsc-material-theme](https://github.com/Dramaga11/vsc-material-theme)             | Apache-2.0               |
-
-Dark and Light (the two stock themes) are this project's own.
+Dark and Light are YAAWC's own stock themes.
 
 ## Adding a theme
 
-1. Transcribe from the project's own palette spec — not a VS Code port or a
-   third-party gist. Record the URL in `source` and name each value in a comment.
-2. Map `success`/`warning`/`danger` using the palette's documented git or
-   diagnostic semantics (added / modified / deleted) rather than raw hue names.
-   Some palettes have no green: Rosé Pine maps "added" to foam.
-3. Use the palette's own raised/panel tone for `surface`. If the spec has no
-   such token, say so in a comment.
-4. If it is one of several themes from the same palette, set `family` and
-   `variant` — the picker groups tiles by family, and a family needs at least two
-   members.
-5. Every theme needs a `syntax` style. If `react-syntax-highlighter` bundles the
-   palette's own, import it in `syntax/index.ts`. Otherwise author one: add a
-   family file under `syntax/` using `buildPrismStyle`, sourced by the ladder
-   above. Either way, register it in `PRISM_STYLES` and `SYNTAX_STYLES` (the unit
-   tests assert the two agree), then set `syntax`. The CodeMirror binding is
-   derived from the Prism style, so editors follow for free.
-6. Run `npm run test:unit` — the invariants catch a mistyped hex, a missing
-   syntax style, and a broken family.
+1. Add a hand-authored entry to `src/lib/theme/themes.ts` from the project's
+   canonical palette or editor specification, not a third-party gist or an
+   unrelated port. Record its `source` URL and annotate upstream roles,
+   deliberate mappings, and deviations so the values can be re-verified. For a
+   generated family, extend the shared palette table instead of copying entries.
+2. Map `success`, `warning`, and `danger` from documented added/modified/deleted
+   or diagnostic roles rather than from raw hue names. If the palette has no
+   direct role, document the closest intentional mapping.
+3. Use the palette's raised or panel tone for `surface`; document the choice when
+   the specification has no such token.
+4. Use `family` and `variant` only for a real multi-member family. Add `group`
+   when the family has a second axis, as Catppuccin does. The catalogue tests
+   require family/variant pairing, unique variants within their group, and more
+   than one member per declared family.
+5. Give every non-stock theme a `syntax` key. Use a bundled style when
+   `react-syntax-highlighter` provides the source; otherwise add a family file
+   under `src/lib/theme/syntax/` with `buildPrismStyle`. Register the binding in
+   `PRISM_STYLES` and its label/group in `SYNTAX_STYLES`; `SYNTAX_FAMILIES` is
+   derived from that metadata. The CodeMirror binding is derived from the same
+   Prism style, so it needs no separate palette copy.
+6. Run `npm run test:unit`. The theme and syntax invariants catch invalid seeds,
+   missing style registrations, broken family metadata, low-contrast regressions,
+   duplicate IDs or names, and incomplete generated palette coverage.

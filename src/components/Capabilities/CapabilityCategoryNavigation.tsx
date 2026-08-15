@@ -50,16 +50,20 @@ export default function CapabilityCategoryNavigation({
       aria-label="Capability categories"
       className={cn(
         mobile
-          ? 'flex gap-1 overflow-x-auto pb-1 lg:hidden'
-          : 'hidden w-56 shrink-0 lg:block',
+          ? 'flex gap-1 overflow-x-auto pb-1 xl:hidden'
+          : 'hidden w-56 shrink-0 xl:sticky xl:top-6 xl:flex xl:max-h-[calc(100svh-1.5rem)] xl:flex-col',
       )}
     >
       {!mobile && (
-        <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wide text-accent">
+        <p className="mb-2 shrink-0 px-3 text-xs font-semibold uppercase tracking-wide text-accent">
           Categories
         </p>
       )}
-      <div className={cn(mobile ? 'flex gap-1' : 'space-y-1')}>
+      <div
+        className={cn(
+          mobile ? 'flex gap-1' : 'min-h-0 space-y-1 overflow-y-auto',
+        )}
+      >
         {pages.map((page) => {
           const active = page.slug === activeSlug;
           return (

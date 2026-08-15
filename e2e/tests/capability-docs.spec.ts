@@ -37,32 +37,119 @@ test.describe('capability documentation', () => {
     await expect(page.locator('h2#choose-a-focus-mode')).toBeVisible();
   });
 
-  test('renders operator references as external GitHub main links', async ({
+  test('renders promoted operator guides in the corpus and category navigation', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/docs/capabilities');
 
-    const references = [
-      [
-        'Configuration guide',
-        `${githubMain}docs/installation/configuration.md`,
-      ],
-      ['Updating YAAWC', `${githubMain}docs/installation/UPDATING.md`],
-      [
-        'Tracing and observability',
-        `${githubMain}docs/installation/TRACING.md`,
-      ],
-      ['Built-in themes', `${githubMain}docs/THEMES.md`],
-      ['Developer architecture', `${githubMain}docs/architecture/README.md`],
-      ['Contributing', `${githubMain}CONTRIBUTING.md`],
+    const content = page.locator('#capability-docs-content');
+    const categoryNavigation = page.locator(
+      'nav[aria-label="Capability categories"]:visible',
+    );
+    for (const [name, href] of [
+      ['Configuration', '/docs/capabilities/configuration'],
+      ['Updating YAAWC', '/docs/capabilities/updating'],
+    ] as const) {
+      await expect(
+        content.getByRole('link', { name, exact: true }),
+      ).toHaveAttribute('href', href);
+      await expect(
+        categoryNavigation.getByRole('link', { name, exact: true }),
+      ).toHaveAttribute('href', href);
+    }
+
+    await page.goto('/docs/capabilities/configuration');
+    await expect(page).toHaveTitle(/Configuration - YAAWC$/);
+    await expect(
+      page.getByRole('heading', { name: 'Configuration', exact: true }),
+    ).toHaveAttribute('id', 'configuration');
+    await expect(
+      page.locator('h2#configuration-file-and-precedence'),
+    ).toBeVisible();
+    await expect(page.locator('h2#data-directory')).toBeVisible();
+    await expect(page.locator('#capability-docs-content')).toContainText(
+      'DATA_DIR',
+    );
+    expect(
+      await page
+        .getByRole('button', { name: 'Copy code to clipboard' })
+        .count(),
+    ).toBeGreaterThan(0);
+
+    await page.goto('/docs/capabilities/updating');
+    await expect(page).toHaveTitle(/Updating YAAWC - YAAWC$/);
+    await expect(
+      page.getByRole('heading', { name: 'Updating YAAWC', exact: true }),
+    ).toHaveAttribute('id', 'updating-yaawc');
+    await expect(page.locator('h2#before-an-update')).toBeVisible();
+    await expect(page.locator('h2#verify-and-recover')).toBeVisible();
+    await expect(page.locator('#capability-docs-content')).toContainText(
+      'docker compose pull app',
+    );
+    expect(
+      await page
+        .getByRole('button', { name: 'Copy code to clipboard' })
+        .count(),
+    ).toBeGreaterThan(0);
+  });
+
+  test('keeps capability cross-links in-app and contributor references on GitHub main', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+
+    const pagesAndLinks = [
+      {
+        path: '/docs/capabilities/administration-and-settings',
+        links: [
+          ['Configuration', '/docs/capabilities/configuration'],
+          ['Updating YAAWC', '/docs/capabilities/updating'],
+        ],
+      },
+      {
+        path: '/docs/capabilities/agent-capabilities',
+        links: [['Configuration', '/docs/capabilities/configuration']],
+      },
+      {
+        path: '/docs/capabilities/artifacts-and-dashboards',
+        links: [['Configuration', '/docs/capabilities/configuration']],
+      },
+      {
+        path: '/docs/capabilities/models-and-providers',
+        links: [['Configuration', '/docs/capabilities/configuration']],
+      },
     ] as const;
 
-    for (const [name, href] of references) {
+    for (const { path, links } of pagesAndLinks) {
+      await page.goto(path);
+      const content = page.locator('#capability-docs-content');
+      for (const [name, href] of links) {
+        await expect(
+          content.getByRole('link', { name, exact: true }),
+        ).toHaveAttribute('href', href);
+      }
+    }
+
+    await page.goto('/docs/capabilities');
+    for (const [name, href] of [
+      ['Built-in themes', `${githubMain}docs/THEMES.md`],
+      ['Contributing', `${githubMain}CONTRIBUTING.md`],
+    ] as const) {
       const link = page.getByRole('link', { name, exact: true });
       await expect(link).toHaveAttribute('href', href);
       await expect(link).toHaveAttribute('target', '_blank');
       await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    }
+
+    for (const obsoleteReference of [
+      'Configuration guide',
+      'Tracing and observability',
+      'Developer architecture',
+    ]) {
+      await expect(
+        page.getByRole('link', { name: obsoleteReference, exact: true }),
+      ).toHaveCount(0);
     }
   });
 
@@ -188,6 +275,90 @@ test.describe('capability documentation', () => {
         exact: true,
       }),
     ).toHaveAttribute('id', 'choose-a-focus-mode');
+  });
+
+  test('keeps desktop document navigation visible and internally scrollable', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 420 });
+    await page.goto('/docs/capabilities/artifacts-and-dashboards');
+
+    const categories = page.locator(
+      'nav[aria-label="Capability categories"]:visible',
+    );
+    const toc = page.locator('nav[aria-label="On this page"]:visible');
+    await expect(categories).toBeVisible();
+    await expect(toc).toBeVisible();
+
+    await page.evaluate(() => window.scrollTo(0, 600));
+
+    for (const navigation of [categories, toc]) {
+      await expect
+        .poll(() =>
+          navigation.evaluate((element) =>
+            Math.round(element.getBoundingClientRect().top),
+          ),
+        )
+        .toBe(24);
+    }
+
+    for (const [navigation, list] of [
+      [categories, categories.locator(':scope > div')],
+      [toc, toc.locator(':scope > ul')],
+    ] as const) {
+      await expect
+        .poll(() =>
+          list.evaluate(
+            (element) => element.scrollHeight > element.clientHeight,
+          ),
+        )
+        .toBe(true);
+      await list.evaluate((element) => {
+        element.scrollTop = element.scrollHeight;
+      });
+      await expect
+        .poll(() => list.evaluate((element) => element.scrollTop))
+        .toBeGreaterThan(0);
+      await expect
+        .poll(() =>
+          navigation.evaluate((element) =>
+            Math.round(element.getBoundingClientRect().top),
+          ),
+        )
+        .toBe(24);
+    }
+  });
+
+  test('aligns clicked and direct TOC fragments at the top gutter', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const path = '/docs/capabilities/artifacts-and-dashboards';
+    const fragment = 'if-an-artifact-or-widget-fails';
+    await page.goto(path);
+
+    const target = page.locator(`h2#${fragment}`);
+    const targetTop = () =>
+      target.evaluate((heading) =>
+        Math.round(heading.getBoundingClientRect().top),
+      );
+    const expectTargetAtTopGutter = async () => {
+      await expect.poll(targetTop).toBeGreaterThanOrEqual(20);
+      await expect.poll(targetTop).toBeLessThanOrEqual(28);
+    };
+
+    await page
+      .locator('nav[aria-label="On this page"]:visible')
+      .getByRole('link', {
+        name: 'If an artifact or widget fails',
+        exact: true,
+      })
+      .click();
+    await expect(page).toHaveURL(new RegExp(`${path}#${fragment}$`));
+    await expectTargetAtTopGutter();
+
+    await page.goto(`${path}#${fragment}`);
+    await expectTargetAtTopGutter();
   });
 
   test('keeps the active category and TOC on direct desktop and mobile page loads', async ({

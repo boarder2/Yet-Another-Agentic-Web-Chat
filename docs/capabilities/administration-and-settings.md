@@ -44,7 +44,7 @@ MCP availability is based on the saved server state and the connection/discovery
 
 `config.toml` is intentionally small at runtime. It contains the required encryption passphrase, optional base URL, and infrastructure settings such as Docker-backed code execution. Model/search credentials, provider URLs, model visibility, retention, image-generation settings, and model choices are managed in Settings and stored in the database or encrypted credential table.
 
-The passphrase must be supplied before credentials can be saved. Keep it stable across restarts and back up it separately from the encrypted database. Detailed deployment options are in the [configuration guide](https://github.com/boarder2/Yet-Another-Agentic-Web-Chat/blob/main/docs/installation/configuration.md); reverse proxy and update notes are in the [installation references](https://github.com/boarder2/Yet-Another-Agentic-Web-Chat/blob/main/docs/installation/UPDATING.md).
+The passphrase must be supplied before credentials can be saved. Keep it stable across restarts and back up it separately from the encrypted database. Detailed deployment options are in the [Configuration](./configuration.md) guide; backup and update procedures are in [Updating YAAWC](./updating.md).
 
 ## Voice availability
 

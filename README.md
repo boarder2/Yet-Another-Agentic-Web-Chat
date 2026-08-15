@@ -6,19 +6,19 @@ YAAWC is an open-source, self-hosted agentic web chat. A LangGraph agent can sea
 
 The user-facing capability corpus is the source of truth for current behavior, prerequisites, limits, privacy, and failure states:
 
-| Area                                                                  | Guide                                                                           |
-| --------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| Chat, focus modes, web research, citations, and conversation controls | [Chat and research](docs/capabilities/chat-and-research.md)                     |
-| Attachments, workspaces, files, instructions, and workspace memory    | [Files and workspaces](docs/capabilities/files-and-workspaces.md)               |
-| Agent tools, deep research, skills, approvals, charts, and code       | [Agent capabilities](docs/capabilities/agent-capabilities.md)                   |
-| Artifacts, generated images, dashboards, and home widgets             | [Artifacts and dashboards](docs/capabilities/artifacts-and-dashboards.md)       |
-| Workflows and scheduled tasks                                         | [Automation](docs/capabilities/automation.md)                                   |
-| Personalization and long-term memory                                  | [Personalization and memory](docs/capabilities/personalization-and-memory.md)   |
-| Chat, System, embedding, image, and search providers                  | [Models and providers](docs/capabilities/models-and-providers.md)               |
-| Storage, private sessions, retention, and external data sharing       | [Privacy and data](docs/capabilities/privacy-and-data.md)                       |
-| Settings, MCP, themes, voice, model visibility, and administration    | [Administration and settings](docs/capabilities/administration-and-settings.md) |
-
-Developer architecture is documented separately in [docs/architecture/README.md](docs/architecture/README.md).
+| Area                                                                      | Guide                                                                           |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Chat, focus modes, web research, citations, and conversation controls     | [Chat and research](docs/capabilities/chat-and-research.md)                     |
+| Attachments, workspaces, files, instructions, and workspace memory        | [Files and workspaces](docs/capabilities/files-and-workspaces.md)               |
+| Agent tools, deep research, skills, approvals, charts, and code           | [Agent capabilities](docs/capabilities/agent-capabilities.md)                   |
+| Artifacts, generated images, dashboards, and home widgets                 | [Artifacts and dashboards](docs/capabilities/artifacts-and-dashboards.md)       |
+| Workflows and scheduled tasks                                             | [Automation](docs/capabilities/automation.md)                                   |
+| Personalization and long-term memory                                      | [Personalization and memory](docs/capabilities/personalization-and-memory.md)   |
+| Chat, System, embedding, image, and search providers                      | [Models and providers](docs/capabilities/models-and-providers.md)               |
+| Storage, private sessions, retention, and external data sharing           | [Privacy and data](docs/capabilities/privacy-and-data.md)                       |
+| Settings, MCP, themes, voice, model visibility, and administration        | [Administration and settings](docs/capabilities/administration-and-settings.md) |
+| Deployment configuration, environment inputs, data paths, Docker, and TTS | [Configuration](docs/capabilities/configuration.md)                             |
+| Backups, release updates, verification, and rollback                      | [Updating YAAWC](docs/capabilities/updating.md)                                 |
 
 ## Quick start with Docker
 
@@ -44,19 +44,20 @@ Developer architecture is documented separately in [docs/architecture/README.md]
 
 5. Open [http://localhost:5005](http://localhost:5005) and configure model and search-provider credentials in Settings.
 
-See the [configuration guide](docs/installation/configuration.md) for infrastructure settings and the [update guide](docs/installation/UPDATING.md) for deployment maintenance.
+See the [Configuration](docs/capabilities/configuration.md) guide for infrastructure settings and [Updating YAAWC](docs/capabilities/updating.md) for deployment maintenance.
 
 ## Manual setup
 
-Install and configure SearXNG with JSON output enabled, then create `config.toml` from `sample.config.toml`, set the encryption passphrase, and run:
+Install and configure SearXNG with JSON output enabled, then create `config.toml` from `sample.config.toml`, set the encryption passphrase, and use one explicit data directory for database, build, and runtime commands:
 
 ```bash
+export DATA_DIR="$PWD/data"
 npm install
 npm run build
 npm start
 ```
 
-For local development, use `npm run dev`. `config.toml` contains the encryption passphrase and infrastructure settings. Model and search credentials, provider endpoints, and most feature settings are managed in the app; code-execution Docker settings remain in `config.toml`.
+For local development, keep the same exported `DATA_DIR` and use `npm run dev`. `npm run build` runs the database push before the Next.js build. `config.toml` contains the encryption passphrase and infrastructure settings. Model and search credentials, provider endpoints, and most feature settings are managed in the app; code-execution Docker settings remain in `config.toml`.
 
 ## Development and contribution
 

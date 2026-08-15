@@ -44,12 +44,15 @@ function TableOfContents({
   const navigation = (
     <nav
       aria-label="On this page"
-      className={cn('text-sm', !mobile && 'sticky top-6 w-52 shrink-0')}
+      className={cn(
+        'text-sm',
+        !mobile && 'flex max-h-[calc(100svh-1.5rem)] w-52 shrink-0 flex-col',
+      )}
     >
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-accent">
+      <p className="mb-2 shrink-0 text-xs font-semibold uppercase tracking-wide text-accent">
         On this page
       </p>
-      <ul className="space-y-1">
+      <ul className={cn('space-y-1', !mobile && 'min-h-0 overflow-y-auto')}>
         {sections.map((section) => (
           <li key={`${section.anchor}-${section.startLine}`}>
             <a
@@ -70,7 +73,7 @@ function TableOfContents({
   return mobile ? (
     <Card className="mb-6 p-4 xl:hidden">{navigation}</Card>
   ) : (
-    <aside className="hidden xl:block">{navigation}</aside>
+    <aside className="hidden xl:sticky xl:top-6 xl:block">{navigation}</aside>
   );
 }
 

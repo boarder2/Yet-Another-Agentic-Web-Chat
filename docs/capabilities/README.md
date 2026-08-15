@@ -4,17 +4,19 @@ YAAWC is a self-hosted agentic web chat. It can research the web, work with loca
 
 ## Find a capability
 
-| Goal                                                                 | Guide                                                           |
-| -------------------------------------------------------------------- | --------------------------------------------------------------- |
-| Chat, web research, sources, focus modes, and conversation controls  | [Chat and research](./chat-and-research.md)                     |
-| Attachments, workspaces, files, instructions, and workspace memory   | [Files and workspaces](./files-and-workspaces.md)               |
-| Agent tools, deep research, skills, approvals, charts, and code      | [Agent capabilities](./agent-capabilities.md)                   |
-| Artifacts, generated images, dashboards, and home widgets            | [Artifacts and dashboards](./artifacts-and-dashboards.md)       |
-| Parameterized workflows and scheduled tasks                          | [Automation](./automation.md)                                   |
-| Personalization and long-term memory                                 | [Personalization and memory](./personalization-and-memory.md)   |
-| Chat, system, embedding, image, and search providers                 | [Models and providers](./models-and-providers.md)               |
-| Data storage, private sessions, retention, and external sharing      | [Privacy and data](./privacy-and-data.md)                       |
-| Settings, MCP servers, themes, voice, visibility, and administration | [Administration and settings](./administration-and-settings.md) |
+| Goal                                                                      | Guide                                                           |
+| ------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Chat, web research, sources, focus modes, and conversation controls       | [Chat and research](./chat-and-research.md)                     |
+| Attachments, workspaces, files, instructions, and workspace memory        | [Files and workspaces](./files-and-workspaces.md)               |
+| Agent tools, deep research, skills, approvals, charts, and code           | [Agent capabilities](./agent-capabilities.md)                   |
+| Artifacts, generated images, dashboards, and home widgets                 | [Artifacts and dashboards](./artifacts-and-dashboards.md)       |
+| Parameterized workflows and scheduled tasks                               | [Automation](./automation.md)                                   |
+| Personalization and long-term memory                                      | [Personalization and memory](./personalization-and-memory.md)   |
+| Chat, system, embedding, image, and search providers                      | [Models and providers](./models-and-providers.md)               |
+| Data storage, private sessions, retention, and external sharing           | [Privacy and data](./privacy-and-data.md)                       |
+| Settings, MCP servers, themes, voice, visibility, and administration      | [Administration and settings](./administration-and-settings.md) |
+| Deployment configuration, environment inputs, data paths, Docker, and TTS | [Configuration](./configuration.md)                             |
+| Backups, release updates, verification, and rollback                      | [Updating YAAWC](./updating.md)                                 |
 
 ## Before you start
 
@@ -25,15 +27,11 @@ YAAWC is a self-hosted agentic web chat. It can research the web, work with loca
 - Enable Docker-backed code execution separately if you need agent code or code widgets.
 - Treat remote model providers, search services, source URLs, MCP servers, and dashboard sources as services that may receive the data needed for the requested operation.
 
-## Installation and operator references
+## Contributor references
 
-Capability details intentionally stay separate from installation deep dives and developer architecture:
+These technical references are maintained in the GitHub source tree:
 
-- [Configuration guide](https://github.com/boarder2/Yet-Another-Agentic-Web-Chat/blob/main/docs/installation/configuration.md)
-- [Updating YAAWC](https://github.com/boarder2/Yet-Another-Agentic-Web-Chat/blob/main/docs/installation/UPDATING.md)
-- [Tracing and observability](https://github.com/boarder2/Yet-Another-Agentic-Web-Chat/blob/main/docs/installation/TRACING.md)
 - [Built-in themes](https://github.com/boarder2/Yet-Another-Agentic-Web-Chat/blob/main/docs/THEMES.md)
-- [Developer architecture](https://github.com/boarder2/Yet-Another-Agentic-Web-Chat/blob/main/docs/architecture/README.md)
 - [Contributing](https://github.com/boarder2/Yet-Another-Agentic-Web-Chat/blob/main/CONTRIBUTING.md)
 
 Availability depends on the selected focus mode, configured models and providers, workspace or private-session state, and the local services an operator has enabled. When a prerequisite is missing, the relevant guide describes what is unavailable and how to recover.

@@ -38,10 +38,10 @@ function createHeadingRenderer(sections: readonly CapabilitySection[]) {
     const anchor = section?.anchor ?? createHeadingAnchor(fallbackHeading);
     const className =
       level === 1
-        ? 'scroll-mt-24 text-3xl font-semibold tracking-tight text-fg'
+        ? 'scroll-mt-6 text-3xl font-semibold tracking-tight text-fg'
         : level === 2
-          ? 'scroll-mt-24 text-2xl font-semibold text-fg'
-          : 'scroll-mt-24 text-xl font-semibold text-fg';
+          ? 'scroll-mt-6 text-2xl font-semibold text-fg'
+          : 'scroll-mt-6 text-xl font-semibold text-fg';
 
     return (
       <Tag id={anchor} className={className}>
@@ -201,17 +201,20 @@ export function CapabilityMarkdown({
   };
 
   return (
-    <Markdown
-      className={cn(
-        'prose max-w-none break-words prose-headings:mb-3 prose-headings:mt-6 prose-headings:leading-tight prose-p:leading-relaxed prose-p:text-fg prose-li:text-fg prose-strong:text-fg prose-a:no-underline prose-code:before:content-none prose-code:after:content-none',
-        'prose-ul:my-3 prose-ol:my-3 prose-li:my-1 prose-blockquote:border-accent prose-blockquote:text-fg-muted',
-        'prose-pre:m-0 prose-pre:bg-transparent prose-table:my-0',
-        className,
-      )}
-      options={markdownOverrides}
-    >
-      {markdown}
-    </Markdown>
+    <>
+      <Markdown
+        className={cn(
+          'prose max-w-none break-words prose-headings:mb-3 prose-headings:mt-6 prose-headings:leading-tight prose-p:leading-relaxed prose-p:text-fg prose-li:text-fg prose-strong:text-fg prose-a:no-underline prose-code:before:content-none prose-code:after:content-none',
+          'prose-ul:my-3 prose-ol:my-3 prose-li:my-1 prose-blockquote:border-accent prose-blockquote:text-fg-muted',
+          'prose-pre:m-0 prose-pre:bg-transparent prose-table:my-0',
+          className,
+        )}
+        options={markdownOverrides}
+      >
+        {markdown}
+      </Markdown>
+      <div aria-hidden="true" className="h-[calc(100svh-1.5rem)]" />
+    </>
   );
 }
 

@@ -233,4 +233,4 @@ Source fetching is server-side and can reach operator-authorized internal or ext
 - **Code widget disabled:** enable code execution and make Docker reachable. A disabled code widget can display its last saved result but cannot refresh.
 - **Runtime failure:** check the preview's error and logs. Timeouts, memory exhaustion, malformed output, too many charts, and oversized output are reported without rendering unvalidated output.
 
-For Docker configuration, see the [configuration guide](https://github.com/boarder2/Yet-Another-Agentic-Web-Chat/blob/main/docs/installation/configuration.md). For storage and deletion scope, see [Privacy and data](./privacy-and-data.md).
+For Docker configuration, see [Configuration](./configuration.md). For storage and deletion scope, see [Privacy and data](./privacy-and-data.md).

@@ -6,11 +6,9 @@ import type { CapabilityPage } from '@/lib/capabilities/types';
 
 export function CapabilityDocsShell({
   pages,
-  currentSlug = 'README',
   children,
 }: {
   pages: readonly CapabilityPage[];
-  currentSlug?: string;
   children: React.ReactNode;
 }) {
   const navigationPages = pages.map(({ slug, title }) => ({ slug, title }));
@@ -36,32 +34,21 @@ export function CapabilityDocsShell({
       </header>
 
       <div className="mb-4 xl:hidden">
-        <CapabilityCategoryNavigation
-          pages={navigationPages}
-          currentSlug={currentSlug}
-          mobile
-        />
+        <CapabilityCategoryNavigation pages={navigationPages} mobile />
       </div>
 
       <div className="flex items-start gap-6">
-        <CapabilityCategoryNavigation
-          pages={navigationPages}
-          currentSlug={currentSlug}
-        />
+        <CapabilityCategoryNavigation pages={navigationPages} />
 
         <section
           id="capability-docs-content"
           className="min-w-0 flex-1 max-w-screen-lg"
         >
-          <CapabilityTableOfContents
-            pages={tocPages}
-            currentSlug={currentSlug}
-            mobile
-          />
+          <CapabilityTableOfContents pages={tocPages} mobile />
           {children}
         </section>
 
-        <CapabilityTableOfContents pages={tocPages} currentSlug={currentSlug} />
+        <CapabilityTableOfContents pages={tocPages} />
       </div>
     </div>
   );

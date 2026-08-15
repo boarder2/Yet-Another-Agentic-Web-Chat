@@ -1,12 +1,11 @@
+import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import {
-  capabilityPageUrl,
-  capabilitySectionUrl,
   createCapabilityCatalog,
   filesystemCapabilityDocsLoader,
   type CapabilityDocsLoader,
 } from './catalog';
-import { CAPABILITY_DOC_FILENAMES } from './types';
+import { CAPABILITY_DOC_FILENAMES, capabilityPageUrl } from './types';
 
 const fixedFixtureFiles = Object.fromEntries(
   CAPABILITY_DOC_FILENAMES.map((filename) => [
@@ -66,13 +65,24 @@ describe('capability docs catalog', () => {
     );
   });
 
-  it('includes the Markdown corpus in standalone output tracing', async () => {
-    const config = (await import('../../../next.config.mjs')).default as {
-      outputFileTracingIncludes?: Record<string, string[]>;
-    };
+  it('includes the Markdown corpus in standalone and Docker builds', async () => {
+    const [config, dockerfile] = await Promise.all([
+      import('../../../next.config.mjs').then(
+        (module) =>
+          module.default as {
+            outputFileTracingIncludes?: Record<string, string[]>;
+          },
+      ),
+      readFile(new URL('../../../app.dockerfile', import.meta.url), 'utf8'),
+    ]);
 
     expect(config.outputFileTracingIncludes?.['**']).toContain(
       './docs/capabilities/**/*.md',
+    );
+    const corpusCopy = 'COPY docs/capabilities ./docs/capabilities';
+    expect(dockerfile).toContain(corpusCopy);
+    expect(dockerfile.indexOf(corpusCopy)).toBeLessThan(
+      dockerfile.indexOf('RUN npm run build'),
     );
   });
 
@@ -82,16 +92,7 @@ describe('capability docs catalog', () => {
       '/docs/capabilities#overview',
     );
     expect(
-      capabilitySectionUrl(
-        {
-          slug: 'chat-and-research',
-          filename: 'chat-and-research.md',
-          title: 'Chat and research',
-          markdown: '',
-          sections: [],
-        },
-        'web-search',
-      ),
+      capabilityPageUrl('chat-and-research', { anchor: 'web-search' }),
     ).toBe('/docs/capabilities/chat-and-research#web-search');
   });
 
@@ -148,7 +149,9 @@ describe('capability docs catalog', () => {
     if (!dataDirectory.ok) return;
     expect(dataDirectory.value.content).toContain('DATA_DIR');
     expect(
-      capabilitySectionUrl(configurationPage.value, dataDirectory.value.anchor),
+      capabilityPageUrl(configurationPage.value, {
+        anchor: dataDirectory.value.anchor,
+      }),
     ).toBe('/docs/capabilities/configuration#data-directory');
 
     const updatingPage = await catalog.getPage('updating');
@@ -185,7 +188,9 @@ describe('capability docs catalog', () => {
     if (!beforeUpdate.ok) return;
     expect(beforeUpdate.value.content).toMatch(/backup/i);
     expect(
-      capabilitySectionUrl(updatingPage.value, beforeUpdate.value.anchor),
+      capabilityPageUrl(updatingPage.value, {
+        anchor: beforeUpdate.value.anchor,
+      }),
     ).toBe('/docs/capabilities/updating#before-an-update');
   });
 

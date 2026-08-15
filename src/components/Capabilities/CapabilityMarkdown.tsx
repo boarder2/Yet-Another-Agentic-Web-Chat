@@ -7,7 +7,8 @@ import { cn } from '@/lib/utils';
 import { createHeadingAnchor } from '@/lib/capabilities/search';
 import {
   CAPABILITY_DOC_FILENAMES,
-  CAPABILITY_DOCS_ROUTE,
+  capabilityPageUrl,
+  isExternalHref,
   type CapabilitySection,
 } from '@/lib/capabilities/types';
 
@@ -117,7 +118,7 @@ function capabilityFilenameFromLink(pathname: string): string | null {
 function normalizeCapabilityLink(rawHref: string): string {
   if (/^(?:javascript|data|vbscript):/i.test(rawHref.trim())) return '';
   if (!rawHref || rawHref.startsWith('#')) return rawHref;
-  if (/^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(rawHref)) return rawHref;
+  if (isExternalHref(rawHref)) return rawHref;
 
   const hashIndex = rawHref.indexOf('#');
   const pathname = hashIndex === -1 ? rawHref : rawHref.slice(0, hashIndex);
@@ -125,12 +126,8 @@ function normalizeCapabilityLink(rawHref: string): string {
   const filename = capabilityFilenameFromLink(pathname);
   if (!filename) return rawHref;
 
-  const slug = filename === 'README.md' ? 'README' : filename.slice(0, -3);
-  const base =
-    slug === 'README'
-      ? CAPABILITY_DOCS_ROUTE
-      : `${CAPABILITY_DOCS_ROUTE}/${encodeURIComponent(slug)}`;
-  if (!fragment) return base;
+  const slug = filename.slice(0, -'.md'.length);
+  if (!fragment) return capabilityPageUrl(slug);
 
   let decodedFragment = fragment;
   try {
@@ -138,13 +135,13 @@ function normalizeCapabilityLink(rawHref: string): string {
   } catch {
     // Keep the source fragment if it is malformed; the page link remains safe.
   }
-  return `${base}#${encodeURIComponent(decodedFragment)}`;
+  return capabilityPageUrl(slug, { anchor: decodedFragment });
 }
 
 const CapabilityLink = ({ href, children }: ComponentProps<'a'>) => {
   const resolvedHref = normalizeCapabilityLink(href ?? '');
   if (!resolvedHref) return <span>{children}</span>;
-  const isExternal = /^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(resolvedHref);
+  const isExternal = isExternalHref(resolvedHref);
 
   return (
     <a

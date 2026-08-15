@@ -10,19 +10,15 @@ export const metadata: Metadata = {
 
 export default async function CapabilityDocsLayout({
   children,
-  params,
 }: {
   children: React.ReactNode;
-  params: Promise<{ slug?: string }>;
 }) {
-  const { slug } = await params;
+  // The `[slug]` segment sits below this layout, so the active page is derived
+  // client-side from the pathname rather than passed down from here.
   const result = await getCapabilityDocsCatalog().load();
 
   return (
-    <CapabilityDocsShell
-      pages={result.ok ? result.value : []}
-      currentSlug={slug ?? 'README'}
-    >
+    <CapabilityDocsShell pages={result.ok ? result.value : []}>
       {children}
     </CapabilityDocsShell>
   );

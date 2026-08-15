@@ -1,17 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import {
-  buildCapabilityDocsGuidance,
-  capabilityDocsGuidance,
-} from './capabilityDocsGuidance';
+import { capabilityDocsGuidance } from './capabilityDocsGuidance';
 
 describe('capability documentation prompt guidance', () => {
   it('requires grounded YAAWC claims and closed failure behavior', () => {
-    const guidance = buildCapabilityDocsGuidance();
-
-    expect(guidance).toContain('MUST call `search_yaawc_docs`');
-    expect(guidance).toContain('returned section citation');
-    expect(guidance).toContain('cannot be verified');
-    expect(guidance).toContain(
+    expect(capabilityDocsGuidance).toContain('MUST call `search_yaawc_docs`');
+    expect(capabilityDocsGuidance).toContain('returned section citation');
+    expect(capabilityDocsGuidance).toContain('cannot be verified');
+    expect(capabilityDocsGuidance).toContain(
       'Do not turn a documentation failure into a web-search answer',
     );
   });

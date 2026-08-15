@@ -77,7 +77,7 @@ const invokeTool = async (
     args: input,
   };
   const runtime = {
-    context: { capabilityFacts },
+    context: { capabilityFacts: () => capabilityFacts },
     state: { relevantDocuments: [] },
     toolCallId: 'docs-call-1',
     config: {},
@@ -159,11 +159,7 @@ describe('search_yaawc_docs tool', () => {
 
   it('reports safe coarse status without exposing runtime facts', async () => {
     const command = await invokeTool(
-      {
-        status: {
-          capabilities: ['web search', 'memory', 'unknown service'],
-        },
-      },
+      { status: ['web search', 'memory', 'unknown service'] },
       {
         focusMode: 'webSearch',
         isPrivate: true,

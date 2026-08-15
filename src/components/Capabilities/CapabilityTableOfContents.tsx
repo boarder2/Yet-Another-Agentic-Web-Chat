@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation';
 import { Card } from '@/components/ui/Card';
 import { cn } from '@/lib/utils';
 import {
-  CAPABILITY_DOCS_ROUTE,
+  capabilitySlugFromPathname,
   type CapabilitySection,
 } from '@/lib/capabilities/types';
 
@@ -17,19 +17,6 @@ export type CapabilityTocPage = {
   slug: string;
   sections: readonly CapabilityTocSection[];
 };
-
-function slugFromPathname(pathname: string | null): string {
-  if (!pathname || pathname === CAPABILITY_DOCS_ROUTE) return 'README';
-  const prefix = `${CAPABILITY_DOCS_ROUTE}/`;
-  if (!pathname.startsWith(prefix)) return 'README';
-
-  const segment = pathname.slice(prefix.length).split('/')[0];
-  try {
-    return decodeURIComponent(segment) || 'README';
-  } catch {
-    return 'README';
-  }
-}
 
 function TableOfContents({
   page,
@@ -79,15 +66,12 @@ function TableOfContents({
 
 export default function CapabilityTableOfContents({
   pages,
-  currentSlug,
   mobile = false,
 }: {
   pages: readonly CapabilityTocPage[];
-  currentSlug: string;
   mobile?: boolean;
 }) {
-  const pathname = usePathname();
-  const activeSlug = pathname ? slugFromPathname(pathname) : currentSlug;
+  const activeSlug = capabilitySlugFromPathname(usePathname());
   const page = pages.find((candidate) => candidate.slug === activeSlug);
 
   return page ? <TableOfContents page={page} mobile={mobile} /> : null;

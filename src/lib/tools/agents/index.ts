@@ -100,27 +100,25 @@ export const isCodeExecutionEnabled = (): boolean => {
   return config.enabled && !('validationError' in config);
 };
 
-// Helper to append interactive-only tools (code execution + ask_user) for top-level use
-function withInteractiveTools<T>(tools: T[]): T[] {
+// Present in every top-level toolset and deliberately absent from the static
+// subagent arrays. ask_user and edit_skill check interactiveSession themselves.
+const ALWAYS_ON_TOOLS = [askUserTool, editSkillTool, yaawcDocsTool];
+
+// Helper to complete a top-level toolset: always-on tools plus code execution
+// when it is configured.
+function withTopLevelTools<T>(tools: T[]): T[] {
   const result = [...tools];
   if (isCodeExecutionEnabled()) {
     result.push(codeExecutionTool as unknown as T);
   }
-  // ask_user is always available; it checks interactiveSession at call time
-  result.push(askUserTool as unknown as T);
-  // edit_skill is always available; it checks interactiveSession at call time
-  result.push(editSkillTool as unknown as T);
-  // Capability lookup is a system tool: it is always present in top-level
-  // dynamic toolsets, but deliberately absent from the static subagent arrays.
-  result.push(yaawcDocsTool as unknown as T);
+  result.push(...(ALWAYS_ON_TOOLS as unknown as T[]));
   return result;
 }
 
-// Dynamic getters that include interactive tools when applicable
-export const getAllAgentTools = () => withInteractiveTools([...allAgentTools]);
-export const getWebSearchTools = () =>
-  withInteractiveTools([...webSearchTools]);
-export const getCoreTools = () => withInteractiveTools([...coreTools]);
+// Dynamic getters that include top-level-only tools when applicable
+export const getAllAgentTools = () => withTopLevelTools([...allAgentTools]);
+export const getWebSearchTools = () => withTopLevelTools([...webSearchTools]);
+export const getCoreTools = () => withTopLevelTools([...coreTools]);
 // Local research includes core tools plus chart + artifact support (no web search)
 export const getLocalResearchTools = () =>
-  withInteractiveTools([...coreTools, createChartTool, ...artifactTools]);
+  withTopLevelTools([...coreTools, createChartTool, ...artifactTools]);

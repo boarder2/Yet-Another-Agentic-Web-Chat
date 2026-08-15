@@ -1,10 +1,12 @@
 import {
   CAPABILITY_DOC_MAX_CONTENT_LENGTH,
   CAPABILITY_DOC_MAX_QUERY_LENGTH,
+  CAPABILITY_DOC_MAX_RESULTS,
   CapabilityPage,
   CapabilitySearchHit,
   CapabilitySearchOptions,
   CapabilitySection,
+  isValidSectionAnchor,
 } from './types';
 
 const SEARCH_STOP_WORDS = new Set([
@@ -54,9 +56,6 @@ export function createHeadingAnchor(heading: string): string {
     .replace(/\s+/g, '-');
   return normalized || 'section';
 }
-
-/** Alias kept explicit for callers that work with anchors rather than headings. */
-export const createCapabilityAnchor = createHeadingAnchor;
 
 function isFenceLine(line: string): { char: '`' | '~'; length: number } | null {
   const match = /^ {0,3}(`{3,}|~{3,})/.exec(line);
@@ -110,7 +109,7 @@ function parseHeadings(markdown: string): ParsedHeading[] {
   return headings;
 }
 
-function boundedText(value: string, maxLength: number): string {
+export function boundedText(value: string, maxLength: number): string {
   const limit = Math.max(
     1,
     Math.min(maxLength, CAPABILITY_DOC_MAX_CONTENT_LENGTH),
@@ -220,7 +219,10 @@ export function searchCapabilitySections(
     Number.isFinite(options.maxResults)
       ? options.maxResults
       : 5;
-  const maxResults = Math.max(1, Math.min(requestedMaxResults, 8));
+  const maxResults = Math.max(
+    1,
+    Math.min(requestedMaxResults, CAPABILITY_DOC_MAX_RESULTS),
+  );
   const requestedContentChars =
     typeof options.maxContentChars === 'number' &&
     Number.isFinite(options.maxContentChars)
@@ -233,25 +235,28 @@ export function searchCapabilitySections(
   const normalizedQuery = normalizeSearchText(query);
   const terms = queryTerms(query);
 
+  const bound = (section: CapabilitySection): CapabilitySection => ({
+    ...section,
+    content: boundedText(section.content, maxContentChars),
+    body: boundedText(section.body, maxContentChars),
+  });
+
   if (!normalizedQuery || terms.length === 0) {
     return sections.slice(0, maxResults).map((section, index) => ({
-      section: {
-        ...section,
-        content: boundedText(section.content, maxContentChars),
-        body: boundedText(section.body, maxContentChars),
-      },
+      section: bound(section),
       score: 1 - index / 10_000,
       matchedTerms: [],
     }));
   }
 
   const phrase = normalizedQuery;
+  // Score first and bound only the survivors: the corpus is far larger than
+  // `maxResults`, and truncating a section is the expensive part.
   return sections
     .map((section, index) => {
       const heading = normalizeSearchText(section.heading);
       const pageTitle = normalizeSearchText(section.pageTitle);
       const body = normalizeSearchText(section.body);
-      const fullText = normalizeSearchText(section.content);
       const matchedTerms = terms.filter(
         (term) =>
           heading.includes(term) ||
@@ -263,7 +268,8 @@ export function searchCapabilitySections(
       let score = 0;
       if (heading.includes(phrase)) score += 60;
       if (pageTitle.includes(phrase)) score += 12;
-      if (fullText.includes(phrase)) score += 5;
+      // `content` is the heading plus the body, so it needs no second pass.
+      if (`${heading} ${body}`.includes(phrase)) score += 5;
       for (const term of matchedTerms) {
         if (heading.includes(term)) score += 12;
         if (pageTitle.includes(term)) score += 4;
@@ -273,19 +279,12 @@ export function searchCapabilitySections(
       // still making the ordering observable and deterministic.
       score += (sections.length - index) / 10_000;
 
-      return {
-        section: {
-          ...section,
-          content: boundedText(section.content, maxContentChars),
-          body: boundedText(section.body, maxContentChars),
-        },
-        score,
-        matchedTerms,
-      };
+      return { section, score, matchedTerms };
     })
-    .filter((hit): hit is CapabilitySearchHit => hit !== null)
+    .filter((hit): hit is NonNullable<typeof hit> => hit !== null)
     .sort((a, b) => b.score - a.score)
-    .slice(0, maxResults);
+    .slice(0, maxResults)
+    .map((hit) => ({ ...hit, section: bound(hit.section) }));
 }
 
 /** Find an exact, already-catalogued section without interpreting a path. */
@@ -293,17 +292,7 @@ export function getSectionByAnchor(
   page: CapabilityPage,
   anchor: string,
 ): CapabilitySection | null {
-  if (
-    typeof anchor !== 'string' ||
-    anchor.length === 0 ||
-    anchor.length > 200 ||
-    anchor.includes('/') ||
-    anchor.includes('\\') ||
-    anchor.includes('..') ||
-    anchor.includes('#')
-  ) {
-    return null;
-  }
+  if (!isValidSectionAnchor(anchor)) return null;
   let decoded = anchor;
   try {
     decoded = decodeURIComponent(anchor);
@@ -312,5 +301,3 @@ export function getSectionByAnchor(
   }
   return page.sections.find((section) => section.anchor === decoded) ?? null;
 }
-
-export const findCapabilitySection = getSectionByAnchor;

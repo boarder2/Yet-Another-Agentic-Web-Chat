@@ -2,23 +2,20 @@ import { Document } from '@langchain/core/documents';
 import { ToolMessage } from '@langchain/core/messages';
 import { Command, getCurrentTaskInput } from '@langchain/langgraph';
 import { z } from 'zod';
-import {
-  capabilityPageUrl,
-  capabilitySectionUrl,
-  getCapabilityDocsCatalog,
-} from '@/lib/capabilities/catalog';
+import { getCapabilityDocsCatalog } from '@/lib/capabilities/catalog';
 import {
   CAPABILITY_DOC_MAX_CONTENT_LENGTH,
   CAPABILITY_DOC_MAX_QUERY_LENGTH,
   CAPABILITY_DOC_MAX_RESULTS,
   CapabilityPage,
   CapabilitySection,
+  capabilityPageUrl,
 } from '@/lib/capabilities/types';
-import { getSectionByAnchor } from '@/lib/capabilities/search';
+import { boundedText, getSectionByAnchor } from '@/lib/capabilities/search';
 import {
+  CAPABILITY_AVAILABILITY_STATUSES,
   getCapabilityAvailability,
   type CapabilityAvailability,
-  type CapabilityRuntimeFacts,
 } from '@/lib/capabilities/availability';
 import { defineTool } from '@/lib/tools/defineTool';
 import type { SimplifiedAgentStateType } from '@/lib/state/chatAgentState';
@@ -27,14 +24,9 @@ const MAX_STATUS_REQUESTS = 8;
 const MAX_TOOL_RESULT_LENGTH = 24_000;
 const MAX_STATUS_LABEL_LENGTH = 100;
 const MAX_TITLE_LENGTH = 200;
-
-const statusObjectSchema = z.object({
-  capability: z.string().max(MAX_STATUS_LABEL_LENGTH).optional(),
-  capabilities: z
-    .array(z.string().max(MAX_STATUS_LABEL_LENGTH))
-    .max(MAX_STATUS_REQUESTS)
-    .optional(),
-});
+/** Room for the `kind`/`query`/`availability` fields and per-section metadata. */
+const RESULT_ENVELOPE_RESERVE = 2_000;
+const MIN_SECTION_CONTENT_LENGTH = 200;
 
 export const YAAWCDocsToolSchema = z.object({
   query: z
@@ -58,8 +50,6 @@ export const YAAWCDocsToolSchema = z.object({
     .max(200)
     .optional()
     .describe('Exact section anchor, used with page.'),
-  slug: z.string().max(160).optional().describe('Alias for page.'),
-  anchor: z.string().max(200).optional().describe('Alias for section.'),
   maxResults: z
     .number()
     .int()
@@ -71,24 +61,13 @@ export const YAAWCDocsToolSchema = z.object({
     ),
   status: z
     .union([
-      z.boolean(),
       z.string().max(MAX_STATUS_LABEL_LENGTH),
       z.array(z.string().max(MAX_STATUS_LABEL_LENGTH)).max(MAX_STATUS_REQUESTS),
-      statusObjectSchema,
     ])
     .optional()
     .describe(
-      'Optional capability name(s) whose current local status should be reported.',
+      'Capability name(s) whose current local status should be reported.',
     ),
-  capability: z
-    .string()
-    .max(MAX_STATUS_LABEL_LENGTH)
-    .optional()
-    .describe('Capability name to check when requesting status.'),
-  includeStatus: z
-    .boolean()
-    .optional()
-    .describe('Include safe coarse availability for the requested capability.'),
 });
 
 type YAAWCDocsInput = z.infer<typeof YAAWCDocsToolSchema>;
@@ -114,64 +93,32 @@ function currentDocumentCount(): number {
   }
 }
 
-function getRuntimeFacts(
-  context: Parameters<typeof getCapabilityAvailability>[1],
-): CapabilityRuntimeFacts {
-  return context ?? {};
-}
-
 function statusCapabilities(input: YAAWCDocsInput): string[] {
-  const requested: string[] = [];
-  const add = (value: unknown) => {
-    if (typeof value === 'string' && value.trim()) requested.push(value.trim());
-  };
-
-  if (typeof input.capability === 'string') add(input.capability);
-  if (typeof input.status === 'string') add(input.status);
-  if (Array.isArray(input.status)) input.status.forEach(add);
-  if (
-    input.status &&
-    typeof input.status === 'object' &&
-    !Array.isArray(input.status)
-  ) {
-    add(input.status.capability);
-    input.status.capabilities?.forEach(add);
-  }
-  if (
-    (input.includeStatus || input.status === true) &&
-    requested.length === 0
-  ) {
-    add(input.query);
-  }
-
+  const requested = (
+    typeof input.status === 'string' ? [input.status] : (input.status ?? [])
+  )
+    .map((value) => value.trim())
+    .filter(Boolean);
   return [...new Set(requested)].slice(0, MAX_STATUS_REQUESTS);
-}
-
-function pageForSection(
-  pages: readonly CapabilityPage[],
-  section: CapabilitySection,
-): CapabilityPage | null {
-  return pages.find((page) => page.slug === section.pageSlug) ?? null;
 }
 
 function documentForSection(
   section: CapabilitySection,
-  page: CapabilityPage | null,
   sourceId: number,
   query: string,
 ): Document {
-  const url = page
-    ? capabilitySectionUrl(page, section.anchor)
-    : capabilityPageUrl(section.pageSlug, { anchor: section.anchor });
   return new Document({
-    pageContent: bounded(section.content, CAPABILITY_DOC_MAX_CONTENT_LENGTH),
+    pageContent: boundedText(
+      section.content,
+      CAPABILITY_DOC_MAX_CONTENT_LENGTH,
+    ),
     metadata: {
       sourceId,
-      title: bounded(
+      title: boundedText(
         `${section.pageTitle} — ${section.heading}`,
         MAX_TITLE_LENGTH,
       ),
-      url,
+      url: capabilityPageUrl(section.pageSlug, { anchor: section.anchor }),
       source: 'yaawc_docs',
       sourceType: 'internal',
       documentType: 'capability-doc',
@@ -189,10 +136,10 @@ function documentForPage(
   query: string,
 ): Document {
   return new Document({
-    pageContent: bounded(page.markdown, CAPABILITY_DOC_MAX_CONTENT_LENGTH),
+    pageContent: boundedText(page.markdown, CAPABILITY_DOC_MAX_CONTENT_LENGTH),
     metadata: {
       sourceId,
-      title: bounded(page.title, MAX_TITLE_LENGTH),
+      title: boundedText(page.title, MAX_TITLE_LENGTH),
       url: capabilityPageUrl(page),
       source: 'yaawc_docs',
       sourceType: 'internal',
@@ -204,63 +151,43 @@ function documentForPage(
   });
 }
 
-function compactDocument(document: Document): Record<string, string | number> {
+function compactDocument(
+  document: Document,
+  contentBudget: number,
+): Record<string, string | number> {
   return {
     sourceId: Number(document.metadata?.sourceId ?? 0),
-    title: bounded(
+    title: boundedText(
       String(document.metadata?.title ?? 'YAAWC capability documentation'),
       MAX_TITLE_LENGTH,
     ),
     url: String(document.metadata?.url ?? ''),
-    content: bounded(document.pageContent, CAPABILITY_DOC_MAX_CONTENT_LENGTH),
+    content: boundedText(document.pageContent, contentBudget),
   };
 }
 
+/**
+ * The result envelope is small and the section count is capped, so the share of
+ * `MAX_TOOL_RESULT_LENGTH` each section may spend is known before serializing.
+ */
+function sectionContentBudget(sectionCount: number): number {
+  if (sectionCount <= 0) return CAPABILITY_DOC_MAX_CONTENT_LENGTH;
+  const perSection = Math.floor(
+    (MAX_TOOL_RESULT_LENGTH - RESULT_ENVELOPE_RESERVE) / sectionCount,
+  );
+  return Math.max(
+    MIN_SECTION_CONTENT_LENGTH,
+    Math.min(perSection, CAPABILITY_DOC_MAX_CONTENT_LENGTH),
+  );
+}
+
 function compactPayload(payload: Record<string, unknown>): string {
-  const sections = payload.sections;
-  if (!Array.isArray(sections)) {
-    const serialized = JSON.stringify(payload);
-    if (serialized.length <= MAX_TOOL_RESULT_LENGTH) return serialized;
-  }
-  if (Array.isArray(sections)) {
-    let compactSections = sections.map((section) =>
-      section && typeof section === 'object'
-        ? { ...(section as Record<string, unknown>) }
-        : section,
-    );
-    let previousLength = Number.POSITIVE_INFINITY;
+  const serialized = JSON.stringify(payload);
+  if (serialized.length <= MAX_TOOL_RESULT_LENGTH) return serialized;
 
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      const candidate = JSON.stringify({
-        ...payload,
-        sections: compactSections,
-      });
-      if (candidate.length <= MAX_TOOL_RESULT_LENGTH) return candidate;
-
-      if (candidate.length >= previousLength && compactSections.length > 1) {
-        compactSections = compactSections.slice(0, -1);
-      } else {
-        compactSections = compactSections.map((section) => {
-          if (!section || typeof section !== 'object') return section;
-          const record = section as Record<string, unknown>;
-          return {
-            ...record,
-            content:
-              typeof record.content === 'string'
-                ? bounded(
-                    record.content,
-                    Math.max(200, Math.floor(record.content.length * 0.75)),
-                  )
-                : record.content,
-          };
-        });
-      }
-      previousLength = candidate.length;
-    }
-  }
-
-  // Keep the tool message valid JSON even if a future payload grows beyond the
-  // hard bound; truncating a serialized string would create an unusable result.
+  // Sections are already bounded to their share of the budget, so overflow can
+  // only come from an unexpectedly large envelope. Keep the message valid JSON;
+  // truncating a serialized string would produce an unusable result.
   return JSON.stringify({
     kind: payload.kind ?? 'ok',
     query: typeof payload.query === 'string' ? safeQuery(payload.query) : '',
@@ -293,18 +220,40 @@ function responseCommand(
 export const yaawcDocsTool = defineTool(
   async (input: YAAWCDocsInput, runtime) => {
     const query = safeQuery(input.query ?? '');
-    const pageSlug = input.page ?? input.slug;
-    const sectionAnchor = input.section ?? input.anchor;
+    const pageSlug = input.page;
+    const sectionAnchor = input.section;
     const catalog = getCapabilityDocsCatalog();
     const requestedStatuses = statusCapabilities(input);
     const statuses: CapabilityAvailability[] | CapabilityAvailability | null =
       requestedStatuses.length > 0
         ? getCapabilityAvailability(
             requestedStatuses,
-            getRuntimeFacts(runtime.context.capabilityFacts),
+            runtime.context.capabilityFacts?.() ?? {},
           )
         : null;
     const statusPayload = statuses ? { availability: statuses } : {};
+
+    const ok = (documents: Document[]) => {
+      const budget = sectionContentBudget(documents.length);
+      return responseCommand(
+        documents,
+        {
+          kind: 'ok',
+          query,
+          sections: documents.map((document) =>
+            compactDocument(document, budget),
+          ),
+          ...statusPayload,
+        },
+        runtime.toolCallId,
+      );
+    };
+    const failure = (kind: string, message: string) =>
+      responseCommand(
+        [],
+        { kind, message, query, ...statusPayload },
+        runtime.toolCallId,
+      );
 
     if (requestedStatuses.length > 0 && !query && !pageSlug && !sectionAnchor) {
       return responseCommand(
@@ -314,80 +263,25 @@ export const yaawcDocsTool = defineTool(
       );
     }
 
-    if (pageSlug && sectionAnchor) {
+    if (pageSlug) {
       const pageResult = await catalog.getPage(pageSlug);
-      if (!pageResult.ok) {
-        return responseCommand(
-          [],
-          {
-            kind: pageResult.kind,
-            message: pageResult.message,
-            query,
-            ...statusPayload,
-          },
-          runtime.toolCallId,
-        );
+      if (!pageResult.ok) return failure(pageResult.kind, pageResult.message);
+
+      if (!sectionAnchor) {
+        return ok([
+          documentForPage(pageResult.value, currentDocumentCount() + 1, query),
+        ]);
       }
       const section = getSectionByAnchor(pageResult.value, sectionAnchor);
       if (!section) {
-        return responseCommand(
-          [],
-          {
-            kind: 'no_match',
-            message: 'No matching YAAWC capability section was found.',
-            query,
-            ...statusPayload,
-          },
-          runtime.toolCallId,
+        return failure(
+          'no_match',
+          'No matching YAAWC capability section was found.',
         );
       }
-      const document = documentForSection(
-        section,
-        pageResult.value,
-        currentDocumentCount() + 1,
-        query,
-      );
-      return responseCommand(
-        [document],
-        {
-          kind: 'ok',
-          query,
-          sections: [compactDocument(document)],
-          ...statusPayload,
-        },
-        runtime.toolCallId,
-      );
-    }
-
-    if (pageSlug) {
-      const pageResult = await catalog.getPage(pageSlug);
-      if (!pageResult.ok) {
-        return responseCommand(
-          [],
-          {
-            kind: pageResult.kind,
-            message: pageResult.message,
-            query,
-            ...statusPayload,
-          },
-          runtime.toolCallId,
-        );
-      }
-      const document = documentForPage(
-        pageResult.value,
-        currentDocumentCount() + 1,
-        query,
-      );
-      return responseCommand(
-        [document],
-        {
-          kind: 'ok',
-          query,
-          sections: [compactDocument(document)],
-          ...statusPayload,
-        },
-        runtime.toolCallId,
-      );
+      return ok([
+        documentForSection(section, currentDocumentCount() + 1, query),
+      ]);
     }
 
     const result = await catalog.search(query, {
@@ -397,48 +291,27 @@ export const yaawcDocsTool = defineTool(
       sectionAnchor,
     });
     if (!result.ok) {
-      return responseCommand(
-        [],
-        {
-          kind: result.kind,
-          message:
-            result.kind === 'unavailable'
-              ? 'YAAWC capability documentation could not be loaded, so this claim cannot be verified.'
-              : result.message,
-          query,
-          ...statusPayload,
-        },
-        runtime.toolCallId,
+      return failure(
+        result.kind,
+        result.kind === 'unavailable'
+          ? 'YAAWC capability documentation could not be loaded, so this claim cannot be verified.'
+          : result.message,
       );
     }
 
-    const pagesResult = await catalog.load();
-    const pages = pagesResult.ok ? pagesResult.value : [];
-    const documents = result.value.map((hit, index) =>
-      documentForSection(
-        hit.section,
-        pageForSection(pages, hit.section),
-        currentDocumentCount() + index + 1,
-        query,
+    return ok(
+      result.value.map((hit, index) =>
+        documentForSection(
+          hit.section,
+          currentDocumentCount() + index + 1,
+          query,
+        ),
       ),
-    );
-    return responseCommand(
-      documents,
-      {
-        kind: 'ok',
-        query,
-        sections: documents.map(compactDocument),
-        ...statusPayload,
-      },
-      runtime.toolCallId,
     );
   },
   {
     name: 'search_yaawc_docs',
-    description:
-      'Search the local YAAWC capability documentation for current features, prerequisites, limits, privacy, settings, availability, and failure behavior. Use this before making any YAAWC product claim. Use page/section for exact retrieval. You may request safe coarse status; statuses are only available, disabled, not configured, or unknown on this device. No network or external credentials are used.',
+    description: `Search the local YAAWC capability documentation for current features, prerequisites, limits, privacy, settings, availability, and failure behavior. Use this before making any YAAWC product claim. Use page/section for exact retrieval. You may request safe coarse status; statuses are only ${CAPABILITY_AVAILABILITY_STATUSES.join(', ')}. No network or external credentials are used.`,
     schema: YAAWCDocsToolSchema,
   },
 );
-
-export const searchYAAWCDocsTool = yaawcDocsTool;

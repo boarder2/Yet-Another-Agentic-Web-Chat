@@ -87,3 +87,52 @@ export interface CapabilitySearchOptions {
 export interface CapabilityPageUrlOptions {
   anchor?: string;
 }
+
+const README_SLUG = 'README';
+
+function isIndexSlug(slug: string): boolean {
+  return slug.toLocaleLowerCase() === 'readme';
+}
+
+/** Anchors address a catalogued heading; they never carry a path or fragment. */
+export function isValidSectionAnchor(anchor: unknown): anchor is string {
+  return (
+    typeof anchor === 'string' &&
+    anchor.length > 0 &&
+    anchor.length <= 200 &&
+    !anchor.includes('/') &&
+    !anchor.includes('\\') &&
+    !anchor.includes('..') &&
+    !anchor.includes('#')
+  );
+}
+
+export function isExternalHref(href: string): boolean {
+  return /^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(href);
+}
+
+/** The single place the `README`-is-the-index rule turns into a route. */
+export function capabilityPageUrl(
+  pageOrSlug: Pick<CapabilityPage, 'slug'> | string,
+  options: CapabilityPageUrlOptions = {},
+): string {
+  const slug = typeof pageOrSlug === 'string' ? pageOrSlug : pageOrSlug.slug;
+  const base = isIndexSlug(slug)
+    ? CAPABILITY_DOCS_ROUTE
+    : `${CAPABILITY_DOCS_ROUTE}/${encodeURIComponent(slug)}`;
+  return options.anchor
+    ? `${base}#${encodeURIComponent(options.anchor)}`
+    : base;
+}
+
+/** Inverse of `capabilityPageUrl`; unknown paths fall back to the index. */
+export function capabilitySlugFromPathname(pathname: string | null): string {
+  const prefix = `${CAPABILITY_DOCS_ROUTE}/`;
+  if (!pathname?.startsWith(prefix)) return README_SLUG;
+  const segment = pathname.slice(prefix.length).split('/')[0];
+  try {
+    return decodeURIComponent(segment) || README_SLUG;
+  } catch {
+    return README_SLUG;
+  }
+}

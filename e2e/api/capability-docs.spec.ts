@@ -15,15 +15,13 @@ import {
   type ChatEvent,
   type CitationSource,
 } from '../utils/sse';
+import {
+  CAPABILITY_DOCS_BROAD_ANSWER as BROAD_ANSWER,
+  CAPABILITY_DOCS_GROUNDED_ANSWER as GROUNDED_ANSWER,
+  CAPABILITY_DOCS_NO_MATCH_ANSWER as NO_MATCH_ANSWER,
+  CAPABILITY_DOCS_STATUS_ANSWER as STATUS_ANSWER,
+} from '../../src/lib/providers/test';
 
-const GROUNDED_ANSWER =
-  'YAAWC capability claims are grounded in the bundled documentation [1].';
-const STATUS_ANSWER =
-  'Private sessions are available for this deterministic run.';
-const BROAD_ANSWER =
-  'YAAWC provides chat, research, workspaces, automation, and agent capabilities [1].';
-const NO_MATCH_ANSWER =
-  'I cannot verify that YAAWC capability from the current documentation.';
 const FOCUS_SOURCE_URL =
   '/docs/capabilities/chat-and-research#choose-a-focus-mode';
 

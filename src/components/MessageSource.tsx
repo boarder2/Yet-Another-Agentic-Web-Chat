@@ -18,13 +18,10 @@ interface MessageSourceProps {
 }
 
 function isCapabilityDocument(source: Document): boolean {
-  return (
-    source.metadata.source === 'yaawc_docs' ||
-    source.metadata.sourceType === 'internal' ||
-    source.metadata.documentType === 'capability-doc'
-  );
+  return source.metadata.source === 'yaawc_docs';
 }
 
+/** Rendered inside the caller's sized pill, which supplies the background. */
 function SourceIcon({
   source,
   compact,
@@ -32,24 +29,15 @@ function SourceIcon({
   source: Document;
   compact: boolean;
 }) {
-  const isInternal = isCapabilityDocument(source);
   const sourceUrl = String(source.metadata.url ?? '');
   const size = compact ? 14 : 16;
 
-  if (isInternal) {
-    return (
-      <div className="flex items-center justify-center rounded-pill bg-surface-2">
-        <BookOpen size={size} className="text-accent" />
-      </div>
-    );
+  if (isCapabilityDocument(source)) {
+    return <BookOpen size={size} className="text-accent" />;
   }
 
   if (sourceUrl === 'File') {
-    return (
-      <div className="flex items-center justify-center rounded-pill bg-surface-2">
-        <File size={size} className="text-fg-muted" />
-      </div>
-    );
+    return <File size={size} className="text-fg-muted" />;
   }
 
   return (

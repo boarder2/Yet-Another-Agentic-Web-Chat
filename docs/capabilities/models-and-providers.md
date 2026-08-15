@@ -57,4 +57,4 @@ A provider may be absent from the model picker when its credential is missing, i
 
 Check the encryption passphrase first, then refresh the provider model list. Re-enter a credential if it was saved under a different passphrase. Verify LM Studio or Custom OpenAI URLs and the model name. For web features, verify the selected search provider and fallback. For image generation, verify that the selected OpenRouter model supports image output. A failed provider does not make local capability documentation, settings, or already stored chats unavailable.
 
-For deployment-level configuration, see the [configuration guide](../installation/configuration.md). For voice and appearance settings, see [Administration and settings](./administration-and-settings.md).
+For deployment-level configuration, see the [configuration guide](https://github.com/boarder2/Yet-Another-Agentic-Web-Chat/blob/main/docs/installation/configuration.md). For voice and appearance settings, see [Administration and settings](./administration-and-settings.md).

@@ -29,11 +29,11 @@ YAAWC is a self-hosted agentic web chat. It can research the web, work with loca
 
 Capability details intentionally stay separate from installation deep dives and developer architecture:
 
-- [Configuration guide](../installation/configuration.md)
-- [Updating YAAWC](../installation/UPDATING.md)
-- [Tracing and observability](../installation/TRACING.md)
-- [Built-in themes](../THEMES.md)
-- [Developer architecture](../architecture/README.md)
-- [Contributing](../../CONTRIBUTING.md)
+- [Configuration guide](https://github.com/boarder2/Yet-Another-Agentic-Web-Chat/blob/main/docs/installation/configuration.md)
+- [Updating YAAWC](https://github.com/boarder2/Yet-Another-Agentic-Web-Chat/blob/main/docs/installation/UPDATING.md)
+- [Tracing and observability](https://github.com/boarder2/Yet-Another-Agentic-Web-Chat/blob/main/docs/installation/TRACING.md)
+- [Built-in themes](https://github.com/boarder2/Yet-Another-Agentic-Web-Chat/blob/main/docs/THEMES.md)
+- [Developer architecture](https://github.com/boarder2/Yet-Another-Agentic-Web-Chat/blob/main/docs/architecture/README.md)
+- [Contributing](https://github.com/boarder2/Yet-Another-Agentic-Web-Chat/blob/main/CONTRIBUTING.md)
 
 Availability depends on the selected focus mode, configured models and providers, workspace or private-session state, and the local services an operator has enabled. When a prerequisite is missing, the relevant guide describes what is unavailable and how to recover.

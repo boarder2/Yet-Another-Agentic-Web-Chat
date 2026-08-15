@@ -4,7 +4,7 @@ Settings are opened from the desktop sidebar or the mobile chat settings control
 
 ## General settings
 
-- **Appearance:** choose from built-in light and dark themes, or copy a built-in theme into the single editable Custom theme. Custom themes expose seven seed colors and a syntax style/variant for chat code blocks, workspace files, and editors. Theme selection is device-local; use Copy/Paste to move a theme between devices. See [Built-in themes](../THEMES.md).
+- **Appearance:** choose from built-in light and dark themes, or copy a built-in theme into the single editable Custom theme. Custom themes expose seven seed colors and a syntax style/variant for chat code blocks, workspace files, and editors. Theme selection is device-local; use Copy/Paste to move a theme between devices. See [Built-in themes](https://github.com/boarder2/Yet-Another-Agentic-Web-Chat/blob/main/docs/THEMES.md).
 - **Automation:** enable automatic related suggestions and automatic first-turn chat titles.
 - **MCP Servers:** add and manage remote Model Context Protocol servers.
 - **Memory:** enable retrieval and automatic detection, choose the memory-processing model, and manage stored memories. See [Personalization and memory](./personalization-and-memory.md).
@@ -44,7 +44,7 @@ MCP availability is based on the saved server state and the connection/discovery
 
 `config.toml` is intentionally small at runtime. It contains the required encryption passphrase, optional base URL, and infrastructure settings such as Docker-backed code execution. Model/search credentials, provider URLs, model visibility, retention, image-generation settings, and model choices are managed in Settings and stored in the database or encrypted credential table.
 
-The passphrase must be supplied before credentials can be saved. Keep it stable across restarts and back up it separately from the encrypted database. Detailed deployment options are in the [configuration guide](../installation/configuration.md); reverse proxy and update notes are in the [installation references](../installation/UPDATING.md).
+The passphrase must be supplied before credentials can be saved. Keep it stable across restarts and back up it separately from the encrypted database. Detailed deployment options are in the [configuration guide](https://github.com/boarder2/Yet-Another-Agentic-Web-Chat/blob/main/docs/installation/configuration.md); reverse proxy and update notes are in the [installation references](https://github.com/boarder2/Yet-Another-Agentic-Web-Chat/blob/main/docs/installation/UPDATING.md).
 
 ## Voice availability
 

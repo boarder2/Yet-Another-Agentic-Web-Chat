@@ -1,5 +1,8 @@
 import { test, expect } from '../fixtures';
 
+const githubMain =
+  'https://github.com/boarder2/Yet-Another-Agentic-Web-Chat/blob/main/';
+
 test.describe('capability documentation', () => {
   test('renders the index and a page with stable headings, tables, and code', async ({
     page,
@@ -32,6 +35,85 @@ test.describe('capability documentation', () => {
 
     await page.goto('/docs/capabilities/chat-and-research#choose-a-focus-mode');
     await expect(page.locator('h2#choose-a-focus-mode')).toBeVisible();
+  });
+
+  test('renders operator references as external GitHub main links', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/docs/capabilities');
+
+    const references = [
+      [
+        'Configuration guide',
+        `${githubMain}docs/installation/configuration.md`,
+      ],
+      ['Updating YAAWC', `${githubMain}docs/installation/UPDATING.md`],
+      [
+        'Tracing and observability',
+        `${githubMain}docs/installation/TRACING.md`,
+      ],
+      ['Built-in themes', `${githubMain}docs/THEMES.md`],
+      ['Developer architecture', `${githubMain}docs/architecture/README.md`],
+      ['Contributing', `${githubMain}CONTRIBUTING.md`],
+    ] as const;
+
+    for (const [name, href] of references) {
+      const link = page.getByRole('link', { name, exact: true });
+      await expect(link).toHaveAttribute('href', href);
+      await expect(link).toHaveAttribute('target', '_blank');
+      await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    }
+  });
+
+  test('renders a copyable code-widget contract and defensive example', async ({
+    page,
+    context,
+  }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await page.goto('/docs/capabilities/artifacts-and-dashboards');
+
+    const content = page.locator('#capability-docs-content');
+    await expect(
+      content.getByRole('heading', { name: 'Code widgets', exact: true }),
+    ).toBeVisible();
+    expect(
+      await content
+        .getByRole('button', { name: 'Copy code to clipboard' })
+        .count(),
+    ).toBeGreaterThanOrEqual(5);
+
+    const renderBlock = content
+      .locator('div.rounded-control')
+      .filter({
+        hasText: 'async function render({ sources, now, location, theme })',
+      })
+      .first();
+    await expect(renderBlock).toBeVisible();
+    await renderBlock
+      .getByRole('button', { name: 'Copy code to clipboard' })
+      .click();
+    await expect
+      .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+      .toContain('async function render({ sources, now, location, theme })');
+
+    const exampleBlock = content
+      .locator('div.rounded-control')
+      .filter({
+        hasText: 'const inputSources = Array.isArray(sources) ? sources : []',
+      })
+      .first();
+    await expect(exampleBlock).toBeVisible();
+    await exampleBlock
+      .getByRole('button', { name: 'Copy code to clipboard' })
+      .click();
+    await expect
+      .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+      .toMatch(/const chartMarkdown = chart\([\s\S]*chartMarkdown/);
+    await expect(content).toContainText('<Chart id="cN"/>');
+    await expect(content).toContainText('2,000,000');
+    await expect(content).toContainText('4,000,000');
+    await expect(content).toContainText('512,000');
   });
 
   test('keeps the documentation body at normal chat width while navigation extends beyond it', async ({

@@ -107,4 +107,26 @@ describe('capability docs catalog', () => {
       kind: 'unavailable',
     });
   });
+
+  it('searches the shipped corpus for the public code-widget construction contract', async () => {
+    const catalog = createCapabilityCatalog(filesystemCapabilityDocsLoader);
+    const result = await catalog.search(
+      'construct a code widget with render and chart',
+      {
+        pageSlug: 'artifacts-and-dashboards',
+        maxResults: 8,
+        maxContentChars: 6_000,
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const guidance = result.value.map((hit) => hit.section.content).join('\n');
+    expect(guidance).toContain(
+      'async function render({ sources, now, location, theme })',
+    );
+    expect(guidance).toContain('The global `chart(spec)` helper');
+    expect(guidance).toContain('`<Chart id="cN"/>`');
+  });
 });

@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { dirname, relative, resolve, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 type Heading = {
@@ -31,6 +31,35 @@ const capabilityPages = [
   'privacy-and-data.md',
 ] as const;
 const capabilityFiles = ['README.md', ...capabilityPages];
+const githubMain =
+  'https://github.com/boarder2/Yet-Another-Agentic-Web-Chat/blob/main/';
+const expectedGithubLinks: Record<string, readonly string[]> = {
+  'README.md': [
+    `${githubMain}docs/installation/configuration.md`,
+    `${githubMain}docs/installation/UPDATING.md`,
+    `${githubMain}docs/installation/TRACING.md`,
+    `${githubMain}docs/THEMES.md`,
+    `${githubMain}docs/architecture/README.md`,
+    `${githubMain}CONTRIBUTING.md`,
+  ],
+  'administration-and-settings.md': [
+    `${githubMain}docs/THEMES.md`,
+    `${githubMain}docs/installation/configuration.md`,
+    `${githubMain}docs/installation/UPDATING.md`,
+  ],
+  'agent-capabilities.md': [`${githubMain}docs/installation/configuration.md`],
+  'artifacts-and-dashboards.md': [
+    `${githubMain}docs/installation/configuration.md`,
+  ],
+  'automation.md': [],
+  'chat-and-research.md': [],
+  'files-and-workspaces.md': [],
+  'models-and-providers.md': [
+    `${githubMain}docs/installation/configuration.md`,
+  ],
+  'personalization-and-memory.md': [],
+  'privacy-and-data.md': [],
+};
 
 const sourceFiles = [
   'README.md',
@@ -79,15 +108,56 @@ const parseHeadings = (markdown: string): Heading[] => {
   return headings;
 };
 
-const extractLinks = (markdown: string): string[] => {
-  const links: string[] = [];
-  const linkPattern = /\]\(\s*(<[^>]+>|[^)\s]+)(?:\s+[^)]*)?\)/g;
+const normalizeReferenceLabel = (label: string) =>
+  label.trim().replace(/\s+/g, ' ').toLowerCase();
 
-  for (const match of markdown.matchAll(linkPattern)) {
-    links.push(match[1].startsWith('<') ? match[1].slice(1, -1) : match[1]);
+const extractLinks = (markdown: string): string[] => {
+  const definitions = new Map<string, string>();
+  const definitionPattern =
+    /^[ \t]{0,3}\[([^\]\r\n]+)\]:[ \t]*(<[^>\r\n]*>|[^ \t\r\n]+)(?:[ \t]+.*)?$/gm;
+
+  for (const match of markdown.matchAll(definitionPattern)) {
+    const rawDestination = match[2];
+    definitions.set(
+      normalizeReferenceLabel(match[1]),
+      rawDestination.startsWith('<')
+        ? rawDestination.slice(1, -1)
+        : rawDestination,
+    );
   }
 
-  return links;
+  const locatedLinks: Array<{ index: number; destination: string }> = [];
+  const addReferenceLink = (index: number, label: string) => {
+    const destination = definitions.get(normalizeReferenceLabel(label));
+    if (destination) locatedLinks.push({ index, destination });
+  };
+
+  const inlineLinkPattern = /\]\(\s*(<[^>]+>|[^)\s]+)(?:\s+[^)]*)?\)/g;
+  for (const match of markdown.matchAll(inlineLinkPattern)) {
+    const rawDestination = match[1];
+    locatedLinks.push({
+      index: match.index,
+      destination: rawDestination.startsWith('<')
+        ? rawDestination.slice(1, -1)
+        : rawDestination,
+    });
+  }
+
+  const referenceLinkPattern = /\[([^\]\r\n]+)\][ \t]*\[([^\]\r\n]*)\]/g;
+  for (const match of markdown.matchAll(referenceLinkPattern)) {
+    if (match.index > 0 && markdown[match.index - 1] === '!') continue;
+    addReferenceLink(match.index, match[2] || match[1]);
+  }
+
+  const shortcutReferencePattern =
+    /(^|[^\w!])\[([^\]\r\n]+)\](?![ \t]*[:\[(])/gm;
+  for (const match of markdown.matchAll(shortcutReferencePattern)) {
+    addReferenceLink(match.index + match[1].length, match[2]);
+  }
+
+  return locatedLinks
+    .sort((left, right) => left.index - right.index)
+    .map(({ destination }) => destination);
 };
 
 const isExternalLink = (destination: string) =>
@@ -239,6 +309,156 @@ describe('authoritative capability corpus', () => {
         assertInternalLinkResolves(source, destination, headings);
       }
     }
+  });
+
+  it('keeps relative capability links in-corpus and pins repository links to GitHub main', () => {
+    for (const file of capabilityFiles) {
+      const source = sourceFiles.find(
+        ({ path }) => path === `docs/capabilities/${file}`,
+      );
+      if (!source) throw new Error(`Missing test fixture for ${file}`);
+
+      const externalLinks = extractLinks(source.text).filter(isExternalLink);
+      expect(externalLinks, `${file} repository references`).toEqual(
+        expectedGithubLinks[file],
+      );
+      for (const destination of externalLinks) {
+        expect(destination).toMatch(new RegExp(`^${githubMain}`));
+      }
+
+      for (const destination of extractLinks(source.text)) {
+        if (isExternalLink(destination)) continue;
+        const hashIndex = destination.indexOf('#');
+        const pathPart =
+          hashIndex === -1 ? destination : destination.slice(0, hashIndex);
+        if (!pathPart) continue;
+
+        const targetPath = resolve(
+          dirname(resolve(repositoryRoot, source.path)),
+          decodeURIComponent(pathPart),
+        );
+        const relativeTarget = relative(capabilitiesRoot, targetPath);
+        expect(
+          relativeTarget === '' ||
+            (relativeTarget !== '..' && !relativeTarget.startsWith(`..${sep}`)),
+          `${source.path} relative link escapes docs/capabilities: ${destination}`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  it('recognizes reference-style links before applying the corpus boundary policy', () => {
+    const markdown =
+      '[configuration guide][cfg]\n\n[cfg]: ../installation/configuration.md';
+    const [destination] = extractLinks(markdown);
+
+    expect(destination).toBe('../installation/configuration.md');
+    if (!destination) throw new Error('Reference link was not extracted');
+
+    const targetPath = resolve(
+      dirname(resolve(repositoryRoot, 'docs/capabilities/README.md')),
+      destination,
+    );
+    const relativeTarget = relative(capabilitiesRoot, targetPath);
+    expect(
+      relativeTarget === '..' || relativeTarget.startsWith(`..${sep}`),
+    ).toBe(true);
+  });
+
+  it('pins the public code-widget contract, limits, and defensive example', () => {
+    const source = sourceFiles.find(
+      ({ path }) => path === 'docs/capabilities/artifacts-and-dashboards.md',
+    );
+    if (!source) throw new Error('Missing code-widget capability page');
+
+    const markdown = source.text;
+    for (const snippet of [
+      'async function render({ sources, now, location, theme })',
+      'url: string;',
+      "type: 'Web Page' | 'HTTP Data';",
+      'content: string;',
+      'error?: string;',
+      'ok: boolean;',
+      'truncated: boolean;',
+      'iso: string, utcIso: string, localIso: string',
+      'string | null',
+      "mode: 'light' | 'dark';",
+      'background: string;',
+      'accentForeground: string;',
+      'danger: string;',
+      'success: string;',
+      'warning: string;',
+      'info: string;',
+      'non-empty Markdown string',
+      'sanitized',
+      'Inline `style` attributes are allowed and pass through without CSS sanitization',
+      'including `url(...)` values',
+      'treat them as trusted and do not interpolate untrusted URLs or CSS',
+      'A failed source',
+      '`render` throws',
+      'The global `chart(spec)` helper',
+      'assigns an id in call order',
+      '`<Chart id="cN"/>`',
+      'After `render` returns, the runtime validates every registered specification',
+      '`chart()` itself does not throw for an invalid spec',
+      'fails the widget afterward rather than being catchable around the call',
+      'for non-pie charts, a legend appears only when it is true and there are multiple series',
+      "type: 'bar' | 'line' | 'area' | 'pie';",
+      'data: Array<Record<string, string | number>>;',
+      'key: string;',
+      'label?: string;',
+      'color?: string;',
+      'stackId?: string;',
+      'xKey?: string;',
+      "orientation?: 'vertical' | 'horizontal';",
+      'donut?: boolean;',
+      'showLegend?: boolean;',
+      'showGrid?: boolean;',
+      'yLabel?: string;',
+      'xLabel?: string;',
+      'yMin?: number;',
+      'yMax?: number;',
+      'must contain exactly one entry',
+      '`name` field',
+      'effective `xKey`',
+      'valid CSS color',
+      'six decimal places',
+      'const inputSources = Array.isArray(sources) ? sources : [];',
+      'const failed = inputSources.filter((source) => !source.ok);',
+      'const chartMarkdown = chart({',
+      'color: theme.colors.accent,',
+      'chartMarkdown,',
+    ]) {
+      expect(markdown, `missing code-widget contract: ${snippet}`).toContain(
+        snippet,
+      );
+    }
+
+    expect(markdown).toMatch(
+      /\*\*`now`\*\* is `\{ iso: string, utcIso: string, localIso: string \}`/,
+    );
+    expect(markdown).toMatch(/\*\*`location`\*\* is `string \| null`/);
+
+    for (const limit of [
+      /Sources per widget\s+\|\s+8/,
+      /Retained characters per source\s+\|\s+2,000,000/,
+      /Retained source characters total\s+\|\s+4,000,000/,
+      /Widget output\/result envelope\s+\|\s+512,000/,
+      /Charts per widget\s+\|\s+10/,
+      /Data rows per chart\s+\|\s+1,000/,
+      /Series per chart\s+\|\s+20/,
+      /Bounded chart strings\s+\|\s+500 characters/,
+    ]) {
+      expect(markdown).toMatch(limit);
+    }
+    expect(markdown).toContain('TOOLS.CODE_EXECUTION.TIMEOUT_SECONDS');
+    expect(markdown).toContain('TOOLS.CODE_EXECUTION.MEMORY_MB');
+    expect(markdown).toContain('30 seconds and 128 MB');
+
+    const codeFences = markdown.match(/```[\s\S]*?```/g) ?? [];
+    expect(
+      codeFences.some((fence) => /code_execution|input_schema/i.test(fence)),
+    ).toBe(false);
   });
 
   it('has no repository link targeting the deleted docs/ui tree', () => {

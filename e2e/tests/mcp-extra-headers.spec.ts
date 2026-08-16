@@ -23,9 +23,18 @@ test.describe('MCP extra headers', () => {
     await page.getByLabel('Header 1 name').fill('X-Portainer-API-Key');
     await page.getByLabel('Header 1 value').fill('ptr_never_shown');
 
+    // The form only unmounts once the create round-trips, so wait on the
+    // request rather than on the default expect timeout — under parallel load
+    // the POST alone can outlast it.
+    const createResponse = page.waitForResponse(
+      (r) =>
+        new URL(r.url()).pathname === '/api/mcp/servers' &&
+        r.request().method() === 'POST',
+    );
     await page.getByRole('button', { name: 'Add Server', exact: true }).click();
-    // Wait for the form to close, otherwise the value is still sitting in its
-    // (not yet unmounted) input when the leak assertion below runs.
+    await createResponse;
+    // Otherwise the value is still sitting in its (not yet unmounted) input
+    // when the leak assertion below runs.
     await expect(page.getByLabel('Header 1 value')).toBeHidden();
 
     // The API is the source of truth: the name is stored, the value is not

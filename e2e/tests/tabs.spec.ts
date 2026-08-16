@@ -27,6 +27,7 @@ test.describe('shared Tabs: history', () => {
     }
     await expect(conversations).toHaveAttribute('aria-selected', 'true');
     await expect(artifacts).toHaveAttribute('aria-selected', 'false');
+    await expect(conversations).toHaveAttribute('aria-current', 'page');
     // Conversations is the default section: the chat browser (its search box)
     // is visible and the artifact browser is not.
     const chatSearch = page.getByPlaceholder('Search conversations...');

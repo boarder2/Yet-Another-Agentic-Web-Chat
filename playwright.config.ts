@@ -20,7 +20,10 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  // No CI worker pin: the `serial` project's `dependencies` (below) is what
+  // keeps its specs off the same clock as everything else, so the worker count
+  // is free to be Playwright's core-scaled default on whatever runner this is.
+  workers: undefined,
   reporter: [['html', { open: 'never' }], ['list']],
   use: {
     baseURL: BASE_URL,
@@ -104,10 +107,15 @@ export default defineConfig({
       // can't tolerate a concurrently-running spec observing dirty state.
       // A single worker with fullyParallel off makes that obvious from the
       // project alone, so specs don't need their own cross-worker mutex.
+      // `dependencies` is what keeps that promise once the run itself is
+      // parallel: a project-level worker cap does not stop *other* projects
+      // from running concurrently, so without this the settings these specs
+      // mutate would be read dirty by a `chromium` spec on another worker.
       name: 'serial',
       testDir: 'e2e/serial',
       fullyParallel: false,
       workers: 1,
+      dependencies: ['smoke', 'api', 'chromium', 'encryption-gate'],
       use: { ...devices['Desktop Chrome'] },
     },
     {

@@ -1738,7 +1738,7 @@ test.describe('IconButton primitive', () => {
     }
   });
 
-  test('list icon links and danger actions expose labels, 15px icons, and disabled state', async ({
+  test('schedule row icon actions: labels, danger tone, focus, busy state, and navigation', async ({
     page,
     request,
   }) => {
@@ -1755,60 +1755,109 @@ test.describe('IconButton primitive', () => {
       await expect(row).toBeVisible();
 
       const edit = row.getByRole('link', { name: 'Edit', exact: true });
-      await expect(edit).toHaveAttribute('title', 'Edit');
-      await expect(edit).toHaveAttribute(
-        'href',
-        `/automations/schedules/${scheduleId}`,
-      );
-      await expect(edit).toHaveClass(/focus-border-neutral/);
-      await expect(edit.locator('svg')).toHaveAttribute('width', '15');
-      await expect(edit.locator('svg')).toHaveAttribute('height', '15');
-
       const remove = row.getByRole('button', { name: 'Delete', exact: true });
-      await expect(remove).toHaveAttribute('title', 'Delete');
-      await expect(remove).toHaveClass(/focus-border-contrast/);
-      await expect(remove).toHaveClass(/text-danger/);
-      await expect(remove.locator('svg')).toHaveAttribute('width', '15');
-      await expect(remove.locator('svg')).toHaveAttribute('height', '15');
-
-      let release!: () => void;
-      const held = new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      await page.route(`**/api/schedules/${scheduleId}/run`, async (route) => {
-        if (route.request().method() !== 'POST') return route.fallback();
-        await held;
-        await route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({ status: 'started' }),
-        });
-      });
-
       const run = row.getByRole('button', { name: 'Run now', exact: true });
-      await run.click();
-      await expect(run).toBeDisabled();
-      await expect(run).toHaveAttribute('aria-busy', 'true');
-      await expect(run.locator('svg.animate-spin')).toHaveCount(1);
-      await expect(run.locator('svg.animate-spin')).toHaveAttribute(
-        'width',
-        '15',
-      );
-      await expect(run.locator('svg.animate-spin')).toHaveAttribute(
-        'height',
-        '15',
-      );
-      await expect(run).toHaveClass(/focus-border-neutral/);
 
-      release();
-      await expect(run).toBeEnabled();
+      await test.step('list icon links and danger actions expose labels, 15px icons, and disabled state', async () => {
+        await expect(edit).toHaveAttribute('title', 'Edit');
+        await expect(edit).toHaveAttribute(
+          'href',
+          `/automations/schedules/${scheduleId}`,
+        );
+        await expect(edit).toHaveClass(/focus-border-neutral/);
+        await expect(edit.locator('svg')).toHaveAttribute('width', '15');
+        await expect(edit.locator('svg')).toHaveAttribute('height', '15');
 
-      // The shared primitive must preserve real link navigation, not only its
-      // accessible name and href attributes.
-      await edit.click();
-      await expect(page).toHaveURL(
-        new RegExp(`/automations/schedules/${scheduleId}$`),
-      );
+        await expect(remove).toHaveAttribute('title', 'Delete');
+        await expect(remove).toHaveClass(/focus-border-contrast/);
+        await expect(remove).toHaveClass(/text-danger/);
+        await expect(remove.locator('svg')).toHaveAttribute('width', '15');
+        await expect(remove.locator('svg')).toHaveAttribute('height', '15');
+      });
+
+      await test.step('danger icon actions keep danger hover and contrast focus without reflow', async () => {
+        const danger = await resolvedTextClass(page, 'text-danger');
+        const dangerSoft = await resolvedBackgroundClass(
+          page,
+          'bg-danger-soft',
+        );
+        const before = await remove.boundingBox();
+        expect(before).not.toBeNull();
+
+        await remove.hover();
+        await expect
+          .poll(() =>
+            remove.evaluate((element) => {
+              const style = getComputedStyle(element);
+              return {
+                background: style.backgroundColor,
+                color: style.color,
+              };
+            }),
+          )
+          .toEqual({ background: dangerSoft, color: danger });
+
+        await page.mouse.move(0, 0);
+        await edit.focus();
+        await page.keyboard.press('Tab');
+        await expect(remove).toBeFocused();
+        await expect
+          .poll(() =>
+            remove.evaluate(
+              (element) => getComputedStyle(element).borderTopColor,
+            ),
+          )
+          .toBe(danger);
+        await expect(remove).toHaveCSS('border-top-width', '1px');
+        await expect(remove).toHaveCSS('outline-style', 'none');
+        expect(await remove.boundingBox()).toEqual(before);
+      });
+
+      // Continues "list icon links and danger actions expose labels, 15px
+      // icons, and disabled state" — the held Run-now busy state and the
+      // Edit-link navigation run last, after the danger-tone assertions.
+      await test.step('list icon links and danger actions expose labels, 15px icons, and disabled state (busy state, navigation)', async () => {
+        let release!: () => void;
+        const held = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        await page.route(
+          `**/api/schedules/${scheduleId}/run`,
+          async (route) => {
+            if (route.request().method() !== 'POST') return route.fallback();
+            await held;
+            await route.fulfill({
+              status: 200,
+              contentType: 'application/json',
+              body: JSON.stringify({ status: 'started' }),
+            });
+          },
+        );
+
+        await run.click();
+        await expect(run).toBeDisabled();
+        await expect(run).toHaveAttribute('aria-busy', 'true');
+        await expect(run.locator('svg.animate-spin')).toHaveCount(1);
+        await expect(run.locator('svg.animate-spin')).toHaveAttribute(
+          'width',
+          '15',
+        );
+        await expect(run.locator('svg.animate-spin')).toHaveAttribute(
+          'height',
+          '15',
+        );
+        await expect(run).toHaveClass(/focus-border-neutral/);
+
+        release();
+        await expect(run).toBeEnabled();
+
+        // The shared primitive must preserve real link navigation, not only
+        // its accessible name and href attributes.
+        await edit.click();
+        await expect(page).toHaveURL(
+          new RegExp(`/automations/schedules/${scheduleId}$`),
+        );
+      });
     } finally {
       const scheduleDelete = await request.delete(
         `/api/schedules/${scheduleId}`,
@@ -1864,67 +1913,6 @@ test.describe('IconButton primitive', () => {
       });
       const chatDelete = await request.delete(`/api/chats/${awaiting.chatId}`);
       expect([200, 204, 404]).toContain(chatDelete.status());
-    }
-  });
-
-  test('danger icon actions keep danger hover and contrast focus without reflow', async ({
-    page,
-    request,
-  }) => {
-    const workflowId = await seedWorkflow(request, {
-      name: uniq('icon-button-danger-workflow'),
-    });
-    const scheduleId = await seedSchedule(request, workflowId, {
-      label: uniq('icon-button-danger-schedule'),
-    });
-
-    try {
-      await page.goto('/automations/scheduled');
-      const row = page.locator(`[data-schedule-id="${scheduleId}"]`);
-      await expect(row).toBeVisible();
-
-      const remove = row.getByRole('button', { name: 'Delete', exact: true });
-      const edit = row.getByRole('link', { name: 'Edit', exact: true });
-      const danger = await resolvedTextClass(page, 'text-danger');
-      const dangerSoft = await resolvedBackgroundClass(page, 'bg-danger-soft');
-      const before = await remove.boundingBox();
-      expect(before).not.toBeNull();
-
-      await expect(remove).toHaveClass(/focus-border-contrast/);
-      await expect(remove).toHaveClass(/text-danger/);
-      await remove.hover();
-      await expect
-        .poll(() =>
-          remove.evaluate((element) => {
-            const style = getComputedStyle(element);
-            return { background: style.backgroundColor, color: style.color };
-          }),
-        )
-        .toEqual({ background: dangerSoft, color: danger });
-
-      await page.mouse.move(0, 0);
-      await edit.focus();
-      await page.keyboard.press('Tab');
-      await expect(remove).toBeFocused();
-      await expect
-        .poll(() =>
-          remove.evaluate(
-            (element) => getComputedStyle(element).borderTopColor,
-          ),
-        )
-        .toBe(danger);
-      await expect(remove).toHaveCSS('border-top-width', '1px');
-      await expect(remove).toHaveCSS('outline-style', 'none');
-      expect(await remove.boundingBox()).toEqual(before);
-    } finally {
-      const scheduleDelete = await request.delete(
-        `/api/schedules/${scheduleId}`,
-      );
-      expect([200, 404]).toContain(scheduleDelete.status());
-      const workflowDelete = await request.delete(
-        `/api/workflows/${workflowId}`,
-      );
-      expect([200, 404]).toContain(workflowDelete.status());
     }
   });
 });

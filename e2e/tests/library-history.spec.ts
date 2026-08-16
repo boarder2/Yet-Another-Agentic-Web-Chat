@@ -1,6 +1,29 @@
 import { test, expect } from '../fixtures';
+import type { Page } from '@playwright/test';
 import { seedChat, seedToolChat } from '../utils/seed';
 import { HistoryPage } from '../pages/HistoryPage';
+
+/**
+ * Type a search query and return once the list has rendered exactly the rows
+ * that query's own response carried. Waiting for the response alone is not
+ * enough: it resolves before React re-renders, which would let a "no match"
+ * assertion pass against the previous query's rows. In search mode the browser
+ * renders `response.chats` verbatim (ChatBrowser's `displayedChats`), so the
+ * row count is an exact settle signal rather than a heuristic.
+ */
+async function search(page: Page, query: string) {
+  const response = page.waitForResponse((r) => {
+    const url = new URL(r.url());
+    return (
+      url.pathname === '/api/chats' &&
+      url.searchParams.get('q') === query &&
+      r.ok()
+    );
+  });
+  await page.locator('input[aria-label="Search chats"]').fill(query);
+  const { chats } = (await (await response).json()) as { chats: unknown[] };
+  await expect(page.locator('[data-list-row]')).toHaveCount(chats.length);
+}
 
 test.describe('history: library', () => {
   test('seeded chats appear with titles and counts in the history list', async ({
@@ -65,11 +88,7 @@ test.describe('history: library', () => {
     await historyPage.goto();
     await historyPage.waitForChats();
 
-    // Type the search token into the search input.
-    const searchInput = page.locator('input[aria-label="Search chats"]');
-    await searchInput.fill(token);
-    // Wait for the debounce + API response + re-render.
-    await page.waitForTimeout(1000);
+    await search(page, token);
 
     // Only the matching chat should appear.
     const titles = await historyPage.chatTitles();
@@ -78,9 +97,9 @@ test.describe('history: library', () => {
 
     // Clear the search and verify all chats reappear.
     await page.getByLabel('Clear search').click();
-    await page.waitForTimeout(500);
-    const allTitles = await historyPage.chatTitles();
-    expect(allTitles.length).toBeGreaterThanOrEqual(3);
+    await expect
+      .poll(() => historyPage.chatTitles().then((t) => t.length))
+      .toBeGreaterThanOrEqual(3);
   });
 
   test('text search shows empty message when no chats match', async ({
@@ -94,9 +113,7 @@ test.describe('history: library', () => {
     await historyPage.goto();
     await historyPage.waitForChats();
 
-    const searchInput = page.locator('input[aria-label="Search chats"]');
-    await searchInput.fill(`no-match-${Date.now()}`);
-    await page.waitForTimeout(1000);
+    await search(page, `no-match-${Date.now()}`);
 
     // The empty-search message is shown.
     await expect(
@@ -123,32 +140,26 @@ test.describe('history: library', () => {
     await historyPage.goto();
     await historyPage.waitForChats();
 
-    const searchInput = page.locator('input[aria-label="Search chats"]');
-
     // The tool name lives only inside the widget envelope, never in visible prose.
-    await searchInput.fill('file_search');
-    await page.waitForTimeout(1000);
+    await search(page, 'file_search');
     expect(
       (await historyPage.chatTitles()).some((t) => t.includes(promptMarker)),
     ).toBe(false);
 
     // The file_search result content is persisted only in a system-role row.
-    await searchInput.fill(docMarker);
-    await page.waitForTimeout(1000);
+    await search(page, docMarker);
     expect(
       (await historyPage.chatTitles()).some((t) => t.includes(promptMarker)),
     ).toBe(false);
 
     // Serialized widget-fence syntax must not match either.
-    await searchInput.fill('yaawc:tool_call');
-    await page.waitForTimeout(1000);
+    await search(page, 'yaawc:tool_call');
     expect(
       (await historyPage.chatTitles()).some((t) => t.includes(promptMarker)),
     ).toBe(false);
 
     // A phrase from the visible assistant answer matches, with a leak-free preview.
-    await searchInput.fill('the answer is deterministic');
-    await page.waitForTimeout(1000);
+    await search(page, 'the answer is deterministic');
     expect(
       (await historyPage.chatTitles()).some((t) => t.includes(promptMarker)),
     ).toBe(true);

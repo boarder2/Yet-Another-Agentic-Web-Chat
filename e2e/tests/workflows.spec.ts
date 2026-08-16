@@ -118,39 +118,15 @@ test.describe('automations: Workflows browse list', () => {
     }
   });
 
-  test('navigates from a workflow name to its editor and uses list wording', async ({
+  test('workflow row: launch modal, action controls, and name-link navigation', async ({
     page,
     request,
   }) => {
-    const name = uniq('workflow-list-edit');
-    const id = await seedWorkflow(request, { name });
+    const name = uniq('workflow-list-row');
+    const id = await seedWorkflow(request, { name, prompt: 'Say hello' });
 
-    try {
-      await page.goto('/automations');
-      const row = workflowRow(page, id);
-      await expect(row).toBeVisible();
-      await row.getByRole('link', { name, exact: true }).click();
-
-      await expect(page).toHaveURL(`/automations/workflows/${id}`);
-      await expect(
-        page.getByRole('heading', { name: 'Edit Workflow', exact: true }),
-      ).toBeVisible();
-      await expect(
-        page.getByPlaceholder('Shown in the workflow list'),
-      ).toBeVisible();
-    } finally {
-      await cleanupWorkflows(request, [id]);
-    }
-  });
-
-  test('Run opens the launch modal without starting until the modal is submitted', async ({
-    page,
-    request,
-  }) => {
-    const id = await seedWorkflow(request, {
-      name: uniq('workflow-list-run'),
-      prompt: 'Say hello',
-    });
+    // Armed before any click, so the launch-modal step's "no request until
+    // submitted" assertion is trustworthy.
     let runRequests = 0;
     const runPath = `/api/workflows/${id}/run`;
     page.on('request', (requestEvent) => {
@@ -166,54 +142,58 @@ test.describe('automations: Workflows browse list', () => {
       await page.goto('/automations');
       const row = workflowRow(page, id);
       await expect(row).toBeVisible();
-      await row.getByRole('button', { name: 'Run', exact: true }).click();
 
-      const dialog = page.getByRole('dialog');
-      await expect(dialog).toBeVisible();
-      await expect(dialog).toContainText(/Run “.*”/);
-      await expect(
-        dialog.getByText('This workflow takes no inputs — run it as-is.'),
-      ).toBeVisible();
-      await expect(
-        dialog.getByRole('button', { name: 'Run', exact: true }),
-      ).toBeVisible();
-      expect(runRequests).toBe(0);
+      await test.step('Run opens the launch modal without starting until the modal is submitted', async () => {
+        await row.getByRole('button', { name: 'Run', exact: true }).click();
 
-      await dialog.getByRole('button', { name: 'Close' }).click();
-      await expect(dialog).toBeHidden();
-    } finally {
-      await cleanupWorkflows(request, [id]);
-    }
-  });
+        const dialog = page.getByRole('dialog');
+        await expect(dialog).toBeVisible();
+        await expect(dialog).toContainText(/Run “.*”/);
+        await expect(
+          dialog.getByText('This workflow takes no inputs — run it as-is.'),
+        ).toBeVisible();
+        await expect(
+          dialog.getByRole('button', { name: 'Run', exact: true }),
+        ).toBeVisible();
+        expect(runRequests).toBe(0);
 
-  test('keeps Schedule, Edit, and Delete controls visible and accessible', async ({
-    page,
-    request,
-  }) => {
-    const name = uniq('workflow-list-actions');
-    const id = await seedWorkflow(request, { name });
+        await dialog.getByRole('button', { name: 'Close' }).click();
+        await expect(dialog).toBeHidden();
+      });
 
-    try {
-      await page.goto('/automations');
-      const row = workflowRow(page, id);
-      await expect(row).toBeVisible();
+      await test.step('keeps Schedule, Edit, and Delete controls visible and accessible', async () => {
+        await expect(
+          row.getByRole('link', { name: 'Schedule', exact: true }),
+        ).toHaveAttribute('href', `/automations/schedules/new?workflow=${id}`);
+        await expect(
+          row.getByRole('link', { name: 'Edit', exact: true }),
+        ).toHaveAttribute('href', `/automations/workflows/${id}`);
+        await expect(
+          row.getByRole('button', { name: 'Delete', exact: true }),
+        ).toBeVisible();
 
-      await expect(
-        row.getByRole('link', { name: 'Schedule', exact: true }),
-      ).toHaveAttribute('href', `/automations/schedules/new?workflow=${id}`);
-      await expect(
-        row.getByRole('link', { name: 'Edit', exact: true }),
-      ).toHaveAttribute('href', `/automations/workflows/${id}`);
-      await expect(
-        row.getByRole('button', { name: 'Delete', exact: true }),
-      ).toBeVisible();
+        await row.getByRole('button', { name: 'Delete', exact: true }).click();
+        const dialog = page.getByRole('dialog');
+        await expect(dialog).toBeVisible();
+        await expect(dialog).toContainText(`Delete “${name}”`);
+        await dialog
+          .getByRole('button', { name: 'Cancel', exact: true })
+          .click();
+        await expect(dialog).toBeHidden();
+      });
 
-      await row.getByRole('button', { name: 'Delete', exact: true }).click();
-      const dialog = page.getByRole('dialog');
-      await expect(dialog).toBeVisible();
-      await expect(dialog).toContainText(`Delete “${name}”`);
-      await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
-      await expect(dialog).toBeHidden();
+      // Last: this click navigates the page away.
+      await test.step('navigates from a workflow name to its editor and uses list wording', async () => {
+        await row.getByRole('link', { name, exact: true }).click();
+
+        await expect(page).toHaveURL(`/automations/workflows/${id}`);
+        await expect(
+          page.getByRole('heading', { name: 'Edit Workflow', exact: true }),
+        ).toBeVisible();
+        await expect(
+          page.getByPlaceholder('Shown in the workflow list'),
+        ).toBeVisible();
+      });
     } finally {
       await cleanupWorkflows(request, [id]);
     }

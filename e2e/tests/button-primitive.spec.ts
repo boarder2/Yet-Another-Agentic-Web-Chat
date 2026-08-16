@@ -7,7 +7,7 @@ import { SettingsPage } from '../pages/SettingsPage';
  * exercised through the Memory settings section, which uses every one of them.
  */
 test.describe('button primitive', () => {
-  test('a neutral button uses a 1px in-place accent focus border', async ({
+  test('MemoryPage add-form buttons through their disabled-to-focused lifecycle', async ({
     page,
   }) => {
     const memory = new MemoryPage(page);
@@ -16,109 +16,140 @@ test.describe('button primitive', () => {
     await memory.clickAddMemory();
 
     const textarea = page.locator('textarea[aria-label="New memory content"]');
-    const cancel = page.getByRole('button', { name: 'Cancel' });
-    const before = await cancel.evaluate((el) => {
-      const style = getComputedStyle(el);
-      const rect = el.getBoundingClientRect();
-      return {
-        borderWidth: style.borderTopWidth,
-        borderColor: style.borderTopColor,
-        outlineStyle: style.outlineStyle,
-        rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
-      };
-    });
-
-    // Tab from the textarea so the browser treats the focus as keyboard-driven
-    // and :focus-visible applies.
-    await textarea.focus();
-    await page.keyboard.press('Tab');
-    await expect(cancel).toBeFocused();
-
-    const accent = await page.evaluate(() => {
-      const probe = document.createElement('span');
-      probe.style.border = '1px solid var(--color-accent)';
-      document.body.appendChild(probe);
-      const color = getComputedStyle(probe).borderTopColor;
-      probe.remove();
-      return color;
-    });
-    await expect
-      .poll(() => cancel.evaluate((el) => getComputedStyle(el).borderTopColor))
-      .toBe(accent);
-    const after = await cancel.evaluate((el) => {
-      const style = getComputedStyle(el);
-      const rect = el.getBoundingClientRect();
-      return {
-        borderWidth: style.borderTopWidth,
-        borderColor: style.borderTopColor,
-        outlineStyle: style.outlineStyle,
-        rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
-      };
-    });
-
-    expect(before.borderWidth).toBe('1px');
-    expect(after.borderWidth).toBe('1px');
-    expect(after.borderColor).toBe(accent);
-    expect(after.outlineStyle).toBe('none');
-    expect(after.rect).toEqual(before.rect);
-  });
-
-  test('a primary button keeps contrast text and focus without reflow', async ({
-    page,
-  }) => {
-    const memory = new MemoryPage(page);
-    await memory.goto('/');
-    await memory.open();
-    await memory.clickAddMemory();
-
-    const textarea = page.locator('textarea[aria-label="New memory content"]');
-    await textarea.fill('primary focus contrast check');
     const cancel = page.getByRole('button', { name: 'Cancel' });
     const save = page.getByRole('button', { name: 'Save' });
+
+    await test.step('a disabled button is not clickable and shows the disabled affordance', async () => {
+      await expect(save).toBeDisabled();
+      await expect(save).toHaveCSS('cursor', 'not-allowed');
+
+      // Clicking a disabled button must not submit — the form stays open.
+      await save.click({ force: true });
+      await expect(textarea).toBeVisible();
+    });
+
+    await textarea.fill('button primitive lifecycle check');
     await expect(save).toBeEnabled();
 
-    const contrastForeground = await page.evaluate(() => {
-      const probe = document.createElement('span');
-      probe.className = 'text-accent-fg';
-      document.body.appendChild(probe);
-      const color = getComputedStyle(probe).color;
-      probe.remove();
-      return color;
+    await test.step('a neutral button uses a 1px in-place accent focus border', async () => {
+      const before = await cancel.evaluate((el) => {
+        const style = getComputedStyle(el);
+        const rect = el.getBoundingClientRect();
+        return {
+          borderWidth: style.borderTopWidth,
+          borderColor: style.borderTopColor,
+          outlineStyle: style.outlineStyle,
+          rect: {
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height,
+          },
+        };
+      });
+
+      // HeadlessUI's FocusTrap re-asserts focus programmatically after mount;
+      // under load that can land after this Tab and clear keyboard modality,
+      // so retry the whole sequence until :focus-visible actually holds.
+      await expect(async () => {
+        await textarea.focus();
+        await page.keyboard.press('Tab');
+        await expect(cancel).toBeFocused();
+        expect(
+          await cancel.evaluate((el) => el.matches(':focus-visible')),
+        ).toBe(true);
+      }).toPass({ timeout: 10_000 });
+
+      const accent = await page.evaluate(() => {
+        const probe = document.createElement('span');
+        probe.style.border = '1px solid var(--color-accent)';
+        document.body.appendChild(probe);
+        const color = getComputedStyle(probe).borderTopColor;
+        probe.remove();
+        return color;
+      });
+      await expect
+        .poll(() =>
+          cancel.evaluate((el) => getComputedStyle(el).borderTopColor),
+        )
+        .toBe(accent);
+      const after = await cancel.evaluate((el) => {
+        const style = getComputedStyle(el);
+        const rect = el.getBoundingClientRect();
+        return {
+          borderWidth: style.borderTopWidth,
+          borderColor: style.borderTopColor,
+          outlineStyle: style.outlineStyle,
+          rect: {
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height,
+          },
+        };
+      });
+
+      expect(before.borderWidth).toBe('1px');
+      expect(after.borderWidth).toBe('1px');
+      expect(after.borderColor).toBe(accent);
+      expect(after.outlineStyle).toBe('none');
+      expect(after.rect).toEqual(before.rect);
     });
-    await expect
-      .poll(() => save.evaluate((el) => getComputedStyle(el).color))
-      .toBe(contrastForeground);
 
-    const before = await save.boundingBox();
-    expect(before).not.toBeNull();
+    await test.step('a primary button keeps contrast text and focus without reflow', async () => {
+      const contrastForeground = await page.evaluate(() => {
+        const probe = document.createElement('span');
+        probe.className = 'text-accent-fg';
+        document.body.appendChild(probe);
+        const color = getComputedStyle(probe).color;
+        probe.remove();
+        return color;
+      });
+      await expect
+        .poll(() => save.evaluate((el) => getComputedStyle(el).color))
+        .toBe(contrastForeground);
 
-    // The second Tab lands on the enabled primary action.
-    await textarea.focus();
-    await page.keyboard.press('Tab');
-    await expect(cancel).toBeFocused();
-    await page.keyboard.press('Tab');
-    await expect(save).toBeFocused();
-    await save.hover();
+      const before = await save.boundingBox();
+      expect(before).not.toBeNull();
 
-    await expect
-      .poll(() => save.evaluate((el) => getComputedStyle(el).borderTopColor))
-      .toBe(contrastForeground);
-    const after = await save.evaluate((el) => {
-      const style = getComputedStyle(el);
-      const rect = el.getBoundingClientRect();
-      return {
-        color: style.color,
-        borderWidth: style.borderTopWidth,
-        borderColor: style.borderTopColor,
-        outlineStyle: style.outlineStyle,
-        rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
-      };
+      // HeadlessUI's FocusTrap re-asserts focus programmatically after mount;
+      // under load that can land after this Tab and clear keyboard modality,
+      // so retry the whole sequence (from Cancel) until :focus-visible holds.
+      await expect(async () => {
+        await cancel.focus();
+        await page.keyboard.press('Tab');
+        await expect(save).toBeFocused();
+        expect(await save.evaluate((el) => el.matches(':focus-visible'))).toBe(
+          true,
+        );
+      }).toPass({ timeout: 10_000 });
+      await save.hover();
+
+      await expect
+        .poll(() => save.evaluate((el) => getComputedStyle(el).borderTopColor))
+        .toBe(contrastForeground);
+      const after = await save.evaluate((el) => {
+        const style = getComputedStyle(el);
+        const rect = el.getBoundingClientRect();
+        return {
+          color: style.color,
+          borderWidth: style.borderTopWidth,
+          borderColor: style.borderTopColor,
+          outlineStyle: style.outlineStyle,
+          rect: {
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height,
+          },
+        };
+      });
+      expect(after.color).toBe(contrastForeground);
+      expect(after.borderWidth).toBe('1px');
+      expect(after.borderColor).toBe(after.color);
+      expect(after.outlineStyle).toBe('none');
+      expect(after.rect).toEqual(before);
     });
-    expect(after.color).toBe(contrastForeground);
-    expect(after.borderWidth).toBe('1px');
-    expect(after.borderColor).toBe(after.color);
-    expect(after.outlineStyle).toBe('none');
-    expect(after.rect).toEqual(before);
   });
 
   test('modal close exposes the IconButton accessible name and 15px icon', async ({
@@ -137,30 +168,6 @@ test.describe('button primitive', () => {
 
     await close.click();
     await expect(close).toBeHidden();
-  });
-
-  test('a disabled button is not clickable and shows the disabled affordance', async ({
-    page,
-  }) => {
-    const memory = new MemoryPage(page);
-    await memory.goto('/');
-    await memory.open();
-    await memory.clickAddMemory();
-
-    const save = page.getByRole('button', { name: 'Save' });
-    await expect(save).toBeDisabled();
-    await expect(save).toHaveCSS('cursor', 'not-allowed');
-
-    // Clicking a disabled button must not submit — the form stays open.
-    await save.click({ force: true });
-    await expect(
-      page.locator('textarea[aria-label="New memory content"]'),
-    ).toBeVisible();
-
-    await page
-      .locator('textarea[aria-label="New memory content"]')
-      .fill('button primitive enablement check');
-    await expect(save).toBeEnabled();
   });
 
   test('soft status variants keep their fill and reveal the matching border on hover', async ({

@@ -47,11 +47,11 @@ test.describe('settings persistence', () => {
 
     // Toggle to the opposite state.
     await toggle.click();
-    await page.waitForTimeout(500);
 
     const expectedState = !initiallyChecked;
-    const toggledChecked = (await toggle.getAttribute('data-checked')) === '';
-    expect(toggledChecked).toBe(expectedState);
+    await expect
+      .poll(() => toggle.getAttribute('data-checked'))
+      .toBe(expectedState ? '' : null);
 
     // 3. Assert localStorage was written. The persist layer debounces (~400ms),
     // so poll rather than reading once at a fixed delay.
@@ -60,15 +60,19 @@ test.describe('settings persistence', () => {
       .toBe(String(expectedState));
 
     // 4. Assert the server reflects the change (settings are synced to DB).
-    // The flush delay is 400ms; wait a bit then check the API. `/api/settings`
+    // The flush delay is 400ms; poll rather than a fixed wait. `/api/settings`
     // returns the serialized-string map (same shape as the localStorage cache),
     // so the boolean is stored as the string "true"/"false".
-    await page.waitForTimeout(1000);
-    const apiRes = await page.request.get('/api/settings');
-    expect(apiRes.status()).toBe(200);
-    const apiBody = await apiRes.json();
+    let apiBody: Record<string, unknown> = {};
+    await expect
+      .poll(async () => {
+        const res = await page.request.get('/api/settings');
+        expect(res.status()).toBe(200);
+        apiBody = await res.json();
+        return apiBody.autoSuggestions;
+      })
+      .toBe(String(expectedState));
     expect(apiBody).toHaveProperty('autoSuggestions');
-    expect(apiBody.autoSuggestions).toBe(String(expectedState));
 
     // 5. Reload the page: localStorage should hydrate from DB and match.
     await page.reload({ waitUntil: 'networkidle' });

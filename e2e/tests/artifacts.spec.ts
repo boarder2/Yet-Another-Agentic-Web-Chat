@@ -106,11 +106,12 @@ test.describe('artifact viewer', () => {
     }
   });
 
-  test('the frame pins the sandbox that withholds same-origin access', async ({
+  test('single-artifact chat-scoped viewer panel', async ({
     page,
     request,
   }) => {
     const { chatId, artifactId } = await seedArtifact(request, {
+      title: 'Solo Doc',
       content: DOC,
     });
     await page.goto(`/c/${chatId}`);
@@ -119,15 +120,42 @@ test.describe('artifact viewer', () => {
       .getByRole('button', { name: 'Open' })
       .click();
 
-    const frame = page.getByTestId('artifact-frame');
-    await expect(frame).toHaveAttribute(
-      'sandbox',
-      'allow-scripts allow-popups',
-    );
-    await expect(frame).toHaveAttribute(
-      'src',
-      `/api/artifacts/${artifactId}/raw?version=1`,
-    );
+    await test.step('the frame pins the sandbox that withholds same-origin access', async () => {
+      const frame = page.getByTestId('artifact-frame');
+      await expect(frame).toHaveAttribute(
+        'sandbox',
+        'allow-scripts allow-popups',
+      );
+      await expect(frame).toHaveAttribute(
+        'src',
+        `/api/artifacts/${artifactId}/raw?version=1`,
+      );
+    });
+
+    await test.step('the artifact renders inside the frame', async () => {
+      const frame = page.frameLocator('[data-testid="artifact-frame"]');
+      await expect(frame.locator('#hd')).toHaveText('Q3 Report');
+    });
+
+    await test.step('a single-artifact chat shows the title instead of a selector', async () => {
+      await expect(page.getByTestId('artifact-title')).toHaveText('Solo Doc');
+      await expect(page.getByTestId('artifact-selector')).toBeHidden();
+    });
+
+    await test.step('the source view shows the artifact HTML read-only', async () => {
+      await page.getByTestId('artifact-view-toggle').click();
+      const source = page.getByTestId('artifact-source');
+      await expect(source).toContainText('Revenue was flat.');
+      await expect(source).toContainText('<!doctype html>');
+      // Read-only: no editable control anywhere in the source view.
+      await expect(
+        source.locator('textarea, [contenteditable="true"]'),
+      ).toHaveCount(0);
+      await expect(page.getByTestId('artifact-frame')).toBeHidden();
+
+      await page.getByTestId('artifact-view-toggle').click();
+      await expect(page.getByTestId('artifact-frame')).toBeVisible();
+    });
   });
 
   test('artifact JS stays off this origin even opened top-level', async ({
@@ -155,18 +183,6 @@ test.describe('artifact viewer', () => {
     });
   });
 
-  test('the artifact renders inside the frame', async ({ page, request }) => {
-    const { chatId } = await seedArtifact(request, { content: DOC });
-    await page.goto(`/c/${chatId}`);
-    await page
-      .getByTestId('artifact-card')
-      .getByRole('button', { name: 'Open' })
-      .click();
-
-    const frame = page.frameLocator('[data-testid="artifact-frame"]');
-    await expect(frame.locator('#hd')).toHaveText('Q3 Report');
-  });
-
   test('the chat chrome stays clear of the docked panel', async ({
     page,
     request,
@@ -190,31 +206,7 @@ test.describe('artifact viewer', () => {
     }
   });
 
-  test('the workspace header stays clear of the docked panel', async ({
-    page,
-    request,
-  }) => {
-    const workspaceId = await seedWorkspace(request);
-    const chatId = await seedChat(request, { workspaceId });
-    await seedArtifact(request, { chatId, content: DOC });
-
-    await page.goto(`/workspaces/${workspaceId}/c/${chatId}`);
-    await page
-      .getByTestId('artifact-card')
-      .getByRole('button', { name: 'Open' })
-      .click();
-
-    const panel = (await page.getByTestId('artifact-panel').boundingBox())!;
-    // The workspace breadcrumb bar spans the full content width, so the panel
-    // has to be reserved out of the page rather than merely painted over it.
-    const header = (await page.locator('[data-sticky-header]').boundingBox())!;
-    expect(header.x + header.width).toBeLessThanOrEqual(panel.x);
-  });
-
-  test('the workspace sidebar folds to its rail while the panel is docked', async ({
-    page,
-    request,
-  }) => {
+  test('workspace-docked artifact panel layout', async ({ page, request }) => {
     const workspaceId = await seedWorkspace(request);
     const chatId = await seedChat(request, { workspaceId });
     await seedArtifact(request, { chatId, content: DOC });
@@ -228,51 +220,52 @@ test.describe('artifact viewer', () => {
       .getByRole('button', { name: 'Open' })
       .click();
 
-    // Expanded, the sidebar would leave the chat too narrow to read, so it
-    // collapses itself — and offers no expand button it couldn't honour.
-    await expect(collapse).toBeHidden();
-    await expect(page.locator('[data-workspace-section]')).toHaveCount(0);
-    await expect(page.locator('button[title="Expand sidebar"]')).toBeHidden();
-
-    // The fold is presentation only: closing the panel restores the sidebar.
-    await page
-      .getByTestId('artifact-panel')
-      .getByRole('button', { name: 'Close artifact panel' })
-      .click();
-    await expect(collapse).toBeVisible();
-  });
-
-  test('the panel cannot be dragged past the composer', async ({
-    page,
-    request,
-  }) => {
-    const workspaceId = await seedWorkspace(request);
-    const chatId = await seedChat(request, { workspaceId });
-    await seedArtifact(request, { chatId, content: DOC });
-
-    await page.goto(`/workspaces/${workspaceId}/c/${chatId}`);
-    await page
-      .getByTestId('artifact-card')
-      .getByRole('button', { name: 'Open' })
-      .click();
-
-    const handle = page.getByRole('separator', {
-      name: 'Resize artifact panel',
+    await test.step('the workspace header stays clear of the docked panel', async () => {
+      const panel = (await page.getByTestId('artifact-panel').boundingBox())!;
+      // The workspace breadcrumb bar spans the full content width, so the
+      // panel has to be reserved out of the page rather than merely painted
+      // over it.
+      const header = (await page
+        .locator('[data-sticky-header]')
+        .boundingBox())!;
+      expect(header.x + header.width).toBeLessThanOrEqual(panel.x);
     });
-    const start = (await handle.boundingBox())!;
-    const y = start.y + start.height / 2;
-    await page.mouse.move(start.x + start.width / 2, y);
-    await page.mouse.down();
-    await page.mouse.move(0, y, { steps: 10 });
-    await page.mouse.up();
 
-    // The widest the panel goes still has to leave the composer its own row of
-    // controls — the send button spills out of the box otherwise.
-    const bar = (await page.getByTestId('chat-input-bar').boundingBox())!;
-    const send = (await page
-      .locator('[data-testid="chat-input-bar"] button[type="submit"]')
-      .boundingBox())!;
-    expect(send.x + send.width).toBeLessThanOrEqual(bar.x + bar.width);
+    await test.step('the workspace sidebar folds to its rail while the panel is docked', async () => {
+      // Expanded, the sidebar would leave the chat too narrow to read, so it
+      // collapses itself — and offers no expand button it couldn't honour.
+      await expect(collapse).toBeHidden();
+      await expect(page.locator('[data-workspace-section]')).toHaveCount(0);
+      await expect(page.locator('button[title="Expand sidebar"]')).toBeHidden();
+    });
+
+    await test.step('the panel cannot be dragged past the composer', async () => {
+      const handle = page.getByRole('separator', {
+        name: 'Resize artifact panel',
+      });
+      const start = (await handle.boundingBox())!;
+      const y = start.y + start.height / 2;
+      await page.mouse.move(start.x + start.width / 2, y);
+      await page.mouse.down();
+      await page.mouse.move(0, y, { steps: 10 });
+      await page.mouse.up();
+
+      // The widest the panel goes still has to leave the composer its own
+      // row of controls — the send button spills out of the box otherwise.
+      const bar = (await page.getByTestId('chat-input-bar').boundingBox())!;
+      const send = (await page
+        .locator('[data-testid="chat-input-bar"] button[type="submit"]')
+        .boundingBox())!;
+      expect(send.x + send.width).toBeLessThanOrEqual(bar.x + bar.width);
+    });
+
+    await test.step('the fold is presentation only: closing the panel restores the sidebar', async () => {
+      await page
+        .getByTestId('artifact-panel')
+        .getByRole('button', { name: 'Close artifact panel' })
+        .click();
+      await expect(collapse).toBeVisible();
+    });
   });
 
   test('the resize handle releases the drag over the frame', async ({
@@ -307,31 +300,6 @@ test.describe('artifact viewer', () => {
     // Pointer motion after release must no longer move the splitter.
     await page.mouse.move(start!.x + 300, y, { steps: 10 });
     expect(await widthOf()).toBe(dragged);
-  });
-
-  test('the source view shows the artifact HTML read-only', async ({
-    page,
-    request,
-  }) => {
-    const { chatId } = await seedArtifact(request, { content: DOC });
-    await page.goto(`/c/${chatId}`);
-    await page
-      .getByTestId('artifact-card')
-      .getByRole('button', { name: 'Open' })
-      .click();
-
-    await page.getByTestId('artifact-view-toggle').click();
-    const source = page.getByTestId('artifact-source');
-    await expect(source).toContainText('Revenue was flat.');
-    await expect(source).toContainText('<!doctype html>');
-    // Read-only: no editable control anywhere in the source view.
-    await expect(
-      source.locator('textarea, [contenteditable="true"]'),
-    ).toHaveCount(0);
-    await expect(page.getByTestId('artifact-frame')).toBeHidden();
-
-    await page.getByTestId('artifact-view-toggle').click();
-    await expect(page.getByTestId('artifact-frame')).toBeVisible();
   });
 
   test('the version switcher browses earlier versions', async ({
@@ -417,20 +385,5 @@ test.describe('artifact viewer', () => {
     await expect(
       panel.getByRole('button', { name: 'Close artifact panel' }),
     ).toBeInViewport();
-  });
-
-  test('a single-artifact chat shows the title instead of a selector', async ({
-    page,
-    request,
-  }) => {
-    const { chatId } = await seedArtifact(request, { title: 'Solo Doc' });
-    await page.goto(`/c/${chatId}`);
-    await page
-      .getByTestId('artifact-card')
-      .getByRole('button', { name: 'Open' })
-      .click();
-
-    await expect(page.getByTestId('artifact-title')).toHaveText('Solo Doc');
-    await expect(page.getByTestId('artifact-selector')).toBeHidden();
   });
 });

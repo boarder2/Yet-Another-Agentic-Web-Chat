@@ -18,7 +18,7 @@ test.describe('model picker', () => {
   // DB sync) change what this spec observes. This spec's `serial` project
   // (one worker) rules that out.
 
-  test('test provider and models are listed in Chat Model picker, with test-direct as the default', async ({
+  test('test provider and models are listed in both the Chat and System Model pickers', async ({
     page,
   }) => {
     await page.goto('/');
@@ -29,58 +29,54 @@ test.describe('model picker', () => {
     await expect(
       page.getByRole('heading', { name: 'Model Configuration' }),
     ).toBeVisible();
-
-    // Open the Chat Model grouped picker (the first ModelField — the Cpu button).
     const dialog = page.getByRole('dialog');
-    await dialog.locator('button:has(svg.lucide-cpu)').first().click();
 
-    // ModelField owns the nested shared composer shell inside the dialog.
-    const popover = await expectComposerPopover(page, 'Select Chat Model');
-    await expect(popover.locator('h3')).toHaveText('Select Chat Model');
+    await test.step('test provider and models are listed in Chat Model picker, with test-direct as the default', async () => {
+      // Open the Chat Model grouped picker (the first ModelField — the Cpu
+      // button).
+      await dialog.locator('button:has(svg.lucide-cpu)').first().click();
 
-    // The seeded default chat model is test/test-direct, so the Test provider is
-    // pre-expanded and marked active, exposing its two models.
-    await expect(popover.getByText('(active)')).toBeVisible();
-    await expect(
-      popover.locator('span.font-medium', { hasText: 'Test (direct)' }),
-    ).toBeVisible();
-    await expect(
-      popover.locator('span.font-medium', { hasText: 'Test (tool loop)' }),
-    ).toBeVisible();
+      // ModelField owns the nested shared composer shell inside the dialog.
+      const popover = await expectComposerPopover(page, 'Select Chat Model');
+      await expect(popover.locator('h3')).toHaveText('Select Chat Model');
 
-    // test-direct (the default) carries the Active badge.
-    await expect(
-      popover.locator('div.bg-accent').filter({ hasText: 'Active' }),
-    ).toBeVisible();
-  });
+      // The seeded default chat model is test/test-direct, so the Test
+      // provider is pre-expanded and marked active, exposing its two models.
+      await expect(popover.getByText('(active)')).toBeVisible();
+      await expect(
+        popover.locator('span.font-medium', { hasText: 'Test (direct)' }),
+      ).toBeVisible();
+      await expect(
+        popover.locator('span.font-medium', { hasText: 'Test (tool loop)' }),
+      ).toBeVisible();
 
-  test('test provider is listed in System Model picker', async ({ page }) => {
-    await page.goto('/');
-    await page.locator('#message-input').waitFor({ state: 'visible' });
+      // test-direct (the default) carries the Active badge.
+      await expect(
+        popover.locator('div.bg-accent').filter({ hasText: 'Active' }),
+      ).toBeVisible();
 
-    // Open the composer's model configurator dialog.
-    await page.getByRole('button', { name: 'Configure models' }).click();
-    await expect(
-      page.getByRole('heading', { name: 'Model Configuration' }),
-    ).toBeVisible();
+      await page.keyboard.press('Escape');
+    });
 
-    // Open the System Model picker (the second Cpu button in the dialog).
-    const dialog = page.getByRole('dialog');
-    const cpuButtons = dialog.locator('button:has(svg.lucide-cpu)');
-    // The second Cpu button opens the System Model popover.
-    await cpuButtons.nth(1).click();
+    await test.step('test provider is listed in System Model picker', async () => {
+      // Open the System Model picker (the second Cpu button in the dialog).
+      const cpuButtons = dialog.locator('button:has(svg.lucide-cpu)');
+      // The second Cpu button opens the System Model popover.
+      await cpuButtons.nth(1).click();
 
-    const popover = await expectComposerPopover(page, 'Select System Model');
+      const popover = await expectComposerPopover(page, 'Select System Model');
 
-    // The Test provider's models are also available in the System Model picker.
-    await expect(
-      popover.locator('span.font-medium', { hasText: 'Test (direct)' }),
-    ).toBeVisible();
-    await expect(
-      popover.locator('span.font-medium', { hasText: 'Test (tool loop)' }),
-    ).toBeVisible();
+      // The Test provider's models are also available in the System Model
+      // picker.
+      await expect(
+        popover.locator('span.font-medium', { hasText: 'Test (direct)' }),
+      ).toBeVisible();
+      await expect(
+        popover.locator('span.font-medium', { hasText: 'Test (tool loop)' }),
+      ).toBeVisible();
 
-    // The default system model (test-direct) has the active indicator.
-    await expect(popover.getByText('(active)')).toBeVisible();
+      // The default system model (test-direct) has the active indicator.
+      await expect(popover.getByText('(active)')).toBeVisible();
+    });
   });
 });

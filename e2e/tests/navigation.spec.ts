@@ -44,21 +44,31 @@ test.describe('navigation: sidebar links', () => {
       } else if ('landmark' in d && d.landmark) {
         await expect(page.locator(d.landmark)).toBeVisible({ timeout: 15_000 });
       }
-    });
 
-    test(`sidebar active state for ${d.label}`, async ({ page }) => {
-      // Navigate to the page directly, then check the sidebar link is active.
-      await page.goto(d.url);
-      await page.waitForLoadState('networkidle');
+      await test.step(`sidebar active state for ${d.label}`, async () => {
+        // The active link has bg-surface-2 and text-accent classes, both
+        // after client-side navigation...
+        const activeLink = page
+          .locator(`.hidden.lg\\:fixed a[href="${d.url}"]`)
+          .last();
+        await expect(activeLink).toBeVisible();
+        const classes = (await activeLink.getAttribute('class')) ?? '';
+        expect(classes).toContain('bg-surface-2');
+        expect(classes).toContain('text-accent');
 
-      const activeLink = page
-        .locator(`.hidden.lg\\:fixed a[href="${d.url}"]`)
-        .last();
-      // The active link has bg-surface-2 and text-accent classes.
-      await expect(activeLink).toBeVisible();
-      const classes = (await activeLink.getAttribute('class')) ?? '';
-      expect(classes).toContain('bg-surface-2');
-      expect(classes).toContain('text-accent');
+        // ...and after a direct load (SSR/usePathname on first paint).
+        await page.goto(d.url);
+        await page.waitForLoadState('networkidle');
+
+        const activeLinkDirect = page
+          .locator(`.hidden.lg\\:fixed a[href="${d.url}"]`)
+          .last();
+        await expect(activeLinkDirect).toBeVisible();
+        const directClasses =
+          (await activeLinkDirect.getAttribute('class')) ?? '';
+        expect(directClasses).toContain('bg-surface-2');
+        expect(directClasses).toContain('text-accent');
+      });
     });
   }
 });

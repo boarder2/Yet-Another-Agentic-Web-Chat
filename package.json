@@ -15,7 +15,7 @@
     "test:e2e": "npm run build && playwright test",
     "test:e2e:smoke": "npm run build && playwright test --project=smoke",
     "test:e2e:api": "npm run build && playwright test --project=api",
-    "test:e2e:serial": "npm run build && playwright test --project=serial",
+    "test:e2e:serial": "npm run build && playwright test --project=serial --no-deps",
     "test:e2e:gate": "npm run build && playwright test --project=smoke --project=api",
     "test:e2e:ui": "npm run build && playwright test --ui",
     "test:e2e:report": "playwright show-report",

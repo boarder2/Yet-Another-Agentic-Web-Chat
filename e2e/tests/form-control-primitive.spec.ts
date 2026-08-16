@@ -47,7 +47,7 @@ test.describe('form control primitives', () => {
     await page.getByRole('button', { name: 'Add MCP Server' }).click();
   };
 
-  test('Input and Select share one recipe and read as an inset well on their panel', async ({
+  test('MCP add-server form controls follow the shared recipe and label contract', async ({
     page,
   }) => {
     await openAddServerForm(page);
@@ -59,60 +59,70 @@ test.describe('form control primitives', () => {
     await expect(input).toBeVisible();
     await expect(select).toBeVisible();
 
-    // One recipe across the primitives — same fill, radius and border weight,
-    // where the fill is the resolved bg-well midpoint token.
-    const inputRecipe = await input.evaluate(recipe);
-    expect(await select.evaluate(recipe)).toEqual(inputRecipe);
-    expect(inputRecipe.background).toBe(await page.evaluate(resolvedWell));
+    await test.step('Input and Select share one recipe and read as an inset well on their panel', async () => {
+      // One recipe across the primitives — same fill, radius and border
+      // weight, where the fill is the resolved bg-well midpoint token.
+      const inputRecipe = await input.evaluate(recipe);
+      expect(await select.evaluate(recipe)).toEqual(inputRecipe);
+      expect(inputRecipe.background).toBe(await page.evaluate(resolvedWell));
 
-    // The field must not be the same colour as the card it sits on, or only
-    // its border delineates it.
-    const panel = await input.evaluate((el) => {
-      const card = el.closest('.bg-surface');
-      return card ? getComputedStyle(card).backgroundColor : null;
+      // The field must not be the same colour as the card it sits on, or
+      // only its border delineates it.
+      const panel = await input.evaluate((el) => {
+        const card = el.closest('.bg-surface');
+        return card ? getComputedStyle(card).backgroundColor : null;
+      });
+      expect(panel).not.toBeNull();
+      expect(inputRecipe.background).not.toBe(panel);
+
+      // Placeholder text reads the semantic tertiary token rather than a
+      // call-site alpha rung.
+      const subtle = await page.evaluate(() => {
+        const probe = document.createElement('span');
+        probe.className = 'text-fg-subtle';
+        document.body.appendChild(probe);
+        const color = getComputedStyle(probe).color;
+        probe.remove();
+        return color;
+      });
+      expect(
+        await input.evaluate(
+          (el) => getComputedStyle(el, '::placeholder').color,
+        ),
+      ).toBe(subtle);
     });
-    expect(panel).not.toBeNull();
-    expect(inputRecipe.background).not.toBe(panel);
 
-    // Placeholder text reads the semantic tertiary token rather than a
-    // call-site alpha rung.
-    const subtle = await page.evaluate(() => {
-      const probe = document.createElement('span');
-      probe.className = 'text-fg-subtle';
-      document.body.appendChild(probe);
-      const color = getComputedStyle(probe).color;
-      probe.remove();
-      return color;
+    await test.step('focusing a control flips its border to accent in place', async () => {
+      const accent = await page.evaluate(resolvedAccent);
+
+      const resting = await input.evaluate((el) => {
+        const s = getComputedStyle(el);
+        return { color: s.borderTopColor, width: s.borderTopWidth };
+      });
+      await input.focus();
+
+      // 1px accent, in place — nothing reflows, and no ring is drawn on top.
+      await expect
+        .poll(() => input.evaluate((el) => getComputedStyle(el).borderTopColor))
+        .toBe(accent);
+      expect(
+        await input.evaluate((el) => getComputedStyle(el).borderTopWidth),
+      ).toBe(resting.width);
+      expect(
+        await input.evaluate((el) => getComputedStyle(el).outlineStyle),
+      ).toBe('none');
     });
-    expect(
-      await input.evaluate((el) => getComputedStyle(el, '::placeholder').color),
-    ).toBe(subtle);
-  });
 
-  test('focusing a control flips its border to accent in place', async ({
-    page,
-  }) => {
-    await openAddServerForm(page);
+    await test.step("a Field's visible label is the accessible name and focuses the control", async () => {
+      // getByLabel resolves through Field's wrapping <label>, with no
+      // aria-label shadowing it — the visible text *is* the accessible name.
+      const urlInput = page.getByLabel('URL', { exact: true });
+      await expect(urlInput).toBeVisible();
+      expect(await urlInput.getAttribute('aria-label')).toBeNull();
 
-    const input = page.getByLabel('Name', { exact: true });
-    const accent = await page.evaluate(resolvedAccent);
-
-    const resting = await input.evaluate((el) => {
-      const s = getComputedStyle(el);
-      return { color: s.borderTopColor, width: s.borderTopWidth };
+      await page.getByText('URL', { exact: true }).click();
+      await expect(urlInput).toBeFocused();
     });
-    await input.focus();
-
-    // 1px accent, in place — nothing reflows, and no ring is drawn on top.
-    await expect
-      .poll(() => input.evaluate((el) => getComputedStyle(el).borderTopColor))
-      .toBe(accent);
-    expect(
-      await input.evaluate((el) => getComputedStyle(el).borderTopWidth),
-    ).toBe(resting.width);
-    expect(
-      await input.evaluate((el) => getComputedStyle(el).outlineStyle),
-    ).toBe('none');
   });
 
   test('focusing a Textarea flips its border too', async ({ page }) => {
@@ -123,29 +133,22 @@ test.describe('form control primitives', () => {
 
     const textarea = page.locator('textarea[aria-label="New memory content"]');
     const cancel = page.getByRole('button', { name: 'Cancel' });
-    await cancel.focus();
-    await page.keyboard.press('Shift+Tab');
-    await expect(textarea).toBeFocused();
+    // HeadlessUI's FocusTrap re-asserts focus programmatically after mount;
+    // under load that can land after this Tab and clear keyboard modality,
+    // so retry the whole sequence until :focus-visible actually holds.
+    await expect(async () => {
+      await cancel.focus();
+      await page.keyboard.press('Shift+Tab');
+      await expect(textarea).toBeFocused();
+      expect(
+        await textarea.evaluate((el) => el.matches(':focus-visible')),
+      ).toBe(true);
+    }).toPass({ timeout: 10_000 });
     await expect
       .poll(() =>
         textarea.evaluate((el) => getComputedStyle(el).borderTopColor),
       )
       .toBe(await page.evaluate(resolvedAccent));
-  });
-
-  test("a Field's visible label is the accessible name and focuses the control", async ({
-    page,
-  }) => {
-    await openAddServerForm(page);
-
-    // getByLabel resolves through Field's wrapping <label>, with no aria-label
-    // shadowing it — the visible text *is* the accessible name.
-    const input = page.getByLabel('URL', { exact: true });
-    await expect(input).toBeVisible();
-    expect(await input.getAttribute('aria-label')).toBeNull();
-
-    await page.getByText('URL', { exact: true }).click();
-    await expect(input).toBeFocused();
   });
 
   test('migrated settings fields keep their visible names', async ({

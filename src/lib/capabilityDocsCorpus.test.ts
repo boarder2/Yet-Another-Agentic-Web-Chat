@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, relative, resolve, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -167,6 +168,23 @@ const walkMarkdownFiles = (directory: string): string[] => {
 
   return paths;
 };
+
+/**
+ * Every committed markdown file, wherever it lives. Walking the working tree
+ * instead would sweep in build output — a standalone build copies README.md
+ * into `.next/` — making the result depend on whether the machine had built
+ * the app. Tracked-but-deleted paths are dropped so a staged deletion does not
+ * fail the read.
+ */
+const trackedMarkdownFiles = (): string[] =>
+  execFileSync('git', ['ls-files', '-z', '*.md'], {
+    cwd: repositoryRoot,
+    encoding: 'utf8',
+  })
+    .split('\0')
+    .filter(Boolean)
+    .map((trackedPath) => resolve(repositoryRoot, trackedPath))
+    .filter(existsSync);
 
 const documentationMarkdownFiles = (): string[] => [
   ...readdirSync(repositoryRoot, { withFileTypes: true })
@@ -588,7 +606,7 @@ describe('authoritative capability corpus', () => {
       ).not.toMatch(/(?:^|\/)TRACING\.md(?:[#?)]|$)/);
     }
 
-    for (const file of walkMarkdownFiles(repositoryRoot)) {
+    for (const file of trackedMarkdownFiles()) {
       const relativePath = file.slice(repositoryRoot.length + 1);
       for (const destination of extractLinks(readFileSync(file, 'utf8'))) {
         expect(

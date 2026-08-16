@@ -285,8 +285,27 @@ describe('retrieveYoutubeTranscript', () => {
     expect(browser.close).toHaveBeenCalledOnce();
   });
 
-  it('reports an advertised-track failure when the page has no InnerTube API key', async () => {
-    const { browser, page, fetchMock } = makeHarness({
+  it('falls back to the panel when the Android VR player serves a Gemini track no captions', async () => {
+    const { page, fetchMock } = makeHarness({
+      playerResponse: playerResponse([
+        track('https://captions.test/gemini', {
+          languageCode: 'en',
+          variant: 'gemini',
+        }),
+      ]),
+      fallbackPlayerResponse: playerResponse([]),
+      panelSegments: [{ ts: '0:07', text: 'Panel rescued the Gemini track' }],
+    });
+
+    const document = await retrieveYoutubeTranscript(videoUrl);
+
+    expect(document?.pageContent).toBe('[0:07] Panel rescued the Gemini track');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(page.waitForSelector).toHaveBeenCalled();
+  });
+
+  it('names every attempted source when no source produces text', async () => {
+    const { browser, page } = makeHarness({
       playerResponse: playerResponse([
         track('https://captions.test/gemini', {
           languageCode: 'en',
@@ -297,11 +316,11 @@ describe('retrieveYoutubeTranscript', () => {
     });
 
     await expect(retrieveYoutubeTranscript(videoUrl)).rejects.toThrow(
-      'InnerTube API key was unavailable',
+      /json3 failed: the InnerTube API key was unavailable; panel failed: the transcript panel did not open/,
     );
 
-    expect(page.click).not.toHaveBeenCalled();
-    expect(fetchMock).not.toHaveBeenCalled();
+    // The panel is tried even when the JSON3 lead fails before any request.
+    expect(page.click).toHaveBeenCalled();
     expect(browser.close).toHaveBeenCalledOnce();
   });
 

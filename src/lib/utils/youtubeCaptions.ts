@@ -490,6 +490,51 @@ export function isGeminiCaptionTrack(track: unknown): boolean {
   }
 }
 
+/** What a player response says about captions, for failure diagnostics. */
+export interface YouTubeCaptionAvailability {
+  playabilityStatus?: string;
+  playabilityReason?: string;
+  advertisedTrackCount: number;
+  usableTrackCount: number;
+  tracks: string[];
+}
+
+function describeTrack(track: YouTubeCaptionTrack): string {
+  const parts = [track.languageCode ?? '?', track.kind ?? 'standard'];
+  if (isGeminiCaptionTrack(track)) parts.push('gemini');
+  if (!isOriginalCaptionTrack(track)) parts.push('translated');
+  return parts.join('/');
+}
+
+/**
+ * Summarize why a player response did or did not yield a caption track.
+ * A blocked or gated response carries a playability status but no tracks,
+ * which is otherwise indistinguishable from a video that simply has none.
+ */
+export function describeCaptionAvailability(
+  value: unknown,
+): YouTubeCaptionAvailability {
+  const playability = asRecord(
+    asRecord(parseJsonValue(value))?.playabilityStatus,
+  );
+  const renderer = findTrackListRenderer(value);
+  const list = readCaptionTrackList(value);
+
+  return {
+    ...(optionalString(playability?.status)
+      ? { playabilityStatus: optionalString(playability?.status) }
+      : {}),
+    ...(optionalString(playability?.reason)
+      ? { playabilityReason: optionalString(playability?.reason) }
+      : {}),
+    advertisedTrackCount: Array.isArray(renderer?.captionTracks)
+      ? renderer.captionTracks.length
+      : 0,
+    usableTrackCount: list?.captionTracks.length ?? 0,
+    tracks: (list?.captionTracks ?? []).map(describeTrack),
+  };
+}
+
 /** Format JSON3's millisecond timestamp using YouTube's line timestamp shape. */
 export function formatCaptionTimestamp(milliseconds: number): string {
   if (!Number.isFinite(milliseconds)) return '0:00';

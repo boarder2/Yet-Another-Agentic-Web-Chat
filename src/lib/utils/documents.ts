@@ -10,6 +10,7 @@ import { JSDOM } from 'jsdom';
 import { chromium, Page, Browser, BrowserContext } from 'playwright';
 import TurndownService from 'turndown';
 import {
+  describeCaptionAvailability,
   isGeminiCaptionTrack,
   parseJson3Captions,
   readCaptionTrackList,
@@ -134,6 +135,9 @@ type YoutubePageData = {
   apiKey: string | null;
   visitorData: string | null;
 };
+
+/** The two independent ways a transcript can be read out of the page. */
+type TranscriptSource = 'panel' | 'json3';
 
 const readYoutubePageData = async (page: Page): Promise<YoutubePageData> =>
   page.evaluate(() => {
@@ -261,53 +265,82 @@ const retrieveJson3Captions = async (
   return parseJson3Captions(payload);
 };
 
-const readPanelTranscript = async (page: Page): Promise<string | null> => {
+/**
+ * Fetch captions through the browser's Android VR InnerTube client. Used when
+ * the rendered panel cannot serve a track, and as the lead source for Gemini
+ * tracks, whose watch-page caption URLs return an empty body.
+ */
+const readAndroidVrCaptions = async (
+  page: Page,
+  videoId: string | null,
+  pageData: YoutubePageData,
+): Promise<string | null> => {
+  if (!videoId) throw new Error('the video ID could not be determined');
+  if (!pageData.apiKey)
+    throw new Error('the InnerTube API key was unavailable');
+
+  const playerResponse = await retrieveAndroidVrPlayerResponse(
+    page,
+    videoId,
+    pageData.apiKey,
+    pageData.visitorData,
+  );
+  console.log(
+    '[retrieveYoutubeTranscript] Android VR caption availability:',
+    JSON.stringify(describeCaptionAvailability(playerResponse)),
+  );
+
+  const track = selectCaptionTrack(playerResponse);
+  if (!track) throw new Error('no original caption track was returned');
+
+  return retrieveJson3Captions(page, track);
+};
+
+/** Read the rendered transcript panel. Throws naming the stage that failed. */
+const readPanelTranscript = async (page: Page): Promise<string> => {
+  // Expand the description (the transcript button lives inside it), then open
+  // the transcript panel. Both clicks are best-effort across layout variants.
   try {
-    // Expand the description (the transcript button lives inside it), then open
-    // the transcript panel. Both clicks are best-effort across layout variants.
+    await page.click('#expand', { timeout: 3000 });
+  } catch {}
+  for (const sel of [
+    'button[aria-label="Show transcript"]',
+    'ytd-video-description-transcript-section-renderer button',
+  ]) {
     try {
-      await page.click('#expand', { timeout: 3000 });
+      await page.click(sel, { timeout: 3000 });
+      break;
     } catch {}
-    for (const sel of [
-      'button[aria-label="Show transcript"]',
-      'ytd-video-description-transcript-section-renderer button',
-    ]) {
-      try {
-        await page.click(sel, { timeout: 3000 });
-        break;
-      } catch {}
-    }
-
-    const hasPanel = await page
-      .waitForSelector('transcript-segment-view-model', { timeout: 8000 })
-      .then(() => true)
-      .catch(() => false);
-    if (!hasPanel) return null;
-
-    const segments = await page.$$eval('transcript-segment-view-model', (els) =>
-      els
-        .map((el) => ({
-          ts:
-            el
-              .querySelector('.ytwTranscriptSegmentViewModelTimestamp')
-              ?.textContent?.trim() || '',
-          text:
-            el
-              .querySelector('[role="text"]')
-              ?.textContent?.replace(/\s+/g, ' ')
-              .trim() || '',
-        }))
-        .filter((s) => s.text),
-    );
-    if (segments.length === 0) return null;
-
-    return segments
-      .map((s) => (s.ts ? `[${s.ts}] ${s.text}` : s.text))
-      .join('\n');
-  } catch (error) {
-    console.warn('[retrieveYoutubeTranscript] Transcript panel failed:', error);
-    return null;
   }
+
+  const hasPanel = await page
+    .waitForSelector('transcript-segment-view-model', { timeout: 8000 })
+    .then(() => true)
+    .catch(() => false);
+  if (!hasPanel) throw new Error('the transcript panel did not open');
+
+  const segments = await page.$$eval('transcript-segment-view-model', (els) =>
+    els
+      .map((el) => ({
+        ts:
+          el
+            .querySelector('.ytwTranscriptSegmentViewModelTimestamp')
+            ?.textContent?.trim() || '',
+        text:
+          el
+            .querySelector('[role="text"]')
+            ?.textContent?.replace(/\s+/g, ' ')
+            .trim() || '',
+      }))
+      .filter((s) => s.text),
+  );
+  if (segments.length === 0) {
+    throw new Error('the transcript panel rendered no segments');
+  }
+
+  return segments
+    .map((s) => (s.ts ? `[${s.ts}] ${s.text}` : s.text))
+    .join('\n');
 };
 
 const saveYoutubeTranscript = async (
@@ -339,12 +372,13 @@ const saveYoutubeTranscript = async (
  * Retrieves a YouTube video's transcript by driving a real browser.
  *
  * YouTube's watch-page player response advertises the available caption tracks.
- * Conventional tracks still use the rendered transcript panel first. Gemini
- * tracks bypass that panel and use the browser's native Android VR InnerTube
- * client to fetch signed JSON3 captions; that path is also the fallback when
- * the panel cannot produce text. Returns null only when no caption tracks are
- * advertised. Advertised tracks that cannot produce text throw a retrieval
- * error so callers can distinguish absence from failure.
+ * Two independent sources can then produce the text: the rendered transcript
+ * panel, and signed JSON3 captions fetched through the browser's native Android
+ * VR InnerTube client. Conventional tracks lead with the panel and Gemini
+ * tracks lead with JSON3; either way the other source is the fallback. Returns
+ * null only when no caption tracks are advertised. Advertised tracks that no
+ * source can render throw a retrieval error naming each attempt, so callers can
+ * distinguish absence from failure.
  */
 export const retrieveYoutubeTranscript = async (
   url: string,
@@ -410,6 +444,15 @@ export const retrieveYoutubeTranscript = async (
       throw new Error('YouTube player response was not available');
     }
 
+    console.log(
+      '[retrieveYoutubeTranscript] Watch page caption availability:',
+      JSON.stringify({
+        ...describeCaptionAvailability(pageData.playerResponse),
+        apiKey: Boolean(pageData.apiKey),
+        visitorData: Boolean(pageData.visitorData),
+      }),
+    );
+
     const trackList = readCaptionTrackList(pageData.playerResponse);
     const rawCaptionTracks = (
       pageData.playerResponse as {
@@ -438,48 +481,44 @@ export const retrieveYoutubeTranscript = async (
       );
     }
 
+    // Gemini tracks render in the panel but their watch-page caption URLs come
+    // back empty, so JSON3 leads for them and the panel leads otherwise. Both
+    // sources fail independently, so whichever does not lead is the fallback.
+    const sources: TranscriptSource[] = isGeminiCaptionTrack(selectedTrack)
+      ? ['json3', 'panel']
+      : ['panel', 'json3'];
+    console.log(
+      `[retrieveYoutubeTranscript] Selected track ${selectedTrack.languageCode ?? '?'}; source order: ${sources.join(' then ')}`,
+    );
+
+    const videoId = extractYoutubeVideoId(url);
+    const failures: string[] = [];
     let pageContent: string | null = null;
-    if (!isGeminiCaptionTrack(selectedTrack)) {
-      pageContent = await readPanelTranscript(page);
+
+    for (const source of sources) {
       if (signal?.aborted) return null;
+      try {
+        pageContent =
+          source === 'panel'
+            ? await readPanelTranscript(page)
+            : await readAndroidVrCaptions(page, videoId, pageData);
+        if (pageContent) break;
+        failures.push(`${source} produced no caption text`);
+      } catch (error) {
+        failures.push(
+          `${source} failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+      console.warn(
+        `[retrieveYoutubeTranscript] ${failures[failures.length - 1]}`,
+      );
     }
 
+    if (signal?.aborted) return null;
     if (!pageContent) {
-      const videoId = extractYoutubeVideoId(url);
-      if (!videoId) {
-        throw new Error(
-          'YouTube advertised captions, but the video ID could not be determined',
-        );
-      }
-      if (!pageData.apiKey) {
-        throw new Error(
-          'YouTube advertised captions, but the InnerTube API key was unavailable',
-        );
-      }
-      if (signal?.aborted) return null;
-
-      const fallbackPlayerResponse = await retrieveAndroidVrPlayerResponse(
-        page,
-        videoId,
-        pageData.apiKey,
-        pageData.visitorData,
+      throw new Error(
+        `YouTube advertised captions, but no caption text could be retrieved (${failures.join('; ')})`,
       );
-      if (signal?.aborted) return null;
-
-      const fallbackTrack = selectCaptionTrack(fallbackPlayerResponse);
-      if (!fallbackTrack) {
-        throw new Error(
-          'YouTube advertised captions, but the Android VR player returned no original caption track',
-        );
-      }
-
-      pageContent = await retrieveJson3Captions(page, fallbackTrack);
-      if (signal?.aborted) return null;
-      if (!pageContent) {
-        throw new Error(
-          'YouTube advertised captions, but no caption text could be retrieved',
-        );
-      }
     }
 
     return await saveYoutubeTranscript(page, url, pageContent);

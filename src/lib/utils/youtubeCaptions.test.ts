@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  describeCaptionAvailability,
   formatCaptionTimestamp,
   isGeminiCaptionTrack,
   parseJson3Captions,
@@ -206,6 +207,56 @@ describe('isGeminiCaptionTrack', () => {
       ),
     ).toBe(false);
     expect(isGeminiCaptionTrack(null)).toBe(false);
+  });
+});
+
+describe('describeCaptionAvailability', () => {
+  it('describes each usable track and counts the ones it discarded', () => {
+    const availability = describeCaptionAvailability(
+      playerResponse({
+        captionTracks: [
+          track('gemini', {
+            languageCode: 'en',
+            kind: 'asr',
+            variant: 'gemini',
+          }),
+          track('french', { languageCode: 'fr', isTranslated: true }),
+          { languageCode: 'de' },
+        ],
+      }),
+    );
+
+    expect(availability).toEqual({
+      advertisedTrackCount: 3,
+      usableTrackCount: 2,
+      tracks: ['en/asr/gemini', 'fr/standard/translated'],
+    });
+  });
+
+  it('separates a gated response from a video with no captions', () => {
+    expect(
+      describeCaptionAvailability({
+        playabilityStatus: {
+          status: 'LOGIN_REQUIRED',
+          reason: 'Sign in to confirm you are not a bot',
+        },
+      }),
+    ).toEqual({
+      playabilityStatus: 'LOGIN_REQUIRED',
+      playabilityReason: 'Sign in to confirm you are not a bot',
+      advertisedTrackCount: 0,
+      usableTrackCount: 0,
+      tracks: [],
+    });
+
+    expect(
+      describeCaptionAvailability({ playabilityStatus: { status: 'OK' } }),
+    ).toEqual({
+      playabilityStatus: 'OK',
+      advertisedTrackCount: 0,
+      usableTrackCount: 0,
+      tracks: [],
+    });
   });
 });
 

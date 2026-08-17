@@ -33,6 +33,9 @@ start outside a herdr session — there is nowhere to put them.
 | review  | `workflow_run_review`   | Reviews the completed build, then repairs findings |
 | close   | `workflow_close`        | Runs configured checks, reports real exit codes  |
 
+On the complex branch, the driver is instructed to use `read` to load the full `grilling` skill
+before asking any questions, then follow it.
+
 A tool called in the wrong phase throws; the model cannot advance by asserting that it has.
 
 Workflow tools are active only in the session that starts or resumes an active workflow. In every

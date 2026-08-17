@@ -15,6 +15,15 @@ function promptFor(phase: Phase): string {
 }
 
 describe('phasePrompt', () => {
+  it('references the grilling skill before questioning the user', () => {
+    const prompt = promptFor('grill');
+
+    expect(prompt).toContain('use `read` to load the complete `grilling` SKILL.md');
+    expect(prompt).toContain('Before starting grilling');
+    expect(prompt).toContain('then follow it');
+    expect(prompt).not.toContain('design tree and frontier rounds');
+  });
+
   it('hands settled grilling decisions into planning and task creation', () => {
     const prompt = promptFor('grill');
 

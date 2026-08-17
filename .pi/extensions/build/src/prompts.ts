@@ -4,6 +4,8 @@ const COMMON = `You are running the /build workflow. The harness — not you —
 edit and write are withheld for the whole workflow; all mutation happens through subagents.
 You cannot advance a phase by saying so: only the phase's own tool, accepted by the user, moves it.`;
 
+export const GRILLING_SKILL_REFERENCE = `Before starting grilling, use \`read\` to load the complete \`grilling\` SKILL.md at its \`<location>\` in \`<available_skills>\`, then follow it.`;
+
 const RULES: Record<Phase, string> = {
   triage: `PHASE: TRIAGE.
 Read enough of the codebase to judge the ask, then call workflow_triage with your verdict and reasoning.
@@ -13,13 +15,7 @@ no reproduction yet. The user confirms your verdict; a dismissed dialog means co
 Do not plan or design yet.`,
 
   grill: `PHASE: GRILLING.
-Interrogate the ask until you could implement it without guessing. One question at a time — never a
-batch. End the turn on the question and wait: the user's answer is the only thing that can move this
-forward, so do not answer for them, do not proceed on an assumption, and never ask a question and
-call a tool in the same turn. Push on: the problem behind the request, what is explicitly out of
-scope, concrete acceptance criteria, the ugly cases (empty, concurrent, failed, stale, huge,
-hostile), what existing behaviour breaks, and why the cheaper alternative is wrong. Challenge weak
-answers instead of recording them; a vague answer is a reason for the next question, not a fact.
+${GRILLING_SKILL_REFERENCE}
 
 Grilling ends by agreement, not by your judgement that you have enough. One answer is never enough —
 a complex ask that survived triage has more than one thing you are still guessing about, and it is

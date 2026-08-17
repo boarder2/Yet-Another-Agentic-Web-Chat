@@ -8,6 +8,7 @@ import {
 } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
 import { validatePlan } from './plan.ts';
+import { GRILLING_SKILL_REFERENCE } from './prompts.ts';
 import {
   advance,
   buildPaths,
@@ -120,7 +121,7 @@ export function registerGates(pi: ExtensionAPI, controller: Controller): void {
 
         return say(
           complexity === 'complex'
-            ? `Triaged as complex. Grill the ask now — one question at a time, waiting for each answer. ` +
+            ? `Triaged as complex. ${GRILLING_SKILL_REFERENCE} ` +
                 `Call workflow_end_grilling only once the user has agreed in conversation that nothing is left open.`
             : `Triaged as simple. Go straight to planning and call workflow_write_plan with the plan and its chunking.`,
         );

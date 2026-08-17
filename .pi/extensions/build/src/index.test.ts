@@ -114,10 +114,10 @@ class FakePi {
     name: string,
     params: unknown,
     ctx: ExtensionContext,
-  ): Promise<void> {
+  ): Promise<unknown> {
     const tool = this.tools.get(name);
     if (!tool) throw new Error(`Missing tool: ${name}`);
-    await tool.execute('test-call', params, undefined, undefined, ctx);
+    return tool.execute('test-call', params, undefined, undefined, ctx);
   }
 }
 
@@ -193,6 +193,35 @@ afterEach(() => {
     rmSync(root, { recursive: true, force: true });
   if (previousHerdrEnv === undefined) delete process.env.HERDR_ENV;
   else process.env.HERDR_ENV = previousHerdrEnv;
+});
+
+describe('grilling guidance', () => {
+  it('makes a complex triage handoff load the grilling skill', async () => {
+    const cwd = tempProject();
+    writeConfig(cwd);
+    process.env.HERDR_ENV = '1';
+    const pi = new FakePi();
+    buildWorkflow(pi.api);
+    const ctx = context(cwd);
+
+    await pi.command('build', 'add a retry guard', ctx);
+    const result = await pi.tool(
+      'workflow_triage',
+      { verdict: 'complex', reasoning: 'The behavior is ambiguous.' },
+      ctx,
+    );
+
+    expect(result).toMatchObject({
+      content: [
+        {
+          type: 'text',
+          text: expect.stringContaining(
+            'use `read` to load the complete `grilling` SKILL.md',
+          ),
+        },
+      ],
+    });
+  });
 });
 
 describe('workflow tool activation', () => {

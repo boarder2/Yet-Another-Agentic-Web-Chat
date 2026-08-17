@@ -24,6 +24,7 @@ import { imageGenerationTool } from './imageGenerationTool';
 import { chatHistorySearchTool } from './chatHistorySearchTool';
 import { getChatMessagesTool } from './getChatMessagesTool';
 import { createChartTool } from './createChartTool';
+import { showChartTool } from './showChartTool';
 import { readSkillTool } from './readSkillTool';
 import { editSkillTool } from './editSkillTool';
 import { artifactTools } from './artifactTools';
@@ -45,6 +46,7 @@ export { imageGenerationTool };
 export { chatHistorySearchTool };
 export { getChatMessagesTool };
 export { createChartTool };
+export { showChartTool };
 export { readSkillTool };
 export { editSkillTool };
 export { artifactTools };
@@ -63,6 +65,7 @@ export const allAgentTools = [
   deepResearchTool,
   todoListTool,
   createChartTool,
+  showChartTool,
   chatHistorySearchTool,
   getChatMessagesTool,
   readSkillTool,
@@ -79,6 +82,7 @@ export const webSearchTools = [
   deepResearchTool,
   todoListTool,
   createChartTool,
+  showChartTool,
   chatHistorySearchTool,
   getChatMessagesTool,
   readSkillTool,
@@ -91,6 +95,8 @@ export const coreTools: typeof allAgentTools = [
   imageGenerationTool,
   chatHistorySearchTool,
   getChatMessagesTool,
+  createChartTool,
+  showChartTool,
   readSkillTool,
 ];
 
@@ -119,6 +125,6 @@ function withTopLevelTools<T>(tools: T[]): T[] {
 export const getAllAgentTools = () => withTopLevelTools([...allAgentTools]);
 export const getWebSearchTools = () => withTopLevelTools([...webSearchTools]);
 export const getCoreTools = () => withTopLevelTools([...coreTools]);
-// Local research includes core tools plus chart + artifact support (no web search)
+// Local research includes core tools plus artifact support (no web search)
 export const getLocalResearchTools = () =>
-  withTopLevelTools([...coreTools, createChartTool, ...artifactTools]);
+  withTopLevelTools([...coreTools, ...artifactTools]);

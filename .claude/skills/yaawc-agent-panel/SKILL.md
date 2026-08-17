@@ -34,7 +34,7 @@ Phase 1 runs only on a **new** message; **resume never re-runs Phase 1** (it reu
 
 ## Streaming events
 
-`panel_executor_started` / `_data` / `_completed` / `_error` (payloads + UI handling documented in the `yaawc-streaming-events` skill). All executors share **one** `yaawc:panel` fenced-JSON widget (`{ id, columns: [{ idx, model, status, responseText?, sourceCount?, tokens?, error? }] }`), patched via `startPanelColumn`/`appendPanelColumnToken`/`setPanelColumnStatus` in `src/lib/widgets/envelope.ts`, rendered by `src/components/MessageActions/PanelColumns.tsx` (columns; tabs on mobile), and stripped from history by `removeToolCallMarkup`. Pre-migration messages render the old `<PanelColumns data="base64json">` tag via a frozen legacy path (`decodeLegacyPanelData` next to the renderer).
+`panel_executor_started` / `_data` / `_completed` / `_error` (payloads + UI handling documented in the `yaawc-streaming-events` skill). All executors share **one** `yaawc:panel` fenced-JSON widget (`{ id, columns: [{ idx, model, status, responseText?, sourceCount?, tokens?, error? }] }`), patched via `startPanelColumn`/`appendPanelColumnToken`/`setPanelColumnStatus` in `src/lib/widgets/envelope.ts`, rendered by `src/components/MessageActions/PanelColumns.tsx` (columns; tabs on mobile), and stripped from history by `removeToolCallMarkup`. Executor chart registrations are forwarded as `chart_spec` milestones with namespaced private ids; `panel_executor_chart` appends a writer-owned `yaawc:chart` envelope inside the originating column. Each executor keeps its own turn-local handle namespace, so overlapping `chart_1` handles cannot collide. Panel executors do not use raw chart tags. Pre-migration messages render the old `<PanelColumns data="base64json">` tag via a frozen legacy path (`decodeLegacyPanelData` next to the renderer).
 
 ## UI & persistence
 
@@ -44,6 +44,7 @@ Phase 1 runs only on a **new** message; **resume never re-runs Phase 1** (it reu
 
 ## Gotchas
 
+- Chart lifecycle tools are available to the synthesizing top-level Chat/Web/Local agent, but remain excluded from deep-research subagents and panel executor restrictions unless the executor focus toolset explicitly includes them; executor placement is always bridged structurally into its column.
 - The separate orchestrator **model** was removed (it duplicated the chat-model picker and silently overrode it). Do not reintroduce one; synthesis always uses `body.chatModel`.
 - The final `sources` event re-emits the executor's COMPLETE document set — **replace**, don't append, or you double-count (`sources_added` batches accumulate; `sources` replaces). Capability-document sections are internal sources and keep their exact `/docs/capabilities/...#...` URLs through this merge.
 - Phase 1 is fired in a non-awaited async IIFE so the HTTP response can subscribe immediately; errors emit a stream `error` event. Deep-research subagents still receive their unchanged static whitelist and do not receive `search_yaawc_docs`.

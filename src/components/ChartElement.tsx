@@ -3,8 +3,10 @@ import { useChartSpec } from '@/lib/chart/ChartSpecContext';
 import { Card } from '@/components/ui/Card';
 
 /**
- * Resolves a `<Chart id="…"/>` placement against the specs streamed for the
- * message. Shared by the message body and the agent panel's executor columns.
+ * Legacy resolver for historical chat rows and dashboard-generated
+ * `<Chart id="…"/>` placeholders. New chat model output must use the
+ * `show_chart` lifecycle, whose writer-owned `yaawc:chart` envelope is rendered
+ * by ChartEnvelope.
  */
 const ChartElement = ({ id }: { id?: string }) => {
   const spec = useChartSpec(id ?? '');

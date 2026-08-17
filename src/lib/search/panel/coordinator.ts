@@ -38,6 +38,9 @@ import {
   type PanelUsage,
 } from '@/lib/streaming/events';
 import type { TokenTracker } from '@/lib/tokens/tracker';
+import { TurnChartRegistry } from '@/lib/chart/turnChartRegistry';
+import { stripStreamedChartTags } from '@/lib/utils/contentStripping';
+import { neutralizeSpoofedFences } from '@/lib/widgets/envelope';
 
 export type { PanelUsage };
 
@@ -212,12 +215,13 @@ export class PanelCoordinator {
     });
 
     const isolated = new EventEmitter();
+    const chartRegistry = new TurnChartRegistry();
     const collected = { text: '', documents: [] as Document[] };
 
     onStreamEvent(isolated, (event) => {
       if (event.type === 'response') {
-        const token = event.data || '';
-        collected.text += token;
+        const token = neutralizeSpoofedFences(event.data || '');
+        collected.text = stripStreamedChartTags(collected.text + token);
         if (token) {
           this.emit({ type: 'panel_executor_data', executorIdx: idx, token });
         }
@@ -225,10 +229,29 @@ export class PanelCoordinator {
         // Incremental per-search batches: accumulate.
         if (Array.isArray(event.data)) collected.documents.push(...event.data);
       } else if (event.type === 'chart_spec') {
-        // Executors keep `create_chart`, and place a <Chart id/> in their answer
-        // text. The spec is addressed by id on the parent message, so it has to
-        // escape the isolated emitter or the column can never resolve the chart.
-        this.emit(event);
+        // Each executor owns its own short-handle namespace. Namespace the
+        // private id before forwarding so concurrent executors cannot overwrite
+        // one another's chart metadata in the parent message.
+        this.emit({
+          type: 'chart_spec',
+          data: {
+            ...event.data,
+            chartId: `panel_${idx}_${event.data.chartId}`,
+            executorIdx: idx,
+          },
+        });
+      } else if (event.type === 'chart_placement') {
+        // Placements stay in the executor column; never forward them as a
+        // top-level chart placement.
+        this.emit({
+          type: 'panel_executor_chart',
+          executorIdx: idx,
+          data: {
+            ...event.data,
+            placementId: `panel_${idx}_${event.data.placementId}`,
+            chartId: `panel_${idx}_${event.data.chartId}`,
+          },
+        });
       } else if (event.type === 'sources') {
         // The final `sources` event re-emits the agent's COMPLETE document
         // set (the same docs already streamed via `sources_added`), so treat
@@ -256,6 +279,11 @@ export class PanelCoordinator {
         undefined, // chatId
         false, // interactiveSession
         this.methodologyInstructions,
+        false, // isPrivate
+        '', // workspaceSuffix
+        undefined, // workspaceId
+        undefined, // aiMessageId
+        chartRegistry,
       );
 
       const tools = executorToolsForFocusMode(focusMode, fileIds);

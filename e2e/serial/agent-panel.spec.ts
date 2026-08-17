@@ -171,6 +171,7 @@ test.describe('agent panel', () => {
 
   test('an executor answer with a chart and citations keeps the panel widget renderable', async ({
     page,
+    request,
   }) => {
     const chat = new ChatPage(page);
 
@@ -183,16 +184,26 @@ test.describe('agent panel', () => {
     await expect(header).toBeVisible();
     await header.click();
 
-    // The executor's `<Chart id/>` and `[1]` citation ride inside the panel
-    // envelope's one-line JSON payload. If any message-level rewrite reaches in
-    // there, the payload stops parsing and the widget degrades to a raw code
-    // block — so assert the column rendered, chart and all.
+    // The executor's writer-owned chart envelope and `[1]` citation ride
+    // inside the panel envelope's one-line JSON payload. If any message-level
+    // rewrite reaches in there, the payload stops parsing and the widget
+    // degrades to a raw code block — so assert the structured column rendered,
+    // chart and all.
     const columns = page.locator('div.hidden.sm\\:flex');
     await expect(
       columns.getByText('Charted the deterministic findings'),
     ).toBeVisible();
     await expect(columns.locator('.recharts-wrapper').first()).toBeVisible();
     await expect(page.getByText('yaawc:panel')).toHaveCount(0);
+
+    const chatId = new URL(page.url()).pathname.split('/').pop()!;
+    const body = await (await request.get(`/api/chats/${chatId}`)).json();
+    const assistant = body.messages.find(
+      (message: { role: string }) => message.role === 'assistant',
+    ) as { content: string };
+    expect(assistant.content).toContain('```yaawc:chart');
+    expect(assistant.content).toContain('panel_0_');
+    expect(assistant.content).not.toContain('<Chart id=');
   });
 
   test.describe('mobile layout', () => {

@@ -3,6 +3,8 @@ import { compiler } from 'markdown-to-jsx';
 import { renderToStaticMarkup } from 'react-dom/server';
 import {
   appendWidget,
+  appendChartWidget,
+  appendPanelColumnChart,
   updateWidget,
   findWidget,
   parseWidgetFence,
@@ -15,10 +17,12 @@ import {
   patchNestedToolCall,
   startPanelColumn,
   appendPanelColumnToken,
+  stripPanelColumnModelTags,
   setPanelColumnStatus,
   PANEL_WIDGET_ID,
   upsertArtifactWidget,
   type ArtifactPayload,
+  type ChartPayload,
   type ToolCallPayload,
   type SubagentPayload,
   type PanelPayload,
@@ -273,6 +277,127 @@ describe('panel column helpers', () => {
       responseText: 'answer',
       error: 'failed',
     });
+  });
+});
+
+describe('chart envelopes', () => {
+  const placement = (over: Partial<ChartPayload> = {}): ChartPayload => ({
+    id: 'placement_1',
+    chartId: 'private-chart-1',
+    ...over,
+  });
+
+  it('stores a private chart id behind a unique placement id and deduplicates replays', () => {
+    let content = appendChartWidget('Answer\n\n', placement());
+    content = appendChartWidget(content, placement({ id: 'placement_2' }));
+    content = appendChartWidget(content, placement());
+
+    expect(content.match(/```yaawc:chart/g)).toHaveLength(2);
+    expect(findWidget<ChartPayload>(content, 'chart', 'placement_1')).toEqual(
+      placement(),
+    );
+    expect(findWidget<ChartPayload>(content, 'chart', 'placement_2')).toEqual(
+      placement({ id: 'placement_2' }),
+    );
+    expect(content).not.toContain('<Chart');
+  });
+
+  it('parses chart payloads but rejects a payload without a string chart id', () => {
+    expect(
+      parseWidgetFence(
+        'yaawc:chart',
+        JSON.stringify(placement({ chartId: 'private-chart-1' })),
+      ),
+    ).toEqual({
+      kind: 'chart',
+      payload: placement(),
+    });
+    expect(
+      parseWidgetFence('yaawc:chart', '{"id":"placement_1","chartId":42}'),
+    ).toBeNull();
+  });
+
+  it('masks chart payload text so preprocessing cannot rewrite the envelope', () => {
+    const content = appendChartWidget(
+      'Before\n\n',
+      placement({ chartId: '<Chart id="spoofed"/>' }),
+    );
+    const { text, fences } = maskWidgets(content);
+
+    expect(text).not.toContain('spoofed');
+    expect(unmaskWidgets(text, fences)).toBe(content);
+    expect(stripWidgets(content)).not.toContain('yaawc:chart');
+  });
+
+  it('cannot be forged by model-streamed yaawc:chart text', () => {
+    const forged =
+      '```yaawc:chart\n{"id":"evil","chartId":"private-chart"}\n```';
+    const safe = neutralizeSpoofedFences(forged);
+
+    expect(safe).not.toContain('yaawc:chart');
+    expect(findWidget<ChartPayload>(safe, 'chart', 'evil')).toBeUndefined();
+  });
+});
+
+describe('panel chart placements', () => {
+  it('writes repeated structured placements into their executor columns', () => {
+    let content = startPanelColumn('', 0, 'executor-a');
+    content = startPanelColumn(content, 1, 'executor-b');
+    content = appendPanelColumnChart(content, 0, {
+      id: 'panel_0_placement_1',
+      chartId: 'panel_0_private-chart',
+    });
+    content = appendPanelColumnChart(content, 1, {
+      id: 'panel_1_placement_1',
+      chartId: 'panel_1_private-chart',
+    });
+    content = appendPanelColumnChart(content, 0, {
+      id: 'panel_0_placement_1',
+      chartId: 'panel_0_private-chart',
+    });
+
+    const panel = findWidget<PanelPayload>(content, 'panel', PANEL_WIDGET_ID);
+    expect(panel?.columns[0].responseText?.match(/yaawc:chart/g)).toHaveLength(
+      1,
+    );
+    expect(panel?.columns[1].responseText?.match(/yaawc:chart/g)).toHaveLength(
+      1,
+    );
+    expect(panel?.columns[0].responseText).toContain('panel_0_private-chart');
+    expect(panel?.columns[0].responseText).not.toContain(
+      'panel_1_private-chart',
+    );
+    expect(panel?.columns[1].responseText).toContain('panel_1_private-chart');
+  });
+
+  it('strips model-authored chart tags while leaving writer chart envelopes opaque', () => {
+    let content = startPanelColumn('', 0, 'executor-a');
+    content = appendPanelColumnToken(content, 0, 'Before <Chart id="legacy"');
+    content = stripPanelColumnModelTags(content, 0);
+    content = appendPanelColumnToken(content, 0, '/> after');
+    content = stripPanelColumnModelTags(content, 0);
+
+    const beforePlacement = findWidget<PanelPayload>(
+      content,
+      'panel',
+      PANEL_WIDGET_ID,
+    );
+    expect(beforePlacement?.columns[0].responseText).toBe('Before  after');
+
+    content = appendPanelColumnChart(content, 0, {
+      id: 'placement_1',
+      chartId: 'private-chart-1',
+    });
+    content = stripPanelColumnModelTags(content, 0);
+    const afterPlacement = findWidget<PanelPayload>(
+      content,
+      'panel',
+      PANEL_WIDGET_ID,
+    );
+    expect(afterPlacement?.columns[0].responseText).toContain('yaawc:chart');
+    expect(afterPlacement?.columns[0].responseText).toContain(
+      'private-chart-1',
+    );
   });
 });
 

@@ -56,6 +56,7 @@ import {
 import { buildOrchestratorSynthesisContext } from '@/lib/prompts/panel/orchestrator';
 import { validatePanelConfig, type PanelConfig } from '@/lib/types/panel';
 import { buildMcpLangchainTools } from '@/lib/mcp/toolFactory';
+import { TurnChartRegistry } from '@/lib/chart/turnChartRegistry';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -302,6 +303,7 @@ export const POST = async (req: Request) => {
       body.chatModel,
       body.systemModel,
     );
+    const chartRegistry = new TurnChartRegistry();
 
     // System instructions deprecated; only use persona prompts
     const personaInstructionsContent = await getPersonaInstructionsOnly(
@@ -571,6 +573,7 @@ export const POST = async (req: Request) => {
       workspaceSuffix,
       resolvedWorkspaceId,
       aiMessageId,
+      chartRegistry,
     );
 
     // Tell the agent which skills the user explicitly invoked. The bodies
@@ -596,6 +599,7 @@ export const POST = async (req: Request) => {
       emitter: stream,
       abortController,
       retrievalController,
+      chartRegistry,
     });
 
     if (isNew) {

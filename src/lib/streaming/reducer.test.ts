@@ -7,8 +7,16 @@ import {
 } from './reducer';
 import type { StreamEvent, ModelStatsV1 } from './events';
 import type { Message } from './chatState';
+import { normalizeChartInput } from '@/lib/chart/chartInput';
+import { findWidget, type PanelPayload } from '@/lib/widgets/envelope';
 
 const AI = 'ai1';
+const chartSpec = normalizeChartInput({
+  type: 'line',
+  title: 'Trend',
+  labels: ['A', 'B'],
+  series: [{ label: 'Value', values: [1, 2] }],
+});
 
 /** Drive a sequence of actions from an initial state, returning the final state
  *  and the flattened effects. */
@@ -227,6 +235,142 @@ describe('charts and todos', () => {
       }),
     ).state;
     expect(s.todoItems).toHaveLength(1);
+  });
+});
+
+describe('structured chart placement', () => {
+  const registration = (chartId = 'private-chart-1') =>
+    ev({
+      type: 'chart_spec',
+      data: {
+        chartId,
+        handle: 'chart_1',
+        spec: chartSpec,
+      },
+    });
+
+  const placement = (
+    chartId = 'private-chart-1',
+    placementId = 'placement_1',
+  ) =>
+    ev({
+      type: 'chart_placement',
+      data: { chartId, placementId, handle: 'chart_1' },
+    });
+
+  it('keeps a registered chart invisible until a writer placement arrives', () => {
+    const registered = reduceStreamEvent(liveStart(), registration()).state;
+    expect(registered.messages).toHaveLength(0);
+    expect(registered.receivedMessage).toBe('');
+    expect(registered.chartSpecsByMessage[AI]['private-chart-1']).toEqual(
+      chartSpec,
+    );
+
+    const shown = run(registered, [placement()]).state;
+    expect(rowContent(shown)).toContain('```yaawc:chart');
+    expect(rowContent(shown)).toContain('private-chart-1');
+    expect(rowContent(shown)).not.toContain('<Chart');
+    expect(rowContent(shown)).not.toContain('Loading chart');
+  });
+
+  it('allows repeated displays but makes replaying one placement idempotent', () => {
+    const { state, effects } = run(liveStart(), [
+      registration(),
+      placement('private-chart-1', 'placement_1'),
+      placement('private-chart-1', 'placement_1'),
+      placement('private-chart-1', 'placement_2'),
+    ]);
+
+    expect(rowContent(state)?.match(/```yaawc:chart/g)).toHaveLength(2);
+    expect(rowContent(state)).toContain('"id":"placement_1"');
+    expect(rowContent(state)).toContain('"id":"placement_2"');
+    expect(
+      effects.filter((effect) => effect.kind === 'bumpScroll'),
+    ).toHaveLength(2);
+
+    const replayed = run(state, [registration(), placement()]).state;
+    expect(rowContent(replayed)).toBe(rowContent(state));
+  });
+
+  it('ignores a placement for an unregistered private chart id', () => {
+    const started = liveStart();
+    const result = reduceStreamEvent(started, placement('guessed-id'));
+
+    expect(result.state).toBe(started);
+    expect(result.state.messages).toHaveLength(0);
+    expect(result.effects).toEqual([]);
+  });
+
+  it('places isolated executor charts in the matching panel column even with overlapping handles', () => {
+    const panelEvents: StreamAction[] = [
+      ev({ type: 'panel_executor_started', executorIdx: 0, model: 'model-a' }),
+      ev({ type: 'panel_executor_started', executorIdx: 1, model: 'model-b' }),
+      ev({
+        type: 'chart_spec',
+        data: {
+          chartId: 'panel_0_private-chart',
+          handle: 'chart_1',
+          executorIdx: 0,
+          spec: chartSpec,
+        },
+      }),
+      ev({
+        type: 'chart_spec',
+        data: {
+          chartId: 'panel_1_private-chart',
+          handle: 'chart_1',
+          executorIdx: 1,
+          spec: chartSpec,
+        },
+      }),
+      ev({
+        type: 'panel_executor_chart',
+        executorIdx: 0,
+        data: {
+          placementId: 'panel_0_placement_1',
+          chartId: 'panel_0_private-chart',
+          handle: 'chart_1',
+        },
+      }),
+      ev({
+        type: 'panel_executor_chart',
+        executorIdx: 1,
+        data: {
+          placementId: 'panel_1_placement_1',
+          chartId: 'panel_1_private-chart',
+          handle: 'chart_1',
+        },
+      }),
+    ];
+    const { state } = run(liveStart(), panelEvents);
+    const panel = findWidget<PanelPayload>(
+      rowContent(state)!,
+      'panel',
+      'panel',
+    );
+
+    expect(panel?.columns).toHaveLength(2);
+    expect(panel?.columns[0].responseText).toContain('panel_0_private-chart');
+    expect(panel?.columns[0].responseText).not.toContain(
+      'panel_1_private-chart',
+    );
+    expect(panel?.columns[1].responseText).toContain('panel_1_private-chart');
+    expect(panel?.columns[1].responseText).not.toContain(
+      'panel_0_private-chart',
+    );
+    expect(rowContent(state)?.match(/```yaawc:chart/g)).toHaveLength(2);
+  });
+
+  it('removes a raw chart tag split across response chunks without a loading placeholder', () => {
+    let state = liveStart();
+    for (const data of ['Before ', '<Chart id="stale"', '/>', ' after']) {
+      state = reduceStreamEvent(state, ev({ type: 'response', data })).state;
+    }
+
+    expect(state.receivedMessage).toBe('Before  after');
+    expect(rowContent(state)).toBe('Before ');
+    expect(rowContent(state)).not.toContain('<Chart');
+    expect(rowContent(state)).not.toContain('Loading chart');
   });
 });
 

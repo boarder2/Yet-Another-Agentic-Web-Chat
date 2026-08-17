@@ -4,7 +4,7 @@ import { tool as coreTool } from 'langchain';
 import type { ToolRuntime } from '@langchain/core/tools';
 import type {
   InferInteropZodOutput,
-  InteropZodObject,
+  InteropZodType,
 } from '@langchain/core/utils/types';
 import { Command } from '@langchain/langgraph';
 import { ToolMessage } from '@langchain/core/messages';
@@ -49,7 +49,7 @@ export type DefineToolRuntime<TState = unknown> = ToolRuntime<
 };
 
 interface DefineToolFields<
-  SchemaT extends InteropZodObject,
+  SchemaT extends InteropZodType,
   NameT extends string,
 > {
   name: NameT;
@@ -65,7 +65,7 @@ interface DefineToolFields<
  * where some tools checked `isSoftStop` and others silently didn't.
  */
 export function defineTool<
-  SchemaT extends InteropZodObject,
+  SchemaT extends InteropZodType,
   NameT extends string,
   TState = unknown,
 >(

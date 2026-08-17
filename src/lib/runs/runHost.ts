@@ -5,12 +5,21 @@ import {
   patchNestedToolCall,
   startPanelColumn,
   appendPanelColumnToken,
+  stripPanelColumnModelTags,
   setPanelColumnStatus,
+  appendChartWidget,
+  appendPanelColumnChart,
   neutralizeSpoofedFences,
   upsertArtifactWidget,
   type ToolCallPayload,
   type SubagentPayload,
 } from '@/lib/widgets/envelope';
+import { stripStreamedChartTags } from '@/lib/utils/contentStripping';
+import { ChartSpecSchema, type ChartSpec } from '@/lib/chart/chartSpec';
+import {
+  restoreTurnChartRegistryFromMilestones,
+  TurnChartRegistry,
+} from '@/lib/chart/turnChartRegistry';
 import {
   insertPartialAssistantRow,
   updateAssistantRow,
@@ -658,6 +667,7 @@ async function performResume(items: ResumeItem[]): Promise<void> {
       (snapshot.workspaceSuffix as string) ?? '',
       snapshot.workspaceId as string | null | undefined,
       (snapshot.aiMessageId as string) ?? run.aiMessageId,
+      run.chartRegistry,
     );
     handler.setThreadId(chat.activeRunThreadId);
     handler.setModelRefs(resumeChatModelRef, resumeSystemModelRef);
@@ -804,7 +814,19 @@ async function reconstructAwaitingRun(
   const persistedEvents = await db
     .select()
     .from(runEvents)
-    .where(eq(runEvents.messageId, messageId));
+    .where(eq(runEvents.messageId, messageId))
+    .orderBy(asc(runEvents.seq));
+  const eventLog = persistedEvents.map((e) => ({
+    seq: e.seq,
+    // Persisted rows may use pre-canonical approval type names; normalize so
+    // resume seeding and replay match the current vocabulary.
+    ev: normalizeStreamEvent(e.data) as StreamEvent,
+  }));
+  const chartRegistry = new TurnChartRegistry();
+  restoreTurnChartRegistryFromMilestones(
+    chartRegistry,
+    eventLog.map(({ ev }) => ev),
+  );
 
   const run: Run = {
     chatId: chat.id,
@@ -813,18 +835,14 @@ async function reconstructAwaitingRun(
     threadId: chat.activeRunThreadId ?? '',
     status: 'awaiting_user' as RunStatus,
     emitter,
-    eventLog: persistedEvents.map((e) => ({
-      seq: e.seq,
-      // Persisted rows may use pre-canonical approval type names; normalize so
-      // resume seeding and replay match the current vocabulary.
-      ev: normalizeStreamEvent(e.data) as StreamEvent,
-    })),
+    eventLog,
     subscribers: new Map(),
     abortController,
     retrievalController,
     seq: Math.max(0, ...persistedEvents.map((e) => e.seq)),
     startedAt: chat.activeRunStartedAt ?? Date.now(),
     recievedMessage: persistedContent,
+    chartRegistry,
   };
 
   registerReconstructedRun(run);
@@ -902,6 +920,12 @@ export async function attachRunHost(params: {
   // For resumed runs, seed from the persisted pre-pause content so post-resume
   // tokens APPEND rather than overwrite. For new runs, start from empty.
   let recievedMessage = isResume ? run.recievedMessage : '';
+  if (isResume) {
+    restoreTurnChartRegistryFromMilestones(
+      run.chartRegistry,
+      run.eventLog.map(({ ev }) => ev),
+    );
+  }
 
   // Markup-correlation maps: code_execution_result and user_question_answered
   // need these to update the right ToolCall widget in the saved markup.
@@ -935,7 +959,60 @@ export async function attachRunHost(params: {
       }
     }
   }
-  const chartSpecs: Record<string, unknown> = {};
+  const chartSpecs: Record<string, ChartSpec> = {};
+  const shownChartIds = new Set<string>();
+  for (const { ev } of run.eventLog) {
+    if (ev.type === 'chart_spec') {
+      const chartId = ev.data.chartId;
+      const parsed = ChartSpecSchema.safeParse(ev.data.spec);
+      if (chartId && parsed.success) chartSpecs[chartId] = parsed.data;
+    } else if (ev.type === 'chart_placement') {
+      if (ev.data.chartId && ev.data.placementId) {
+        shownChartIds.add(ev.data.chartId);
+      }
+    } else if (ev.type === 'panel_executor_chart') {
+      if (ev.data.chartId && ev.data.placementId) {
+        shownChartIds.add(ev.data.chartId);
+      }
+    }
+  }
+  const visibleChartMetadata = (): Record<string, ChartSpec> => {
+    const visible: Record<string, ChartSpec> = {};
+    for (const chartId of shownChartIds) {
+      const spec = chartSpecs[chartId];
+      if (spec) visible[chartId] = spec;
+    }
+    return visible;
+  };
+
+  // A placement milestone can outlive the last partial-content flush when a
+  // process pauses for approval or restarts. Rebuild its writer envelope before
+  // replay_complete is sent so the authoritative accumulated content cannot
+  // erase a chart the replay reducer just restored from milestones.
+  if (isResume) {
+    for (const { ev } of run.eventLog) {
+      if (ev.type === 'chart_placement') {
+        const { placementId, chartId } = ev.data;
+        if (placementId && chartId && chartSpecs[chartId]) {
+          recievedMessage = appendChartWidget(recievedMessage, {
+            id: placementId,
+            chartId,
+          });
+        }
+      } else if (ev.type === 'panel_executor_chart') {
+        const { placementId, chartId } = ev.data;
+        if (placementId && chartId && chartSpecs[chartId]) {
+          recievedMessage = appendPanelColumnChart(
+            recievedMessage,
+            ev.executorIdx,
+            { id: placementId, chartId },
+          );
+        }
+      }
+    }
+    run.recievedMessage = recievedMessage;
+  }
+
   let sources: Record<string, unknown>[] = [];
   let searchQuery: string | undefined;
   let searchUrl: string | undefined;
@@ -978,7 +1055,9 @@ export async function attachRunHost(params: {
         ...(sources.length > 0 && { sources }),
         ...(searchQuery && { searchQuery }),
         ...(searchUrl && { searchUrl }),
-        ...(Object.keys(chartSpecs).length > 0 && { chartSpecs }),
+        ...(Object.keys(visibleChartMetadata()).length > 0 && {
+          chartSpecs: visibleChartMetadata(),
+        }),
       },
     }).catch((err: unknown) =>
       console.warn('[runHost] incremental flush failed:', err),
@@ -1069,7 +1148,9 @@ export async function attachRunHost(params: {
         ...(sources.length > 0 && { sources }),
         ...(searchQuery && { searchQuery }),
         ...(searchUrl && { searchUrl }),
-        ...(Object.keys(chartSpecs).length > 0 && { chartSpecs }),
+        ...(Object.keys(visibleChartMetadata()).length > 0 && {
+          chartSpecs: visibleChartMetadata(),
+        }),
       });
     };
 
@@ -1094,7 +1175,7 @@ export async function attachRunHost(params: {
         data,
         messageId: aiMessageId,
       });
-      recievedMessage += data;
+      recievedMessage = stripStreamedChartTags(recievedMessage + data);
       scheduleFlush(false);
     } else if (event.type === 'sources' || event.type === 'sources_added') {
       if (event.searchQuery) searchQuery = event.searchQuery;
@@ -1182,8 +1263,10 @@ export async function attachRunHost(params: {
             executionId,
             (current) => ({
               ...current,
-              responseText:
-                (current.responseText ?? '') + (nestedEvent.data || ''),
+              responseText: stripStreamedChartTags(
+                (current.responseText ?? '') +
+                  neutralizeSpoofedFences(nestedEvent.data || ''),
+              ),
             }),
           );
         } else if (nestedEvent.type === 'tool_call_started') {
@@ -1234,7 +1317,14 @@ export async function attachRunHost(params: {
           recievedMessage,
           'subagent',
           event.id,
-          { status, summary: event.summary, error: event.error },
+          {
+            status,
+            summary:
+              typeof event.summary === 'string'
+                ? stripStreamedChartTags(event.summary)
+                : event.summary,
+            error: event.error,
+          },
         );
       }
       scheduleFlush(true);
@@ -1244,7 +1334,17 @@ export async function attachRunHost(params: {
       event.type === 'panel_executor_completed' ||
       event.type === 'panel_executor_error'
     ) {
-      pushEvent(run, { ...event, messageId: aiMessageId } as StreamEvent);
+      const panelEvent =
+        event.type === 'panel_executor_data'
+          ? {
+              ...event,
+              token: neutralizeSpoofedFences(event.token ?? ''),
+            }
+          : event;
+      pushEvent(run, {
+        ...panelEvent,
+        messageId: aiMessageId,
+      } as StreamEvent);
       const idx = event.executorIdx;
       if (event.type === 'panel_executor_started') {
         recievedMessage = startPanelColumn(
@@ -1253,10 +1353,13 @@ export async function attachRunHost(params: {
           event.model ?? `Model ${idx + 1}`,
         );
       } else if (event.type === 'panel_executor_data') {
-        recievedMessage = appendPanelColumnToken(
-          recievedMessage,
+        recievedMessage = stripPanelColumnModelTags(
+          appendPanelColumnToken(
+            recievedMessage,
+            idx,
+            panelEvent.type === 'panel_executor_data' ? panelEvent.token : '',
+          ),
           idx,
-          event.token ?? '',
         );
       } else if (event.type === 'panel_executor_completed') {
         recievedMessage = setPanelColumnStatus(
@@ -1278,9 +1381,41 @@ export async function attachRunHost(params: {
       scheduleFlush(true);
     } else if (event.type === 'chart_spec') {
       const { chartId, spec } = event.data;
-      if (chartId && spec) chartSpecs[chartId] = spec;
+      const parsed = ChartSpecSchema.safeParse(spec);
+      if (!chartId || !parsed.success) return;
+      chartSpecs[chartId] = parsed.data;
       pushEvent(run, {
         type: 'chart_spec',
+        data: { ...event.data, spec: parsed.data },
+        messageId: aiMessageId,
+      });
+      scheduleFlush(true);
+    } else if (event.type === 'chart_placement') {
+      const { placementId, chartId } = event.data;
+      if (!placementId || !chartId || !chartSpecs[chartId]) return;
+      shownChartIds.add(chartId);
+      recievedMessage = appendChartWidget(recievedMessage, {
+        id: placementId,
+        chartId,
+      });
+      pushEvent(run, {
+        type: 'chart_placement',
+        data: event.data,
+        messageId: aiMessageId,
+      });
+      scheduleFlush(true);
+    } else if (event.type === 'panel_executor_chart') {
+      const { placementId, chartId } = event.data;
+      if (!placementId || !chartId || !chartSpecs[chartId]) return;
+      shownChartIds.add(chartId);
+      recievedMessage = appendPanelColumnChart(
+        recievedMessage,
+        event.executorIdx,
+        { id: placementId, chartId },
+      );
+      pushEvent(run, {
+        type: 'panel_executor_chart',
+        executorIdx: event.executorIdx,
         data: event.data,
         messageId: aiMessageId,
       });
@@ -1447,7 +1582,9 @@ export async function attachRunHost(params: {
         usedLocation,
         usedPersonalization,
         ...(memoriesUsed.length > 0 && { memoriesUsed }),
-        ...(Object.keys(chartSpecs).length > 0 && { chartSpecs }),
+        ...(Object.keys(visibleChartMetadata()).length > 0 && {
+          chartSpecs: visibleChartMetadata(),
+        }),
         // no runStatus field = success
       });
     } else if (event.type === 'agent_error') {
@@ -1460,7 +1597,9 @@ export async function attachRunHost(params: {
         ...(sources.length > 0 && { sources }),
         ...(searchQuery && { searchQuery }),
         ...(searchUrl && { searchUrl }),
-        ...(Object.keys(chartSpecs).length > 0 && { chartSpecs }),
+        ...(Object.keys(visibleChartMetadata()).length > 0 && {
+          chartSpecs: visibleChartMetadata(),
+        }),
       }).catch(console.warn);
     }
   });

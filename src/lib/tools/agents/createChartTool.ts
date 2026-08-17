@@ -1,42 +1,57 @@
 import { z } from 'zod';
-import crypto from 'crypto';
-import { ChartSpecSchema } from '@/lib/chart/chartSpec';
+import {
+  ChartInputSchema,
+  safeNormalizeChartInput,
+} from '@/lib/chart/chartInput';
 import { emitStreamEvent } from '@/lib/streaming/events';
 import { defineTool } from '@/lib/tools/defineTool';
 
+function validationMessage(error: {
+  issues: Array<{ message: string }>;
+}): string {
+  return error.issues.map((issue) => issue.message).join('; ');
+}
+
 export const createChartTool = defineTool(
-  async (input: z.infer<typeof ChartSpecSchema>, runtime): Promise<string> => {
-    const { emitter } = runtime.context;
+  async (input: z.infer<typeof ChartInputSchema>, runtime): Promise<string> => {
+    const { chartRegistry, emitter } = runtime.context;
 
-    const validation = ChartSpecSchema.safeParse(input);
-    if (!validation.success) {
-      const msg = validation.error.issues.map((i) => i.message).join('; ');
-      return `Error: Invalid chart spec — ${msg}. Please fix and retry.`;
+    if (!chartRegistry || !emitter) {
+      return 'Error: create_chart is unavailable because this run has no chart stream.';
     }
 
-    if (!emitter) {
-      return 'Error: create_chart requires an interactive session. It is unavailable in subagents and non-streaming contexts.';
+    const normalized = safeNormalizeChartInput(input);
+    if (!normalized.success) {
+      return `Error: Invalid chart input — ${validationMessage(normalized.error)}. Please fix and retry.`;
     }
 
-    const spec = validation.data;
-    const chartId = crypto.randomUUID();
-
+    const snapshot = chartRegistry.snapshot();
     try {
+      const registration = chartRegistry.register(normalized.data);
       emitStreamEvent(emitter, {
         type: 'chart_spec',
-        data: { chartId, spec },
+        data: {
+          chartId: registration.chartId,
+          handle: registration.handle,
+          spec: registration.spec,
+          source: 'create_chart',
+          toolCallId: runtime.toolCallId,
+        },
       });
-    } catch (err) {
-      console.warn('createChartTool: Failed to emit chart_spec event', err);
-      return 'Error: Failed to emit chart spec event.';
+      return JSON.stringify({
+        handle: registration.handle,
+        title: registration.title,
+      });
+    } catch (error) {
+      chartRegistry.restore(snapshot);
+      console.warn('createChartTool: Failed to register chart', error);
+      return `Error: Could not create chart — ${error instanceof Error ? error.message : String(error)}`;
     }
-
-    return JSON.stringify({ chartId });
   },
   {
     name: 'create_chart',
     description:
-      'Generate an interactive chart (bar, line, pie/donut, area). Call the tool, then place <Chart id="<chartId>"/> exactly where the chart should appear in your response. Before first use this session, call read_skill("chart-creation") for the spec schema, per-type examples, and the code_execution path that should be preferred when available.',
-    schema: ChartSpecSchema,
+      'Register an interactive bar, line, area, or pie chart for this turn. Use the simplified input with a title, labels and aligned series values (or pie slices). The result contains a short handle; call show_chart with that handle where the chart should appear. This tool registers only and never writes response markup.',
+    schema: ChartInputSchema,
   },
 );

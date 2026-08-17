@@ -5,11 +5,8 @@ import {
   ensureImage,
   checkDockerAvailable,
 } from '@/lib/sandbox/dockerExecutor';
-import {
-  ChartSpecSchema,
-  ChartSpec,
-  CHART_MAX_PER_WIDGET,
-} from '@/lib/chart/chartSpec';
+import { CHART_MAX_PER_WIDGET, type ChartSpec } from '@/lib/chart/chartSpec';
+import { safeNormalizeChartInput } from '@/lib/chart/chartInput';
 import {
   fetchSourceContent,
   FetchedSource,
@@ -281,12 +278,20 @@ export async function runCodeWidget(input: {
           fail('Invalid chart entry returned by chart().', logs),
         );
       }
-      const v = ChartSpecSchema.safeParse(entry.spec);
-      if (!v.success) {
-        const m = v.error.issues.map((i) => i.message).join('; ');
-        return withCounts(fail(`Invalid chart "${entry.id}": ${m}`, logs));
+      const normalized = safeNormalizeChartInput(entry.spec);
+      if (!normalized.success) {
+        const m = normalized.error.issues
+          .map((issue) => {
+            const path =
+              issue.path.length > 0 ? `${issue.path.join('.')}: ` : '';
+            return `${path}${issue.message}`;
+          })
+          .join('; ');
+        return withCounts(
+          fail(`Invalid simplified chart "${entry.id}": ${m}`, logs),
+        );
       }
-      charts[entry.id] = v.data;
+      charts[entry.id] = normalized.data;
     }
 
     const content = sanitizeWidgetMarkdown(String(parsed.output ?? ''));

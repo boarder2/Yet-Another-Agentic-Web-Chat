@@ -15,6 +15,7 @@ import ArtifactCard from './Artifacts/ArtifactCard';
 import ArtifactMention from './Artifacts/ArtifactMention';
 import { parseArtifactHref } from '@/lib/artifacts/mention';
 import ChartElement, { spaceChartTags } from './ChartElement';
+import ChartEnvelope from './ChartEnvelope';
 import {
   maskWidgets,
   parseWidgetFence,
@@ -256,6 +257,8 @@ const WidgetOrCodeBlock = ({
         return <SubagentExecution {...parsed.payload} />;
       if (parsed.kind === 'artifact')
         return <ArtifactCard {...parsed.payload} />;
+      if (parsed.kind === 'chart')
+        return <ChartEnvelope chartId={parsed.payload.chartId} />;
       return <PanelColumns columns={parsed.payload.columns} />;
     }
   }
@@ -407,6 +410,8 @@ const MarkdownRenderer = ({
       PanelColumns: {
         component: PanelColumns,
       },
+      // Legacy historical chat/dashboard placeholders only. New chat placement
+      // is writer-authored by show_chart and dispatched from yaawc:chart above.
       Chart: {
         component: ChartElement,
       },

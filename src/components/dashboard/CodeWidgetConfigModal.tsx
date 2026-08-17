@@ -548,8 +548,18 @@ const RuntimeHelp = ({
             Web Page: <code>sources[0].content</code> is extracted page text.
           </li>
           <li>
-            <code>chart(spec)</code> registers a chart and returns a{' '}
-            <code>&lt;Chart/&gt;</code> string — embed it in your output.
+            <code>chart(spec)</code> accepts simplified bar, line, area, or pie
+            input: Cartesian charts require a title, unique <code>labels</code>,
+            and aligned numeric <code>series</code>; pie charts require a title
+            and non-negative <code>slices</code> with a positive total. It
+            returns a <code>&lt;Chart id=&quot;cN&quot;/&gt;</code> placeholder
+            — embed it where the chart should appear.
+          </li>
+          <li>
+            Titles and displayed labels are trimmed and unique. Limits are 100
+            labels, 15 series, and 20 pie slices; optional colors must be valid
+            CSS colors. Canonical <code>data</code>/<code>xKey</code> chart
+            source is not accepted.
           </li>
           <li>
             <code>now</code>: <code>&#123; iso, utcIso, localIso &#125;</code>;{' '}

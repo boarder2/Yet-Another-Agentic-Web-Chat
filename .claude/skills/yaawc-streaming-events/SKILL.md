@@ -23,9 +23,9 @@ One seam between agent and UI. Milestone events persist to `run_events` (`runEve
 
 Events carry structured payloads — never markup. The two writers (`reducer.ts` client-side, `runHost.ts` server-side) serialize them into the assistant message with one isomorphic codec:
 
-- A widget is a code fence with a reserved `yaawc:<kind>` info string + compact single-line JSON. Kinds: `tool_call`, `subagent`, `panel`, `artifact`.
-- `appendWidget`/`updateWidget`/`findWidget` (idempotent on payload `id`); `upsertArtifactWidget` (one card per artifact per message); `parseWidgetFence` (render-side decode); `stripWidgets` (LLM context/clipboard); `neutralizeSpoofedFences` downgrades any model-streamed `yaawc:` fence — all legitimate envelopes are writer-appended, so forging is structurally impossible.
-- `MarkdownRenderer`'s `code` override dispatches known kinds to `ToolCall`/`SubagentExecution`/`PanelColumns`/`ArtifactCard`; unknown/invalid falls back to a plain code block. Pre-migration `<ToolCall>`-style tag markup renders via a frozen, read-only legacy path.
+- A widget is a code fence with a reserved `yaawc:<kind>` info string + compact single-line JSON. Kinds: `tool_call`, `subagent`, `panel`, `artifact`, and writer-owned `chart` placements.
+- `appendWidget`/`updateWidget`/`findWidget` (idempotent on payload `id`); `appendChartWidget` (unique placement id plus private canonical chart id); `upsertArtifactWidget` (one card per artifact per message); `parseWidgetFence` (render-side decode); `stripWidgets` (LLM context/clipboard); `neutralizeSpoofedFences` downgrades any model-streamed `yaawc:` fence — all legitimate envelopes are writer-appended, so forging is structurally impossible. A chart envelope never exposes the model handle or accepts a raw chart tag.
+- `MarkdownRenderer`'s `code` override dispatches known kinds to `ToolCall`/`SubagentExecution`/`PanelColumns`/`ArtifactCard`/`ChartEnvelope`; unknown/invalid falls back to a plain code block. Pre-migration `<ToolCall>`-style tag markup renders via a frozen, read-only legacy path. Historical chat `<Chart>` tags and dashboard-generated placeholders remain on that legacy path; new streamed chat tags are stripped and new placement is `show_chart`.
 - Codec unit-tested (`envelope.test.ts`), including markdown-to-jsx parse-shape tests (regression net for the nested-widget-spillage bug this format fixed).
 
 ## Tool-call lifecycle
@@ -37,7 +37,7 @@ Events carry structured payloads — never markup. The two writers (`reducer.ts`
 | `tool_call_error`   | `{ data: { toolCallId, status:"error", error } }`              | Patches widget with error                        |
 
 - `toolCallId` is the LangChain callback `runId`; attrs are extracted on start, truncated to `TOOL_ARG_MAX_LENGTH = 350`.
-- **Skipped**: `deep_research`, `todo_list`, `create_chart` have specialized rendering; system-source `read_skill` is suppressed.
+- **Skipped**: `deep_research`, `todo_list`, `create_chart`, and `show_chart` have specialized rendering; system-source `read_skill` is suppressed. `create_chart` registers only; `show_chart` emits a chart placement without generic tool chrome.
 - **Interrupts**: LangGraph interrupts arrive via `handleToolError`, detected by `isGraphInterrupt(err)` and dropped (widget stays "running"); after the stream loop, `agent.getState()` collects pending interrupts → `interrupt` control event → runHost persists approvals, run → `awaiting_user`.
 - **Resume**: `doResume()` rebuilds the agent from the LangGraph checkpoint and streams `Command({ resume })`. Re-invoked interrupted tools (widget already exists) are suppressed in `handleToolStart` by stable LLM `tool_call_id`; new tools emit normally.
 - Firefox AI detection is a synthetic `tool_call_started` with `status:"success"`, `toolType:"firefoxAI"`.
@@ -52,7 +52,9 @@ Events carry structured payloads — never markup. The two writers (`reducer.ts`
 | `panel_executor_started/_data/_completed/_error` | Patch columns in the ONE shared `yaawc:panel` widget (`startPanelColumn`/`appendPanelColumnToken`/`setPanelColumnStatus`); `_data` not persisted — see `yaawc-agent-panel`                              |
 | `artifact_saved`                                 | `{ data: { artifactId, title, version, action } }` → `upsertArtifactWidget` card + opens viewer. Card written in replay too; only the `openArtifact`/`invalidateArtifacts` effects are `inReplay`-gated |
 | `sources` / `sources_added`                      | Final set (replace) / streaming batches (append)                                                                                                                                                        |
-| `chart_spec`                                     | ChartSpec keyed by `chartId`                                                                                                                                                                            |
+| `chart_spec`                                     | Normalized canonical ChartSpec keyed by private `chartId`, with the current-turn handle for reconstruction                                                                                              |
+| `chart_placement`                                | Writer-owned `yaawc:chart` placement keyed by unique placement id; only a registered current-turn chart can be shown, and repeats are allowed                                                           |
+| `panel_executor_chart`                           | Structured chart placement bridged into the originating executor column; executor registries and private ids remain namespaced                                                                          |
 | `workspace_file_changed`                         | Invalidates the workspace's TanStack Query                                                                                                                                                              |
 | `replay_complete`                                | Flips `inReplay` off so live tokens append (replay pre-seeds content from DB — tokens must be gated to avoid duplication)                                                                               |
 | `stats` / `context_grew`                         | Live token usage / context-growth indicator                                                                                                                                                             |

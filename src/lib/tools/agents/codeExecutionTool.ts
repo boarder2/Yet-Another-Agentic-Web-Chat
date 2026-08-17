@@ -7,11 +7,13 @@ import {
   ensureImage,
 } from '@/lib/sandbox/dockerExecutor';
 import { getCodeExecutionConfig } from '@/lib/config';
-import { ChartSpecSchema } from '@/lib/chart/chartSpec';
 import { emitStreamEvent } from '@/lib/streaming/events';
+import {
+  createCodeChartChannel,
+  injectChartHelper,
+  registerCodeExecutionCharts,
+} from './codeExecutionCharts';
 import { defineTool } from '@/lib/tools/defineTool';
-
-const CHART_ENVELOPE_RE = /^__CHART__(\{.*\})$/;
 
 const MAX_CODE_LENGTH = 50_000;
 
@@ -147,61 +149,25 @@ export const codeExecutionTool = defineTool(
       });
     }
 
-    const result = await executeCode(code);
-
-    // Scan stdout for __CHART__ envelopes and extract chart specs
-    let cleanedStdout = result.stdout;
-    const chartIds: string[] = [];
-    const { randomUUID } = await import('crypto');
-    if (result.stdout) {
-      const lines = result.stdout.split('\n');
-      const processedLines: string[] = [];
-      for (const line of lines) {
-        const m = line.trim().match(CHART_ENVELOPE_RE);
-        if (!m) {
-          processedLines.push(line);
-          continue;
-        }
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(m[1]);
-        } catch {
-          processedLines.push(line);
-          continue;
-        }
-        const validation = ChartSpecSchema.safeParse(parsed);
-        if (!validation.success) {
-          const reason = validation.error.issues
-            .map((i) => i.message)
-            .join('; ');
-          processedLines.push(`Chart skipped: ${reason}`);
-          continue;
-        }
-        const chartId = randomUUID();
-        chartIds.push(chartId);
-        const chartTitle = validation.data.title;
-        processedLines.push(
-          `[Chart created${chartTitle ? ` — title: "${chartTitle}"` : ''}. To display it, copy this tag verbatim into your response where the chart should appear: <Chart id="${chartId}"/>]`,
-        );
-        try {
-          emitStreamEvent(emitter, {
-            type: 'chart_spec',
-            data: {
-              chartId,
-              spec: validation.data,
-              source: 'code_execution',
-              toolCallId,
-            },
-          });
-        } catch (err) {
-          console.warn(
-            'codeExecutionTool: Failed to emit chart_spec event',
-            err,
-          );
-        }
-      }
-      cleanedStdout = processedLines.join('\n');
-    }
+    const chartChannel = createCodeChartChannel();
+    const result = await executeCode(injectChartHelper(code, chartChannel), {
+      privateRecordPrefix: chartChannel.prefix,
+    });
+    const executionSucceeded =
+      result.exitCode === 0 &&
+      !result.timedOut &&
+      !result.oomKilled &&
+      !result.error;
+    const chartOutcome = registerCodeExecutionCharts({
+      records: result.privateRecords ?? result.machineRecords ?? [],
+      recordErrors:
+        result.privateRecordErrors ?? result.machineRecordErrors ?? [],
+      executionSucceeded,
+      registry: runtime.context.chartRegistry,
+      emitter,
+      toolCallId,
+    });
+    const cleanedStdout = result.stdout;
 
     emitStreamEvent(emitter, {
       type: 'code_execution_result',
@@ -212,7 +178,9 @@ export const codeExecutionTool = defineTool(
         timedOut: result.timedOut,
         oomKilled: result.oomKilled,
         toolCallId,
-        chartIds,
+        chartHandles: chartOutcome.handles,
+        chartTitles: chartOutcome.titles,
+        chartErrors: chartOutcome.errors,
       },
     });
 
@@ -225,6 +193,16 @@ export const codeExecutionTool = defineTool(
       resultText = `Exit code: ${result.exitCode}`;
       if (cleanedStdout) resultText += `\n\nStdout:\n${cleanedStdout}`;
       if (result.stderr) resultText += `\n\nStderr:\n${result.stderr}`;
+    }
+    if (chartOutcome.handles.length > 0) {
+      resultText += '\n\nCharts:';
+      for (let index = 0; index < chartOutcome.handles.length; index += 1) {
+        resultText += `\n- ${chartOutcome.handles[index]} — ${chartOutcome.titles[index]}`;
+      }
+    }
+    if (chartOutcome.errors.length > 0) {
+      resultText += '\n\nChart errors:';
+      for (const error of chartOutcome.errors) resultText += `\n- ${error}`;
     }
 
     await runtime.persist({
@@ -247,7 +225,7 @@ export const codeExecutionTool = defineTool(
   {
     name: 'code_execution',
     description:
-      'Run sandboxed Node.js JS (no network/filesystem, user-approved). Prefer this over reasoning for exact results: math, date/time, counting, regex, encoding, sorting/aggregation, unit conversion. Before first use this session, call read_skill("code-execution") for runtime details, sandbox limits, and output patterns.',
+      'Run sandboxed Node.js JS (no network/filesystem, user-approved). Prefer this over reasoning for exact results: math, date/time, counting, regex, encoding, sorting/aggregation, unit conversion. To register a chart from computed data, call the injected global chart(spec) helper; after a successful run, use the returned short handle with show_chart.',
     schema: CodeExecutionToolSchema,
   },
 );

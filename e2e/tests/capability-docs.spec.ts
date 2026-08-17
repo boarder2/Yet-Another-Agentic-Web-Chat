@@ -196,8 +196,10 @@ test.describe('capability documentation', () => {
       .click();
     await expect
       .poll(() => page.evaluate(() => navigator.clipboard.readText()))
-      .toMatch(/const chartMarkdown = chart\([\s\S]*chartMarkdown/);
+      .toMatch(/const chartMarkdown = chart\([\s\S]*labels: rows\.map/);
     await expect(content).toContainText('<Chart id="cN"/>');
+    await expect(content).toContainText('labels: Array<string | number>');
+    await expect(content).toContainText('canonical-format input are rejected');
     await expect(content).toContainText('2,000,000');
     await expect(content).toContainText('4,000,000');
     await expect(content).toContainText('512,000');

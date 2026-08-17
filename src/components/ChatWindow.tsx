@@ -1593,11 +1593,13 @@ const ChatWindow = ({
 
   const chartSpecContextValue = useMemo(
     () => ({
+      getChartSpecById: (id: string) => flatChartSpecs[id],
       getChartSpec: (id: string) => {
         const direct = flatChartSpecs[id];
         if (direct) return direct;
-        // Fallback: models sometimes emit the chart's title as the id
-        // instead of its UUID. Match on title so the chart still renders.
+        // Legacy fallback for historical chat and dashboard `<Chart>` tags.
+        // New chat placement is writer-authored by show_chart and references
+        // the private id directly.
         return Object.values(flatChartSpecs).find((s) => s.title === id);
       },
     }),

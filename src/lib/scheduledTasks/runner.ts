@@ -35,6 +35,7 @@ import {
 } from '@/lib/utils/prompts';
 import {
   appendWidget,
+  appendChartWidget,
   updateWidget,
   neutralizeSpoofedFences,
   type ToolCallPayload,
@@ -42,6 +43,8 @@ import {
 import { SimplifiedAgent } from '@/lib/search/simplifiedAgent';
 import { createTurnTracker } from '@/lib/tokens/tracker';
 import { onStreamEvent } from '@/lib/streaming/events';
+import { ChartSpecSchema, type ChartSpec } from '@/lib/chart/chartSpec';
+import { stripStreamedChartTags } from '@/lib/utils/contentStripping';
 import { resolveWorkflowRun } from '@/lib/workflows/resolveWorkflowRun';
 
 export async function runSchedule(
@@ -165,12 +168,16 @@ export async function runSchedule(
     let searchQuery = '';
     let searchUrl = '';
     let modelStats: Record<string, unknown> | undefined;
+    const chartSpecs: Record<string, ChartSpec> = {};
+    const shownChartIds = new Set<string>();
     const startTime = Date.now();
 
     await new Promise<void>((resolve, reject) => {
       onStreamEvent(emitter, (event) => {
         if (event.type === 'response') {
-          receivedMessage += neutralizeSpoofedFences(event.data);
+          receivedMessage = stripStreamedChartTags(
+            receivedMessage + neutralizeSpoofedFences(event.data),
+          );
         } else if (event.type === 'sources' || event.type === 'sources_added') {
           sources = event.data as unknown as Array<Record<string, unknown>>;
           if (event.searchQuery) searchQuery = event.searchQuery;
@@ -200,6 +207,20 @@ export async function runSchedule(
             event.data.toolCallId,
             { status: event.data.status, error: event.data.error },
           );
+        } else if (event.type === 'chart_spec') {
+          const parsed = ChartSpecSchema.safeParse(event.data.spec);
+          if (event.data.chartId && parsed.success) {
+            chartSpecs[event.data.chartId] = parsed.data;
+          }
+        } else if (event.type === 'chart_placement') {
+          const { placementId, chartId } = event.data;
+          if (placementId && chartId && chartSpecs[chartId]) {
+            shownChartIds.add(chartId);
+            receivedMessage = appendChartWidget(receivedMessage, {
+              id: placementId,
+              chartId,
+            });
+          }
         } else if (event.type === 'model_stats') {
           modelStats = event.data as unknown as Record<string, unknown>;
         } else if (event.type === 'agent_end') {
@@ -232,6 +253,13 @@ export async function runSchedule(
         ...(searchQuery && { searchQuery }),
         ...(searchUrl && { searchUrl }),
         ...(modelStats && { modelStats }),
+        ...(shownChartIds.size > 0 && {
+          chartSpecs: Object.fromEntries(
+            [...shownChartIds]
+              .filter((id) => chartSpecs[id])
+              .map((id) => [id, chartSpecs[id]]),
+          ),
+        }),
       },
     });
 

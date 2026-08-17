@@ -26,12 +26,14 @@ async function render({ sources, now, theme }) {
   const chartMd = chart({
     type: 'bar',
     title: 'Source content size',
-    xKey: 'name',
-    series: [{ key: 'chars', label: 'Characters', color: theme.colors.accent }],
-    data: sources.map((s, i) => ({
-      name: \`Source \${i + 1}\`,
-      chars: s.content.length,
-    })),
+    labels: sources.map((_s, i) => \`Source \${i + 1}\`),
+    series: [
+      {
+        label: 'Characters',
+        values: sources.map((s) => s.content.length),
+        color: theme.colors.accent,
+      },
+    ],
   });
 
   return \`# \${sources.length} source(s) loaded\\n\\n\${chartMd}\`;

@@ -213,6 +213,9 @@ describe('capability docs catalog', () => {
       'async function render({ sources, now, location, theme })',
     );
     expect(guidance).toContain('The global `chart(spec)` helper');
+    expect(guidance).toContain('labels: Array<string | number>;');
+    expect(guidance).toContain('normalized canonical specs');
     expect(guidance).toContain('`<Chart id="cN"/>`');
+    expect(guidance).toContain('canonical-format input are rejected');
   });
 });

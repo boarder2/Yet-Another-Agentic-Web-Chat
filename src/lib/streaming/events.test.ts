@@ -82,8 +82,80 @@ describe('isAgentControlEvent', () => {
       'sources',
       'tool_call_started',
       'chart_spec',
+      'chart_placement',
+      'panel_executor_chart',
     ]) {
       expect(isAgentControlEvent({ type })).toBe(false);
     }
+  });
+});
+
+describe('structured chart events', () => {
+  const spec = {
+    type: 'line',
+    title: 'Trend',
+    data: [{ label: 'A', series_1: 1 }],
+    series: [{ key: 'series_1', label: 'Value' }],
+    xKey: 'label',
+  } as never;
+
+  it('round-trips registration and placement events through the wire codec', () => {
+    const events: StreamEvent[] = [
+      {
+        type: 'chart_spec',
+        messageId: 'm1',
+        data: {
+          chartId: 'private-1',
+          handle: 'chart_1',
+          spec,
+          source: 'tool',
+        },
+      },
+      {
+        type: 'chart_placement',
+        messageId: 'm1',
+        data: {
+          placementId: 'placement_1',
+          chartId: 'private-1',
+          handle: 'chart_1',
+          placementNumber: 1,
+        },
+      },
+      {
+        type: 'panel_executor_chart',
+        messageId: 'm1',
+        executorIdx: 2,
+        data: {
+          placementId: 'panel_2_placement_1',
+          chartId: 'panel_2_private-1',
+          handle: 'chart_1',
+        },
+      },
+    ];
+
+    for (const event of events) {
+      expect(parseStreamEvent(JSON.stringify(event))).toEqual(event);
+    }
+  });
+
+  it('keeps panel chart forwarding structured and separate from top-level placement', () => {
+    const event = normalizeStreamEvent({
+      type: 'panel_executor_chart',
+      executorIdx: 1,
+      data: {
+        placementId: 'panel_1_placement_1',
+        chartId: 'panel_1_private-1',
+      },
+    });
+
+    expect(event).toEqual({
+      type: 'panel_executor_chart',
+      executorIdx: 1,
+      data: {
+        placementId: 'panel_1_placement_1',
+        chartId: 'panel_1_private-1',
+      },
+    });
+    expect(event.type).not.toBe('chart_placement');
   });
 });

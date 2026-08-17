@@ -56,6 +56,7 @@ import { getImageGenerationConfig } from '@/lib/settings/server';
 import { getResolvedSearchCapabilities } from '@/lib/search/providers';
 import type { CapabilityRuntimeFacts } from '@/lib/capabilities/availability';
 import { toolContextSchema, type ToolContext } from '@/lib/tools/toolContext';
+import { TurnChartRegistry } from '@/lib/chart/turnChartRegistry';
 import {
   normalizeUsageMetadata,
   type TokenTracker,
@@ -175,6 +176,7 @@ export class SimplifiedAgent {
   private systemRecorder: Recorder;
   private workspaceSuffix: string;
   private aiMessageId?: string;
+  private readonly chartRegistry: TurnChartRegistry;
   private threadId?: string;
   private chatModelRef?: {
     provider: string;
@@ -213,6 +215,7 @@ export class SimplifiedAgent {
     workspaceSuffix: string = '',
     workspaceId?: string | null,
     aiMessageId?: string,
+    chartRegistry?: TurnChartRegistry,
   ) {
     this.chatLlm = chatLlm;
     this.systemLlm = systemLlm;
@@ -236,6 +239,7 @@ export class SimplifiedAgent {
     this.workspaceSuffix = workspaceSuffix;
     this.workspaceId = workspaceId;
     this.aiMessageId = aiMessageId;
+    this.chartRegistry = chartRegistry ?? new TurnChartRegistry();
   }
 
   public setInvokedSkillNames(names: Set<string> | Iterable<string>) {
@@ -526,6 +530,7 @@ export class SimplifiedAgent {
             personaInstructions,
             personalizationSection,
             new Date(),
+            codeExecutionEnabled,
           );
           break;
         case 'webSearch':
@@ -752,6 +757,7 @@ export class SimplifiedAgent {
           tracker: this.tracker,
           chatRecorder: this.chatRecorder,
           systemRecorder: this.systemRecorder,
+          chartRegistry: this.chartRegistry,
           capabilityFacts: () => this.getCapabilityFacts(focusMode, fileIds),
         },
         recursionLimit: 150, // Increased to handle complex multi-task research with todo_list
@@ -790,7 +796,8 @@ export class SimplifiedAgent {
               if (
                 toolName === 'deep_research' ||
                 toolName === 'todo_list' ||
-                toolName === 'create_chart'
+                toolName === 'create_chart' ||
+                toolName === 'show_chart'
               ) {
                 return;
               }
@@ -1043,7 +1050,8 @@ export class SimplifiedAgent {
               if (
                 toolName === 'deep_research' ||
                 toolName === 'todo_list' ||
-                toolName === 'create_chart'
+                toolName === 'create_chart' ||
+                toolName === 'show_chart'
               ) {
                 delete toolCalls[runId];
                 return;
@@ -1169,7 +1177,8 @@ export class SimplifiedAgent {
               if (
                 toolName === 'deep_research' ||
                 toolName === 'todo_list' ||
-                toolName === 'create_chart'
+                toolName === 'create_chart' ||
+                toolName === 'show_chart'
               ) {
                 delete toolCalls[runId];
                 return;
@@ -1791,6 +1800,7 @@ ${url ? `<url>${url}</url>` : ''}
           tracker: this.tracker,
           chatRecorder: this.chatRecorder,
           systemRecorder: this.systemRecorder,
+          chartRegistry: this.chartRegistry,
           capabilityFacts: () => this.getCapabilityFacts(focusMode, fileIds),
         },
         recursionLimit: 150,
@@ -1877,7 +1887,8 @@ ${url ? `<url>${url}</url>` : ''}
                 if (
                   toolName === 'deep_research' ||
                   toolName === 'todo_list' ||
-                  toolName === 'create_chart'
+                  toolName === 'create_chart' ||
+                  toolName === 'show_chart'
                 )
                   return;
                 resumeToolCalls.set(cbRunId, toolName);

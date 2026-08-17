@@ -10,7 +10,11 @@ import Markdown, { MarkdownToJSX } from 'markdown-to-jsx';
 import { cn } from '@/lib/utils';
 import { Card } from '@/components/ui/Card';
 import ChartElement, { spaceChartTags } from '../ChartElement';
-import type { PanelColumnPayload } from '@/lib/widgets/envelope';
+import ChartEnvelope from '../ChartEnvelope';
+import {
+  parseWidgetFence,
+  type PanelColumnPayload,
+} from '@/lib/widgets/envelope';
 import { removeThinkingBlocks } from '@/lib/utils/contentStripping';
 
 /**
@@ -41,21 +45,45 @@ function decodeLegacyPanelData(data: string): PanelColumnPayload[] {
   return [];
 }
 
+const extractInfoString = (className?: string): string | null => {
+  if (!className) return null;
+  for (const token of className.split(/\s+/)) {
+    const match = token.match(/^(?:language-|lang-)(.+)$/);
+    if (match) return match[1];
+  }
+  return null;
+};
+
+const ColumnCode = ({
+  className,
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) => {
+  const infoString = extractInfoString(className);
+  if (infoString?.startsWith('yaawc:') && typeof children === 'string') {
+    const parsed = parseWidgetFence(infoString, children);
+    if (parsed?.kind === 'chart') {
+      return <ChartEnvelope chartId={parsed.payload.chartId} />;
+    }
+  }
+
+  return className ? (
+    <pre className="bg-surface-2 rounded-control p-2 overflow-x-auto my-2">
+      <code className={className}>{children}</code>
+    </pre>
+  ) : (
+    <code className="px-1.5 py-0.5 rounded-control bg-surface-2 font-mono text-xs">
+      {children}
+    </code>
+  );
+};
+
 const columnMarkdownOptions: MarkdownToJSX.Options = {
   overrides: {
     Chart: { component: ChartElement },
-    code: {
-      component: ({ className, children }) =>
-        className ? (
-          <pre className="bg-surface-2 rounded-control p-2 overflow-x-auto my-2">
-            <code className={className}>{children}</code>
-          </pre>
-        ) : (
-          <code className="px-1.5 py-0.5 rounded-control bg-surface-2 font-mono text-xs">
-            {children}
-          </code>
-        ),
-    },
+    code: { component: ColumnCode },
     pre: { component: ({ children }) => children },
     a: {
       component: (props) => (

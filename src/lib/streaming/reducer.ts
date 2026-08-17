@@ -18,12 +18,15 @@ import type { Document } from '@langchain/core/documents';
 import type { ChartSpec } from '@/lib/chart/chartSpec';
 import {
   appendWidget,
+  appendChartWidget,
+  appendPanelColumnChart,
   updateWidget,
   neutralizeSpoofedFences,
   upsertNestedToolCall,
   patchNestedToolCall,
   startPanelColumn,
   appendPanelColumnToken,
+  stripPanelColumnModelTags,
   setPanelColumnStatus,
   upsertArtifactWidget,
   type ToolCallPayload,
@@ -40,6 +43,7 @@ import type {
 } from './chatState';
 import { panelExecutorTokens, type StreamEvent } from './events';
 import type { StreamEffect } from './effects';
+import { stripStreamedChartTags } from '@/lib/utils/contentStripping';
 
 /** How many response tokens accumulate before the assistant row is re-rendered. */
 const RESPONSE_BUFFER_THRESHOLD = 5;
@@ -192,9 +196,14 @@ function applyWidgetTokens(content: string, p: PendingWidgetTokens): string {
   return p.kind === 'subagent'
     ? updateWidget<SubagentPayload>(content, 'subagent', p.id, (current) => ({
         ...current,
-        responseText: (current.responseText ?? '') + p.text,
+        responseText: stripStreamedChartTags(
+          (current.responseText ?? '') + p.text,
+        ),
       }))
-    : appendPanelColumnToken(content, Number(p.id), p.text);
+    : stripPanelColumnModelTags(
+        appendPanelColumnToken(content, Number(p.id), p.text),
+        Number(p.id),
+      );
 }
 
 /** Commit all buffered nested widget tokens into the row content. */
@@ -473,11 +482,19 @@ function reduceStreamAction(
     case 'response': {
       if (state.inReplay) return { state, effects };
       const token = neutralizeSpoofedFences(action.data ?? '');
-      const receivedMessage = state.receivedMessage + token;
+      const rawReceivedMessage = state.receivedMessage + token;
+      const receivedMessage = stripStreamedChartTags(rawReceivedMessage);
       const tokenCount = state.tokenCount + 1;
+      const contentWasSanitized = receivedMessage !== rawReceivedMessage;
       // Buffer the row re-render: commit every N tokens, or immediately if the
-      // row does not exist yet so the assistant bubble appears at once.
-      if (tokenCount < RESPONSE_BUFFER_THRESHOLD && state.rowAdded) {
+      // row does not exist yet so the assistant bubble appears at once. A
+      // sanitizing removal commits immediately so a split raw chart tag cannot
+      // leave stale markup visible until the next token batch.
+      if (
+        tokenCount < RESPONSE_BUFFER_THRESHOLD &&
+        state.rowAdded &&
+        !contentWasSanitized
+      ) {
         return { state: { ...state, receivedMessage, tokenCount }, effects };
       }
       const msgId = msgIdFor(state, action);
@@ -562,7 +579,10 @@ function reduceStreamAction(
       const apply = (content: string) =>
         updateWidget<SubagentPayload>(content, 'subagent', action.id, {
           status,
-          summary: action.summary,
+          summary:
+            typeof action.summary === 'string'
+              ? stripStreamedChartTags(action.summary)
+              : action.summary,
           error: action.error,
         });
       const receivedMessage = apply(state.receivedMessage);
@@ -579,7 +599,7 @@ function reduceStreamAction(
         const buffered = bufferWidgetToken(
           state,
           { msgId, kind: 'subagent', id: executionId },
-          nested.data || '',
+          neutralizeSpoofedFences(nested.data || ''),
         );
         if (buffered.flushed) scroll();
         return { state: buffered.state, effects };
@@ -672,7 +692,7 @@ function reduceStreamAction(
       const buffered = bufferWidgetToken(
         state,
         { msgId, kind: 'panel', id: String(action.executorIdx) },
-        action.token ?? '',
+        neutralizeSpoofedFences(action.token ?? ''),
       );
       if (buffered.flushed) scroll();
       return { state: buffered.state, effects };
@@ -681,7 +701,9 @@ function reduceStreamAction(
     case 'chart_spec': {
       const msgId = msgIdFor(state, action);
       const { chartId, spec } = action.data;
-      if (!chartId || !spec) return { state, effects };
+      if (!chartId || !spec || state.chartSpecsByMessage[msgId]?.[chartId]) {
+        return { state, effects };
+      }
       return {
         state: {
           ...state,
@@ -693,6 +715,53 @@ function reduceStreamAction(
             },
           },
         },
+        effects,
+      };
+    }
+
+    case 'chart_placement': {
+      const msgId = msgIdFor(state, action);
+      const { placementId, chartId } = action.data;
+      if (
+        !placementId ||
+        !chartId ||
+        !state.chartSpecsByMessage[msgId]?.[chartId]
+      ) {
+        return { state, effects };
+      }
+      const receivedMessage = appendChartWidget(state.receivedMessage, {
+        id: placementId,
+        chartId,
+      });
+      if (receivedMessage === state.receivedMessage) return { state, effects };
+      const messages = upsertAssistant(state, msgId, receivedMessage);
+      scroll();
+      return {
+        state: { ...state, receivedMessage, rowAdded: true, messages },
+        effects,
+      };
+    }
+
+    case 'panel_executor_chart': {
+      const msgId = msgIdFor(state, action);
+      const { placementId, chartId } = action.data;
+      if (
+        !placementId ||
+        !chartId ||
+        !state.chartSpecsByMessage[msgId]?.[chartId]
+      ) {
+        return { state, effects };
+      }
+      const receivedMessage = appendPanelColumnChart(
+        state.receivedMessage,
+        action.executorIdx,
+        { id: placementId, chartId },
+      );
+      if (receivedMessage === state.receivedMessage) return { state, effects };
+      const messages = upsertAssistant(state, msgId, receivedMessage);
+      scroll();
+      return {
+        state: { ...state, receivedMessage, rowAdded: true, messages },
         effects,
       };
     }

@@ -40,6 +40,8 @@ const MILESTONE_TYPES = new Set<string>([
   'panel_executor_error',
   'todo_update',
   'chart_spec',
+  'chart_placement',
+  'panel_executor_chart',
   'workspace_file_changed',
 ]);
 

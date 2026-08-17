@@ -21,7 +21,7 @@ app/layout.tsx
             └── Chat (message list, scroll, approval widgets)
                 ├── MessageBox[] (user + assistant + compaction rows)
                 │   └── MarkdownRenderer → ToolCall / SubagentExecution / PanelColumns /
-                │       ArtifactCard / ThinkBox / ChartWidget / CodeBlock
+                │       ArtifactCard / ChartEnvelope / ThinkBox / ChartWidget / CodeBlock
                 ├── TodoWidget · CodeExecution · UserQuestionPrompt · WorkspaceEditApproval ·
                 │   SkillEditApproval · McpToolApproval (transient, above input)
                 └── MessageInput (composer: focus mode, attach, ModelConfigurator,
@@ -47,10 +47,10 @@ Non-secret settings are DB-backed with a localStorage cache — the sync layer, 
 
 `MarkdownRenderer.tsx` uses `markdown-to-jsx` with overrides:
 
-- **Widget fences** — the `code` override dispatches known `yaawc:<kind>` fences (parsed by `src/lib/widgets/envelope.ts`) to typed components: `ToolCall`, `SubagentExecution`, `PanelColumns`, `ArtifactCard`. Unknown/invalid `yaawc:*` fences fall back to `CodeBlock`.
-- **Legacy path (frozen, read-only)** — pre-migration `<ToolCall>`/`<SubagentExecution>`/`<PanelColumns>` tag markup still renders (base64-decoded attrs); nothing writes it anymore.
+- **Widget fences** — the `code` override dispatches known `yaawc:<kind>` fences (parsed by `src/lib/widgets/envelope.ts`) to typed components: `ToolCall`, `SubagentExecution`, `PanelColumns`, `ArtifactCard`, and writer-owned `ChartEnvelope`. Unknown/invalid `yaawc:*` fences fall back to `CodeBlock`.
+- **Legacy path (frozen, read-only)** — pre-migration `<ToolCall>`/`<SubagentExecution>`/`<PanelColumns>` tag markup still renders (base64-decoded attrs); historical chat and dashboard `<Chart>` placeholders still resolve through `ChartElement`. New chat model tags are stripped in streaming and nothing new writes legacy chat tags; agents use `show_chart`.
 - **`ArtifactMention`** — a user's `@[Title](artifact:<id>)` is ordinary markdown; the `a` override renders it as a chip (dimmed, inert if deleted). The workspace sidebar reaches the panel/composer via `ArtifactBridgeContext`.
-- **`<Chart>`** — model-emitted self-closing tag; renders `ChartWidget` via `useChartSpec()` from `ChartSpecContext`.
+- **`ChartEnvelope`** — exact private canonical chart-id lookup from a writer-authored `yaawc:chart` placement; an unregistered or guessed id renders nothing. `ChartElement` is only the legacy historical-chat/dashboard `<Chart>` resolver.
 - **`<a>`** — citation links (`[N]`) styled via `CitationLink`.
 - **Think blocks** — `<think>…</think>` extracted before parsing, rendered as collapsible `ThinkBox` above content.
 - **Security** — `iframe`, `script`, `object`, `style` render as `null`.

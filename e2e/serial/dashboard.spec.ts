@@ -131,6 +131,20 @@ test.describe('dashboard', () => {
       dialog.getByRole('heading', { name: 'Create Code Widget', exact: true }),
     ).toBeVisible();
 
+    await dialog
+      .getByRole('button', { name: 'Runtime & API', exact: true })
+      .click();
+    await expect(dialog).toContainText('unique labels');
+    await expect(dialog).toContainText('aligned numeric series');
+    await expect(dialog).toContainText('positive total');
+    await expect(dialog).toContainText('<Chart id="cN"/>');
+    await expect(dialog).toContainText(
+      '100 labels, 15 series, and 20 pie slices',
+    );
+    await expect(dialog).toContainText(
+      'Canonical data/xKey chart source is not accepted',
+    );
+
     const code = dialog.getByLabel('Code', { exact: true });
     await expect(code).toBeVisible();
 

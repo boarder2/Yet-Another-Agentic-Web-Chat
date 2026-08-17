@@ -16,13 +16,15 @@
  * run host, and the renderer. Pure functions only — no DOM, no network.
  */
 
-export type WidgetKind = 'tool_call' | 'subagent' | 'panel' | 'artifact';
+export type WidgetKind =
+  'tool_call' | 'subagent' | 'panel' | 'artifact' | 'chart';
 
 const WIDGET_KINDS: ReadonlySet<string> = new Set([
   'tool_call',
   'subagent',
   'panel',
   'artifact',
+  'chart',
 ]);
 
 /** Former `<ToolCall>` attributes as plain JSON fields (base64 dropped). */
@@ -93,14 +95,25 @@ export interface ArtifactPayload {
   action: 'create' | 'edit';
 }
 
+/** Writer-owned placement of a registered turn chart. `id` is never a chart handle. */
+export interface ChartPayload {
+  id: string;
+  chartId: string;
+}
+
 export type WidgetPayload =
-  ToolCallPayload | SubagentPayload | PanelPayload | ArtifactPayload;
+  | ToolCallPayload
+  | SubagentPayload
+  | PanelPayload
+  | ArtifactPayload
+  | ChartPayload;
 
 export type ParsedWidget =
   | { kind: 'tool_call'; payload: ToolCallPayload }
   | { kind: 'subagent'; payload: SubagentPayload }
   | { kind: 'panel'; payload: PanelPayload }
-  | { kind: 'artifact'; payload: ArtifactPayload };
+  | { kind: 'artifact'; payload: ArtifactPayload }
+  | { kind: 'chart'; payload: ChartPayload };
 
 type WithId = { id: string };
 
@@ -166,6 +179,16 @@ export function appendWidget<T extends WithId>(
   return (sep || balanced) + makeFence(kind, payload) + '\n\n';
 }
 
+/** Append a writer-owned chart placement, keyed by its unique placement id. */
+export function appendChartWidget(
+  content: string,
+  payload: ChartPayload,
+): string {
+  return appendWidget<ChartPayload>(content, 'chart', payload);
+}
+
+export const appendChartPlacementWidget = appendChartWidget;
+
 /**
  * Locate the widget of `kind` + `id` in `content` and replace its payload
  * with `patch` (a partial merge) or the result of `updater(current)`.
@@ -221,6 +244,12 @@ export function parseWidgetFence(
     !payload ||
     typeof payload !== 'object' ||
     typeof (payload as { id?: unknown }).id !== 'string'
+  ) {
+    return null;
+  }
+  if (
+    kind === 'chart' &&
+    typeof (payload as { chartId?: unknown }).chartId !== 'string'
   ) {
     return null;
   }
@@ -298,6 +327,78 @@ export function appendPanelColumnToken(
     }),
   );
 }
+
+function removeRawChartTags(text: string): string {
+  return text
+    .replace(/<Chart\b[^>]*\/>/g, '')
+    .replace(/<Chart\b[^>]*>[\s\S]*?<\/Chart>/g, '');
+}
+
+/** Remove model-authored chart tags from one panel column, preserving nested widgets. */
+export function stripPanelColumnModelTags(
+  content: string,
+  idx: number,
+): string {
+  return updateWidget<PanelPayload>(
+    content,
+    'panel',
+    PANEL_WIDGET_ID,
+    (current) => ({
+      ...current,
+      columns: current.columns.map((c) =>
+        c.idx === idx
+          ? {
+              ...c,
+              responseText: mapOutsideWidgets(
+                c.responseText ?? '',
+                removeRawChartTags,
+              ),
+            }
+          : c,
+      ),
+    }),
+  );
+}
+
+/** Append a structured chart placement inside a panel executor column. */
+export function appendPanelColumnChart(
+  content: string,
+  idx: number,
+  payload: ChartPayload,
+): string {
+  return updateWidget<PanelPayload>(
+    ensurePanelWidget(content),
+    'panel',
+    PANEL_WIDGET_ID,
+    (current) => {
+      let columns = current.columns;
+      if (!columns.some((c) => c.idx === idx)) {
+        columns = [
+          ...columns,
+          {
+            idx,
+            model: `Model ${idx + 1}`,
+            status: 'running' as const,
+            responseText: '',
+          },
+        ].sort((a, b) => a.idx - b.idx);
+      }
+      return {
+        ...current,
+        columns: columns.map((c) =>
+          c.idx === idx
+            ? {
+                ...c,
+                responseText: appendChartWidget(c.responseText ?? '', payload),
+              }
+            : c,
+        ),
+      };
+    },
+  );
+}
+
+export const appendPanelColumnChartWidget = appendPanelColumnChart;
 
 /** Set a panel executor column's terminal status, creating the column if it doesn't exist yet. */
 export function setPanelColumnStatus(

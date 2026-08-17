@@ -2,6 +2,10 @@ import Docker from 'dockerode';
 import { PassThrough } from 'stream';
 import { finished } from 'stream/promises';
 import { getCodeExecutionConfig } from '@/lib/config';
+import {
+  PrivateRecordCollector,
+  type PrivateRecordCapture,
+} from '@/lib/tools/agents/codeExecutionCharts';
 
 const IMAGE_CHECK_TTL_MS = 60 * 60 * 1000; // 1 hour
 
@@ -47,6 +51,12 @@ export type ExecutionResult = {
   timedOut: boolean;
   oomKilled: boolean;
   error?: string;
+  /** Records consumed from the randomized private stdout channel. */
+  privateRecords?: string[];
+  privateRecordErrors?: string[];
+  /** Aliases used by callers that name the channel machine transport. */
+  machineRecords?: string[];
+  machineRecordErrors?: string[];
 };
 
 export async function checkDockerAvailable(): Promise<boolean> {
@@ -105,7 +115,14 @@ export async function ensureImage(imageName: string): Promise<void> {
 
 export async function executeCode(
   code: string,
-  opts?: { stdin?: string; maxOutputChars?: number },
+  opts?: {
+    stdin?: string;
+    maxOutputChars?: number;
+    privateRecordPrefix?: string;
+    machineRecordPrefix?: string;
+    maxPrivateRecords?: number;
+    maxPrivateRecordBytes?: number;
+  },
 ): Promise<ExecutionResult> {
   const config = getCodeExecutionConfig();
   const docker = createDockerClient();
@@ -164,17 +181,28 @@ export async function executeCode(
     // stdout envelope) can override the per-stream cap; chat keeps the config
     // default so its truncate-with-note behavior is unchanged.
     const maxChars = opts?.maxOutputChars ?? config.maxOutputChars;
+    const privateRecordPrefix =
+      opts?.privateRecordPrefix ?? opts?.machineRecordPrefix;
+    const privateCollector = privateRecordPrefix
+      ? new PrivateRecordCollector(privateRecordPrefix, {
+          maxRecords: opts?.maxPrivateRecords,
+          maxRecordBytes: opts?.maxPrivateRecordBytes,
+        })
+      : undefined;
+
+    const appendStdout = (text: string) => {
+      if (!text || stdoutLen >= maxChars) return;
+      const sliced = text.slice(0, maxChars - stdoutLen);
+      stdoutChunks.push(sliced);
+      stdoutLen += sliced.length;
+    };
 
     const stdoutStream = new PassThrough();
     const stderrStream = new PassThrough();
 
     stdoutStream.on('data', (chunk: Buffer) => {
       const text = chunk.toString('utf8');
-      if (stdoutLen < maxChars) {
-        const sliced = text.slice(0, maxChars - stdoutLen);
-        stdoutChunks.push(sliced);
-        stdoutLen += sliced.length;
-      }
+      appendStdout(privateCollector ? privateCollector.push(text) : text);
     });
 
     stderrStream.on('data', (chunk: Buffer) => {
@@ -233,8 +261,11 @@ export async function executeCode(
     } catch {}
     (attachStream as { destroy?: () => void }).destroy?.();
 
+    if (privateCollector) appendStdout(privateCollector.finish());
     const stdout = stdoutChunks.join('');
     const stderr = stderrChunks.join('');
+    const privateCapture: PrivateRecordCapture | undefined =
+      privateCollector?.capture();
     const truncatedNote = (len: number) =>
       len >= maxChars ? `\n[...truncated at ${maxChars} characters]` : '';
 
@@ -244,6 +275,14 @@ export async function executeCode(
       exitCode: timedOut ? 137 : exitCode,
       timedOut,
       oomKilled,
+      ...(privateCapture
+        ? {
+            privateRecords: privateCapture.records,
+            privateRecordErrors: privateCapture.errors,
+            machineRecords: privateCapture.records,
+            machineRecordErrors: privateCapture.errors,
+          }
+        : {}),
     };
   } finally {
     sandboxState.activeContainers.delete(container);

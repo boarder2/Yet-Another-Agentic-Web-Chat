@@ -19,7 +19,16 @@ The top-level agent chooses tools from the active focus mode and the current run
 ## Answers, charts, and media
 
 - `todo_list` maintains a visible plan of up to 10 tasks. It is state management and does not call an external model.
-- `create_chart` renders validated interactive bar, line, area, or pie/donut charts in the answer. It needs an interactive top-level stream; code execution can also emit chart data.
+- `create_chart` validates and registers a turn-local chart; `show_chart` places a chart-only writer widget at that point in the answer. The model uses a short handle returned by `create_chart` (never an internal ID or HTML tag), and a registered chart may be shown more than once. These tools are available in Web Search, Local Research, and Chat focus modes on an interactive top-level stream. A chart that is registered but never shown remains invisible.
+- Chart input uses a required title, aligned numeric series over string-or-number labels, or labeled non-negative pie slices. Titles and displayed labels are trimmed and unique; limits are 100 labels, 15 series, and 20 slices, with optional valid CSS colors and only type-appropriate options. Code execution's global `chart(spec)` helper uses the same simplified input and returns ordered handles after a clean run; code execution can be used for computed data.
+
+A hand-authored chart follows this lifecycle; the returned handle is valid only in the current turn:
+
+```text
+create_chart({ type: "line", title: "Trend", labels: ["A", "B"], series: [{ label: "Value", values: [1, 2] }] })
+show_chart({ handle: "chart_1" })
+```
+
 - Image generation is available in a durable top-level chat when it is enabled with an OpenRouter image model. It supports the configured default aspect ratio and resolution, with per-request overrides. See [Models and providers](./models-and-providers.md).
 - Artifact tools create, edit, and read self-contained HTML documents. They are available only where artifacts can be owned; private chats withhold them. See [Artifacts and dashboards](./artifacts-and-dashboards.md).
 - Workspace tools list, read, search, create, and edit files when the chat belongs to a workspace. See [Files and workspaces](./files-and-workspaces.md).
@@ -32,7 +41,7 @@ The parent agent receives the subagent summary and its source documents. A faile
 
 ## Skills and instructions
 
-Built-in skills explain specialized tool contracts such as deep research, chart creation, ask-user, and code execution. User skills can be global or workspace-scoped, enabled or disabled, automatically offered to the model, or marked slash-only. Type `/skill-name` in the composer to invoke an enabled skill explicitly. The agent can load a skill with `read_skill` and can propose creating, updating, or deleting a user skill with `edit_skill`.
+Built-in skills explain specialized tool contracts such as deep research, the optional chart-creation reference, ask-user, and code execution. User skills can be global or workspace-scoped, enabled or disabled, automatically offered to the model, or marked slash-only. Type `/skill-name` in the composer to invoke an enabled skill explicitly. The agent can load a skill with `read_skill` and can propose creating, updating, or deleting a user skill with `edit_skill`.
 
 Skill edits require user approval in an interactive chat. A workspace skill can override a global user skill with the same name, but built-in skill names remain reserved. Persona prompts control response style; skills can add task-specific instructions. See [Personalization and memory](./personalization-and-memory.md) for persona settings.
 
@@ -54,7 +63,7 @@ Subagents, panels, and scheduled runs do not have an interactive user approval s
 
 Enable code execution in `config.toml` under `[TOOLS.CODE_EXECUTION]` and provide a reachable Docker daemon. The default limits are a 30-second timeout, 128 MB memory, and 50,000 output characters; code input is limited to 50,000 characters. The runtime uses an official Node image, drops Linux capabilities, runs without network access, and does not give user code access to the host filesystem.
 
-Every top-level interactive call shows the JavaScript and asks for approval before running. Code execution is unavailable in subagents and non-interactive workflow or scheduled contexts. Docker being configured is not the same as Docker being reachable; the tool checks the daemon when a call is requested. Detailed deployment settings are in the [Configuration](./configuration.md) guide.
+Every top-level interactive call shows the JavaScript and asks for approval before running. The global `chart(spec)` helper accepts the simplified chart input, captures chart records privately, and returns short handles only after a clean execution; nonzero, timed-out, or out-of-memory runs register no charts. Code execution is unavailable in subagents and non-interactive workflow or scheduled contexts. Docker being configured is not the same as Docker being reachable; the tool checks the daemon when a call is requested. Detailed deployment settings are in the [Configuration](./configuration.md) guide.
 
 ## MCP tools
 

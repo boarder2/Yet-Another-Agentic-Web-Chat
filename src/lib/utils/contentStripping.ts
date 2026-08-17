@@ -3,7 +3,7 @@
  * content. Kept separate from contentUtils.ts so client bundles can import them
  * without pulling in LangChain.
  */
-import { stripWidgets } from '@/lib/widgets/envelope';
+import { mapOutsideWidgets, stripWidgets } from '@/lib/widgets/envelope';
 
 /**
  * Removes all content within <think>...</think> blocks, including content
@@ -46,11 +46,21 @@ export const removeToolCallMarkup = (text: string): string => {
 
 /**
  * Removes <Chart .../> markup (self-closing and paired).
+ *
+ * Historical chat rows and dashboard output still use this legacy renderer;
+ * new stream writers call {@link stripStreamedChartTags} on accumulated model
+ * content instead of changing those read paths.
  */
 export const removeChartMarkup = (text: string): string =>
   text
     .replace(/<Chart\b[^>]*\/>/g, '')
     .replace(/<Chart\b[^>]*>[\s\S]*?<\/Chart>/g, '');
+
+/** Strip only model-authored chart tags, never the contents of writer widgets. */
+export const stripStreamedChartTags = (text: string): string =>
+  mapOutsideWidgets(text, removeChartMarkup);
+
+export const removeStreamedChartTags = stripStreamedChartTags;
 
 /**
  * Strips citation markers like [1] or [1, 2] from text.

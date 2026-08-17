@@ -1,11 +1,18 @@
 import { describe, it, expect } from 'vitest';
-import { removeToolCallMarkup } from './contentStripping';
+import {
+  removeToolCallMarkup,
+  stripStreamedChartTags,
+} from './contentStripping';
 import {
   appendWidget,
+  appendChartWidget,
+  findWidget,
   startPanelColumn,
   appendPanelColumnToken,
+  stripPanelColumnModelTags,
   type ToolCallPayload,
   type SubagentPayload,
+  type PanelPayload,
 } from '@/lib/widgets/envelope';
 
 const toolCall = (over: Partial<ToolCallPayload> = {}): ToolCallPayload => ({
@@ -13,6 +20,61 @@ const toolCall = (over: Partial<ToolCallPayload> = {}): ToolCallPayload => ({
   type: 'file_search',
   status: 'success',
   ...over,
+});
+
+describe('streamed chart tag stripping', () => {
+  it('removes complete model-authored self-closing and paired tags', () => {
+    expect(
+      stripStreamedChartTags(
+        'Before <Chart id="one"/> middle <Chart id="two">loading</Chart> after',
+      ),
+    ).toBe('Before  middle  after');
+  });
+
+  it('removes a chart tag only after its split chunks complete', () => {
+    let content = '';
+    for (const chunk of ['Before ', '<Chart id="split"', '/>', ' after']) {
+      content = stripStreamedChartTags(content + chunk);
+    }
+
+    expect(content).toBe('Before  after');
+    expect(content).not.toContain('<Chart');
+  });
+
+  it('does not rewrite chart-like text inside writer-owned envelopes', () => {
+    const writerContent = appendChartWidget('Before\n\n', {
+      id: 'placement_1',
+      chartId: '<Chart id="inside-payload"/>',
+    });
+
+    expect(stripStreamedChartTags(writerContent)).toBe(writerContent);
+  });
+
+  it('strips split model tags in panel response text without removing structured placements', () => {
+    let content = startPanelColumn('', 0, 'executor-a');
+    for (const chunk of [
+      'Before ',
+      '<Chart id="panel-split"',
+      '/>',
+      ' after',
+    ]) {
+      content = appendPanelColumnToken(content, 0, chunk);
+      content = stripPanelColumnModelTags(content, 0);
+    }
+
+    const withoutPlacement = findWidget<PanelPayload>(
+      content,
+      'panel',
+      'panel',
+    );
+    expect(withoutPlacement?.columns[0].responseText).toBe('Before  after');
+
+    content = appendChartWidget(content, {
+      id: 'placement_1',
+      chartId: 'private-chart-1',
+    });
+    expect(stripStreamedChartTags(content)).toContain('yaawc:chart');
+  });
 });
 
 describe('removeToolCallMarkup', () => {

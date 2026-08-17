@@ -126,9 +126,26 @@ export type TodoUpdateData = {
 export type ChartSpecData = {
   chartId: string;
   spec: ChartSpec;
+  /** Short handle allocated for this turn. Historical events may omit it. */
+  handle?: string;
+  /** Alias accepted by bridges that call the turn handle explicit. */
+  turnHandle?: string;
   source?: string;
   toolCallId?: string;
+  /** Set when a panel executor owns the registration. */
+  executorIdx?: number;
 };
+
+export type ChartPlacementData = {
+  /** Unique writer placement id, not the model-facing chart handle. */
+  placementId: string;
+  /** Private chart id referenced by the writer envelope. */
+  chartId: string;
+  handle?: string;
+  placementNumber?: number;
+};
+
+export type PanelExecutorChartData = ChartPlacementData;
 export type CodeExecutionResultData = {
   stdout?: string;
   stderr?: string;
@@ -138,6 +155,9 @@ export type CodeExecutionResultData = {
   toolCallId?: string;
   executionId?: string;
   chartIds?: string[];
+  chartHandles?: string[];
+  chartTitles?: string[];
+  chartErrors?: string[];
   denied?: boolean;
   denyReason?: string;
 };
@@ -172,6 +192,12 @@ export type AgentEmitEvent =
   | { type: 'tool_call_error'; data: ToolCallErrorData }
   | { type: 'todo_update'; data: TodoUpdateData }
   | { type: 'chart_spec'; data: ChartSpecData }
+  | { type: 'chart_placement'; data: ChartPlacementData }
+  | {
+      type: 'panel_executor_chart';
+      executorIdx: number;
+      data: PanelExecutorChartData;
+    }
   | { type: 'code_execution_result'; data: CodeExecutionResultData }
   | { type: 'workspace_file_changed'; data: WorkspaceFileChangedData }
   | { type: 'widget_proposal'; data: WidgetProposalData }
@@ -260,6 +286,12 @@ export type StreamEvent =
   | ({ type: 'tool_call_error'; data: ToolCallErrorData } & WithMessageId)
   | ({ type: 'todo_update'; data: TodoUpdateData } & WithMessageId)
   | ({ type: 'chart_spec'; data: ChartSpecData } & WithMessageId)
+  | ({ type: 'chart_placement'; data: ChartPlacementData } & WithMessageId)
+  | ({
+      type: 'panel_executor_chart';
+      executorIdx: number;
+      data: PanelExecutorChartData;
+    } & WithMessageId)
   | ({
       type: 'code_execution_result';
       data: CodeExecutionResultData;

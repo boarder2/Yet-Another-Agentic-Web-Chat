@@ -20,7 +20,7 @@ Persona prompts (DB systemPrompts type='persona', resolved by ID via getPersonaI
 
 ## Focus-mode prompts (`src/lib/prompts/simplifiedAgent/`)
 
-`webSearch.ts` (all tools, iterative research + citations) · `chat.ts` (conversational, no tools) · `localResearch.ts` (file_search, file citations) · `firefoxAI.ts` (auto-detected, no tools) · `chartingGuidance.ts` (shared `buildChartingGuidance(codeExecutionEnabled)` injected into webSearch/localResearch). Unknown modes fall through to `webSearch` with a console warning.
+`webSearch.ts` (all tools, iterative research + citations) · `chat.ts` (conversational plus chart lifecycle tools) · `localResearch.ts` (file_search, file citations) · `firefoxAI.ts` (auto-detected, no tools) · `chartingGuidance.ts` (shared `buildChartingGuidance(codeExecutionEnabled)` injected into Chat, Web Search, and Local Research). Guidance teaches the turn-local `create_chart` → `show_chart` registry flow, simplified input, and optional computed-data `chart(spec)` helper; it does not teach model-authored `<Chart>` tags. Unknown modes fall through to `webSearch` with a console warning.
 
 ## Formatting & citation templates (`src/lib/prompts/templates.ts`)
 

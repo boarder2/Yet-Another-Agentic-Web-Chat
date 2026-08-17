@@ -26,7 +26,7 @@ Sources are always fetched server-side via `src/lib/dashboard/sources.ts` (`fetc
 
 ## Sandbox & runner
 
-`src/lib/dashboard/codeWidgetRunner.ts` — nonce harness, fail-closed parse, semaphore (N=3), line-mapped categorized errors. Runs via `src/lib/sandbox/dockerExecutor.ts` `executeCode(code, { stdin })`. Code-widget contract: `render({ sources, now, location, theme })` — the single source of truth is `WIDGET_THEME_CONTRACT` in `src/lib/widgets/widgetTheme.ts`, reused by `codeWidgetTemplate.ts`, the modal RuntimeHelp, and the builder prompt.
+`src/lib/dashboard/codeWidgetRunner.ts` — nonce harness, fail-closed parse, semaphore (N=3), line-mapped categorized errors. Runs via `src/lib/sandbox/dockerExecutor.ts` `executeCode(code, { stdin })`. Code-widget contract: `render({ sources, now, location, theme })` — the single source of truth is `WIDGET_THEME_CONTRACT` in `src/lib/widgets/widgetTheme.ts`, reused by `codeWidgetTemplate.ts`, the modal RuntimeHelp, and the builder prompt. The global `chart(spec)` helper returns `<Chart id="cN"/>` placement text, but the parent validates only simplified chart input and normalizes it to canonical `ChartSpec` before returning/caching the result; canonical-format source intentionally fails.
 
 ## Output sanitization
 
@@ -34,7 +34,9 @@ Sources are always fetched server-side via `src/lib/dashboard/sources.ts` (`fetc
 
 ## Charts
 
-`src/lib/chart/chartSpec.ts` — `ChartSpec` (Zod-validated), `CHART_MAX_PER_WIDGET`, size caps. Series accept a `color` field (validated by `isCssColor`). Specs cached alongside widget content.
+`src/lib/chart/chartInput.ts` is the only public code-widget chart contract: required titled `bar`/`line`/`area` input uses unique string-or-number `labels` and aligned numeric `series` values; pie input uses unique non-negative `slices` with a positive total. It enforces the 100-label, 15-series, and 20-slice limits, 500-character/color safety, applicable options, and normalizes valid input to the canonical spec.
+
+`src/lib/chart/chartSpec.ts` remains the renderer/history schema. `CHART_MAX_PER_WIDGET` is 10. Dashboard `chart(spec)` preserves generated `<Chart id="cN"/>` placement, and cached normalized specs are keyed by those ids. Existing cached/historical canonical specs remain readable; canonical-format source passed to a refreshed code widget is intentionally rejected with no adapter.
 
 ## Theme-aware rendering
 

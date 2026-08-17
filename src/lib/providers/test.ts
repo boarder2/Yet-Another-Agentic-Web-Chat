@@ -354,37 +354,85 @@ class FakeChatModel extends BaseChatModel {
       return;
     }
 
-    // Charts the way the real thing works: call create_chart, then place the
-    // returned id in the answer. The answer also carries a `[1]` citation, so
-    // both message-level rewrites (citation linkification, chart block-spacing)
-    // run over whatever widget envelope this model's text ends up inside.
-    if (this.modelName.includes('chart') && !hasToolResult) {
-      yield new ChatGenerationChunk({
-        text: '',
-        message: new AIMessageChunk({
-          content: '',
-          tool_calls: [
-            {
-              name: 'create_chart',
-              args: {
-                type: 'bar',
-                title: 'Deterministic chart',
-                data: [{ label: 'a', value: 1 }],
-                series: [{ key: 'value' }],
-                xKey: 'label',
-              },
-              id: 'test-create-chart-call-1',
-              type: 'tool_call',
-            },
-          ],
-          usage_metadata: {
-            input_tokens: 12,
-            output_tokens: 4,
-            total_tokens: 16,
-          },
-        }),
-      });
+    // Chart variants exercise the turn-local register → show lifecycle. The
+    // model never receives or authors an internal chart ID.
+    const isRawChartVariant =
+      this.modelName.includes('chart-raw') ||
+      this.modelName.includes('raw-tag') ||
+      this.modelName.includes('chart-tags');
+    if (this.modelName.includes('chart-code-approval') && !hasToolResult) {
+      yield lifecycleToolChunk(
+        'code_execution',
+        {
+          description: 'Compute deterministic chart data',
+          code: `chart(${JSON.stringify({
+            type: 'line',
+            title: 'Approval chart',
+            labels: ['A', 'B'],
+            series: [{ label: 'Value', values: [1, 2] }],
+          })})`,
+        },
+        'test-chart-approval-code-1',
+      );
       return;
+    }
+    if (this.modelName.includes('chart-approval') && hasToolResult) {
+      if (toolResultCount === 1) {
+        yield lifecycleToolChunk(
+          'ask_user',
+          {
+            question: 'Continue showing the deterministic chart?',
+            options: [{ label: 'Continue' }],
+            multiSelect: false,
+            allowFreeformInput: false,
+          },
+          'test-chart-approval-question-1',
+        );
+        return;
+      }
+      if (toolResultCount === 2) {
+        yield lifecycleToolChunk(
+          'show_chart',
+          { handle: lastToolResultField(messages, 'handle') || 'chart_1' },
+          'test-chart-approval-show-1',
+        );
+        return;
+      }
+    }
+    if (this.modelName.includes('chart') && !isRawChartVariant) {
+      if (!hasToolResult) {
+        yield lifecycleToolChunk(
+          'create_chart',
+          {
+            type: 'bar',
+            title: 'Deterministic chart',
+            labels: ['a'],
+            series: [{ label: 'Value', values: [1] }],
+          },
+          'test-create-chart-call-1',
+        );
+        return;
+      }
+
+      const handle =
+        this.modelName.includes('unknown') && toolResultCount === 1
+          ? 'chart_99'
+          : lastToolResultField(messages, 'handle') || 'chart_1';
+      const shouldShow =
+        !this.modelName.includes('unshown') &&
+        (toolResultCount === 1 ||
+          (this.modelName.includes('unknown') && toolResultCount === 2) ||
+          ((this.modelName.includes('repeat') ||
+            this.modelName.includes('repeated')) &&
+            toolResultCount === 2));
+      if (shouldShow) {
+        yield lifecycleToolChunk(
+          'show_chart',
+          { handle },
+          `test-show-chart-call-${toolResultCount}`,
+        );
+        return;
+      }
     }
 
     if (this.modelName.includes('tool') && !hasToolResult) {
@@ -423,8 +471,10 @@ class FakeChatModel extends BaseChatModel {
       // Echo the system prompt so specs can assert which sections were
       // injected. Checked after the title branch so auto-titling still works.
       answer = systemText(messages);
+    } else if (isRawChartVariant) {
+      answer = `${CHART_ANSWER_PREFIX} [1].\n\n<Chart id="guessed-or-stale"/>\n\nDone.`;
     } else if (this.modelName.includes('chart')) {
-      answer = `${CHART_ANSWER_PREFIX} [1].\n\n<Chart id="${lastToolResultField(messages, 'chartId')}"/>\n\nDone.`;
+      answer = `${CHART_ANSWER_PREFIX} [1].\n\nDone.`;
     } else if (this.modelName.includes('image')) {
       answer = 'The deterministic image is ready.';
     } else if (this.modelName.includes('artifact-read')) {
@@ -559,6 +609,25 @@ function hashVector(text: string, dims: number): number[] {
   return vec;
 }
 
+function lifecycleToolChunk(
+  name: string,
+  args: Record<string, unknown>,
+  id: string,
+): ChatGenerationChunk {
+  return new ChatGenerationChunk({
+    text: '',
+    message: new AIMessageChunk({
+      content: '',
+      tool_calls: [{ name, args, id, type: 'tool_call' }],
+      usage_metadata: {
+        input_tokens: 12,
+        output_tokens: 4,
+        total_tokens: 16,
+      },
+    }),
+  });
+}
+
 function capabilityDocsToolChunk(
   args: Record<string, unknown>,
   id: string,
@@ -620,8 +689,8 @@ function artifactToolChunk(
 
 /**
  * Read a field back out of the most recent JSON tool result that carries it —
- * how a scripted model picks up an id a tool just handed it (`create_chart`'s
- * `chartId`, `create_artifact`'s `artifactId`).
+ * how a scripted model picks up a value a tool just handed it (`create_chart`'s
+ * `handle`, `create_artifact`'s `artifactId`).
  */
 function lastToolResultField(messages: BaseMessage[], field: string): string {
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -693,6 +762,42 @@ export async function loadTestChatModels(): Promise<Record<string, ChatModel>> {
       displayName: 'Test (chart answer)',
       model: new FakeChatModel({
         modelName: 'test-chart',
+      }) as unknown as BaseChatModel,
+    },
+    'test-chart-create-show': {
+      displayName: 'Test (chart create and show)',
+      model: new FakeChatModel({
+        modelName: 'test-chart-create-show',
+      }) as unknown as BaseChatModel,
+    },
+    'test-chart-unknown': {
+      displayName: 'Test (chart handle recovery)',
+      model: new FakeChatModel({
+        modelName: 'test-chart-unknown',
+      }) as unknown as BaseChatModel,
+    },
+    'test-chart-repeat': {
+      displayName: 'Test (repeated chart placement)',
+      model: new FakeChatModel({
+        modelName: 'test-chart-repeat',
+      }) as unknown as BaseChatModel,
+    },
+    'test-chart-unshown': {
+      displayName: 'Test (unshown chart)',
+      model: new FakeChatModel({
+        modelName: 'test-chart-unshown',
+      }) as unknown as BaseChatModel,
+    },
+    'test-chart-raw-tag': {
+      displayName: 'Test (legacy raw chart tag)',
+      model: new FakeChatModel({
+        modelName: 'test-chart-raw-tag',
+      }) as unknown as BaseChatModel,
+    },
+    'test-chart-approval': {
+      displayName: 'Test (chart approval resume)',
+      model: new FakeChatModel({
+        modelName: 'test-chart-approval',
       }) as unknown as BaseChatModel,
     },
     'test-image': {

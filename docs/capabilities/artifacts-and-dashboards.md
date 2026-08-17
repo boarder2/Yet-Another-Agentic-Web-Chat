@@ -98,44 +98,51 @@ The sandbox has no network access, host filesystem or provider credentials, and 
 
 #### The global `chart(spec)` helper
 
-`chart` is available globally inside `render`; do not import it. Each call registers one chart, assigns an id in call order (`c0`, `c1`, …), and returns the exact Markdown placeholder `<Chart id="cN"/>`. After `render` returns, the runtime validates every registered specification; `chart()` itself does not throw for an invalid spec, so an invalid chart fails the widget afterward rather than being catchable around the call. Embed the returned string in the Markdown returned by `render`, at the position where the chart belongs. Creating a chart without returning its placeholder produces a warning rather than a visible chart.
+`chart` is available globally inside `render`; do not import it. Each call registers one chart, assigns an id in call order (`c0`, `c1`, …), and returns the exact Markdown placeholder `<Chart id="cN"/>`. Embed the returned string in the Markdown returned by `render`, at the position where the chart belongs. Creating a chart without returning its placeholder produces a warning rather than a visible chart.
 
-The complete chart specification is:
+The helper accepts only the simplified input below. The runtime validates and normalizes every registered input after `render` returns, before the result is cached. An invalid chart fails the widget; validation is not catchable around the helper call. The normalized canonical specs are what the renderer and cache store. Existing cached or historical canonical specs remain readable, but refreshing code that still calls `chart()` with canonical `data`/`xKey`/series-key fields fails clearly; there is no adapter or source migration.
+
+For **bar**, **line**, and **area** charts:
 
 ```ts
 {
-  type: 'bar' | 'line' | 'area' | 'pie';
-  title?: string;
-  data: Array<Record<string, string | number>>;
+  type: 'bar' | 'line' | 'area';
+  title: string;
+  labels: Array<string | number>;
   series: Array<{
-    key: string;
-    label?: string;
+    label: string;
+    values: number[];
     color?: string;
-    stackId?: string;
   }>;
-  xKey?: string;
   options?: {
+    // bar only
     orientation?: 'vertical' | 'horizontal';
-    donut?: boolean;
+    // bar and area only
+    stacked?: boolean;
     showLegend?: boolean;
     showGrid?: boolean;
-    yLabel?: string;
     xLabel?: string;
+    yLabel?: string;
     yMin?: number;
     yMax?: number;
   };
 }
 ```
 
-`title` is shown above the chart. `data` contains at least one row, and `series` contains at least one entry; each series `label` defaults to its `key`, `color` is an optional valid CSS color, and a shared `stackId` stacks bar or area series. `xKey` selects the category axis for non-pie charts and defaults to `x`. `orientation` changes bar charts between vertical and horizontal layouts. `donut` changes a pie chart to a donut. `showLegend` defaults to true; for non-pie charts, a legend appears only when it is true and there are multiple series, while pie charts display a legend whenever it is true. `showGrid` defaults to true for non-pie charts and false for pie charts. `xLabel` and `yLabel` label the axes; `yMin` and `yMax` set numeric bounds for bar and line charts. The area renderer currently accepts those fields but does not apply the bounds. Options that do not apply to a chart type have no visible effect.
+`line` accepts the shared legend/grid/axis/bounds options but not `orientation` or `stacked`; `bar` accepts `orientation` and `stacked`; `area` accepts `stacked` and applies `yMin`/`yMax`. The series arrays must align with `labels`. Boolean `stacked` is normalized to the renderer's stack setting. Pie slice colors are honored individually, and omitted colors use the theme-aware defaults.
 
-#### Chart validation rules
+For **pie** charts:
 
-- `data` must contain 1–1,000 rows, and every cell must be a string or number.
-- `series` must contain 1–20 entries. Every `series[].key` is non-empty and must exist on every data row.
-- For **bar**, **line**, and **area** charts, every data row must also contain the effective `xKey` field. If `xKey` is omitted, every row must contain `x`.
-- For **pie** charts, `series` must contain exactly one entry and every data row must contain a `name` field for the slice label. The one series key is the slice value; use numbers for numeric chart values.
-- `title`, `xKey`, `series.key`, `series.label`, `series.stackId`, and string-valued data cells are bounded to 500 characters. `series.color` must match a valid CSS color. The chart schema also accepts string `xLabel` and `yLabel` values; those labels and `series.color` are not part of the bounded-string check.
+```ts
+{
+  type: 'pie';
+  title: string;
+  slices: Array<{ label: string; value: number; color?: string }>;
+  options?: { donut?: boolean; showLegend?: boolean };
+}
+```
+
+Titles, labels, and colors are trimmed. Displayed labels must be unique, including numeric `2025` versus string `"2025"`; values must be finite, and pie values must be non-negative with a positive total. Optional colors must be valid CSS colors. When both bounds are supplied, `yMin` must be less than `yMax`. Limits are 100 labels, 15 Cartesian series, and 20 pie slices. Unsupported options and canonical-format input are rejected.
 
 #### Limits and sandbox configuration
 
@@ -148,15 +155,16 @@ The code-widget runtime enforces these limits:
 | Retained source characters total |          4,000,000 |
 | Widget output/result envelope    | 512,000 characters |
 | Charts per widget                |                 10 |
-| Data rows per chart              |              1,000 |
-| Series per chart                 |                 20 |
-| Bounded chart strings            |     500 characters |
+| Labels per Cartesian chart       |                100 |
+| Series per Cartesian chart       |                 15 |
+| Pie slices per chart             |                 20 |
+| Bounded chart strings/colors     |     500 characters |
 
 The sandbox timeout and memory limit are configurable in `config.toml` under `TOOLS.CODE_EXECUTION.TIMEOUT_SECONDS` and `TOOLS.CODE_EXECUTION.MEMORY_MB`; their defaults are 30 seconds and 128 MB. A timeout or out-of-memory termination fails the widget. Code widgets require `TOOLS.CODE_EXECUTION.ENABLED = true` and a reachable Docker daemon; the widget runner applies its own 512,000-character output cap.
 
 #### Defensive copy-paste example
 
-This example handles an empty source list and failed sources, uses current theme colors, creates a valid chart from every fetched record, embeds the returned placeholder, and still produces useful Markdown when some sources fail:
+This example handles an empty source list and failed sources, uses current theme colors, creates a valid simplified chart from every fetched record, embeds the returned placeholder, and still produces useful Markdown when some sources fail:
 
 ```js
 async function render({ sources, now, location, theme }) {
@@ -189,12 +197,11 @@ async function render({ sources, now, location, theme }) {
   const chartMarkdown = chart({
     type: 'bar',
     title: 'Fetched source characters',
-    xKey: 'name',
-    data: rows,
+    labels: rows.map((row) => row.name),
     series: [
       {
-        key: 'characters',
         label: 'Characters',
+        values: rows.map((row) => row.characters),
         color: theme.colors.accent,
       },
     ],

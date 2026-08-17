@@ -4,6 +4,7 @@ import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import type { CachedEmbeddings } from '@/lib/utils/cachedEmbeddings';
 import type { TokenTracker, Recorder } from '@/lib/tokens/tracker';
 import type { CapabilityRuntimeFacts } from '@/lib/capabilities/availability';
+import type { TurnChartRegistry } from '@/lib/chart/turnChartRegistry';
 
 /**
  * Per-run context handed to every tool via LangChain's native `ToolRuntime`
@@ -32,6 +33,8 @@ export const toolContextSchema = z.object({
   tracker: z.custom<TokenTracker>(),
   chatRecorder: z.custom<Recorder>(),
   systemRecorder: z.custom<Recorder>(),
+  /** Current turn's short-handle → private chart registry. */
+  chartRegistry: z.custom<TurnChartRegistry>(),
   /**
    * Non-sensitive local facts used only for safe capability availability.
    * Deferred: resolving these hits settings/provider storage, and only the rare

@@ -31,6 +31,7 @@ import {
   resolveWorkflowRun,
   type Workflow,
 } from '@/lib/workflows/resolveWorkflowRun';
+import { TurnChartRegistry } from '@/lib/chart/turnChartRegistry';
 
 /**
  * Start a manual run of `workflow` with `values`, returning the seeded chat id.
@@ -94,6 +95,7 @@ export async function startWorkflowRun(
     run.chatModel,
     run.systemModel,
   );
+  const chartRegistry = new TurnChartRegistry();
 
   const abortController = new AbortController();
   const retrievalController = new AbortController();
@@ -119,6 +121,7 @@ export async function startWorkflowRun(
     '', // workspaceSuffix
     null, // workspaceId
     aiMessageId,
+    chartRegistry,
   );
   agent.setModelRefs(run.chatModel, run.systemModel);
 
@@ -133,6 +136,7 @@ export async function startWorkflowRun(
     emitter,
     abortController,
     retrievalController,
+    chartRegistry,
   });
 
   if (isNew) {

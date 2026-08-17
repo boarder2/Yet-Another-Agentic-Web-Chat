@@ -18,7 +18,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
-import { ChartSpec, ChartSpecSchema } from '@/lib/chart/chartSpec';
+import { ChartSpec, ChartSpecSchema, isCssColor } from '@/lib/chart/chartSpec';
 import { Card } from '@/components/ui/Card';
 
 // Design-system-compatible series palette.
@@ -99,13 +99,19 @@ function ChartWidgetInner({ spec }: ChartWidgetProps) {
             innerRadius={innerR}
             paddingAngle={2}
           >
-            {data.map((_, idx) => (
-              <Cell
-                key={idx}
-                fill={getSeriesColor(idx, series[0]?.color)}
-                opacity={0.9}
-              />
-            ))}
+            {data.map((row, idx) => {
+              const sliceColor =
+                typeof row.color === 'string' && isCssColor(row.color)
+                  ? row.color
+                  : undefined;
+              return (
+                <Cell
+                  key={idx}
+                  fill={getSeriesColor(idx, sliceColor ?? series[0]?.color)}
+                  opacity={0.9}
+                />
+              );
+            })}
           </Pie>
           <Tooltip contentStyle={tooltipStyle} />
           {showLegend && <Legend wrapperStyle={{ fontSize: 12 }} />}
@@ -286,6 +292,7 @@ function ChartWidgetInner({ spec }: ChartWidgetProps) {
         />
         <YAxis
           tick={axisStyle}
+          domain={valueDomain}
           label={
             yLabel
               ? {

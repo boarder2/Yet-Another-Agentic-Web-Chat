@@ -1,5 +1,6 @@
 import type { EventEmitter } from 'stream';
 import type { StreamEvent } from '@/lib/streaming/events';
+import { TurnChartRegistry } from '@/lib/chart/turnChartRegistry';
 
 export type RunStatus =
   'running' | 'awaiting_user' | 'completed' | 'errored' | 'cancelled';
@@ -35,6 +36,8 @@ export type Run = {
   // Seeded from persisted messages.content on lazy reconstruction so
   // post-resume tokens append rather than overwrite.
   recievedMessage: string;
+  /** Turn-local chart handles shared by tools, runHost, and resume. */
+  chartRegistry: TurnChartRegistry;
 };
 
 type Registry = {
@@ -68,6 +71,7 @@ export function startRun(params: {
   emitter: EventEmitter;
   abortController: AbortController;
   retrievalController: AbortController;
+  chartRegistry?: TurnChartRegistry;
 }): { run: Run; isNew: boolean } {
   const reg = getRegistry();
   const existing = reg.byMessageId.get(params.messageId);
@@ -89,6 +93,7 @@ export function startRun(params: {
     seq: 0,
     startedAt: Date.now(),
     recievedMessage: '',
+    chartRegistry: params.chartRegistry ?? new TurnChartRegistry(),
   };
 
   reg.byMessageId.set(params.messageId, run);

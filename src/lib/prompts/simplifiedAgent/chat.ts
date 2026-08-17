@@ -1,5 +1,6 @@
 import { formatDateForLLM } from '@/lib/utils';
 import { formattingChat } from '@/lib/prompts/templates';
+import { buildChartingGuidance } from './chartingGuidance';
 
 /**
  * Build the Chat mode system prompt for SimplifiedAgent
@@ -8,6 +9,7 @@ export function buildChatPrompt(
   personaInstructions: string,
   personalizationSection: string,
   date: Date = new Date(),
+  codeExecutionEnabled: boolean = false,
 ): string {
   const personaBlock = personaInstructions
     ? personaInstructions
@@ -48,6 +50,8 @@ You are a conversational AI assistant designed for creative and engaging dialogu
 - Structure responses logically
 
 ${personaBlock}${personalizationBlock}
+
+${buildChartingGuidance(codeExecutionEnabled)}
 
 ## Current Context
 - Today's Date: ${formatDateForLLM(date)}

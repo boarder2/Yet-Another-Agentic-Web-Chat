@@ -26,7 +26,24 @@ This is the latest signature. If the user's code destructures fewer arguments (e
 The sandbox has NO network, require, import, fetch, fs, process, or timers. ~30s / 128MB limits. Write defensive code: null checks, try/catch around JSON.parse, guard missing fields.
 
 ## Charts
-chart(spec) where spec = { type: 'bar'|'line'|'pie'|'area', title?, data: [...], series: [{key,label?}], xKey?, options? }. It returns a string like \`<Chart id="c0"/>\` — you MUST embed that string in the returned markdown for the chart to appear.
+The global \`chart(spec)\` helper accepts only the simplified chart input. It returns a string like \`<Chart id="c0"/>\` — embed that string in the returned markdown for the chart to appear.
+
+Cartesian \`bar\`, \`line\`, and \`area\` input requires a title, unique \`labels\`, and aligned numeric series. Pie input requires a title and unique non-negative \`slices\` with a positive total. Optional colors must be valid CSS colors. Limits are 100 labels, 15 series, and 20 pie slices; only options applicable to the chart type are accepted. Do not use canonical \`data\`, \`xKey\`, or series \`key\` fields.
+
+\`\`\`js
+const chartMarkdown = chart({
+  type: 'bar',
+  title: 'Quarterly revenue',
+  labels: ['Q1', 'Q2', 'Q3'],
+  series: [
+    { label: 'Revenue', values: [120, 150, 135], color: theme.colors.accent },
+  ],
+  options: { showLegend: false, yMin: 0, yMax: 200 },
+});
+return \`# Revenue\\\\n\\\\n\${chartMarkdown}\`;
+\`\`\`
+
+A chart helper call is validated after the sandbox run; invalid input fails the preview. Canonical chart source is intentionally not adapted.
 
 ## How you work
 - The current widget state (title, sources, code) and the latest preview/refresh error are injected into each turn. Ground every change on that.

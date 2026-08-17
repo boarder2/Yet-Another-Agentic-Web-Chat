@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useRef, useState } from 'react';
 import { Layers, X, Plus, ChevronDown, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -65,9 +65,9 @@ const UNSUPPORTED_LABEL =
  *
  * `enabled` is only ever set while the selection holds 2–4 executors
  * (`hasValidExecutors`), so the engaged state always matches what the turn
- * will send (ChatWindow gates on `isPanelSelectionReady`) — the icon half
- * simply becomes a second trigger for the popover until models are chosen,
- * and removing executors below the minimum clears `enabled`.
+ * will send (ChatWindow gates on `isPanelSelectionReady`) — until models are
+ * chosen there is nothing to toggle, so the split collapses to the single
+ * popover trigger, and removing executors below the minimum clears `enabled`.
  */
 
 const PanelSelector = ({ focusMode }: { focusMode: string }) => {
@@ -79,6 +79,7 @@ const PanelSelector = ({ focusMode }: { focusMode: string }) => {
     PANEL_PRESETS_KEY,
     EMPTY_PRESETS,
   );
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const [savingName, setSavingName] = useState(false);
   const [nameInput, setNameInput] = useState('');
   const { openSettings } = useSettingsModal();
@@ -175,33 +176,28 @@ const PanelSelector = ({ focusMode }: { focusMode: string }) => {
           {/* Split control: the icon half toggles in one click, the chevron
               half opens configuration. Below sm the icon half hides and the
               chevron becomes the whole button — one trigger on every
-              viewport, so the panel's anchor (the last PopoverButton) stays
-              visible. */}
+              viewport, so the panel's anchor (the PopoverButton) stays
+              visible. Only the chevron is a PopoverButton (headlessui
+              supports exactly one per Popover); before executors exist there
+              is nothing to toggle, so the icon half forwards its click to
+              that trigger instead. */}
           <div className="flex items-center rounded-control">
-            {configured ? (
-              <ComposerActionButton
-                type="button"
-                {...toggleProps}
-                geometry="compact"
-                configured={active}
-                className="hidden sm:inline-flex rounded-r-none"
-                onClick={() => update({ enabled: !selection.enabled })}
-              >
-                <Layers size={18} />
-              </ComposerActionButton>
-            ) : (
-              <PopoverButton
-                as={ComposerActionButton}
-                type="button"
-                {...toggleProps}
-                geometry="compact"
-                configured={active}
-                className="hidden sm:inline-flex rounded-r-none"
-              >
-                <Layers size={18} />
-              </PopoverButton>
-            )}
+            <ComposerActionButton
+              type="button"
+              {...toggleProps}
+              geometry="compact"
+              configured={active}
+              className="hidden sm:inline-flex rounded-r-none"
+              onClick={() =>
+                configured
+                  ? update({ enabled: !selection.enabled })
+                  : triggerRef.current?.click()
+              }
+            >
+              <Layers size={18} />
+            </ComposerActionButton>
             <PopoverButton
+              ref={triggerRef}
               as={ComposerActionButton}
               type="button"
               geometry="compact"

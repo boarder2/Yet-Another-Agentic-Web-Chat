@@ -33,8 +33,6 @@ export interface WidgetLayout {
   w: number;
   h: number;
   static?: boolean;
-  isDraggable?: boolean;
-  isResizable?: boolean;
 }
 
 interface WidgetConfigBase {

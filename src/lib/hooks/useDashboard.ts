@@ -206,8 +206,6 @@ export const useDashboard = (): UseDashboardReturn => {
             y: Math.floor(index / 2) * 4, // Stack rows
             w: DASHBOARD_CONSTRAINTS.DEFAULT_WIDGET_WIDTH,
             h: DASHBOARD_CONSTRAINTS.DEFAULT_WIDGET_HEIGHT,
-            isDraggable: true,
-            isResizable: true,
           };
           widget.layout = defaultLayout;
         }
@@ -302,8 +300,6 @@ export const useDashboard = (): UseDashboardReturn => {
         y: position.y,
         w: DASHBOARD_CONSTRAINTS.DEFAULT_WIDGET_WIDTH,
         h: DASHBOARD_CONSTRAINTS.DEFAULT_WIDGET_HEIGHT,
-        isDraggable: true,
-        isResizable: true,
       };
 
       // New widgets get BOTH placement flags set explicitly so a home-created
@@ -405,8 +401,6 @@ export const useDashboard = (): UseDashboardReturn => {
                 y: position.y,
                 w: DASHBOARD_CONSTRAINTS.DEFAULT_WIDGET_WIDTH,
                 h: DASHBOARD_CONSTRAINTS.DEFAULT_WIDGET_HEIGHT,
-                isDraggable: true,
-                isResizable: true,
               };
             }
             return next;
@@ -713,8 +707,6 @@ export const useDashboard = (): UseDashboardReturn => {
             minH: constraints.minH,
             maxH: constraints.maxH,
             static: layout.static,
-            isDraggable: layout.isDraggable,
-            isResizable: layout.isResizable,
           };
         });
       };
@@ -745,8 +737,6 @@ export const useDashboard = (): UseDashboardReturn => {
               w: newLayout.w,
               h: newLayout.h,
               static: newLayout.static || prevLayout.static,
-              isDraggable: newLayout.isDraggable ?? prevLayout.isDraggable,
-              isResizable: newLayout.isResizable ?? prevLayout.isResizable,
             },
           };
         }

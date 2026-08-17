@@ -17,6 +17,7 @@ import {
   createCodeChartChannel,
   decodeCodeChartRecord,
   decodeCodeChartRecords,
+  describeCodeChartOutcome,
   injectChartHelper,
   registerCodeExecutionCharts,
 } from './codeExecutionCharts';
@@ -115,6 +116,23 @@ describe('code execution chart private protocol', () => {
     expect(oversized.errors[0]).toContain(
       'exceeded the 8-byte transport limit',
     );
+  });
+
+  it('discards an oversized multi-byte record instead of leaking its tail', () => {
+    const prefix = '__YAAWC_CHART_RECORD_wide__';
+    const collector = new PrivateRecordCollector(prefix, {
+      maxRecordBytes: 8,
+    });
+
+    // 12 three-byte characters: over the byte limit, but only 12 UTF-16 units,
+    // so a byte budget applied as a character offset would spill the tail.
+    let visible = collector.push(`${prefix}${'あ'.repeat(12)}`);
+    visible += collector.push('more overflow\nafter\n');
+    visible += collector.finish();
+
+    expect(visible).toBe('after\n');
+    expect(collector.records).toEqual([]);
+    expect(collector.errors[0]).toContain('exceeded the transport limit');
   });
 
   it('handles a marker split across stdout chunks without leaking it to visible output', () => {
@@ -329,6 +347,34 @@ describe('code execution chart private protocol', () => {
       expect.stringContaining('private transport overflow'),
     ]);
     expect(chartRegistry.registrationCount).toBe(1);
+  });
+
+  it('reports registered handles with the reminder that they are not yet visible', () => {
+    const chartRegistry = registry();
+    const outcome = registerCodeExecutionCharts({
+      records: [record(spec('Growth'))],
+      recordErrors: ['private transport overflow'],
+      executionSucceeded: true,
+      registry: chartRegistry,
+      emitter: new EventEmitter(),
+    });
+
+    const described = describeCodeChartOutcome(outcome);
+    expect(described).toContain('chart_1 — Growth');
+    expect(described).toContain('show_chart');
+    expect(described).toContain('private transport overflow');
+  });
+
+  it('describes nothing when a run registered no charts', () => {
+    expect(
+      describeCodeChartOutcome({
+        results: [],
+        registrations: [],
+        handles: [],
+        titles: [],
+        errors: [],
+      }),
+    ).toBe('');
   });
 
   it('uses the documented bounded defaults for the private channel', () => {

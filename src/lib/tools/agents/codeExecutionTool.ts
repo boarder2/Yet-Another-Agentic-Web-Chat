@@ -10,6 +10,7 @@ import { getCodeExecutionConfig } from '@/lib/config';
 import { emitStreamEvent } from '@/lib/streaming/events';
 import {
   createCodeChartChannel,
+  describeCodeChartOutcome,
   injectChartHelper,
   registerCodeExecutionCharts,
 } from './codeExecutionCharts';
@@ -159,20 +160,18 @@ export const codeExecutionTool = defineTool(
       !result.oomKilled &&
       !result.error;
     const chartOutcome = registerCodeExecutionCharts({
-      records: result.privateRecords ?? result.machineRecords ?? [],
-      recordErrors:
-        result.privateRecordErrors ?? result.machineRecordErrors ?? [],
+      records: result.privateRecords ?? [],
+      recordErrors: result.privateRecordErrors ?? [],
       executionSucceeded,
       registry: runtime.context.chartRegistry,
       emitter,
       toolCallId,
     });
-    const cleanedStdout = result.stdout;
 
     emitStreamEvent(emitter, {
       type: 'code_execution_result',
       data: {
-        stdout: cleanedStdout,
+        stdout: result.stdout,
         stderr: result.stderr,
         exitCode: result.exitCode,
         timedOut: result.timedOut,
@@ -191,19 +190,10 @@ export const codeExecutionTool = defineTool(
       resultText = `Execution ran out of memory (limit: ${ceConfig.memoryMb}MB).`;
     } else {
       resultText = `Exit code: ${result.exitCode}`;
-      if (cleanedStdout) resultText += `\n\nStdout:\n${cleanedStdout}`;
+      if (result.stdout) resultText += `\n\nStdout:\n${result.stdout}`;
       if (result.stderr) resultText += `\n\nStderr:\n${result.stderr}`;
     }
-    if (chartOutcome.handles.length > 0) {
-      resultText += '\n\nCharts:';
-      for (let index = 0; index < chartOutcome.handles.length; index += 1) {
-        resultText += `\n- ${chartOutcome.handles[index]} — ${chartOutcome.titles[index]}`;
-      }
-    }
-    if (chartOutcome.errors.length > 0) {
-      resultText += '\n\nChart errors:';
-      for (const error of chartOutcome.errors) resultText += `\n- ${error}`;
-    }
+    resultText += describeCodeChartOutcome(chartOutcome);
 
     await runtime.persist({
       kind: 'code_execution',

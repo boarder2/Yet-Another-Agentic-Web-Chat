@@ -187,8 +187,6 @@ export function appendChartWidget(
   return appendWidget<ChartPayload>(content, 'chart', payload);
 }
 
-export const appendChartPlacementWidget = appendChartWidget;
-
 /**
  * Locate the widget of `kind` + `id` in `content` and replace its payload
  * with `patch` (a partial merge) or the result of `updater(current)`.
@@ -254,6 +252,24 @@ export function parseWidgetFence(
     return null;
   }
   return { kind, payload } as ParsedWidget;
+}
+
+/**
+ * Decode a markdown-to-jsx code block into its widget payload. `className`
+ * carries the fence info string as `language-xxx`/`lang-xxx` (possibly
+ * duplicated — see CodeBlock). Returns `null` for anything that isn't a valid
+ * `yaawc:*` envelope so callers fall back to plain code-block rendering.
+ */
+export function parseWidgetCodeBlock(
+  className: string | undefined,
+  body: unknown,
+): ParsedWidget | null {
+  if (!className || typeof body !== 'string') return null;
+  for (const token of className.split(/\s+/)) {
+    const match = /^(?:language-|lang-)(yaawc:.+)$/.exec(token);
+    if (match) return parseWidgetFence(match[1], body);
+  }
+  return null;
 }
 
 /**
@@ -328,16 +344,14 @@ export function appendPanelColumnToken(
   );
 }
 
-function removeRawChartTags(text: string): string {
-  return text
-    .replace(/<Chart\b[^>]*\/>/g, '')
-    .replace(/<Chart\b[^>]*>[\s\S]*?<\/Chart>/g, '');
-}
-
-/** Remove model-authored chart tags from one panel column, preserving nested widgets. */
-export function stripPanelColumnModelTags(
+/**
+ * Rewrite one panel column's model-streamed text with `transform`. The caller
+ * owns the transform so this module stays free of chart-markup knowledge.
+ */
+export function mapPanelColumnText(
   content: string,
   idx: number,
+  transform: (text: string) => string,
 ): string {
   return updateWidget<PanelPayload>(
     content,
@@ -347,13 +361,7 @@ export function stripPanelColumnModelTags(
       ...current,
       columns: current.columns.map((c) =>
         c.idx === idx
-          ? {
-              ...c,
-              responseText: mapOutsideWidgets(
-                c.responseText ?? '',
-                removeRawChartTags,
-              ),
-            }
+          ? { ...c, responseText: transform(c.responseText ?? '') }
           : c,
       ),
     }),
@@ -397,8 +405,6 @@ export function appendPanelColumnChart(
     },
   );
 }
-
-export const appendPanelColumnChartWidget = appendPanelColumnChart;
 
 /** Set a panel executor column's terminal status, creating the column if it doesn't exist yet. */
 export function setPanelColumnStatus(

@@ -1,5 +1,9 @@
 import type { Skill } from '../types';
 import { getCodeExecutionConfig } from '@/lib/config';
+import {
+  TURN_CHART_MAX_PLACEMENTS,
+  TURN_CHART_MAX_REGISTRATIONS,
+} from '@/lib/chart/turnChartRegistry';
 
 const DESCRIPTION =
   'Optional reference for the turn-local create_chart/show_chart lifecycle and the simplified chart input.';
@@ -54,12 +58,16 @@ const COMMON = [
   'show_chart({ handle: "chart_1" })',
   '',
   'Use the exact handle from the current turn. If show_chart rejects a handle, use its available-handle feedback or create a new chart. The skill is optional and does not need to be loaded before the first chart.',
+  '',
+  'Only the tool call places a chart. A handle or tool name typed into the answer text ({chart_1}, a bare show_chart line) is stripped before the reader sees it.',
+  '',
+  `A turn can register at most ${TURN_CHART_MAX_REGISTRATIONS} charts and call show_chart at most ${TURN_CHART_MAX_PLACEMENTS} times; a call past either cap fails and lists the handles you already have.`,
 ].join('\n');
 
 const CODE_EXECUTION = [
   '## Computed chart data',
   '',
-  'When values need aggregation, sorting, parsing, or other exact computation, use code_execution. It injects a global chart(spec) helper. Call it once per chart; the tool result lists the short handles and titles, then call show_chart for the handles that belong in the answer.',
+  'When values need aggregation, sorting, parsing, or other exact computation, use code_execution. It injects a global chart(spec) helper. Call it once per chart; it returns nothing, and the tool result lists the short handles and titles. Registration is silent, so call show_chart for every handle that belongs in the answer.',
   '',
   'const rows = [',
   "  { label: 'Q1', value: 120 },",

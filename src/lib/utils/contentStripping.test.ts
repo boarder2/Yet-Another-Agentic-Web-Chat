@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   removeToolCallMarkup,
+  stripPanelColumnModelTags,
   stripStreamedChartTags,
 } from './contentStripping';
 import {
@@ -9,7 +10,6 @@ import {
   findWidget,
   startPanelColumn,
   appendPanelColumnToken,
-  stripPanelColumnModelTags,
   type ToolCallPayload,
   type SubagentPayload,
   type PanelPayload,
@@ -39,6 +39,21 @@ describe('streamed chart tag stripping', () => {
 
     expect(content).toBe('Before  after');
     expect(content).not.toContain('<Chart');
+  });
+
+  it('removes a placement the model narrated instead of calling show_chart', () => {
+    expect(
+      stripStreamedChartTags('Here it is:\n\nshow_chart\n\n{chart_4}\n\nDone'),
+    ).toBe('Here it is:\n\n\n\nDone');
+  });
+
+  it('keeps a narrated handle that appears inside a writer-owned envelope', () => {
+    const writerContent = appendWidget<ToolCallPayload>('', 'tool_call', {
+      ...toolCall({ type: 'code_execution' }),
+      code: 'chart({ id: "{chart_4}" })',
+    });
+
+    expect(stripStreamedChartTags(writerContent)).toBe(writerContent);
   });
 
   it('does not rewrite chart-like text inside writer-owned envelopes', () => {

@@ -47,6 +47,7 @@ export { chatHistorySearchTool };
 export { getChatMessagesTool };
 export { createChartTool };
 export { showChartTool };
+export const CHART_TOOL_NAMES = [createChartTool.name, showChartTool.name];
 export { readSkillTool };
 export { editSkillTool };
 export { artifactTools };

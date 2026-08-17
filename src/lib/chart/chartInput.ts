@@ -11,15 +11,6 @@ export const CHART_INPUT_MAX_LABELS = 100;
 export const CHART_INPUT_MAX_SERIES = 15;
 export const CHART_INPUT_MAX_SLICES = 20;
 
-// Aliases keep the limits useful to callers that do not need to distinguish
-// simplified input from the larger historical ChartSpec limits.
-export const MAX_CHART_LABELS = CHART_INPUT_MAX_LABELS;
-export const MAX_CHART_SERIES = CHART_INPUT_MAX_SERIES;
-export const MAX_CHART_SLICES = CHART_INPUT_MAX_SLICES;
-export const MAX_LABELS = CHART_INPUT_MAX_LABELS;
-export const MAX_SERIES = CHART_INPUT_MAX_SERIES;
-export const MAX_SLICES = CHART_INPUT_MAX_SLICES;
-
 /** Stable keys used when a simplified input is normalized to ChartSpec. */
 export const CHART_INPUT_X_KEY = 'label';
 export const CHART_INPUT_STACK_ID = 'stacked';
@@ -118,10 +109,6 @@ function duplicateIndexes(values: readonly (string | number)[]): number[] {
   return duplicates;
 }
 
-function duplicateStringIndexes(values: readonly string[]): number[] {
-  return duplicateIndexes(values);
-}
-
 function hasInvalidBounds(options?: { yMin?: number; yMax?: number }): boolean {
   return (
     options?.yMin !== undefined &&
@@ -153,7 +140,7 @@ function validateCartesianInput(
       message: 'labels must be unique after trimming',
     });
   }
-  for (const index of duplicateStringIndexes(
+  for (const index of duplicateIndexes(
     input.series.map((series) => series.label),
   )) {
     addIssue({
@@ -270,7 +257,7 @@ const pieInput = z
   })
   .strict()
   .superRefine((input, ctx) => {
-    for (const index of duplicateStringIndexes(
+    for (const index of duplicateIndexes(
       input.slices.map((slice) => slice.label),
     )) {
       ctx.addIssue({
@@ -289,33 +276,16 @@ const pieInput = z
     }
   });
 
-export const BarChartInputSchema = barInput;
-export const LineChartInputSchema = lineInput;
-export const AreaChartInputSchema = areaInput;
-export const PieChartInputSchema = pieInput;
-
-export const CartesianChartInputSchema = z.discriminatedUnion('type', [
-  barInput,
-  lineInput,
-  areaInput,
-]);
-
 export const ChartInputSchema = z
   .discriminatedUnion('type', [barInput, lineInput, areaInput, pieInput])
   .describe(
     'Simplified chart input: Cartesian charts use labels and aligned series values; pie charts use labeled non-negative slices.',
   );
 
-export const SimplifiedChartInputSchema = ChartInputSchema;
-export const SimplifiedChartSchema = ChartInputSchema;
-
-export type BarChartInput = z.infer<typeof barInput>;
-export type LineChartInput = z.infer<typeof lineInput>;
-export type AreaChartInput = z.infer<typeof areaInput>;
-export type CartesianChartInput = z.infer<typeof CartesianChartInputSchema>;
-export type PieChartInput = z.infer<typeof pieInput>;
-export type ChartInput = z.infer<typeof ChartInputSchema>;
-export type SimplifiedChartInput = ChartInput;
+type CartesianChartInput = z.infer<
+  typeof barInput | typeof lineInput | typeof areaInput
+>;
+type PieChartInput = z.infer<typeof pieInput>;
 
 function canonicalSeriesKey(index: number): string {
   return `series_${index + 1}`;
@@ -422,5 +392,9 @@ export function safeNormalizeChartInput(input: unknown) {
   }
 }
 
-export const parseChartInput = normalizeChartInput;
-export const normalizeSimplifiedChartInput = normalizeChartInput;
+/** Flatten a validation failure into one model-readable sentence. */
+export function chartValidationMessage(error: {
+  issues: Array<{ message: string }>;
+}): string {
+  return error.issues.map((issue) => issue.message).join('; ');
+}

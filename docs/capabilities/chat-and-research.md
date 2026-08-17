@@ -6,11 +6,11 @@ YAAWC turns a message into a streamed assistant response. The agent can gather s
 
 The composer has three focus modes. The Web Search mode is labelled **All** in the current composer.
 
-| Mode                                 | What it is for                                                                      | Main retrieval scope                                                                                                                |
-| ------------------------------------ | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| **Web Search** (`webSearch`)         | Research current information across the internet                                    | Web, URL, image, PDF, video-transcript, deep-research, chart, artifact, history, skill, and other configured tools                  |
-| **Chat** (`chat`)                    | Conversation, drafting, explanation, and creative work without web or file research | Conversational tools such as history lookup, skills, interactive questions, code when enabled, and image generation when configured |
-| **Local Research** (`localResearch`) | Ask questions about attached documents with citations                               | File search plus core interaction, chart, artifact, and configured image-generation tools; no web search                            |
+| Mode                                 | What it is for                                                                      | Main retrieval scope                                                                                                                        |
+| ------------------------------------ | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Web Search** (`webSearch`)         | Research current information across the internet                                    | Web, URL, image, PDF, video-transcript, deep-research, chart, artifact, history, skill, and other configured tools                          |
+| **Chat** (`chat`)                    | Conversation, drafting, explanation, and creative work without web or file research | Conversational tools such as history lookup, skills, interactive questions, charts, code when enabled, and image generation when configured |
+| **Local Research** (`localResearch`) | Ask questions about attached documents with citations                               | File search plus core interaction, chart, artifact, and configured image-generation tools; no web search                                    |
 
 Web Search can also use attached chat documents when files are supplied. A workspace adds its own file and workspace tools; see [Files and workspaces](./files-and-workspaces.md).
 

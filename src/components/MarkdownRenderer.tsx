@@ -18,7 +18,7 @@ import ChartElement, { spaceChartTags } from './ChartElement';
 import ChartEnvelope from './ChartEnvelope';
 import {
   maskWidgets,
-  parseWidgetFence,
+  parseWidgetCodeBlock,
   unmaskWidgets,
 } from '@/lib/widgets/envelope';
 
@@ -224,17 +224,6 @@ const LegacyToolCall = (props: Record<string, unknown>) => {
   );
 };
 
-/** Extract the fence info string from a markdown-to-jsx code `className`
- *  (`language-xxx`/`lang-xxx`, possibly duplicated — see CodeBlock). */
-const extractInfoString = (className?: string): string | null => {
-  if (!className) return null;
-  for (const token of className.split(/\s+/)) {
-    const match = token.match(/^(?:language-|lang-)(.+)$/);
-    if (match) return match[1];
-  }
-  return null;
-};
-
 /**
  * Dispatch a fenced code block to a widget component when its info string is
  * a known `yaawc:*` envelope, falling back to the plain code block renderer
@@ -248,19 +237,15 @@ const WidgetOrCodeBlock = ({
   className?: string;
   children: React.ReactNode;
 }) => {
-  const infoString = extractInfoString(className);
-  if (infoString?.startsWith('yaawc:') && typeof children === 'string') {
-    const parsed = parseWidgetFence(infoString, children);
-    if (parsed) {
-      if (parsed.kind === 'tool_call') return <ToolCall {...parsed.payload} />;
-      if (parsed.kind === 'subagent')
-        return <SubagentExecution {...parsed.payload} />;
-      if (parsed.kind === 'artifact')
-        return <ArtifactCard {...parsed.payload} />;
-      if (parsed.kind === 'chart')
-        return <ChartEnvelope chartId={parsed.payload.chartId} />;
-      return <PanelColumns columns={parsed.payload.columns} />;
-    }
+  const parsed = parseWidgetCodeBlock(className, children);
+  if (parsed) {
+    if (parsed.kind === 'tool_call') return <ToolCall {...parsed.payload} />;
+    if (parsed.kind === 'subagent')
+      return <SubagentExecution {...parsed.payload} />;
+    if (parsed.kind === 'artifact') return <ArtifactCard {...parsed.payload} />;
+    if (parsed.kind === 'chart')
+      return <ChartEnvelope chartId={parsed.payload.chartId} />;
+    return <PanelColumns columns={parsed.payload.columns} />;
   }
   if (className) {
     // Fenced code block with language specifier

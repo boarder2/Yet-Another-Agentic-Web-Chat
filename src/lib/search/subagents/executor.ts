@@ -13,7 +13,7 @@ import { SubagentExecution } from '@/lib/state/chatAgentState';
 import { SimplifiedAgent } from '@/lib/search/simplifiedAgent';
 import { SubagentDefinition } from './definitions';
 import { CachedEmbeddings } from '@/lib/utils/cachedEmbeddings';
-import { allAgentTools } from '@/lib/tools/agents';
+import { allAgentTools, CHART_TOOL_NAMES } from '@/lib/tools/agents';
 import { ARTIFACT_TOOL_NAMES } from '@/lib/tools/agents/artifactTools';
 import { removeThinkingBlocks } from '@/lib/utils/contentUtils';
 import {
@@ -22,6 +22,28 @@ import {
   isAgentControlEvent,
 } from '@/lib/streaming/events';
 import type { TokenTracker } from '@/lib/tokens/tracker';
+
+/**
+ * The tools a subagent may use: the global set minus the ones that dead-end in
+ * a subagent run, then the definition's allowlist (empty allows everything).
+ *
+ * Artifacts are chat-scoped rows anchored to the parent turn's assistant
+ * message, and a subagent run has neither. Charts dead-end the same way: a
+ * subagent's chart events reach the parent inside a `subagent_data` envelope,
+ * which renders nested tool calls and response text only — the tool would
+ * report success and the chart would never appear.
+ */
+export function filterSubagentTools(
+  allowedTools: readonly string[],
+): typeof allAgentTools {
+  const withheld = [...ARTIFACT_TOOL_NAMES, ...CHART_TOOL_NAMES];
+  const available = allAgentTools.filter(
+    (tool) => !withheld.includes(tool.name),
+  );
+  return allowedTools.length > 0
+    ? available.filter((tool) => allowedTools.includes(tool.name))
+    : available;
+}
 
 /**
  * SubagentExecutor runs a SimplifiedAgent with subagent-specific constraints
@@ -157,8 +179,7 @@ export class SubagentExecutor {
       // Limit context to avoid token bloat
       const limitedContext = context.slice(-5);
 
-      // Filter tools based on subagent's allowed tools
-      const filteredTools = this.getFilteredTools();
+      const filteredTools = filterSubagentTools(this.definition.allowedTools);
 
       // Execute the subagent with custom tools and system prompt
       // Note: searchAndAnswer returns void and streams via emitter
@@ -225,27 +246,6 @@ export class SubagentExecutor {
       });
       return execution;
     }
-  }
-
-  /**
-   * Filter available tools based on subagent's allowed tools list
-   */
-  private getFilteredTools(): typeof allAgentTools {
-    // Artifacts are chat-scoped rows anchored to the parent turn's assistant
-    // message; a subagent run has neither, so the tools would only dead-end.
-    const availableTools = allAgentTools.filter(
-      (tool) => !ARTIFACT_TOOL_NAMES.includes(tool.name),
-    );
-
-    // Filter by allowed tools whitelist
-    if (this.definition.allowedTools.length > 0) {
-      return availableTools.filter((tool) =>
-        this.definition.allowedTools.includes(tool.name),
-      );
-    }
-
-    // If no allowed tools specified, return all tools
-    return availableTools;
   }
 
   /**

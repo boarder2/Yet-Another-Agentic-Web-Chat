@@ -15,8 +15,9 @@ SimplifiedAgent → deep_research tool (deepResearchTool.ts)
     → child SimplifiedAgent on an isolated EventEmitter
       · tools filtered to the definition's allowedTools whitelist
         (web_search, url_fetch, image_search, image_analysis, pdf_loader —
-        no deep_research, so no recursion; artifact tools dropped from the pool,
-        they anchor to a parent chat/message the child doesn't have)
+        no deep_research, so no recursion; artifact and chart tools dropped from
+        the pool by filterSubagentTools — they anchor to a parent chat/message
+        or writer stream the child doesn't have)
       · last 5 messages of context; Chat Model; maxTurns cap
       · empty personaInstructions — behavior comes only from the definition's
         systemPrompt; userLocation/userProfile forwarded for search context

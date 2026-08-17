@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getSubagentDefinition } from './definitions';
+import { filterSubagentTools } from './executor';
 
 const deepResearchTools = [
   'web_search',
@@ -16,5 +17,14 @@ describe('deep-research subagent tool restrictions', () => {
     expect(definition!.allowedTools).toEqual(deepResearchTools);
     expect(definition!.allowedTools).not.toContain('search_yaawc_docs');
     expect(definition!.allowedTools).not.toContain('deep_research');
+  });
+
+  it('withholds chart and artifact tools even from an empty allowlist', () => {
+    const names = filterSubagentTools([]).map((tool) => tool.name);
+
+    expect(names).not.toContain('create_chart');
+    expect(names).not.toContain('show_chart');
+    expect(names).not.toContain('create_artifact');
+    expect(names).toContain('web_search');
   });
 });

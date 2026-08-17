@@ -54,9 +54,6 @@ export type ExecutionResult = {
   /** Records consumed from the randomized private stdout channel. */
   privateRecords?: string[];
   privateRecordErrors?: string[];
-  /** Aliases used by callers that name the channel machine transport. */
-  machineRecords?: string[];
-  machineRecordErrors?: string[];
 };
 
 export async function checkDockerAvailable(): Promise<boolean> {
@@ -119,7 +116,6 @@ export async function executeCode(
     stdin?: string;
     maxOutputChars?: number;
     privateRecordPrefix?: string;
-    machineRecordPrefix?: string;
     maxPrivateRecords?: number;
     maxPrivateRecordBytes?: number;
   },
@@ -181,8 +177,7 @@ export async function executeCode(
     // stdout envelope) can override the per-stream cap; chat keeps the config
     // default so its truncate-with-note behavior is unchanged.
     const maxChars = opts?.maxOutputChars ?? config.maxOutputChars;
-    const privateRecordPrefix =
-      opts?.privateRecordPrefix ?? opts?.machineRecordPrefix;
+    const privateRecordPrefix = opts?.privateRecordPrefix;
     const privateCollector = privateRecordPrefix
       ? new PrivateRecordCollector(privateRecordPrefix, {
           maxRecords: opts?.maxPrivateRecords,
@@ -279,8 +274,6 @@ export async function executeCode(
         ? {
             privateRecords: privateCapture.records,
             privateRecordErrors: privateCapture.errors,
-            machineRecords: privateCapture.records,
-            machineRecordErrors: privateCapture.errors,
           }
         : {}),
     };

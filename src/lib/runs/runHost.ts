@@ -5,7 +5,6 @@ import {
   patchNestedToolCall,
   startPanelColumn,
   appendPanelColumnToken,
-  stripPanelColumnModelTags,
   setPanelColumnStatus,
   appendChartWidget,
   appendPanelColumnChart,
@@ -14,8 +13,12 @@ import {
   type ToolCallPayload,
   type SubagentPayload,
 } from '@/lib/widgets/envelope';
-import { stripStreamedChartTags } from '@/lib/utils/contentStripping';
+import {
+  stripPanelColumnModelTags,
+  stripStreamedChartTags,
+} from '@/lib/utils/contentStripping';
 import { ChartSpecSchema, type ChartSpec } from '@/lib/chart/chartSpec';
+import { resolveChartPlacement } from '@/lib/chart/placement';
 import {
   restoreTurnChartRegistryFromMilestones,
   TurnChartRegistry,
@@ -992,20 +995,17 @@ export async function attachRunHost(params: {
   if (isResume) {
     for (const { ev } of run.eventLog) {
       if (ev.type === 'chart_placement') {
-        const { placementId, chartId } = ev.data;
-        if (placementId && chartId && chartSpecs[chartId]) {
-          recievedMessage = appendChartWidget(recievedMessage, {
-            id: placementId,
-            chartId,
-          });
+        const payload = resolveChartPlacement(chartSpecs, ev.data);
+        if (payload) {
+          recievedMessage = appendChartWidget(recievedMessage, payload);
         }
       } else if (ev.type === 'panel_executor_chart') {
-        const { placementId, chartId } = ev.data;
-        if (placementId && chartId && chartSpecs[chartId]) {
+        const payload = resolveChartPlacement(chartSpecs, ev.data);
+        if (payload) {
           recievedMessage = appendPanelColumnChart(
             recievedMessage,
             ev.executorIdx,
-            { id: placementId, chartId },
+            payload,
           );
         }
       }
@@ -1391,13 +1391,10 @@ export async function attachRunHost(params: {
       });
       scheduleFlush(true);
     } else if (event.type === 'chart_placement') {
-      const { placementId, chartId } = event.data;
-      if (!placementId || !chartId || !chartSpecs[chartId]) return;
-      shownChartIds.add(chartId);
-      recievedMessage = appendChartWidget(recievedMessage, {
-        id: placementId,
-        chartId,
-      });
+      const payload = resolveChartPlacement(chartSpecs, event.data);
+      if (!payload) return;
+      shownChartIds.add(payload.chartId);
+      recievedMessage = appendChartWidget(recievedMessage, payload);
       pushEvent(run, {
         type: 'chart_placement',
         data: event.data,
@@ -1405,13 +1402,13 @@ export async function attachRunHost(params: {
       });
       scheduleFlush(true);
     } else if (event.type === 'panel_executor_chart') {
-      const { placementId, chartId } = event.data;
-      if (!placementId || !chartId || !chartSpecs[chartId]) return;
-      shownChartIds.add(chartId);
+      const payload = resolveChartPlacement(chartSpecs, event.data);
+      if (!payload) return;
+      shownChartIds.add(payload.chartId);
       recievedMessage = appendPanelColumnChart(
         recievedMessage,
         event.executorIdx,
-        { id: placementId, chartId },
+        payload,
       );
       pushEvent(run, {
         type: 'panel_executor_chart',

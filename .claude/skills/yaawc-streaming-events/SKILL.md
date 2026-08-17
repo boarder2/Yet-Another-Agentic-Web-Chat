@@ -60,6 +60,8 @@ Events carry structured payloads — never markup. The two writers (`reducer.ts`
 | `stats` / `context_grew`                         | Live token usage / context-growth indicator                                                                                                                                                             |
 | `messageEnd`                                     | Finalizes the assistant message (modelStats, searchQuery, memoriesUsed, …)                                                                                                                              |
 
+A model that narrates a placement (`{chart_1}` or a bare `show_chart` line) instead of calling the tool still gets one: `SimplifiedAgent.emitResponse` tracks mentions (`src/lib/chart/handleMentions.ts`) and emits `chart_placement` for a chart not yet shown. Every writer strips the mention text via `stripStreamedChartTags`, so the placeholder never reaches the reader.
+
 ## Approval / interrupt events
 
 `runHost` emits `${kind}_pending` on first observation; each has an `*_answered` companion. Wire uses canonical kinds (`ask_user`, `workspace_edit`, `workspace_create`, `skill_edit`, `code_execution`, `mcp_tool`); `normalizeStreamEvent` maps legacy aliases from persisted buffers. The reducer dedupes against the mount-time `/api/approvals/pending` fetch (`seed_approvals`) by `approvalId`. UI: approval cards (`CodeExecution`, `UserQuestionPrompt`, `WorkspaceEditApproval`, `SkillEditApproval`, `McpToolApproval`).

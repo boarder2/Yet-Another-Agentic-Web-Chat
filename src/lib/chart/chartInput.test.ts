@@ -1,13 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
-  AreaChartInputSchema,
   ChartInputSchema,
   CHART_INPUT_MAX_LABELS,
   CHART_INPUT_MAX_SERIES,
   CHART_INPUT_MAX_SLICES,
-  LineChartInputSchema,
   normalizeChartInput,
-  PieChartInputSchema,
   safeNormalizeChartInput,
 } from './chartInput';
 import { ChartSpecSchema } from './chartSpec';
@@ -304,13 +301,13 @@ describe('simplified chart input normalization', () => {
     expectInvalid(pieInput({ options: { xLabel: 'not applicable' } }));
 
     expect(
-      AreaChartInputSchema.safeParse({
+      ChartInputSchema.safeParse({
         ...cartesianInput({ type: 'area' }),
         options: { stacked: false },
       }).success,
     ).toBe(true);
-    expect(LineChartInputSchema.safeParse(cartesianInput()).success).toBe(true);
-    expect(PieChartInputSchema.safeParse(pieInput()).success).toBe(true);
+    expect(ChartInputSchema.safeParse(cartesianInput()).success).toBe(true);
+    expect(ChartInputSchema.safeParse(pieInput()).success).toBe(true);
   });
 
   it('enforces the simplified 100-label, 15-series, and 20-slice limits', () => {

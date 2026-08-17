@@ -169,6 +169,32 @@ test.describe('chat chart lifecycle', () => {
     expect(JSON.parse(assistant.metadata).chartSpecs).toBeUndefined();
   });
 
+  test('places a narrated chart and strips its placeholder text', async ({
+    page,
+    request,
+  }) => {
+    const { chatId, events } = await runChartTurn(
+      request,
+      'test-chart-mention',
+    );
+
+    expect(eventsOfType(events, 'chart_placement')).toHaveLength(1);
+
+    const chat = await openChat(page, chatId);
+    const answer = page.locator('[data-answer]').last();
+    await expect(answer.locator('.recharts-wrapper')).toHaveCount(1);
+    await expect(answer).not.toContainText('{chart_1}');
+    await expect(answer).not.toContainText('show_chart');
+
+    const body = await (await request.get(`/api/chats/${chatId}`)).json();
+    const assistant = body.messages.find(
+      (message: { role: string }) => message.role === 'assistant',
+    ) as { content: string };
+    expect(assistant.content).toContain('```yaawc:chart');
+    expect(assistant.content).not.toContain('{chart_1}');
+    await chat.waitForStreamComplete();
+  });
+
   test('makes chart tools available in Chat mode and survives reload', async ({
     page,
     request,

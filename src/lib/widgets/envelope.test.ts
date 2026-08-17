@@ -17,7 +17,6 @@ import {
   patchNestedToolCall,
   startPanelColumn,
   appendPanelColumnToken,
-  stripPanelColumnModelTags,
   setPanelColumnStatus,
   PANEL_WIDGET_ID,
   upsertArtifactWidget,
@@ -27,6 +26,7 @@ import {
   type SubagentPayload,
   type PanelPayload,
 } from './envelope';
+import { stripPanelColumnModelTags } from '@/lib/utils/contentStripping';
 
 const toolCall = (over: Partial<ToolCallPayload> = {}): ToolCallPayload => ({
   id: 'call_1',

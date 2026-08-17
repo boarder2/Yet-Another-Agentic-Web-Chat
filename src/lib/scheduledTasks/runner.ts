@@ -43,6 +43,7 @@ import {
 import { SimplifiedAgent } from '@/lib/search/simplifiedAgent';
 import { createTurnTracker } from '@/lib/tokens/tracker';
 import { onStreamEvent } from '@/lib/streaming/events';
+import { resolveChartPlacement } from '@/lib/chart/placement';
 import { ChartSpecSchema, type ChartSpec } from '@/lib/chart/chartSpec';
 import { stripStreamedChartTags } from '@/lib/utils/contentStripping';
 import { resolveWorkflowRun } from '@/lib/workflows/resolveWorkflowRun';
@@ -213,13 +214,10 @@ export async function runSchedule(
             chartSpecs[event.data.chartId] = parsed.data;
           }
         } else if (event.type === 'chart_placement') {
-          const { placementId, chartId } = event.data;
-          if (placementId && chartId && chartSpecs[chartId]) {
-            shownChartIds.add(chartId);
-            receivedMessage = appendChartWidget(receivedMessage, {
-              id: placementId,
-              chartId,
-            });
+          const payload = resolveChartPlacement(chartSpecs, event.data);
+          if (payload) {
+            shownChartIds.add(payload.chartId);
+            receivedMessage = appendChartWidget(receivedMessage, payload);
           }
         } else if (event.type === 'model_stats') {
           modelStats = event.data as unknown as Record<string, unknown>;

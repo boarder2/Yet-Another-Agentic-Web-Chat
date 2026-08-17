@@ -26,7 +26,6 @@ import {
   patchNestedToolCall,
   startPanelColumn,
   appendPanelColumnToken,
-  stripPanelColumnModelTags,
   setPanelColumnStatus,
   upsertArtifactWidget,
   type ToolCallPayload,
@@ -43,7 +42,11 @@ import type {
 } from './chatState';
 import { panelExecutorTokens, type StreamEvent } from './events';
 import type { StreamEffect } from './effects';
-import { stripStreamedChartTags } from '@/lib/utils/contentStripping';
+import { resolveChartPlacement } from '@/lib/chart/placement';
+import {
+  stripPanelColumnModelTags,
+  stripStreamedChartTags,
+} from '@/lib/utils/contentStripping';
 
 /** How many response tokens accumulate before the assistant row is re-rendered. */
 const RESPONSE_BUFFER_THRESHOLD = 5;
@@ -721,18 +724,12 @@ function reduceStreamAction(
 
     case 'chart_placement': {
       const msgId = msgIdFor(state, action);
-      const { placementId, chartId } = action.data;
-      if (
-        !placementId ||
-        !chartId ||
-        !state.chartSpecsByMessage[msgId]?.[chartId]
-      ) {
-        return { state, effects };
-      }
-      const receivedMessage = appendChartWidget(state.receivedMessage, {
-        id: placementId,
-        chartId,
-      });
+      const payload = resolveChartPlacement(
+        state.chartSpecsByMessage[msgId] ?? {},
+        action.data,
+      );
+      if (!payload) return { state, effects };
+      const receivedMessage = appendChartWidget(state.receivedMessage, payload);
       if (receivedMessage === state.receivedMessage) return { state, effects };
       const messages = upsertAssistant(state, msgId, receivedMessage);
       scroll();
@@ -744,18 +741,15 @@ function reduceStreamAction(
 
     case 'panel_executor_chart': {
       const msgId = msgIdFor(state, action);
-      const { placementId, chartId } = action.data;
-      if (
-        !placementId ||
-        !chartId ||
-        !state.chartSpecsByMessage[msgId]?.[chartId]
-      ) {
-        return { state, effects };
-      }
+      const payload = resolveChartPlacement(
+        state.chartSpecsByMessage[msgId] ?? {},
+        action.data,
+      );
+      if (!payload) return { state, effects };
       const receivedMessage = appendPanelColumnChart(
         state.receivedMessage,
         action.executorIdx,
-        { id: placementId, chartId },
+        payload,
       );
       if (receivedMessage === state.receivedMessage) return { state, effects };
       const messages = upsertAssistant(state, msgId, receivedMessage);

@@ -57,6 +57,7 @@ import { getResolvedSearchCapabilities } from '@/lib/search/providers';
 import type { CapabilityRuntimeFacts } from '@/lib/capabilities/availability';
 import { toolContextSchema, type ToolContext } from '@/lib/tools/toolContext';
 import { TurnChartRegistry } from '@/lib/chart/turnChartRegistry';
+import { ChartMentionTracker } from '@/lib/chart/handleMentions';
 import {
   normalizeUsageMetadata,
   type TokenTracker,
@@ -177,6 +178,8 @@ export class SimplifiedAgent {
   private workspaceSuffix: string;
   private aiMessageId?: string;
   private readonly chartRegistry: TurnChartRegistry;
+  /** Scans the streamed answer for placements the model narrated. */
+  private readonly chartMentions = new ChartMentionTracker();
   private threadId?: string;
   private chatModelRef?: {
     provider: string;
@@ -353,6 +356,36 @@ export class SimplifiedAgent {
 
   private emitResponse(text: string) {
     emitStreamEvent(this.emitter, { type: 'response', data: text });
+    this.placeMentionedCharts(text);
+  }
+
+  /**
+   * Honor a placement the model narrated (`{chart_1}`) instead of calling
+   * `show_chart`. The mention text itself is stripped downstream by every
+   * writer, so this is the only chance to still render the chart it named —
+   * and it must be placed as the mention streams in so the widget lands where
+   * the model meant it to. A chart already shown is skipped, so a model that
+   * both calls the tool and narrates the call does not place it twice.
+   */
+  private placeMentionedCharts(text: string) {
+    for (const handle of this.chartMentions.push(text)) {
+      if (this.chartRegistry.isPlaced(handle)) continue;
+      try {
+        const placement = this.chartRegistry.place(handle);
+        emitStreamEvent(this.emitter, {
+          type: 'chart_placement',
+          data: {
+            placementId: placement.placementId,
+            chartId: placement.chartId,
+            handle: placement.handle,
+            placementNumber: placement.placementNumber,
+          },
+        });
+      } catch {
+        // An unknown handle or an exhausted placement budget: the mention is
+        // removed from the answer either way, so there is nothing to report.
+      }
+    }
   }
 
   /**

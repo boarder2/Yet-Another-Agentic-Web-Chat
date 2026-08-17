@@ -1,28 +1,19 @@
 import { z } from 'zod';
 import {
   ChartInputSchema,
+  chartValidationMessage,
   safeNormalizeChartInput,
 } from '@/lib/chart/chartInput';
 import { emitStreamEvent } from '@/lib/streaming/events';
 import { defineTool } from '@/lib/tools/defineTool';
 
-function validationMessage(error: {
-  issues: Array<{ message: string }>;
-}): string {
-  return error.issues.map((issue) => issue.message).join('; ');
-}
-
 export const createChartTool = defineTool(
   async (input: z.infer<typeof ChartInputSchema>, runtime): Promise<string> => {
     const { chartRegistry, emitter } = runtime.context;
 
-    if (!chartRegistry || !emitter) {
-      return 'Error: create_chart is unavailable because this run has no chart stream.';
-    }
-
     const normalized = safeNormalizeChartInput(input);
     if (!normalized.success) {
-      return `Error: Invalid chart input — ${validationMessage(normalized.error)}. Please fix and retry.`;
+      return `Error: Invalid chart input — ${chartValidationMessage(normalized.error)}. Please fix and retry.`;
     }
 
     const snapshot = chartRegistry.snapshot();
@@ -41,6 +32,9 @@ export const createChartTool = defineTool(
       return JSON.stringify({
         handle: registration.handle,
         title: registration.title,
+        // Registration is silent, and models routinely stop here and describe a
+        // chart the reader cannot see. The next step rides back with the handle.
+        next_step: `This chart is not visible yet. Call show_chart({ handle: "${registration.handle}" }) at the point in your answer where it belongs.`,
       });
     } catch (error) {
       chartRegistry.restore(snapshot);

@@ -19,10 +19,6 @@ export const showChartTool = defineTool(
   ): Promise<string> => {
     const { chartRegistry, emitter } = runtime.context;
 
-    if (!chartRegistry || !emitter) {
-      return 'Error: show_chart is unavailable because this run has no chart stream.';
-    }
-
     const snapshot = chartRegistry.snapshot();
     let placement;
     try {

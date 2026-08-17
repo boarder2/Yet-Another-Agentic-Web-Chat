@@ -3,7 +3,12 @@
  * content. Kept separate from contentUtils.ts so client bundles can import them
  * without pulling in LangChain.
  */
-import { mapOutsideWidgets, stripWidgets } from '@/lib/widgets/envelope';
+import { stripChartHandleMentions } from '@/lib/chart/handleMentions';
+import {
+  mapOutsideWidgets,
+  mapPanelColumnText,
+  stripWidgets,
+} from '@/lib/widgets/envelope';
 
 /**
  * Removes all content within <think>...</think> blocks, including content
@@ -56,11 +61,22 @@ export const removeChartMarkup = (text: string): string =>
     .replace(/<Chart\b[^>]*\/>/g, '')
     .replace(/<Chart\b[^>]*>[\s\S]*?<\/Chart>/g, '');
 
-/** Strip only model-authored chart tags, never the contents of writer widgets. */
+/**
+ * Strip model-authored chart markup — legacy `<Chart>` tags and narrated
+ * placements like `{chart_4}` — never the contents of writer widgets. A chart
+ * only ever appears through a writer-appended widget, so the leftover text is
+ * noise whether or not the mention resolved to a real chart.
+ */
 export const stripStreamedChartTags = (text: string): string =>
-  mapOutsideWidgets(text, removeChartMarkup);
+  mapOutsideWidgets(text, (chunk) =>
+    stripChartHandleMentions(removeChartMarkup(chunk)),
+  );
 
-export const removeStreamedChartTags = stripStreamedChartTags;
+/** Remove model-authored chart tags from one panel column, preserving nested widgets. */
+export const stripPanelColumnModelTags = (
+  content: string,
+  idx: number,
+): string => mapPanelColumnText(content, idx, stripStreamedChartTags);
 
 /**
  * Strips citation markers like [1] or [1, 2] from text.
@@ -118,7 +134,7 @@ export const stripMarkdown = (text: string): string => {
  */
 export const toSpeechText = (content: string): string => {
   let text = removeToolCallMarkup(content);
-  text = removeChartMarkup(text);
+  text = stripChartHandleMentions(removeChartMarkup(text));
   text = removeThinkingBlocks(text);
   text = removeCitations(text);
   text = stripMarkdown(text);

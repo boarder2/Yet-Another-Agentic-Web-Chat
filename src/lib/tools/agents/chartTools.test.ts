@@ -99,7 +99,13 @@ describe('chart lifecycle tools', () => {
       ),
     );
 
-    expect(result).toEqual({ handle: 'chart_1', title: 'Quarterly revenue' });
+    expect(result).toMatchObject({
+      handle: 'chart_1',
+      title: 'Quarterly revenue',
+    });
+    // The result is the model's last read before it writes the answer, so it
+    // carries the next step a silent registration otherwise leaves implicit.
+    expect(result.next_step).toContain('show_chart({ handle: "chart_1" })');
     expect(chartRegistry.registrationCount).toBe(1);
     expect(chartRegistry.placementCount).toBe(0);
     expect(chartRegistry.resolve('chart_1')?.chartId).toBe('private-1');

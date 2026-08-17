@@ -37,7 +37,7 @@ If a workflow edit makes a saved schedule fill set invalid, the schedule is disa
 
 ## Headless behavior
 
-Scheduled runs are headless. They persist a chat and answer without waiting for a person, so code execution, ask-user questions, workspace edits, and other approval-gated actions cannot complete as they do in an interactive chat. Scheduled runs do not perform automatic memory extraction. Deep research can be requested through a saved focus configuration, but its nested live activity is not represented in the scheduled result in the same way as an interactive stream.
+Scheduled runs are headless. They persist a chat and answer without waiting for a person, so code execution, ask-user questions, workspace edits, and other approval-gated actions cannot complete as they do in an interactive chat. Scheduled runs do not perform automatic memory extraction. Charts are an exception to the headless limits: a scheduled run can register and show charts, and they are stored in the persisted answer. Deep research can be requested through a saved focus configuration, but its nested live activity is not represented in the scheduled result in the same way as an interactive stream.
 
 A manual workflow run is continuable, but it still uses the workflow's stored non-workspace configuration rather than the page from which it was launched.
 

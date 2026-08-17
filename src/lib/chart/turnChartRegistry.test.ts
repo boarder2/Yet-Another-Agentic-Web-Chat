@@ -84,7 +84,7 @@ describe('TurnChartRegistry', () => {
     const registry = new TurnChartRegistry({ idFactory: deterministicIds() });
     const registration = registry.register(chart('Repeatable'));
     const first = registry.place(registration.handle);
-    const second = registry.show(registration.handle);
+    const second = registry.place(registration.handle);
 
     expect(first).toMatchObject({
       handle: 'chart_1',
@@ -102,6 +102,19 @@ describe('TurnChartRegistry', () => {
     });
     expect(registry.placementCount).toBe(2);
     expect(registry.registrationCount).toBe(1);
+  });
+
+  it('reports whether a chart has already been shown', () => {
+    const registry = new TurnChartRegistry({ idFactory: deterministicIds() });
+    const registration = registry.register(chart('Shown once'));
+
+    expect(registry.isPlaced(registration.handle)).toBe(false);
+    registry.place(registration.handle);
+    expect(registry.isPlaced(registration.handle)).toBe(true);
+    expect(registry.isPlaced('chart_9')).toBe(false);
+
+    const restored = new TurnChartRegistry({ snapshot: registry.snapshot() });
+    expect(restored.isPlaced(registration.handle)).toBe(true);
   });
 
   it(`rejects the ${TURN_CHART_MAX_REGISTRATIONS + 1}th registration`, () => {
@@ -158,7 +171,8 @@ describe('TurnChartRegistry', () => {
     original.place('chart_1');
     const snapshot = original.snapshot();
 
-    const restored = TurnChartRegistry.fromSnapshot(snapshot, {
+    const restored = new TurnChartRegistry({
+      snapshot,
       idFactory: deterministicIds(),
     });
 
@@ -222,6 +236,8 @@ describe('TurnChartRegistry', () => {
       { handle: 'chart_2', title: 'Second' },
     ]);
     expect(registry.placementCount).toBe(1);
+    expect(registry.isPlaced('chart_1')).toBe(true);
+    expect(registry.isPlaced('chart_2')).toBe(false);
     expect(registry.place('chart_2')).toMatchObject({
       chartId: 'private-2',
       placementId: 'placement_2',

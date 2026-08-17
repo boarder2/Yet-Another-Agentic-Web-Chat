@@ -360,6 +360,8 @@ class FakeChatModel extends BaseChatModel {
       this.modelName.includes('chart-raw') ||
       this.modelName.includes('raw-tag') ||
       this.modelName.includes('chart-tags');
+    // Narrates the placement in the answer instead of calling show_chart.
+    const isMentionChartVariant = this.modelName.includes('chart-mention');
     if (this.modelName.includes('chart-code-approval') && !hasToolResult) {
       yield lifecycleToolChunk(
         'code_execution',
@@ -420,6 +422,7 @@ class FakeChatModel extends BaseChatModel {
           : lastToolResultField(messages, 'handle') || 'chart_1';
       const shouldShow =
         !this.modelName.includes('unshown') &&
+        !isMentionChartVariant &&
         (toolResultCount === 1 ||
           (this.modelName.includes('unknown') && toolResultCount === 2) ||
           ((this.modelName.includes('repeat') ||
@@ -471,6 +474,8 @@ class FakeChatModel extends BaseChatModel {
       // Echo the system prompt so specs can assert which sections were
       // injected. Checked after the title branch so auto-titling still works.
       answer = systemText(messages);
+    } else if (isMentionChartVariant) {
+      answer = `${CHART_ANSWER_PREFIX} [1].\n\nshow_chart\n\n{chart_1}\n\nDone.`;
     } else if (isRawChartVariant) {
       answer = `${CHART_ANSWER_PREFIX} [1].\n\n<Chart id="guessed-or-stale"/>\n\nDone.`;
     } else if (this.modelName.includes('chart')) {
@@ -786,6 +791,12 @@ export async function loadTestChatModels(): Promise<Record<string, ChatModel>> {
       displayName: 'Test (unshown chart)',
       model: new FakeChatModel({
         modelName: 'test-chart-unshown',
+      }) as unknown as BaseChatModel,
+    },
+    'test-chart-mention': {
+      displayName: 'Test (narrated chart placement)',
+      model: new FakeChatModel({
+        modelName: 'test-chart-mention',
       }) as unknown as BaseChatModel,
     },
     'test-chart-raw-tag': {

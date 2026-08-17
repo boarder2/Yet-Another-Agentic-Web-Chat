@@ -12,7 +12,7 @@ import { Card } from '@/components/ui/Card';
 import ChartElement, { spaceChartTags } from '../ChartElement';
 import ChartEnvelope from '../ChartEnvelope';
 import {
-  parseWidgetFence,
+  parseWidgetCodeBlock,
   type PanelColumnPayload,
 } from '@/lib/widgets/envelope';
 import { removeThinkingBlocks } from '@/lib/utils/contentStripping';
@@ -45,15 +45,6 @@ function decodeLegacyPanelData(data: string): PanelColumnPayload[] {
   return [];
 }
 
-const extractInfoString = (className?: string): string | null => {
-  if (!className) return null;
-  for (const token of className.split(/\s+/)) {
-    const match = token.match(/^(?:language-|lang-)(.+)$/);
-    if (match) return match[1];
-  }
-  return null;
-};
-
 const ColumnCode = ({
   className,
   children,
@@ -61,12 +52,9 @@ const ColumnCode = ({
   className?: string;
   children: React.ReactNode;
 }) => {
-  const infoString = extractInfoString(className);
-  if (infoString?.startsWith('yaawc:') && typeof children === 'string') {
-    const parsed = parseWidgetFence(infoString, children);
-    if (parsed?.kind === 'chart') {
-      return <ChartEnvelope chartId={parsed.payload.chartId} />;
-    }
+  const parsed = parseWidgetCodeBlock(className, children);
+  if (parsed?.kind === 'chart') {
+    return <ChartEnvelope chartId={parsed.payload.chartId} />;
   }
 
   return className ? (

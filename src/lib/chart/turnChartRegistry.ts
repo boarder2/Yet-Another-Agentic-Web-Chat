@@ -3,8 +3,6 @@ import { ChartSpecSchema, type ChartSpec } from './chartSpec';
 
 export const TURN_CHART_MAX_REGISTRATIONS = 10;
 export const TURN_CHART_MAX_PLACEMENTS = 20;
-export const MAX_TURN_CHARTS = TURN_CHART_MAX_REGISTRATIONS;
-export const MAX_TURN_CHART_PLACEMENTS = TURN_CHART_MAX_PLACEMENTS;
 
 export interface TurnChartMilestone {
   type: string;
@@ -32,6 +30,8 @@ export interface TurnChartRegistrySnapshot {
   registrations: TurnChartRegistration[];
   nextHandle: number;
   placementCount: number;
+  /** Handles shown at least once; absent in older snapshots. */
+  placedHandles?: string[];
 }
 
 export interface TurnChartRegistryOptions {
@@ -88,40 +88,17 @@ function availableText(charts: readonly AvailableTurnChart[]): string {
   return charts.map(({ handle, title }) => `${handle} (${title})`).join(', ');
 }
 
-function isSnapshot(value: unknown): value is TurnChartRegistrySnapshot {
-  return (
-    !!value &&
-    typeof value === 'object' &&
-    ('registrations' in value || 'nextHandle' in value) &&
-    Array.isArray((value as { registrations?: unknown }).registrations)
-  );
-}
-
 /** A turn-local mapping from short model handles to private chart IDs. */
 export class TurnChartRegistry {
   private readonly idFactory: () => string;
   private readonly registrations = new Map<string, TurnChartRegistration>();
   private nextHandle = 1;
   private placementCountValue = 0;
+  private readonly placedHandles = new Set<string>();
 
-  constructor(options?: TurnChartRegistryOptions);
-  constructor(snapshot?: TurnChartRegistrySnapshot);
-  constructor(
-    optionsOrSnapshot:
-      TurnChartRegistryOptions | TurnChartRegistrySnapshot = {},
-  ) {
-    const options = isSnapshot(optionsOrSnapshot)
-      ? { snapshot: optionsOrSnapshot }
-      : optionsOrSnapshot;
+  constructor(options: TurnChartRegistryOptions = {}) {
     this.idFactory = options.idFactory ?? generateId;
     if (options.snapshot) this.restore(options.snapshot);
-  }
-
-  static fromSnapshot(
-    snapshot: TurnChartRegistrySnapshot,
-    options: Omit<TurnChartRegistryOptions, 'snapshot'> = {},
-  ): TurnChartRegistry {
-    return new TurnChartRegistry({ ...options, snapshot });
   }
 
   get registrationCount(): number {
@@ -163,10 +140,6 @@ export class TurnChartRegistry {
     return registration ? cloneRegistration(registration) : undefined;
   }
 
-  get(handle: unknown): TurnChartRegistration | undefined {
-    return this.resolve(handle);
-  }
-
   require(handle: unknown): TurnChartRegistration {
     const registration = this.resolve(handle);
     if (registration) return registration;
@@ -194,6 +167,7 @@ export class TurnChartRegistry {
     }
 
     this.placementCountValue += 1;
+    this.placedHandles.add(registration.handle);
     return clonePlacement({
       ...registration,
       placementId: `placement_${this.placementCountValue}`,
@@ -201,8 +175,9 @@ export class TurnChartRegistry {
     });
   }
 
-  show(handle: unknown): TurnChartPlacement {
-    return this.place(handle);
+  /** True once the chart has been placed, however that placement was requested. */
+  isPlaced(handle: unknown): boolean {
+    return typeof handle === 'string' && this.placedHandles.has(handle);
   }
 
   availableCharts(): AvailableTurnChart[] {
@@ -212,15 +187,12 @@ export class TurnChartRegistry {
     }));
   }
 
-  list(): TurnChartRegistration[] {
-    return [...this.registrations.values()].map(cloneRegistration);
-  }
-
   snapshot(): TurnChartRegistrySnapshot {
     return {
-      registrations: this.list(),
+      registrations: [...this.registrations.values()].map(cloneRegistration),
       nextHandle: this.nextHandle,
       placementCount: this.placementCountValue,
+      placedHandles: [...this.placedHandles],
     };
   }
 
@@ -273,6 +245,10 @@ export class TurnChartRegistry {
     }
     this.nextHandle = snapshot.nextHandle;
     this.placementCountValue = snapshot.placementCount;
+    this.placedHandles.clear();
+    for (const handle of snapshot.placedHandles ?? []) {
+      if (restored.has(handle)) this.placedHandles.add(handle);
+    }
   }
 
   private allocateHandle(): string {
@@ -316,8 +292,9 @@ export function restoreTurnChartRegistryFromMilestones(
 ): void {
   const registrations: TurnChartRegistration[] = [];
   const byHandle = new Set<string>();
-  const byChartId = new Set<string>();
+  const handleByChartId = new Map<string, string>();
   const placementIds = new Set<string>();
+  const placedHandles = new Set<string>();
   let maxHandle = 0;
 
   for (const milestone of milestones) {
@@ -342,7 +319,7 @@ export function restoreTurnChartRegistryFromMilestones(
         typeof handle !== 'string' ||
         !/^chart_[1-9]\d*$/.test(handle) ||
         byHandle.has(handle) ||
-        byChartId.has(chartId) ||
+        handleByChartId.has(chartId) ||
         registrations.length >= TURN_CHART_MAX_REGISTRATIONS
       ) {
         continue;
@@ -358,7 +335,7 @@ export function restoreTurnChartRegistryFromMilestones(
         spec: parsed.data,
       });
       byHandle.add(handle);
-      byChartId.add(chartId);
+      handleByChartId.set(chartId, handle);
       maxHandle = Math.max(maxHandle, Number(handle.slice('chart_'.length)));
       continue;
     }
@@ -371,10 +348,11 @@ export function restoreTurnChartRegistryFromMilestones(
       typeof value.placementId === 'string' &&
       value.placementId.length > 0 &&
       typeof value.chartId === 'string' &&
-      byChartId.has(value.chartId)
+      handleByChartId.has(value.chartId)
     ) {
       if (placementIds.size < TURN_CHART_MAX_PLACEMENTS) {
         placementIds.add(value.placementId);
+        placedHandles.add(handleByChartId.get(value.chartId) as string);
       }
     }
   }
@@ -383,7 +361,6 @@ export function restoreTurnChartRegistryFromMilestones(
     registrations,
     nextHandle: Math.max(1, maxHandle + 1),
     placementCount: placementIds.size,
+    placedHandles: [...placedHandles],
   });
 }
-
-export const restoreTurnChartRegistry = restoreTurnChartRegistryFromMilestones;

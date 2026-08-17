@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import type { EventEmitter } from 'events';
 import { emitStreamEvent } from '@/lib/streaming/events';
 import {
-  normalizeChartInput,
+  chartValidationMessage,
   safeNormalizeChartInput,
 } from '@/lib/chart/chartInput';
 import {
@@ -145,10 +145,11 @@ export class PrivateRecordCollector {
         this.captureErrors.push(
           'A private chart record was incomplete or exceeded the transport limit.',
         );
+        // No newline is left in the buffer, so every remaining character
+        // belongs to this record. Drop it and keep discarding until the line
+        // actually terminates in a later chunk.
         this.discardingRecord = !final;
-        this.pending = final
-          ? ''
-          : this.pending.slice(payloadStart + this.maxRecordBytes);
+        this.pending = '';
         continue;
       }
 
@@ -279,12 +280,6 @@ export function decodeCodeChartRecords(
   return records.map((record, index) => decodeCodeChartRecord(record, index));
 }
 
-function validationMessage(error: {
-  issues: Array<{ message: string }>;
-}): string {
-  return error.issues.map((issue) => issue.message).join('; ');
-}
-
 function resultError(
   index: number,
   message: string,
@@ -336,7 +331,7 @@ export function registerCodeExecutionCharts(options: {
     const normalized = safeNormalizeChartInput(emission.spec);
     if (!normalized.success) {
       results.push(
-        resultError(emission.index, validationMessage(normalized.error)),
+        resultError(emission.index, chartValidationMessage(normalized.error)),
       );
       continue;
     }
@@ -374,6 +369,30 @@ export function registerCodeExecutionCharts(options: {
   return summarizeCodeChartResults(results, registrations);
 }
 
+/**
+ * The chart section of a code execution result. Registration is silent, so the
+ * reminder rides back with the handles — this is the model's last read before
+ * it writes the answer.
+ */
+export function describeCodeChartOutcome(
+  outcome: CodeChartRegistrationOutcome,
+): string {
+  let text = '';
+  if (outcome.handles.length > 0) {
+    text += '\n\nCharts registered:';
+    for (let index = 0; index < outcome.handles.length; index += 1) {
+      text += `\n- ${outcome.handles[index]} — ${outcome.titles[index]}`;
+    }
+    text +=
+      '\n\nNone of these are visible yet. Call show_chart with each handle that belongs in your answer, at the point where it belongs.';
+  }
+  if (outcome.errors.length > 0) {
+    text += '\n\nChart errors:';
+    for (const error of outcome.errors) text += `\n- ${error}`;
+  }
+  return text;
+}
+
 function summarizeCodeChartResults(
   results: CodeChartRegistrationResult[],
   registrations: TurnChartRegistration[],
@@ -388,16 +407,3 @@ function summarizeCodeChartResults(
     errors: results.flatMap((result) => (result.error ? [result.error] : [])),
   };
 }
-
-/** Public aliases for callers that use the transport terminology. */
-export const createPrivateChartChannel = createCodeChartChannel;
-export const buildPrivateChartHelper = buildChartHelperPrelude;
-export const capturePrivateRecords = (
-  prefix: string,
-  options?: PrivateRecordCollectorOptions,
-) => new PrivateRecordCollector(prefix, options);
-export const parseCodeChartRecords = decodeCodeChartRecords;
-export const registerCodeCharts = registerCodeExecutionCharts;
-
-/** Normalize a simplified input for callers that want the protocol validator alone. */
-export { normalizeChartInput };

@@ -9,7 +9,7 @@ Stack: Next.js App Router + React 19 + Tailwind 4, TanStack Query, LangChain/Lan
 - `npm run dev` — dev server on :5005 (auto-bumps if taken — read the bound port from the log)
 - `DATA_DIR=/path/to/data npm run build` — db:push then next build; `DATA_DIR=/path/to/data npm start` serves it. Keep one explicit `DATA_DIR` across Drizzle, build, dev, and runtime commands because the runtime and Drizzle defaults differ when it is unset.
 - `npm run lint` / `npm run format:write` / `npx tsc --noEmit`
-- `npm run test` — all tests (the CI gate); `npm run test:unit` — vitest, pure modules only
+- `npm run test` — all tests (the CI gate); `npm run test:unit` — vitest, isolated behavior
 - `npm run test:e2e` — Playwright suite in `e2e/` (`--project=chromium|api|smoke|serial`); mocked LLM, isolated test DB. See `e2e/CLAUDE.md`; coverage matrix in `e2e/COVERAGE.md`
 - `npm run db:generate` after editing `src/lib/db/schema.ts`; `npm run db:push` to apply — never hand-write files in `drizzle/`
 - Setup: `cp sample.config.toml config.toml` (**never overwrite an existing `config.toml`**), then `npm install`
@@ -40,7 +40,7 @@ Subsystem detail lives in the `.claude/skills/yaawc-*` skills — read the relev
 - UI: reuse the primitives in `src/components/ui/` (`Button`, `Modal`, `Select`, `Input`/`Field`, …) — never hand-roll a dialog or scrim. See the `yaawc-design-system` skill
 - Data fetching: TanStack Query hooks in `src/lib/hooks/api/` via `apiFetch` (`src/lib/api/client.ts`) and keys from `qk` (`src/lib/api/keys.ts`) — no raw `fetch` in components; mutations invalidate their keys
 - DB changes: edit `src/lib/db/schema.ts` only, then `npm run db:generate`
-- Tests are e2e-first: new functionality ships with Playwright specs asserting intended behavior, never calling a real LLM (env-gated test provider — see `e2e/CLAUDE.md`). Vitest unit tests only for pure, side-effect-free modules
+- Tests use the lowest practical level: prefer fast Vitest unit tests for pure or isolated behavior; use Playwright for UI workflows and full application boundaries. Avoid duplicating unit coverage in e2e unless the e2e test verifies an additional integration boundary. E2e tests never call a real LLM (env-gated test provider — see `e2e/CLAUDE.md`)
 - Ask before adding dependencies
 - Terse, factual responses; clarify via `AskUserQuestion`, never inline in prose; evaluate the user's proposals critically — say so with reasoning when one is weak
 - Keep this file and the `yaawc-*` skills accurate when a change touches what they document — big-picture only, no implementation minutiae. Docs/README additions equally terse

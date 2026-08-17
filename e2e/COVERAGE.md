@@ -2,7 +2,7 @@
 
 Route/page → spec mapping for the e2e suite. Kept in sync with `e2e/api/*.spec.ts`, `e2e/tests/*.spec.ts`, and `e2e/serial/*.spec.ts` as specs are added — when you add or rename a spec that changes what's covered, update this file in the same change.
 
-The pure stream-event modules (`src/lib/streaming/`, the vocabulary + reducer) are covered by vitest unit tests (`src/**/*.test.ts`, `npm run test:unit`) rather than e2e — the narrow exception to the e2e-first policy. So is the migration replay (`src/lib/db/migrations.test.ts`): the suite builds its DB with `drizzle-kit push`, so only a replay onto an empty DB proves `drizzle/` still runs on a new install. The wire contract those modules assume is pinned here by `api/chat.spec.ts` (stream/replay) and the reload/reattach UI spec (`serial/chat.spec.ts`).
+Isolated behavior is covered by vitest unit tests (`src/**/*.test.ts`, `npm run test:unit`) where browser or full-application coverage adds no value. The stream-event modules (`src/lib/streaming/`, the vocabulary + reducer) are one example. So is the migration replay (`src/lib/db/migrations.test.ts`): the suite builds its DB with `drizzle-kit push`, so only a replay onto an empty DB proves `drizzle/` still runs on a new install. The wire contract those modules assume is pinned here by `api/chat.spec.ts` (stream/replay) and the reload/reattach UI spec (`serial/chat.spec.ts`).
 
 ## API routes → specs
 

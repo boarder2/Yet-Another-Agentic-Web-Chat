@@ -30,10 +30,10 @@ secrets, database files, uploads, or workspace blobs to a change.
   prerequisites, limits, privacy, availability, or failure states change; do
   not add roadmap or history prose.
 - Run `npm run format:write`, `npm run lint`, and `npx tsc --noEmit`.
-- Run the applicable tests. Use `npm run test:unit` for pure modules and
-  `npm run test:e2e` for browser or API behavior; `npm run test` is the full
-  configured gate. If a check is not applicable or cannot run, explain why in
-  the pull request.
+- Run the applicable tests. Prefer `npm run test:unit` for pure or isolated
+  behavior; use `npm run test:e2e` for browser/UI workflows and full-application
+  or HTTP-contract behavior. `npm run test` is the full configured gate. If a
+  check is not applicable or cannot run, explain why in the pull request.
 - For a database schema change, edit `src/lib/db/schema.ts`, run
   `npm run db:generate`, and include the generated migration. Never hand-write
   files in `drizzle/`.

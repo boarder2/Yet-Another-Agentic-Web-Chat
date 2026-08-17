@@ -13,7 +13,7 @@ One seam between agent and UI. Milestone events persist to `run_events` (`runEve
 - **`reducer.ts`** — `reduceStreamEvent(state, event) → { state, effects }`, one pure transition per event, shared by live-send and reconnect/attach. Bucket key is `event.messageId ?? activeAiMessageId`; replay-gating is the `inReplay` state field (attach only, until `replay_complete`); idempotency guards apply in both modes.
 - **`effects.ts`** — `StreamEffect` values the reducer returns (`toastError`, `setLoading`, `bumpScroll`, `invalidateActiveRuns`, `invalidateWorkspace`, `fetchSuggestions`, `refreshSkills`, `setChatTitle`, `openArtifact`, `invalidateArtifacts`); `ChatWindow.runEffect` performs them, the reducer never does.
 
-`reducer.ts`/`events.ts` are pure — unit-tested, the narrow exception to the e2e-only policy.
+`reducer.ts`/`events.ts` are pure — unit-tested directly; keep this behavior at the fast unit-test layer rather than duplicating it in e2e.
 
 **Producers**: `simplifiedAgent.ts` registers `handleToolStart/End/Error` on each `agent.streamEvents()` call — in `searchAndAnswer()` AND `doResume()`, identical shapes. **`runHost.ts` is the synthesis point**: stamps the assistant `messageId`, serializes widget events into persisted content via the codec, adds producer-less events (`messageEnd`, `replay_complete`, `gone`, `*_pending`/`*_answered`), translates `model_stats` → `stats`, buffers milestones for persistence. `chatTitle` (auto-title, first turn) is pushed after `messageEnd`, before `terminate` — the only window still reaching subscribers; generation lives in `attachRunHost`'s `agent_end` branch (`src/lib/utils/chatTitle.ts`).
 

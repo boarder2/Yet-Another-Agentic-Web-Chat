@@ -2,8 +2,8 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import tsconfigPaths from 'vite-tsconfig-paths';
 
-// Unit tests are the narrow exception to the e2e-only policy: pure modules only
-// (no DOM, no network, no LLM), tested through their interface. See CLAUDE.md.
+// Unit tests cover isolated behavior through interfaces. Keep this suite fast:
+// no DOM, network, or LLM. See CLAUDE.md.
 export default defineConfig({
   plugins: [tsconfigPaths()],
   resolve: {

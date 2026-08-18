@@ -470,9 +470,9 @@ export const POST = async (req: Request) => {
       }
     }
 
-    // Persist invoked-skill bodies as system rows attached to this turn.
-    // They ride along on subsequent turns via buildHistoryFromDb naturally,
-    // so no in-flight SystemMessage injection is needed.
+    // Persist invoked-skill bodies as system rows attached to this turn so
+    // subsequent turns replay them through buildHistoryFromDb. SimplifiedAgent
+    // separately injects the resolved bodies into the current turn.
     for (const skillName of invokedSkillNames) {
       const skill = getByName(allSkillsForChat, skillName);
       if (!skill) continue;
@@ -576,9 +576,9 @@ export const POST = async (req: Request) => {
       chartRegistry,
     );
 
-    // Tell the agent which skills the user explicitly invoked. The bodies
-    // themselves were already persisted as system rows above and now live
-    // in `history` via buildHistoryFromDb — no in-flight injection needed.
+    // Tell the agent which skills the user explicitly invoked. It forces their
+    // resolved bodies into the current turn; the rows above preserve them for
+    // subsequent turns.
     handler.setInvokedSkillNames(invokedSkillNames);
     // Store model refs so the agent can build a config snapshot for resume.
     handler.setModelRefs(body.chatModel, body.systemModel);

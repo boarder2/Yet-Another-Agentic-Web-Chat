@@ -43,7 +43,7 @@ The parent agent receives the subagent summary and its source documents. A faile
 
 ## Skills and instructions
 
-Built-in skills explain specialized tool contracts such as deep research, the optional chart-creation reference, ask-user, and code execution. User skills can be global or workspace-scoped, enabled or disabled, automatically offered to the model, or marked slash-only. Type `/skill-name` in the composer to invoke an enabled skill explicitly. The agent can load a skill with `read_skill` and can propose creating, updating, or deleting a user skill with `edit_skill`.
+Built-in skills explain specialized tool contracts such as deep research, the optional chart-creation reference, ask-user, and code execution. User skills can be global or workspace-scoped, enabled or disabled, automatically offered to the model, or marked slash-only. Type `/skill-name` in the composer to force an enabled skill's instructions into that turn; this does not depend on the model choosing to load it. The agent can load a non-invoked skill with `read_skill` and can propose creating, updating, or deleting a user skill with `edit_skill`.
 
 Skill edits require user approval in an interactive chat. A workspace skill can override a global user skill with the same name, but built-in skill names remain reserved. Persona prompts control response style; skills can add task-specific instructions. See [Personalization and memory](./personalization-and-memory.md) for persona settings.
 

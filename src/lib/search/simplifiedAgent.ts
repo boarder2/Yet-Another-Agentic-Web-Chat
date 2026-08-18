@@ -48,7 +48,10 @@ import { CachedEmbeddings } from '../utils/cachedEmbeddings';
 import { buildPersonalizationSection } from '../utils/personalization';
 import { emitStreamEvent } from '@/lib/streaming/events';
 import { resolveSkillsForChat } from '@/lib/skills/resolve';
-import { buildSkillsPromptSection } from '@/lib/skills/promptSection';
+import {
+  buildInvokedSkillsContext,
+  buildSkillsPromptSection,
+} from '@/lib/skills/promptSection';
 import { setRunContext, cleanupSkillsForRun } from '@/lib/skills/runStore';
 import type { Skill } from '@/lib/skills/types';
 import { capabilityDocsGuidance } from '@/lib/prompts/simplifiedAgent/capabilityDocsGuidance';
@@ -688,11 +691,6 @@ export class SimplifiedAgent {
         this.emitResponse(''); // Empty response, to give the UI a message to display.
       }, 100);
 
-      const humanMsg =
-        messageImageIds && messageImageIds.length > 0
-          ? buildMultimodalHumanMessage(query, messageImageIds)
-          : new HumanMessage(query);
-
       // Detect Firefox AI prompt pattern
       const trimmed = query.trim();
       const startsWithAscii = trimmed.startsWith("I'm on page");
@@ -701,20 +699,33 @@ export class SimplifiedAgent {
       const firefoxAIDetected =
         (startsWithAscii || startsWithCurly) && containsSelection;
       const toolCalls: Record<string, string> = {};
+      const preparedHistory = prepHistoryMessages(history);
 
-      const messagesHistory = [
-        // new SystemMessage(
-        //   this.createEnhancedSystemPrompt(
-        //     focusMode,
-        //     fileIds,
-        //     history.length,
-        //     query,
-        //     firefoxAIDetected,
-        //   ),
-        // ),
-        ...prepHistoryMessages(history),
-        humanMsg,
-      ];
+      // Skill resolution happens during initialization. Initialize before
+      // constructing the current human turn so an explicit /skill invocation
+      // is applied immediately rather than only appearing on the next turn.
+      const agent = await this.initializeAgent(
+        focusMode,
+        fileIds,
+        preparedHistory.length + 1,
+        query,
+        firefoxAIDetected,
+        customTools,
+        customSystemPrompt,
+        extraTools,
+      );
+      const invokedSkillsContext = buildInvokedSkillsContext(
+        this.resolvedSkills,
+        this.invokedSkillNames,
+      );
+      const humanContent = invokedSkillsContext
+        ? `${invokedSkillsContext}\n\n${query}`
+        : query;
+      const humanMsg =
+        messageImageIds && messageImageIds.length > 0
+          ? buildMultimodalHumanMessage(humanContent, messageImageIds)
+          : new HumanMessage(humanContent);
+      const messagesHistory = [...preparedHistory, humanMsg];
 
       // Run-ID attribution sets (see CLAUDE.md — Run-ID Attribution section)
       // LangChain's AsyncLocalStorage propagates the parent's callback context into child
@@ -727,20 +738,6 @@ export class SimplifiedAgent {
       const parentToolsNodeRunIds = new Set<string>();
       // run_id of each LLM call that belongs to THIS parent agent's 'model_request' node
       const activeAgentLlmRunIds = new Set<string>();
-
-      // Initialize agent with the provided focus mode and file context
-      // Pass the number of messages that will be sent to the LLM so prompts can adapt.
-      const llmMessagesCount = messagesHistory.length;
-      const agent = await this.initializeAgent(
-        focusMode,
-        fileIds,
-        llmMessagesCount,
-        query,
-        firefoxAIDetected,
-        customTools,
-        customSystemPrompt,
-        extraTools,
-      );
 
       // Prepare initial state. `initialDocuments` (panel orchestrator) seeds the
       // citation set so the agent's [n] references align with the pre-merged

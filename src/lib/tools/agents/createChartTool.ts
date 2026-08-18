@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import {
-  ChartInputSchema,
+  ChartToolInputSchema,
   chartValidationMessage,
   safeNormalizeChartInput,
 } from '@/lib/chart/chartInput';
@@ -8,7 +8,10 @@ import { emitStreamEvent } from '@/lib/streaming/events';
 import { defineTool } from '@/lib/tools/defineTool';
 
 export const createChartTool = defineTool(
-  async (input: z.infer<typeof ChartInputSchema>, runtime): Promise<string> => {
+  async (
+    input: z.infer<typeof ChartToolInputSchema>,
+    runtime,
+  ): Promise<string> => {
     const { chartRegistry, emitter } = runtime.context;
 
     const normalized = safeNormalizeChartInput(input);
@@ -46,6 +49,6 @@ export const createChartTool = defineTool(
     name: 'create_chart',
     description:
       'Register an interactive bar, line, area, or pie chart for this turn. Use the simplified input with a title, labels and aligned series values (or pie slices). The result contains a short handle; call show_chart with that handle where the chart should appear. This tool registers only and never writes response markup.',
-    schema: ChartInputSchema,
+    schema: ChartToolInputSchema,
   },
 );

@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { describe, expect, it, vi } from 'vitest';
+import { convertToOpenAITool } from '@langchain/core/utils/function_calling';
 import { getSubagentDefinition } from '@/lib/search/subagents/definitions';
 import {
   STREAM_EVENT_CHANNEL,
@@ -84,6 +85,12 @@ const registry = () =>
   });
 
 describe('chart lifecycle tools', () => {
+  it('serializes create_chart with a provider-compatible object schema', () => {
+    const definition = convertToOpenAITool(createChartTool);
+
+    expect(definition.function.parameters).toMatchObject({ type: 'object' });
+  });
+
   it('registers a simplified chart without placing it or exposing tool chrome', async () => {
     const chartRegistry = registry();
     const emitter = new EventEmitter();

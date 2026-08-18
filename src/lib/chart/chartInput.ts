@@ -282,6 +282,53 @@ export const ChartInputSchema = z
     'Simplified chart input: Cartesian charts use labels and aligned series values; pie charts use labeled non-negative slices.',
   );
 
+/** DeepSeek requires every function's root JSON Schema to be an object. */
+export const ChartToolInputSchema = z
+  .object({
+    type: z.enum(['bar', 'line', 'area', 'pie']),
+    title: requiredText,
+    labels: z
+      .array(labelValue)
+      .max(CHART_INPUT_MAX_LABELS)
+      .optional()
+      .describe('Required for bar, line, and area charts.'),
+    series: z
+      .array(cartesianSeries)
+      .max(CHART_INPUT_MAX_SERIES)
+      .optional()
+      .describe('Required for bar, line, and area charts.'),
+    slices: z
+      .array(pieSlice)
+      .max(CHART_INPUT_MAX_SLICES)
+      .optional()
+      .describe('Required for pie charts.'),
+    options: z
+      .object({
+        ...cartesianOptions,
+        orientation: z.enum(['vertical', 'horizontal']).optional(),
+        stacked: z.boolean().optional(),
+        donut: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict()
+  .superRefine((input, ctx) => {
+    const parsed = ChartInputSchema.safeParse(input);
+    if (!parsed.success) {
+      parsed.error.issues.forEach((issue) =>
+        ctx.addIssue({
+          code: 'custom',
+          path: issue.path,
+          message: issue.message,
+        }),
+      );
+    }
+  })
+  .describe(
+    'Simplified chart input. Cartesian charts require labels and aligned series values; pie charts require labeled non-negative slices.',
+  );
+
 type CartesianChartInput = z.infer<
   typeof barInput | typeof lineInput | typeof areaInput
 >;

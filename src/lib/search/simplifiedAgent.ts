@@ -22,22 +22,13 @@ import { ARTIFACT_TOOL_NAMES } from '@/lib/tools/agents/artifactTools';
 //   getLangfuseCallbacks,
 //   getLangfuseHandler,
 // } from '@/lib/tracing/langfuse';
-import {
-  pushCallbackRunId,
-  dropCallbackRunId as dropCodeCallbackRunId,
-} from '@/lib/sandbox/codeExecutionCorrelation';
-import {
-  pushCallbackRunId as pushQuestionCallbackRunId,
-  dropCallbackRunId as dropQuestionCallbackRunId,
-} from '@/lib/userQuestion/questionCorrelation';
 import { getLanggraphCheckpointer } from '@/lib/runs/checkpointer';
-import { isGraphInterrupt } from '@langchain/langgraph';
 import { isSoftStop } from '@/lib/utils/runControl';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { BaseMessage, HumanMessage } from '@langchain/core/messages';
 import { buildMultimodalHumanMessage } from '@/lib/utils/images';
 import { ChatPromptTemplate } from '@langchain/core/prompts';
-import { RunnableConfig, RunnableSequence } from '@langchain/core/runnables';
+import { RunnableSequence } from '@langchain/core/runnables';
 import { createAgent } from 'langchain';
 import { EventEmitter } from 'events';
 import { Document } from '@langchain/core/documents';
@@ -58,102 +49,61 @@ import { capabilityDocsGuidance } from '@/lib/prompts/simplifiedAgent/capability
 import { getImageGenerationConfig } from '@/lib/settings/server';
 import { getResolvedSearchCapabilities } from '@/lib/search/providers';
 import type { CapabilityRuntimeFacts } from '@/lib/capabilities/availability';
-import { toolContextSchema, type ToolContext } from '@/lib/tools/toolContext';
 import { TurnChartRegistry } from '@/lib/chart/turnChartRegistry';
+import { toolContextSchema } from '@/lib/tools/toolContext';
+import type { AgentRunConfig } from '@/lib/search/agentRunConfig';
 import { ChartMentionTracker } from '@/lib/chart/handleMentions';
 import {
-  normalizeUsageMetadata,
-  type TokenTracker,
-  type Recorder,
-} from '@/lib/tokens/tracker';
-
-/**
- * Extract text content from LLM message content (handles both string and array formats)
- * OpenAI returns string, Anthropic returns array of content blocks.
- * Thinking/reasoning blocks are wrapped in <think> tags so the frontend ThinkBox renders them.
- */
-function extractTextContent(
-  content:
-    | string
-    | Array<{
-        type?: string;
-        text?: string;
-        thinking?: string;
-        reasoning?: string;
-      }>
-    | null
-    | undefined,
-): string {
-  if (!content) return '';
-
-  if (typeof content === 'string') {
-    return content;
-  }
-
-  if (Array.isArray(content)) {
-    let text = '';
-    for (const block of content) {
-      if (typeof block !== 'object' || block === null) continue;
-
-      if (
-        (block.type === 'text' || block.type === 'text_delta') &&
-        block.text
-      ) {
-        // Regular text output
-        text += block.text;
-      } else if (
-        (block.type === 'thinking' || block.type === 'thinking_delta') &&
-        block.thinking
-      ) {
-        // Anthropic extended thinking blocks — wrap so ThinkBox renders them
-        text += `<think>${block.thinking}</think>`;
-      } else if (block.type === 'reasoning' && block.reasoning) {
-        // LangChain normalized reasoning block — wrap so ThinkBox renders them
-        text += `<think>${block.reasoning}</think>`;
-      }
-    }
-    return text;
-  }
-
-  return '';
-}
-
-/** Max length of an MCP response surfaced in the tool widget (avoids bloating message content). */
-const MCP_RESULT_MAX_LENGTH = 4000;
-
-/**
- * Pull the response text out of a finished MCP tool's handler output. MCP tools
- * return a LangGraph `Command` whose `update.messages[0]` is the result `ToolMessage`;
- * fall back to a raw string / `{ content }` shape for safety. Truncated for display.
- */
-function extractMcpResultContent(output: unknown): string | null {
-  try {
-    const out = output as
-      | {
-          update?: { messages?: Array<{ content?: unknown }> };
-          content?: unknown;
-        }
-      | string
-      | null
-      | undefined;
-    let content: unknown;
-    if (typeof out === 'string') content = out;
-    else if (out && typeof out === 'object') {
-      content = out.update?.messages?.[0]?.content ?? out.content;
-    }
-    if (typeof content !== 'string' || content.length === 0) return null;
-    return content.length > MCP_RESULT_MAX_LENGTH
-      ? content.slice(0, MCP_RESULT_MAX_LENGTH) + '\n… (truncated)'
-      : content;
-  } catch {
-    return null;
-  }
-}
+  AgentStreamDriver,
+  AgentStreamExecutionError,
+  AgentStreamIntegrityError,
+  extractAgentStreamTextContent,
+} from '@/lib/search/agentStreamDriver';
+import type { TokenTracker, Recorder } from '@/lib/tokens/tracker';
 
 /**
  * SimplifiedAgent class that provides a streamlined interface for creating and managing an AI agent
  * with customizable focus modes and tools.
  */
+export interface AgentDependencies {
+  chatLlm: BaseChatModel;
+  systemLlm: BaseChatModel;
+  embeddings: CachedEmbeddings;
+  emitter: EventEmitter;
+  tokenTracking: {
+    tracker: TokenTracker;
+    chatRecorder: Recorder;
+    systemRecorder: Recorder;
+  };
+}
+
+export interface AgentRuntimeContext {
+  signal: AbortSignal;
+  retrievalSignal?: AbortSignal;
+  threadId?: string;
+  memorySection?: string;
+  invokedSkillNames?: Iterable<string>;
+  chartRegistry?: TurnChartRegistry;
+}
+
+export interface SearchAndAnswerCommand {
+  query: string;
+  history?: BaseMessage[];
+  customTools?: typeof allAgentTools;
+  customSystemPrompt?: string;
+  messageImageIds?: string[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  extraTools?: any[];
+  initialDocuments?: Document[];
+}
+
+export interface ResumeCommand {
+  resumeArg: unknown;
+  pinnedMcpDescriptors?: import('@/lib/mcp/types').McpToolDescriptor[];
+  mcpMarkupIds?: Record<string, string>;
+  existingDocuments?: Document[];
+}
+
 export class SimplifiedAgent {
   private chatLlm: BaseChatModel;
   private systemLlm: BaseChatModel;
@@ -162,7 +112,6 @@ export class SimplifiedAgent {
   private personaInstructions: string;
   private methodologyInstructions: string;
   private signal: AbortSignal;
-  private currentToolNames: string[] = [];
   private messageId?: string;
   private retrievalSignal?: AbortSignal;
   private userLocation?: string;
@@ -184,97 +133,40 @@ export class SimplifiedAgent {
   /** Scans the streamed answer for placements the model narrated. */
   private readonly chartMentions = new ChartMentionTracker();
   private threadId?: string;
-  private chatModelRef?: {
-    provider: string;
-    name: string;
-    contextWindowSize?: number;
-  };
-  private systemModelRef?: {
-    provider: string;
-    name: string;
-    contextWindowSize?: number;
-  } | null;
-  private panelConfig: Record<string, unknown> | null = null;
+  private readonly runConfig: AgentRunConfig;
 
-  constructor(
-    chatLlm: BaseChatModel,
-    systemLlm: BaseChatModel,
-    embeddings: CachedEmbeddings,
-    emitter: EventEmitter,
-    personaInstructions: string = '',
-    signal: AbortSignal,
-    tokenTracking: {
-      tracker: TokenTracker;
-      chatRecorder: Recorder;
-      systemRecorder: Recorder;
-    },
-    messageId?: string,
-    retrievalSignal?: AbortSignal,
-    userLocation?: string,
-    userProfile?: string,
-    memoryEnabled: boolean = false,
-    memorySection: string = '',
-    chatId?: string,
-    interactiveSession: boolean = false,
-    methodologyInstructions: string = '',
-    isPrivate: boolean = false,
-    workspaceSuffix: string = '',
-    workspaceId?: string | null,
-    aiMessageId?: string,
-    chartRegistry?: TurnChartRegistry,
-  ) {
-    this.chatLlm = chatLlm;
-    this.systemLlm = systemLlm;
-    this.embeddings = embeddings;
-    this.emitter = emitter;
-    this.personaInstructions = personaInstructions;
-    this.methodologyInstructions = methodologyInstructions;
-    this.signal = signal;
-    this.messageId = messageId;
-    this.retrievalSignal = retrievalSignal;
-    this.userLocation = userLocation;
-    this.userProfile = userProfile;
-    this.memoryEnabled = memoryEnabled;
-    this.memorySection = memorySection;
-    this.chatId = chatId;
-    this.interactiveSession = interactiveSession;
-    this.isPrivate = isPrivate;
-    this.tracker = tokenTracking.tracker;
-    this.chatRecorder = tokenTracking.chatRecorder;
-    this.systemRecorder = tokenTracking.systemRecorder;
-    this.workspaceSuffix = workspaceSuffix;
-    this.workspaceId = workspaceId;
-    this.aiMessageId = aiMessageId;
-    this.chartRegistry = chartRegistry ?? new TurnChartRegistry();
-  }
-
-  public setInvokedSkillNames(names: Set<string> | Iterable<string>) {
-    this.invokedSkillNames = new Set(names);
-  }
-
-  public setThreadId(threadId: string) {
-    this.threadId = threadId;
-  }
-
-  /** Stash the panel config so it lands in the resume config snapshot. */
-  public setPanelConfig(panel: Record<string, unknown> | null) {
-    this.panelConfig = panel;
-  }
-
-  public setModelRefs(
-    chatModelRef: {
-      provider: string;
-      name: string;
-      contextWindowSize?: number;
-    },
-    systemModelRef?: {
-      provider: string;
-      name: string;
-      contextWindowSize?: number;
-    } | null,
-  ) {
-    this.chatModelRef = chatModelRef;
-    this.systemModelRef = systemModelRef;
+  constructor(options: {
+    dependencies: AgentDependencies;
+    run: AgentRunConfig;
+    context: AgentRuntimeContext;
+  }) {
+    const { dependencies, run, context } = options;
+    this.runConfig = run;
+    this.chatLlm = dependencies.chatLlm;
+    this.systemLlm = dependencies.systemLlm;
+    this.embeddings = dependencies.embeddings;
+    this.emitter = dependencies.emitter;
+    this.personaInstructions = run.personaInstructions;
+    this.methodologyInstructions = run.methodologyInstructions;
+    this.signal = context.signal;
+    this.messageId = run.messageId ?? undefined;
+    this.retrievalSignal = context.retrievalSignal;
+    this.userLocation = run.userLocation ?? undefined;
+    this.userProfile = run.userProfile ?? undefined;
+    this.memoryEnabled = run.memoryEnabled;
+    this.memorySection = context.memorySection ?? '';
+    this.chatId = run.chatId ?? undefined;
+    this.interactiveSession = run.interactiveSession;
+    this.isPrivate = run.isPrivate;
+    this.tracker = dependencies.tokenTracking.tracker;
+    this.chatRecorder = dependencies.tokenTracking.chatRecorder;
+    this.systemRecorder = dependencies.tokenTracking.systemRecorder;
+    this.workspaceSuffix = run.workspaceSuffix;
+    this.workspaceId = run.workspaceId;
+    this.aiMessageId = run.aiMessageId ?? undefined;
+    this.threadId = context.threadId;
+    this.invokedSkillNames = new Set(context.invokedSkillNames ?? []);
+    this.chartRegistry = context.chartRegistry ?? new TurnChartRegistry();
   }
 
   /** Build only the local, non-sensitive facts the capability tool may report. */
@@ -331,32 +223,6 @@ export class SimplifiedAgent {
     };
   }
 
-  /** Returns serializable config state for DB persistence (for resume after restart). */
-  public buildConfigSnapshot(
-    focusMode: string,
-    fileIds: string[],
-  ): Record<string, unknown> {
-    return {
-      chatModelRef: this.chatModelRef,
-      systemModelRef: this.systemModelRef,
-      focusMode,
-      fileIds,
-      personaInstructions: this.personaInstructions,
-      methodologyInstructions: this.methodologyInstructions,
-      userLocation: this.userLocation,
-      userProfile: this.userProfile,
-      workspaceId: this.workspaceId,
-      isPrivate: this.isPrivate,
-      chatId: this.chatId,
-      messageId: this.messageId,
-      aiMessageId: this.aiMessageId,
-      interactiveSession: this.interactiveSession,
-      workspaceSuffix: this.workspaceSuffix,
-      memoryEnabled: this.memoryEnabled,
-      panel: this.panelConfig,
-    };
-  }
-
   private emitResponse(text: string) {
     emitStreamEvent(this.emitter, { type: 'response', data: text });
     this.placeMentionedCharts(text);
@@ -389,6 +255,39 @@ export class SimplifiedAgent {
         // removed from the answer either way, so there is nothing to report.
       }
     }
+  }
+
+  private createStreamDriver(
+    runId: string,
+    focusMode: string,
+    fileIds: string[],
+  ): AgentStreamDriver {
+    return new AgentStreamDriver({
+      llm: this.chatLlm,
+      systemLlm: this.systemLlm,
+      embeddings: this.embeddings,
+      fileIds,
+      emitter: this.emitter,
+      messageId: this.messageId,
+      assistantMessageId: this.aiMessageId,
+      runId,
+      retrievalSignal: this.retrievalSignal,
+      userLocation: this.userLocation,
+      userProfile: this.userProfile,
+      chatId: this.chatId,
+      workspaceId: this.workspaceId,
+      interactiveSession: this.interactiveSession,
+      isPrivate: this.isPrivate,
+      tracker: this.tracker,
+      chatRecorder: this.chatRecorder,
+      systemRecorder: this.systemRecorder,
+      chartRegistry: this.chartRegistry,
+      capabilityFacts: () => this.getCapabilityFacts(focusMode, fileIds),
+      signal: this.signal,
+      threadId: this.threadId,
+      resolvedSkills: this.resolvedSkills,
+      onResponse: (text) => this.emitResponse(text),
+    });
   }
 
   /**
@@ -428,9 +327,6 @@ export class SimplifiedAgent {
 
     const allTools =
       firefoxDocsOnly || !extraTools ? tools : [...tools, ...extraTools];
-
-    // Cache tool names for usage attribution heuristics
-    this.currentToolNames = allTools.map((t) => t.name.toLowerCase());
 
     const enhancedSystemPrompt = customSystemPrompt
       ? customSystemPrompt
@@ -667,18 +563,17 @@ export class SimplifiedAgent {
   /**
    * Execute the simplified agent workflow
    */
-  async searchAndAnswer(
-    query: string,
-    history: BaseMessage[] = [],
-    fileIds: string[] = [],
-    focusMode: string = 'webSearch',
-    customTools?: typeof allAgentTools,
-    customSystemPrompt?: string,
-    messageImageIds?: string[],
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    extraTools?: any[],
-    initialDocuments?: Document[],
-  ): Promise<void> {
+  async searchAndAnswer(command: SearchAndAnswerCommand): Promise<void> {
+    const {
+      query,
+      history = [],
+      customTools,
+      customSystemPrompt,
+      messageImageIds,
+      extraTools,
+      initialDocuments,
+    } = command;
+    const { focusMode, fileIds } = this.runConfig;
     let skillRunId: string | null = null;
 
     try {
@@ -686,24 +581,18 @@ export class SimplifiedAgent {
       console.log(`SimplifiedAgent: Focus mode: ${focusMode}`);
       console.log(`SimplifiedAgent: File IDs: ${fileIds.join(', ')}`);
 
-      // Write this on a background thread after a delay otherwise the emitter won't be listening
       setTimeout(() => {
-        this.emitResponse(''); // Empty response, to give the UI a message to display.
+        this.emitResponse('');
       }, 100);
 
-      // Detect Firefox AI prompt pattern
       const trimmed = query.trim();
       const startsWithAscii = trimmed.startsWith("I'm on page");
-      const startsWithCurly = trimmed.startsWith('I’' + 'm on page'); // handle curly apostrophe variant
+      const startsWithCurly = trimmed.startsWith('I’' + 'm on page');
       const containsSelection = trimmed.includes('<selection>');
       const firefoxAIDetected =
         (startsWithAscii || startsWithCurly) && containsSelection;
-      const toolCalls: Record<string, string> = {};
       const preparedHistory = prepHistoryMessages(history);
 
-      // Skill resolution happens during initialization. Initialize before
-      // constructing the current human turn so an explicit /skill invocation
-      // is applied immediately rather than only appearing on the next turn.
       const agent = await this.initializeAgent(
         focusMode,
         fileIds,
@@ -726,22 +615,6 @@ export class SimplifiedAgent {
           ? buildMultimodalHumanMessage(humanContent, messageImageIds)
           : new HumanMessage(humanContent);
       const messagesHistory = [...preparedHistory, humanMsg];
-
-      // Run-ID attribution sets (see CLAUDE.md — Run-ID Attribution section)
-      // LangChain's AsyncLocalStorage propagates the parent's callback context into child
-      // tool executions, so child SimplifiedAgent LLM events also appear in this stream.
-      // These sets let us distinguish the parent agent's own events from nested child events.
-
-      // run_id of each active deep_research tool invocation in the parent graph's tools node
-      const deepResearchRunIds = new Set<string>();
-      // run_id of each 'tools' node chain start that belongs to the parent graph (not a child)
-      const parentToolsNodeRunIds = new Set<string>();
-      // run_id of each LLM call that belongs to THIS parent agent's 'model_request' node
-      const activeAgentLlmRunIds = new Set<string>();
-
-      // Prepare initial state. `initialDocuments` (panel orchestrator) seeds the
-      // citation set so the agent's [n] references align with the pre-merged
-      // sources, and further searches append after them.
       const seededDocuments = initialDocuments ?? [];
       const initialState = {
         messages: messagesHistory,
@@ -752,8 +625,6 @@ export class SimplifiedAgent {
         subagentExecutions: [],
       };
 
-      // Stash resolved skills + per-run context (chatId/parentMessageId) so
-      // read_skill and other context-bearing tools can persist their reads.
       const runId = `run_${Date.now()}_${Math.random().toString(36).slice(2)}`;
       skillRunId = runId;
       setRunContext(runId, {
@@ -762,797 +633,40 @@ export class SimplifiedAgent {
         skills: this.resolvedSkills,
       });
 
-      // Configure the agent run
-      const config: RunnableConfig & { context: ToolContext } = {
-        configurable: {
-          thread_id: this.threadId ?? `simplified_agent_${Date.now()}`,
-        },
-        context: {
-          llm: this.chatLlm,
-          systemLlm: this.systemLlm,
-          embeddings: this.embeddings,
-          fileIds,
-          emitter: this.emitter,
-          // Pass through message and retrieval controls for tools
-          messageId: this.messageId,
-          assistantMessageId: this.aiMessageId,
-          runId,
-          retrievalSignal: this.retrievalSignal,
-          userLocation: this.userLocation,
-          userProfile: this.userProfile,
-          chatId: this.chatId,
-          workspaceId: this.workspaceId,
-          interactiveSession: this.interactiveSession,
-          isPrivate: this.isPrivate,
-          tracker: this.tracker,
-          chatRecorder: this.chatRecorder,
-          systemRecorder: this.systemRecorder,
-          chartRegistry: this.chartRegistry,
-          capabilityFacts: () => this.getCapabilityFacts(focusMode, fileIds),
-        },
-        recursionLimit: 150, // Increased to handle complex multi-task research with todo_list
-        signal: this.retrievalSignal,
-        // ...getLangfuseCallbacks(),
-      };
-
-      // Use streamEvents to capture both tool calls and token-level streaming
+      const driver = this.createStreamDriver(runId, focusMode, fileIds);
+      const config = driver.buildConfig();
       const eventStream = agent.streamEvents(initialState, {
         ...config,
         version: 'v2',
-        callbacks: [
-          {
-            handleToolStart: (
-              tool,
-              input,
-              runId,
-              parentRunId?,
-              tags?,
-              metadata?,
-              runName?,
-            ) => {
-              console.log('SimplifiedAgent: Tool started:', {
-                tool,
-                input,
-                runId,
-                parentRunId,
-                tags,
-                metadata,
-                runName,
-              });
-              const toolName = runName || tool.name || 'unknown';
-              toolCalls[runId] = toolName;
-
-              // Skip generic tool events for tools with specialized inline rendering
-              if (
-                toolName === 'deep_research' ||
-                toolName === 'todo_list' ||
-                toolName === 'create_chart' ||
-                toolName === 'show_chart'
-              ) {
-                return;
-              }
-
-              // For read_skill: suppress events when loading a system skill (silent)
-              if (toolName === 'read_skill') {
-                try {
-                  const parsedInput =
-                    typeof input === 'string' ? JSON.parse(input) : input;
-                  const skillName = parsedInput?.name as string | undefined;
-                  if (skillName && this.resolvedSkills.length > 0) {
-                    const matched = this.resolvedSkills.find(
-                      (s) => s.name === skillName,
-                    );
-                    if (matched && matched.source === 'system') {
-                      delete toolCalls[runId];
-                      return;
-                    }
-                  }
-                } catch {
-                  // Fall through to emit normally
-                }
-              }
-
-              // Skip tool calls from child SimplifiedAgent graphs.
-              // parentRunId is the run_id of the invoking 'tools' node; if it isn't in
-              // parentToolsNodeRunIds it belongs to a nested child graph, not this agent.
-              if (parentRunId && !parentToolsNodeRunIds.has(parentRunId)) {
-                delete toolCalls[runId];
-                return;
-              }
-
-              // Emit a tool_call_started event so UI can display a running state spinner.
-              try {
-                const type = toolName.trim();
-                // We only include lightweight identifying args for now; avoid large payloads.
-                const TOOL_ARG_MAX_LENGTH = 350;
-                const attrs: Record<string, unknown> = {};
-                try {
-                  if (input && typeof input === 'string') {
-                    // Construct an object from the input json string if possible
-                    const trimmed = input.trim();
-                    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
-                      try {
-                        input = JSON.parse(trimmed);
-                      } catch {
-                        // If parsing fails, fall back to original string
-                        input = trimmed;
-                      }
-                    }
-                  }
-                  if (input && typeof input === 'object') {
-                    const inputObj = input as Record<string, unknown>;
-                    if (typeof inputObj.query === 'string') {
-                      attrs.query = inputObj.query.slice(
-                        0,
-                        TOOL_ARG_MAX_LENGTH,
-                      );
-                    }
-                    // For read_skill, surface the skill name as query for UI display
-                    if (
-                      toolName === 'read_skill' &&
-                      typeof inputObj.name === 'string'
-                    ) {
-                      attrs.query = inputObj.name.slice(0, TOOL_ARG_MAX_LENGTH);
-                    }
-                    if (Array.isArray(inputObj.urls)) {
-                      attrs.count = inputObj.urls.length;
-                    }
-                    if (typeof inputObj.url === 'string') {
-                      attrs.url = inputObj.url.slice(0, TOOL_ARG_MAX_LENGTH);
-                    }
-                    if (typeof inputObj.pdfUrl === 'string') {
-                      attrs.url = inputObj.pdfUrl.slice(0, TOOL_ARG_MAX_LENGTH);
-                    }
-                    // Memory tools: extract content for display
-                    if (
-                      typeof inputObj.content === 'string' &&
-                      !inputObj.query
-                    ) {
-                      attrs.query = inputObj.content.slice(
-                        0,
-                        TOOL_ARG_MAX_LENGTH,
-                      );
-                    }
-                  }
-                  // For code_execution, include the code as a plain string field.
-                  if (
-                    type === 'code_execution' &&
-                    input &&
-                    typeof input === 'object'
-                  ) {
-                    const inputObj = input as Record<string, unknown>;
-                    if (typeof inputObj.code === 'string') {
-                      attrs.code = inputObj.code;
-                      // Store correlation: code content → callback runId
-                      // Used by codeExecutionTool to include the correct markup toolCallId
-                      // in its code_execution_pending event (fixes race with async Docker checks)
-                      pushCallbackRunId(inputObj.code, runId);
-                    }
-                    if (typeof inputObj.description === 'string') {
-                      attrs.description = inputObj.description.slice(0, 100);
-                    }
-                  }
-                  // For ask_user, store correlation and include question as attribute
-                  if (
-                    type === 'ask_user' &&
-                    input &&
-                    typeof input === 'object'
-                  ) {
-                    const inputObj = input as Record<string, unknown>;
-                    if (typeof inputObj.question === 'string') {
-                      attrs.query = inputObj.question.slice(0, 200);
-                      // Store correlation: question text → callback runId
-                      pushQuestionCallbackRunId(inputObj.question, runId);
-                    }
-                    if (typeof inputObj.context === 'string') {
-                      attrs.context = inputObj.context.slice(0, 200);
-                    }
-                  }
-                  if (
-                    type === 'get_message' &&
-                    input &&
-                    typeof input === 'object'
-                  ) {
-                    const inputObj = input as Record<string, unknown>;
-                    if (inputObj.messageId !== undefined) {
-                      attrs.query = String(inputObj.messageId);
-                    }
-                  }
-                  if (
-                    type === 'chat_history_search' &&
-                    input &&
-                    typeof input === 'object'
-                  ) {
-                    const inputObj = input as Record<string, unknown>;
-                    if (Array.isArray(inputObj.keywords)) {
-                      const joined = inputObj.keywords
-                        .filter((k) => typeof k === 'string')
-                        .join(', ');
-                      attrs.query = joined.slice(0, TOOL_ARG_MAX_LENGTH);
-                    }
-                  }
-                  // For workspace tools, extract relevant args for display
-                  if (
-                    (type === 'workspace_read' ||
-                      type === 'workspace_grep' ||
-                      type === 'workspace_edit' ||
-                      type === 'workspace_create_file') &&
-                    input &&
-                    typeof input === 'object'
-                  ) {
-                    const inputObj = input as Record<string, unknown>;
-                    if (
-                      type === 'workspace_read' &&
-                      typeof inputObj.file === 'string'
-                    ) {
-                      attrs.query = inputObj.file.slice(0, TOOL_ARG_MAX_LENGTH);
-                    }
-                    if (
-                      type === 'workspace_grep' &&
-                      typeof inputObj.pattern === 'string'
-                    ) {
-                      attrs.query = inputObj.pattern.slice(
-                        0,
-                        TOOL_ARG_MAX_LENGTH,
-                      );
-                    }
-                    if (
-                      (type === 'workspace_edit' ||
-                        type === 'workspace_create_file') &&
-                      typeof inputObj.file === 'string'
-                    ) {
-                      attrs.query = inputObj.file.slice(0, TOOL_ARG_MAX_LENGTH);
-                      // Correlate filename → callback runId so the interrupt's
-                      // *_pending event carries the chip's markupToolCallId and
-                      // the chip can be closed to success on resume (markupKey =
-                      // input.file in workspace edit/create tools).
-                      pushQuestionCallbackRunId(inputObj.file, runId);
-                    }
-                  }
-                  // For skill edits, correlate skill name → callback runId
-                  // (markupKey = input.name in editSkillTool) so the chip closes.
-                  if (
-                    type === 'edit_skill' &&
-                    input &&
-                    typeof input === 'object'
-                  ) {
-                    const inputObj = input as Record<string, unknown>;
-                    if (typeof inputObj.name === 'string') {
-                      pushQuestionCallbackRunId(inputObj.name, runId);
-                    }
-                  }
-                  // For MCP tools, correlate namespacedName → callback runId
-                  // (markupKey = namespacedName in the mcp_tool interrupt) and
-                  // surface the calling arguments in the widget.
-                  if (type.startsWith('mcp__')) {
-                    pushQuestionCallbackRunId(type, runId);
-                    if (input && typeof input === 'object') {
-                      try {
-                        const json = JSON.stringify(input);
-                        if (json && json !== '{}') {
-                          attrs.mcpArgs = json;
-                        }
-                      } catch {
-                        // ignore arg serialization errors
-                      }
-                    }
-                  }
-                } catch (_attrErr) {
-                  // Ignore attribute extraction errors
-                }
-
-                emitStreamEvent(this.emitter, {
-                  type: 'tool_call_started',
-                  data: {
-                    toolCallId: runId,
-                    toolType: type,
-                    status: 'running',
-                    attrs,
-                  },
-                });
-              } catch (emitErr) {
-                console.warn('Failed to emit tool_call_started event', emitErr);
-              }
-            },
-            handleToolEnd: (output, runId, parentRunId, tags) => {
-              console.log('SimplifiedAgent: Tool completed:', {
-                output,
-                runId,
-                parentRunId,
-                tags,
-              });
-
-              const toolName = toolCalls[runId];
-
-              // Skip if the tool was never registered (e.g. filtered out as a child-graph call)
-              if (!toolName) return;
-
-              // Reaching here means the tool finished without interrupting (the
-              // interrupt path is the isGraphInterrupt branch in handleToolError),
-              // so any correlation entry it pushed speculatively in handleToolStart
-              // is stale. Drop it; otherwise a later interrupt for the same key
-              // (e.g. an edit_skill create that early-errors, then an update) would
-              // pop this dead runId and target the wrong markup widget.
-              dropQuestionCallbackRunId(runId);
-              dropCodeCallbackRunId(runId);
-
-              // Skip generic tool events for tools with specialized inline rendering
-              if (
-                toolName === 'deep_research' ||
-                toolName === 'todo_list' ||
-                toolName === 'create_chart' ||
-                toolName === 'show_chart'
-              ) {
-                delete toolCalls[runId];
-                return;
-              }
-
-              // For read_skill: surface structured {error} payloads as UI errors
-              if (toolName === 'read_skill') {
-                const outputStr =
-                  typeof output === 'string'
-                    ? output
-                    : typeof output?.content === 'string'
-                      ? output.content
-                      : null;
-                let errorMsg: string | null = null;
-                if (outputStr) {
-                  try {
-                    const parsed = JSON.parse(outputStr);
-                    if (parsed && typeof parsed.error === 'string') {
-                      errorMsg = parsed.error;
-                    }
-                  } catch {
-                    // Not JSON — treat as successful skill body
-                  }
-                }
-                if (errorMsg) {
-                  if (toolCalls[runId]) delete toolCalls[runId];
-                  try {
-                    emitStreamEvent(this.emitter, {
-                      type: 'tool_call_error',
-                      data: {
-                        toolCallId: runId,
-                        status: 'error',
-                        error: errorMsg.substring(0, 500),
-                      },
-                    });
-                  } catch (emitErr) {
-                    console.warn(
-                      'Failed to emit tool_call_error event',
-                      emitErr,
-                    );
-                  }
-                  return;
-                }
-              }
-
-              // If youtube transcript tool, capture videoId for potential future UI enhancements
-              let extra: Record<string, string> | undefined;
-              if (toolName === 'youtube_transcript') {
-                const videoId =
-                  output?.update?.relevantDocuments?.[0]?.metadata?.source;
-                if (videoId) {
-                  extra = { videoId: String(videoId) };
-                }
-              }
-              // If image_generation, extract imageId from tool output for UI rendering
-              if (toolName === 'image_generation') {
-                try {
-                  const msgContent = output?.update?.messages?.[0]?.content;
-                  if (typeof msgContent === 'string') {
-                    const parsed = JSON.parse(msgContent);
-                    if (parsed.imageId) {
-                      extra = { imageId: String(parsed.imageId) };
-                    }
-                  }
-                } catch {
-                  // If parsing fails, skip extra
-                }
-              }
-              // For MCP tools, surface the response content in the widget.
-              if (toolName.startsWith('mcp__')) {
-                const result = extractMcpResultContent(output);
-                if (result) {
-                  extra = { ...(extra ?? {}), mcpResult: result };
-                }
-              }
-              if (toolCalls[runId]) delete toolCalls[runId];
-
-              // Emit success update so UI can swap spinner for checkmark
-              try {
-                emitStreamEvent(this.emitter, {
-                  type: 'tool_call_success',
-                  data: {
-                    toolCallId: runId,
-                    status: 'success',
-                    ...(extra ? { extra } : {}),
-                  },
-                });
-              } catch (emitErr) {
-                console.warn('Failed to emit tool_call_success event', emitErr);
-              }
-            },
-            handleToolError: (err, runId, parentRunId, tags) => {
-              // LangGraph interrupts propagate as errors through the callback system — they
-              // are not actual tool failures. Skip the error event so the widget stays "running"
-              // rather than showing the raw interrupt payload as an error message.
-              if (isGraphInterrupt(err)) {
-                if (toolCalls[runId]) delete toolCalls[runId];
-                return;
-              }
-
-              console.error('SimplifiedAgent: Tool error:', {
-                error: err,
-                runId,
-                parentRunId,
-                tags,
-              });
-
-              const toolName = toolCalls[runId];
-
-              // Skip if the tool was never registered (e.g. filtered out as a child-graph call)
-              if (!toolName) return;
-
-              // Reaching here means the tool finished without interrupting (the
-              // interrupt path is the isGraphInterrupt branch in handleToolError),
-              // so any correlation entry it pushed speculatively in handleToolStart
-              // is stale. Drop it; otherwise a later interrupt for the same key
-              // (e.g. an edit_skill create that early-errors, then an update) would
-              // pop this dead runId and target the wrong markup widget.
-              dropQuestionCallbackRunId(runId);
-              dropCodeCallbackRunId(runId);
-
-              // Skip generic tool events for tools with specialized inline rendering
-              if (
-                toolName === 'deep_research' ||
-                toolName === 'todo_list' ||
-                toolName === 'create_chart' ||
-                toolName === 'show_chart'
-              ) {
-                delete toolCalls[runId];
-                return;
-              }
-
-              const message =
-                (err && (err.message || err.toString())) ||
-                'Unknown tool error';
-              // Emit error update to UI
-              try {
-                emitStreamEvent(this.emitter, {
-                  type: 'tool_call_error',
-                  data: {
-                    toolCallId: runId,
-                    status: 'error',
-                    error: message.substring(0, 500),
-                  },
-                });
-              } catch (emitErr) {
-                console.warn('Failed to emit tool_call_error event', emitErr);
-              }
-            },
-          },
-          // getLangfuseHandler() || {},
-        ],
+        callbacks: driver.callbacks({
+          kind: 'start',
+          seededDocuments,
+          firefoxAIDetected,
+        }),
       });
 
-      let finalResult: {
-        messages?: BaseMessage[];
-        relevantDocuments?: Document[];
-      } | null = null;
-      const collectedDocuments: Document[] = [];
-      // Reference-identity dedupe for collected docs. The `relevantDocuments`
-      // graph channel uses a concat reducer, so seeded panel sources (placed in
-      // initialState) and tool-added docs reappear in `finalResult` as the SAME
-      // object references already collected from incremental events — without
-      // this they would be pushed (and re-emitted as sources_added) twice,
-      // duplicating citations and corrupting [n] numbering. Returns only the
-      // docs not seen before so callers emit each source exactly once.
-      const seenDocs = new Set<Document>();
-      const collectNewDocs = (docs: Document[]): Document[] => {
-        const fresh = docs.filter((d) => !seenDocs.has(d));
-        for (const d of fresh) seenDocs.add(d);
-        collectedDocuments.push(...fresh);
-        return fresh;
-      };
-      let currentResponseBuffer = '';
-      let initialMessageSent = false;
-
-      // Seed pre-merged citation set (panel orchestrator) into the collected
-      // documents + emit them so the UI numbers them ahead of any new searches.
-      if (seededDocuments.length > 0) {
-        collectNewDocs(seededDocuments);
-        emitStreamEvent(this.emitter, {
-          type: 'sources_added',
-          data: seededDocuments,
-          searchQuery: 'Panel sources',
-          searchUrl: '',
-        });
-      }
-
+      let streamResult;
       try {
-        // Process the event stream
-        for await (const event of eventStream) {
-          // Check if the operation has been aborted (e.g., client disconnected)
-          if (this.signal.aborted) {
-            console.log(
-              'SimplifiedAgent: Abort signal received, stopping event processing',
-            );
-            break;
-          }
-
-          if (!initialMessageSent) {
-            initialMessageSent = true;
-            // If Firefox AI was detected, emit synthetic lifecycle events so UI can show a completed pseudo-tool
-            if (firefoxAIDetected) {
-              const syntheticId = `firefoxAI-${Date.now()}`;
-              try {
-                // Emit single started event already marked success to avoid double UI churn
-                emitStreamEvent(this.emitter, {
-                  type: 'tool_call_started',
-                  data: {
-                    toolCallId: syntheticId,
-                    toolType: 'firefoxAI',
-                    status: 'success',
-                  },
-                });
-              } catch (e) {
-                console.warn(
-                  'Failed to emit firefoxAI synthetic tool event',
-                  e,
-                );
-              }
-            }
-          }
-
-          const emitNewDocs = (newDocs: Document[]) => {
-            //Group by metadata.searchQuery and emit separate source blocks for each
-            const groupedBySearchQuery = newDocs.reduce(
-              (acc, doc) => {
-                const searchQuery = doc.metadata?.searchQuery || 'Agent Search';
-                if (!acc[searchQuery]) {
-                  acc[searchQuery] = [];
-                }
-                acc[searchQuery].push(doc);
-                return acc;
-              },
-              {} as Record<string, Document[]>,
-            );
-
-            for (const [searchQuery, docs] of Object.entries(
-              groupedBySearchQuery,
-            )) {
-              emitStreamEvent(this.emitter, {
-                type: 'sources_added',
-                data: docs,
-                searchQuery,
-                searchUrl: '',
-              });
-            }
-          };
-
-          // --- Run-ID attribution tracking (Steps 2-4) ---
-          // Step 2: Track deep_research tool execution run IDs.
-          // Any on_chat_model_start / on_chain_start with a parent_id in this set
-          // belongs to a child SimplifiedAgent, not the parent graph.
-          if (
-            event.event === 'on_tool_start' &&
-            event.name === 'deep_research'
-          ) {
-            deepResearchRunIds.add(event.run_id);
-          }
-          if (
-            (event.event === 'on_tool_end' ||
-              event.event === 'on_tool_error') &&
-            event.name === 'deep_research'
-          ) {
-            deepResearchRunIds.delete(event.run_id);
-          }
-
-          // Step 3: Track parent-graph 'tools' node run IDs.
-          // handleToolStart callbacks receive parentRunId; we compare it against this set
-          // to skip tool call lifecycle events that come from child agent tool executions.
-          if (
-            event.event === 'on_chain_start' &&
-            event.metadata?.langgraph_node === 'tools' &&
-            !(event as unknown as { parent_ids?: string[] }).parent_ids?.some(
-              (id: string) => deepResearchRunIds.has(id),
-            )
-          ) {
-            parentToolsNodeRunIds.add(event.run_id);
-          }
-          if (
-            (event.event === 'on_chain_end' ||
-              event.event === 'on_chain_error') &&
-            event.metadata?.langgraph_node === 'tools'
-          ) {
-            parentToolsNodeRunIds.delete(event.run_id);
-          }
-
-          // Step 4: Register parent-agent LLM run IDs.
-          // Drain happens later in the on_chat_model_end handler (after token counting)
-          // to avoid a use-after-delete race on the same event.
-          if (
-            event.event === 'on_chat_model_start' &&
-            event.metadata?.langgraph_node === 'model_request' &&
-            !(event as unknown as { parent_ids?: string[] }).parent_ids?.some(
-              (id: string) => deepResearchRunIds.has(id),
-            )
-          ) {
-            activeAgentLlmRunIds.add(event.run_id);
-          }
-
-          // --- End attribution tracking ---
-
-          // Handle different event types
-          if (
-            event.event === 'on_chain_end' &&
-            event.name === 'RunnableSequence'
-          ) {
-            finalResult = event.data.output;
-            // Collect relevant documents from the final result. Dedupe by
-            // reference so seeded/tool docs already collected from incremental
-            // events (the concat reducer keeps the same object refs here) aren't
-            // counted or re-emitted a second time.
-            if (finalResult && finalResult.relevantDocuments) {
-              const fresh = collectNewDocs(finalResult.relevantDocuments);
-              if (fresh.length > 0) emitNewDocs(fresh);
-            }
-          }
-
-          // Collect sources from tool results
-          if (
-            event.event === 'on_chain_end' &&
-            (event.name.includes('search') ||
-              event.name.includes('Search') ||
-              event.name.includes('tool') ||
-              event.name.includes('Tool'))
-          ) {
-            // Handle LangGraph state updates with relevantDocuments
-            if (event.data?.output && Array.isArray(event.data.output)) {
-              for (const item of event.data.output) {
-                if (
-                  item.update &&
-                  item.update.relevantDocuments &&
-                  Array.isArray(item.update.relevantDocuments)
-                ) {
-                  const fresh = collectNewDocs(item.update.relevantDocuments);
-                  if (fresh.length > 0) emitNewDocs(fresh);
-
-                  // Log for deep_research to verify sources are being emitted
-                  if (event.name === 'deep_research') {
-                    console.log(
-                      `SimplifiedAgent: deep_research returned ${item.update.relevantDocuments.length} documents`,
-                    );
-                  }
-                }
-              }
-            }
-          }
-
-          // Handle streaming tool calls (for thought messages)
-          // Only count events from the 'model_request' node (createAgent's LLM node).
-          // In LangChain/LangGraph v1.x, AsyncLocalStorage propagates parent callbacks into
-          // tool executions, so system model llm.invoke() calls inside tools also fire
-          // on_chat_model_end in this stream. Those events have langgraph_node === 'tools'
-          // and must be excluded — their tokens are reported via ctx.systemRecorder instead.
-          // Additionally guard by activeAgentLlmRunIds to exclude child SimplifiedAgent
-          // LLM calls (which also have langgraph_node === 'model_request' from the child's graph).
-          if (
-            event.event === 'on_chat_model_end' &&
-            event.data.output &&
-            event.metadata?.langgraph_node === 'model_request' &&
-            activeAgentLlmRunIds.has(event.run_id)
-          ) {
-            const output = event.data.output;
-
-            if (output.usage_metadata) {
-              const normalized = normalizeUsageMetadata(output.usage_metadata);
-              console.log(
-                'SimplifiedAgent: Collected usage from usage_metadata:',
-                normalized,
-              );
-              this.chatRecorder.record(normalized);
-            } else if (output.response_metadata?.usage) {
-              // Fallback to response_metadata for different model providers
-              const normalized = normalizeUsageMetadata(
-                output.response_metadata.usage,
-              );
-              console.log(
-                'SimplifiedAgent: Collected usage from response_metadata:',
-                normalized,
-              );
-              this.chatRecorder.record(normalized);
-            }
-          }
-          // Drain activeAgentLlmRunIds AFTER the token-counting check above so the
-          // has() test doesn't evaluate against an already-deleted entry.
-          if (event.event === 'on_chat_model_end') {
-            activeAgentLlmRunIds.delete(event.run_id);
-          }
-
-          // Handle LLM end events for token usage tracking (completion models only; same
-          // node filter as on_chat_model_end to exclude tool-level system LLM calls).
-          // Also guarded by activeAgentLlmRunIds for the same child-agent reason above.
-          if (
-            event.event === 'on_llm_end' &&
-            event.data.output &&
-            event.metadata?.langgraph_node === 'model_request' &&
-            activeAgentLlmRunIds.has(event.run_id)
-          ) {
-            const output = event.data.output;
-
-            // Only count tokens from the agent node. System model calls inside tools
-            // report via ctx.systemRecorder and have langgraph_node === 'tools'.
-            if (output.llmOutput?.tokenUsage) {
-              const normalized = normalizeUsageMetadata(
-                output.llmOutput.tokenUsage,
-              );
-              console.log(
-                'SimplifiedAgent: Collected usage from llmOutput:',
-                normalized,
-              );
-              this.chatRecorder.record(normalized);
-            }
-          }
-
-          // Handle token-level streaming for the final response.
-          // Guard by activeAgentLlmRunIds so that tokens from child SimplifiedAgent
-          // instances (spawned by deep_research) — which bubble up via AsyncLocalStorage
-          // callback propagation — are not emitted as parent response tokens.
-          if (
-            event.event === 'on_chat_model_stream' &&
-            event.data.chunk &&
-            activeAgentLlmRunIds.has(event.run_id)
-          ) {
-            const chunk = event.data.chunk;
-            const textContent = extractTextContent(chunk.content);
-
-            if (textContent) {
-              currentResponseBuffer += textContent;
-              this.emitResponse(textContent);
-            }
-          }
-        }
-
-        // After the stream loop ends normally, check for pending LangGraph interrupts.
-        // When interrupt() is called inside a tool, LangGraph pauses the graph and writes
-        // a checkpoint; the stream ends cleanly but tasks[*].interrupts is populated.
-        if (!this.signal.aborted && this.threadId) {
-          try {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const agentState = await (agent as any).getState({
-              configurable: { thread_id: this.threadId },
-            });
-            const pendingInterrupts = (agentState?.tasks ?? []).flatMap(
-              (t: { interrupts?: unknown[] }) => t.interrupts ?? [],
-            );
-            if (pendingInterrupts.length > 0) {
-              // runHost listens for 'interrupts' and handles DB persistence + status transition
-              emitStreamEvent(this.emitter, {
-                type: 'interrupt',
-                interrupts: pendingInterrupts,
-              });
-              if (skillRunId) cleanupSkillsForRun(skillRunId);
-              return; // Do NOT emit agent_end — run is now paused at an interrupt
-            }
-          } catch (stateErr) {
-            console.warn(
-              '[simplifiedAgent] interrupt state check failed:',
-              stateErr,
-            );
-          }
-        }
-      } catch (err: unknown) {
-        if (
-          this.retrievalSignal &&
-          this.retrievalSignal.aborted &&
-          isSoftStop(this.messageId || '')
-        ) {
-          // If respond-now was triggered, run a quick synthesis from collected context before finalization
-
-          const docsString = collectedDocuments
-            .map((doc, idx: number) => {
+        streamResult = await driver.consume(
+          eventStream,
+          { kind: 'start', seededDocuments, firefoxAIDetected },
+          agent,
+        );
+      } catch (error) {
+        if (error instanceof AgentStreamIntegrityError) throw error;
+        if (this.retrievalSignal?.aborted && isSoftStop(this.messageId || '')) {
+          streamResult =
+            error instanceof AgentStreamExecutionError
+              ? error.result
+              : {
+                  finalResult: null,
+                  collectedDocuments: [],
+                  responseText: '',
+                  interrupted: false,
+                  aborted: false,
+                };
+          const docsString = streamResult.collectedDocuments
+            .map((doc, idx) => {
               const meta = doc?.metadata || {};
               const title = meta.title || meta.url || `Source ${idx + 1}`;
               const url = meta.url || '';
@@ -1565,13 +679,11 @@ ${url ? `<url>${url}</url>` : ''}
             })
             .join('\n\n');
 
-          // Build the respond-now prompt based on whether a custom system prompt is active.
-          // When customSystemPrompt is provided (e.g. deep research subagent), use it
-          // instead of the default webSearchResponsePrompt to stay consistent with
-          // the agent's original role.
           let respondNowPrompt: ChatPromptTemplate;
           if (customSystemPrompt) {
-            const synthesisSystemPrompt = `${customSystemPrompt}\n\n## Early Synthesis\nYou were interrupted before completing your full research. Synthesize a response from the documents gathered so far.\n\n<context>\n${docsString || 'No context documents available.'}\n</context>\n\nCurrent date: ${formatDateForLLM(new Date())}`;
+            const synthesisSystemPrompt = `${customSystemPrompt}\n\n## Early Synthesis\nYou were interrupted before completing your full research. Synthesize a response from the documents gathered so far.\n\n<context>\n${
+              docsString || 'No context documents available.'
+            }\n</context>\n\nCurrent date: ${formatDateForLLM(new Date())}`;
             respondNowPrompt = ChatPromptTemplate.fromMessages([
               ['system', synthesisSystemPrompt],
               ['user', query],
@@ -1598,85 +710,51 @@ ${url ? `<url>${url}</url>` : ''}
             this.chatLlm,
           ]).withConfig({
             runName: 'SimplifiedRespondNowSynthesis',
-            // ...getLangfuseCallbacks(),
             signal: this.signal,
           });
-
-          const eventStream2 = chain.streamEvents(
-            { query },
-            { version: 'v2' /* ...getLangfuseCallbacks() */ },
-          );
+          const eventStream2 = chain.streamEvents({ query }, { version: 'v2' });
 
           this.emitResponse(
             `## ⚠︎ Early response triggered by budget or user request. ⚠︎\nResponse may be incomplete, lack citations, or omit important content.\n\n---\n\n`,
           );
-
-          for await (const event of eventStream2) {
-            if (this.signal.aborted) break;
-            if (event.event === 'on_chat_model_stream' && event.data?.chunk) {
-              const chunk = event.data.chunk;
-              const textContent = extractTextContent(chunk.content);
-
-              if (textContent) {
-                currentResponseBuffer += textContent;
-                this.emitResponse(textContent);
-              }
-            }
-            if (event.event === 'on_chat_model_end' && event.data?.output) {
-              const meta =
-                event.data.output.usage_metadata ||
-                event.data.output.response_metadata?.usage;
-              if (meta) {
-                this.chatRecorder.record(normalizeUsageMetadata(meta));
-              }
-            }
-            if (
-              event.event === 'on_llm_end' &&
-              (event.data?.output?.llmOutput?.tokenUsage ||
-                event.data?.output?.estimatedTokenUsage)
-            ) {
-              const t =
-                event.data.output.llmOutput?.tokenUsage ||
-                event.data.output.estimatedTokenUsage;
-              this.chatRecorder.record(normalizeUsageMetadata(t));
-            }
-          }
+          const synthesisResult = await driver.consume(eventStream2, {
+            kind: 'respond-now',
+            existingDocuments: streamResult.collectedDocuments,
+            emitFinalSources: true,
+          });
+          streamResult = {
+            ...streamResult,
+            finalResult:
+              streamResult.finalResult ?? synthesisResult.finalResult,
+            responseText:
+              streamResult.responseText + synthesisResult.responseText,
+          };
         } else {
-          throw err;
+          throw error;
         }
       }
 
-      // Emit the final sources used for the response
-      if (collectedDocuments.length > 0) {
-        emitStreamEvent(this.emitter, {
-          type: 'sources',
-          data: collectedDocuments,
-          searchQuery: '',
-          searchUrl: '',
-        });
+      if (streamResult.interrupted) {
+        if (skillRunId) cleanupSkillsForRun(skillRunId);
+        return;
       }
 
-      // If we didn't get any streamed tokens but have a final result, emit it
+      const currentResponseBuffer = streamResult.responseText;
+      const finalResult = streamResult.finalResult;
       if (
         currentResponseBuffer === '' &&
-        finalResult &&
-        finalResult.messages &&
+        finalResult?.messages &&
         finalResult.messages.length > 0
       ) {
         const finalMessage =
           finalResult.messages[finalResult.messages.length - 1];
-
-        if (finalMessage && finalMessage.content) {
+        if (finalMessage?.content) {
           console.log('SimplifiedAgent: Emitting complete response (fallback)');
-
-          const text = extractTextContent(finalMessage.content);
-          if (text) {
-            this.emitResponse(text);
-          }
+          const text = extractAgentStreamTextContent(finalMessage.content);
+          if (text) this.emitResponse(text);
         }
       }
 
-      // If we still have no response, emit a fallback message
       if (
         currentResponseBuffer === '' &&
         (!finalResult ||
@@ -1690,25 +768,29 @@ ${url ? `<url>${url}</url>` : ''}
       }
 
       console.log('SimplifiedAgent: Usage collected:', this.tracker.statsV2());
-
       if (skillRunId) cleanupSkillsForRun(skillRunId);
       emitStreamEvent(this.emitter, { type: 'agent_end' });
     } catch (error: unknown) {
       if (skillRunId) cleanupSkillsForRun(skillRunId);
 
-      console.error('SimplifiedAgent: Error during search and answer:', error);
+      if (error instanceof AgentStreamIntegrityError) {
+        console.error('SimplifiedAgent: Stream integrity failure:', error);
+        emitStreamEvent(this.emitter, {
+          type: 'agent_error',
+          data: error.message,
+        });
+        return;
+      }
 
-      // Handle specific error types
+      console.error('SimplifiedAgent: Error during search and answer:', error);
       if (this.signal.aborted) {
         console.warn('SimplifiedAgent: Operation was aborted');
         this.emitResponse('The search operation was cancelled.');
       } else {
-        // General error handling
         this.emitResponse(
           'I encountered an error while processing your request. Please try rephrasing your query or contact support if the issue persists.',
         );
       }
-
       emitStreamEvent(this.emitter, { type: 'agent_end' });
     }
   }
@@ -1717,13 +799,14 @@ ${url ? `<url>${url}</url>` : ''}
    * Resume a paused run from a LangGraph checkpoint.
    * Called by the resume endpoint after an interrupt is answered.
    */
-  async doResume(
-    focusMode: string,
-    fileIds: string[],
-    resumeArg: unknown,
-    pinnedMcpDescriptors: import('@/lib/mcp/types').McpToolDescriptor[] = [],
-    mcpMarkupIds: Record<string, string> = {},
-  ): Promise<void> {
+  async doResume(command: ResumeCommand): Promise<void> {
+    const {
+      resumeArg,
+      pinnedMcpDescriptors = [],
+      mcpMarkupIds = {},
+      existingDocuments = [],
+    } = command;
+    const { focusMode, fileIds } = this.runConfig;
     let skillRunId: string | null = null;
 
     try {
@@ -1735,11 +818,9 @@ ${url ? `<url>${url}</url>` : ''}
         skills: this.resolvedSkills,
       });
 
-      // Reconstruct workspace tools so the resumed agent can execute workspace_edit etc.
-      // These tools are normally injected by route.ts as extraTools, but doResume creates
-      // a fresh agent that has no knowledge of the original route's context.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const resumeExtraTools: any[] = [];
+      // Reconstruct workspace tools so a resumed approval has the same tool
+      // surface as the original interactive run.
+      const resumeExtraTools: unknown[] = [];
       if (this.workspaceId) {
         const [
           { workspaceLsTool },
@@ -1763,36 +844,24 @@ ${url ? `<url>${url}</url>` : ''}
         );
       }
 
-      // Rebuild MCP tools. Must use the same namespaced names as the initial run
-      // so that any in-flight approval (which uses namespacedName as markupKey)
-      // can complete. pinnedMcpDescriptors carries any descriptor snapshots
-      // extracted from the resolving approvals by performResume (in-memory,
-      // already resolved in DB before this method is called). Inject any pinned
-      // tool not in the live list so an interrupted tool can still complete even
-      // if the server (or its workspace scope) changed.
       const { buildMcpLangchainTools, buildToolForDescriptor } =
         await import('@/lib/mcp/toolFactory');
-      // Live discovery is best-effort: a failure (e.g. degraded DB/tool-config
-      // read) just omits the live MCP tools for this resume.
       const builtNames = new Set<string>();
       try {
         const mcpTools = await buildMcpLangchainTools({
           workspaceId: this.workspaceId,
         });
         resumeExtraTools.push(...mcpTools);
-        for (const t of mcpTools) builtNames.add(t.name);
-      } catch (e) {
+        for (const tool of mcpTools) builtNames.add(tool.name);
+      } catch (error) {
         console.warn(
           '[SimplifiedAgent] doResume: failed to rebuild live MCP tools:',
-          e,
+          error,
         );
       }
-      // Pinned descriptors must ALWAYS be reconstructed, even if live discovery
-      // failed: these tools were already user-approved at interrupt time, so an
-      // already-granted call can complete and its tool_call_id isn't left dangling.
-      for (const snapshot of pinnedMcpDescriptors) {
-        if (!builtNames.has(snapshot.namespacedName)) {
-          resumeExtraTools.push(buildToolForDescriptor(snapshot));
+      for (const descriptor of pinnedMcpDescriptors) {
+        if (!builtNames.has(descriptor.namespacedName)) {
+          resumeExtraTools.push(buildToolForDescriptor(descriptor));
         }
       }
 
@@ -1806,319 +875,31 @@ ${url ? `<url>${url}</url>` : ''}
         undefined,
         resumeExtraTools.length > 0 ? resumeExtraTools : undefined,
       );
-
-      const config: RunnableConfig & { context: ToolContext } = {
-        configurable: {
-          thread_id: this.threadId ?? '',
-        },
-        context: {
-          llm: this.chatLlm,
-          systemLlm: this.systemLlm,
-          embeddings: this.embeddings,
-          fileIds,
-          emitter: this.emitter,
-          messageId: this.messageId,
-          assistantMessageId: this.aiMessageId,
-          runId,
-          retrievalSignal: this.retrievalSignal,
-          userLocation: this.userLocation,
-          userProfile: this.userProfile,
-          chatId: this.chatId,
-          workspaceId: this.workspaceId,
-          interactiveSession: this.interactiveSession,
-          isPrivate: this.isPrivate,
-          tracker: this.tracker,
-          chatRecorder: this.chatRecorder,
-          systemRecorder: this.systemRecorder,
-          chartRegistry: this.chartRegistry,
-          capabilityFacts: () => this.getCapabilityFacts(focusMode, fileIds),
-        },
-        recursionLimit: 150,
-        signal: this.retrievalSignal,
-      };
-
+      const driver = this.createStreamDriver(runId, focusMode, fileIds);
+      const config = driver.buildConfig();
+      const resumePolicy = await driver.prepareResumePolicy(
+        agent,
+        mcpMarkupIds,
+        existingDocuments,
+      );
       const { Command } = await import('@langchain/langgraph');
-
-      // Track active tool call run IDs so handleToolEnd can update the right widget.
-      const resumeToolCalls = new Map<string, string>();
-      // On resume LangGraph re-runs EVERY interrupted tool node from scratch (one
-      // per pending interrupt), not just the one being answered. Each already has a
-      // markup widget from the original run, so emitting tool_call_started for them
-      // would create duplicates (and the un-answered ones, which re-interrupt, would
-      // leave an orphaned spinner). Identify those re-invocations by the LLM
-      // tool_call_id, which is stable across replays (the callback runId is not).
-      // handleToolStart receives it as its 8th arg (config.toolCall.id); the pending
-      // interrupts expose the same id at interrupt.value.toolCallId.
-      const reinvokedToolCallIds = new Set<string>();
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const preState = await (agent as any).getState({
-          configurable: { thread_id: this.threadId ?? '' },
-        });
-        for (const task of preState?.tasks ?? []) {
-          for (const intr of (task as { interrupts?: unknown[] }).interrupts ??
-            []) {
-            const id = (intr as { value?: { toolCallId?: string } })?.value
-              ?.toolCallId;
-            if (id) reinvokedToolCallIds.add(id);
-          }
-        }
-      } catch (preStateErr) {
-        console.warn(
-          '[simplifiedAgent] resume pre-state interrupt scan failed:',
-          preStateErr,
-        );
-      }
-      // cbRunIds of the re-invoked interrupted tools, recorded as they start so
-      // handleToolEnd/handleToolError can recognize them by runId.
-      const resumedToolRunIds = new Set<string>();
-      // resume cbRunId → original widget markup toolCallId, for re-invoked MCP
-      // tools (so handleToolEnd attaches the response to the correct widget).
-      const resumeMcpMarkupByRunId = new Map<string, string>();
-
       const eventStream = agent.streamEvents(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        new Command({ resume: resumeArg }) as any,
+        new Command({ resume: resumeArg }),
         {
           ...config,
           version: 'v2',
-          callbacks: [
-            {
-              handleToolStart: (
-                _tool: unknown,
-                input: unknown,
-                cbRunId: string,
-                _parentRunId?: string,
-                _tags?: string[],
-                _metadata?: Record<string, unknown>,
-                runName?: string,
-                llmToolCallId?: string,
-              ) => {
-                const toolName =
-                  runName ||
-                  (_tool as { name?: string } | undefined)?.name ||
-                  '';
-                if (!toolName) return;
-                // Skip the re-invocations of the interrupted tools, matched by
-                // their stable LLM tool_call_id. Their widgets already exist from
-                // the original run; emitting another tool_call_started would
-                // duplicate them (and orphan the un-answered ones' spinners).
-                if (llmToolCallId && reinvokedToolCallIds.has(llmToolCallId)) {
-                  resumedToolRunIds.add(cbRunId);
-                  resumeToolCalls.set(cbRunId, toolName);
-                  if (mcpMarkupIds[llmToolCallId]) {
-                    resumeMcpMarkupByRunId.set(
-                      cbRunId,
-                      mcpMarkupIds[llmToolCallId],
-                    );
-                  }
-                  return;
-                }
-                if (
-                  toolName === 'deep_research' ||
-                  toolName === 'todo_list' ||
-                  toolName === 'create_chart' ||
-                  toolName === 'show_chart'
-                )
-                  return;
-                resumeToolCalls.set(cbRunId, toolName);
-
-                const TOOL_ARG_MAX_LENGTH = 350;
-                const attrs: Record<string, unknown> = {};
-                try {
-                  let parsed = input;
-                  if (typeof input === 'string') {
-                    const t = input.trim();
-                    if (t.startsWith('{') && t.endsWith('}'))
-                      parsed = JSON.parse(t);
-                  }
-                  if (parsed && typeof parsed === 'object') {
-                    const obj = parsed as Record<string, unknown>;
-                    if (typeof obj.query === 'string')
-                      attrs.query = obj.query.slice(0, TOOL_ARG_MAX_LENGTH);
-                    if (
-                      toolName === 'read_skill' &&
-                      typeof obj.name === 'string'
-                    )
-                      attrs.query = obj.name.slice(0, TOOL_ARG_MAX_LENGTH);
-                    if (Array.isArray(obj.urls)) attrs.count = obj.urls.length;
-                    if (typeof obj.url === 'string')
-                      attrs.url = obj.url.slice(0, TOOL_ARG_MAX_LENGTH);
-                    if (typeof obj.pdfUrl === 'string')
-                      attrs.url = obj.pdfUrl.slice(0, TOOL_ARG_MAX_LENGTH);
-                    if (typeof obj.content === 'string' && !obj.query)
-                      attrs.query = obj.content.slice(0, TOOL_ARG_MAX_LENGTH);
-                    if (toolName === 'code_execution') {
-                      if (typeof obj.code === 'string') {
-                        attrs.code = obj.code;
-                        pushCallbackRunId(obj.code, cbRunId);
-                      }
-                      if (typeof obj.description === 'string')
-                        attrs.description = obj.description.slice(0, 100);
-                    }
-                    if (toolName === 'ask_user') {
-                      if (typeof obj.question === 'string') {
-                        attrs.query = obj.question.slice(0, 200);
-                        pushQuestionCallbackRunId(obj.question, cbRunId);
-                      }
-                      if (typeof obj.context === 'string')
-                        attrs.context = obj.context.slice(0, 200);
-                    }
-                    if (
-                      (toolName === 'workspace_edit' ||
-                        toolName === 'workspace_create_file') &&
-                      typeof obj.file === 'string'
-                    ) {
-                      attrs.query = obj.file.slice(0, TOOL_ARG_MAX_LENGTH);
-                      pushQuestionCallbackRunId(obj.file, cbRunId);
-                    }
-                    if (
-                      toolName === 'edit_skill' &&
-                      typeof obj.name === 'string'
-                    )
-                      pushQuestionCallbackRunId(obj.name, cbRunId);
-                    // MCP tools: correlate namespacedName → callback runId and
-                    // surface the calling arguments in the widget.
-                    if (toolName.startsWith('mcp__')) {
-                      pushQuestionCallbackRunId(toolName, cbRunId);
-                      try {
-                        const json = JSON.stringify(obj);
-                        if (json && json !== '{}') attrs.mcpArgs = json;
-                      } catch {
-                        // ignore arg serialization errors
-                      }
-                    }
-                    if (
-                      toolName === 'workspace_read' &&
-                      typeof obj.file === 'string'
-                    )
-                      attrs.query = obj.file.slice(0, TOOL_ARG_MAX_LENGTH);
-                    if (
-                      toolName === 'workspace_grep' &&
-                      typeof obj.pattern === 'string'
-                    )
-                      attrs.query = obj.pattern.slice(0, TOOL_ARG_MAX_LENGTH);
-                  }
-                } catch {
-                  // ignore attribute extraction errors
-                }
-                emitStreamEvent(this.emitter, {
-                  type: 'tool_call_started',
-                  data: {
-                    toolCallId: cbRunId,
-                    toolType: toolName,
-                    status: 'running',
-                    attrs,
-                  },
-                });
-              },
-              handleToolEnd: (output: unknown, cbRunId: string) => {
-                const name = resumeToolCalls.get(cbRunId);
-                if (!name) return;
-                resumeToolCalls.delete(cbRunId);
-                // Finished without interrupting → drop any stale correlation
-                // entry so a later same-key interrupt doesn't pop this dead id.
-                dropQuestionCallbackRunId(cbRunId);
-                dropCodeCallbackRunId(cbRunId);
-                // For MCP tools, surface the response. The MCP call's output is
-                // only available here (after the approved tool re-runs on resume),
-                // so even though performResume already closed the widget to success,
-                // re-emit a success carrying the result so it merges into the widget.
-                let extra: Record<string, string> | undefined;
-                if (name.startsWith('mcp__')) {
-                  const result = extractMcpResultContent(output);
-                  if (result) extra = { mcpResult: result };
-                }
-                // resumeRun already emitted tool_call_success for the resumed tools;
-                // only re-emit if we have an MCP result to attach. The widget for a
-                // resumed tool is keyed by the ORIGINAL run's markup toolCallId, not
-                // this resume callback's cbRunId, so target that instead.
-                if (resumedToolRunIds.has(cbRunId)) {
-                  if (extra) {
-                    const markupId =
-                      resumeMcpMarkupByRunId.get(cbRunId) ?? cbRunId;
-                    emitStreamEvent(this.emitter, {
-                      type: 'tool_call_success',
-                      data: {
-                        toolCallId: markupId,
-                        status: 'success',
-                        extra,
-                      },
-                    });
-                  }
-                  return;
-                }
-                emitStreamEvent(this.emitter, {
-                  type: 'tool_call_success',
-                  data: {
-                    toolCallId: cbRunId,
-                    status: 'success',
-                    ...(extra ? { extra } : {}),
-                  },
-                });
-              },
-              handleToolError: (err: unknown, cbRunId: string) => {
-                if (isGraphInterrupt(err)) {
-                  resumeToolCalls.delete(cbRunId);
-                  return;
-                }
-                const name = resumeToolCalls.get(cbRunId);
-                if (!name) return;
-                resumeToolCalls.delete(cbRunId);
-                dropQuestionCallbackRunId(cbRunId);
-                dropCodeCallbackRunId(cbRunId);
-                if (resumedToolRunIds.has(cbRunId)) return;
-                const msg =
-                  (err instanceof Error ? err.message : String(err)) ||
-                  'Unknown tool error';
-                emitStreamEvent(this.emitter, {
-                  type: 'tool_call_error',
-                  data: {
-                    toolCallId: cbRunId,
-                    status: 'error',
-                    error: msg.substring(0, 500),
-                  },
-                });
-              },
-            },
-          ],
+          callbacks: driver.callbacks(resumePolicy),
         },
       );
+      const streamResult = await driver.consume(
+        eventStream,
+        resumePolicy,
+        agent,
+      );
 
-      for await (const event of eventStream) {
-        if (this.signal.aborted) break;
-
-        if (event.event === 'on_chat_model_stream' && event.data?.chunk) {
-          const chunk = event.data.chunk;
-          const textContent = extractTextContent(chunk.content);
-          if (textContent) this.emitResponse(textContent);
-        }
-      }
-
-      // Check for further interrupts after resume stream
-      if (!this.signal.aborted && this.threadId) {
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const agentState = await (agent as any).getState({
-            configurable: { thread_id: this.threadId },
-          });
-          const pendingInterrupts = (agentState?.tasks ?? []).flatMap(
-            (t: { interrupts?: unknown[] }) => t.interrupts ?? [],
-          );
-          if (pendingInterrupts.length > 0) {
-            emitStreamEvent(this.emitter, {
-              type: 'interrupt',
-              interrupts: pendingInterrupts,
-            });
-            if (skillRunId) cleanupSkillsForRun(skillRunId);
-            return;
-          }
-        } catch (stateErr) {
-          console.warn(
-            '[simplifiedAgent] resume interrupt state check failed:',
-            stateErr,
-          );
-        }
+      if (streamResult.interrupted) {
+        if (skillRunId) cleanupSkillsForRun(skillRunId);
+        return;
       }
 
       if (skillRunId) cleanupSkillsForRun(skillRunId);
@@ -2128,7 +909,10 @@ ${url ? `<url>${url}</url>` : ''}
       console.error('[SimplifiedAgent] doResume error:', error);
       emitStreamEvent(this.emitter, {
         type: 'agent_error',
-        data: String(error),
+        data:
+          error instanceof AgentStreamIntegrityError
+            ? error.message
+            : String(error),
       });
     }
   }

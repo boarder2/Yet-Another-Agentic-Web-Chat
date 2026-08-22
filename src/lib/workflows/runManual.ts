@@ -32,6 +32,7 @@ import {
   type Workflow,
 } from '@/lib/workflows/resolveWorkflowRun';
 import { TurnChartRegistry } from '@/lib/chart/turnChartRegistry';
+import { createAgentRunConfig } from '@/lib/search/agentRunConfig';
 
 /**
  * Start a manual run of `workflow` with `values`, returning the seeded chat id.
@@ -100,33 +101,45 @@ export async function startWorkflowRun(
   const abortController = new AbortController();
   const retrievalController = new AbortController();
 
-  const agent = new SimplifiedAgent(
-    chatLlm,
-    systemLlm,
-    embedding,
-    emitter,
-    personaInstructions,
-    abortController.signal,
-    { tracker, chatRecorder, systemRecorder },
-    userMessageId,
-    retrievalController.signal,
-    undefined, // userLocation
-    undefined, // userProfile
-    false, // memoryEnabled
-    '', // memorySection
-    chatId,
-    true, // interactiveSession — continuable
-    methodologyInstructions,
-    false, // isPrivate
-    '', // workspaceSuffix
-    null, // workspaceId
-    aiMessageId,
-    chartRegistry,
-  );
-  agent.setModelRefs(run.chatModel, run.systemModel);
-
   const threadId = `${userMessageId}:${startTime}`;
-  agent.setThreadId(threadId);
+  const runConfig = createAgentRunConfig({
+    chatModelRef: run.chatModel,
+    systemModelRef: run.systemModel ?? run.chatModel,
+    focusMode: run.focusMode,
+    fileIds: [],
+    personaInstructions,
+    methodologyInstructions,
+    userLocation: null,
+    userProfile: null,
+    workspaceId: null,
+    isPrivate: false,
+    chatId,
+    messageId: userMessageId,
+    aiMessageId,
+    interactiveSession: true,
+    workspaceSuffix: '',
+    memoryEnabled: false,
+    panel: null,
+  });
+
+  const agent = new SimplifiedAgent({
+    dependencies: {
+      chatLlm,
+      systemLlm,
+      embeddings: embedding,
+      emitter,
+      tokenTracking: { tracker, chatRecorder, systemRecorder },
+    },
+    run: runConfig,
+    context: {
+      signal: abortController.signal,
+      retrievalSignal: retrievalController.signal,
+      threadId,
+      memorySection: '',
+      invokedSkillNames: [],
+      chartRegistry,
+    },
+  });
 
   const { run: hubRun, isNew } = startRun({
     chatId,
@@ -153,7 +166,7 @@ export async function startWorkflowRun(
         usedLocation: false,
         usedPersonalization: false,
         memoriesUsed: [],
-        configSnapshot: agent.buildConfigSnapshot(run.focusMode, []),
+        configSnapshot: runConfig,
         titleGen: {
           systemLlm,
           systemRecorder,
@@ -167,15 +180,10 @@ export async function startWorkflowRun(
     }
 
     // Fire the agent (not awaited — runs independently until end/error).
-    agent.searchAndAnswer(
-      run.composedQuery,
-      [],
-      [],
-      run.focusMode,
-      undefined,
-      undefined,
-      undefined,
-    );
+    agent.searchAndAnswer({
+      query: run.composedQuery,
+      history: [],
+    });
   }
 
   return { chatId };

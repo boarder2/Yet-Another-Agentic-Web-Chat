@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { isMilestoneEvent } from './runEventsPersistence';
 
-describe('chart run-event milestones', () => {
+describe('run-event milestones', () => {
+  it('persists cumulative stats snapshots for resume reconstruction', () => {
+    expect(isMilestoneEvent('stats')).toBe(true);
+  });
+
   it('persists chart registrations and both placement families for reconstruction', () => {
     expect(isMilestoneEvent('chart_spec')).toBe(true);
     expect(isMilestoneEvent('chart_placement')).toBe(true);

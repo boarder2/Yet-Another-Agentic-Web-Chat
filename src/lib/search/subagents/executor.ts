@@ -22,6 +22,7 @@ import {
   isAgentControlEvent,
 } from '@/lib/streaming/events';
 import type { TokenTracker } from '@/lib/tokens/tracker';
+import { createAgentRunConfig } from '@/lib/search/agentRunConfig';
 
 /**
  * The tools a subagent may use: the global set minus the ones that dead-end in
@@ -162,19 +163,51 @@ export class SubagentExecutor {
       // Create SimplifiedAgent with subagent configuration
       // Note: personaInstructions is empty — the subagent's behavior is controlled
       // entirely by the customSystemPrompt passed to searchAndAnswer, not persona instructions.
-      const subagent = new SimplifiedAgent(
-        selectedLlm, // Use configured model
-        this.systemLlm, // Always use system model for internal operations
-        this.embeddings,
-        isolatedEmitter,
-        '', // No persona instructions for subagents — definition.systemPrompt is used as customSystemPrompt
-        this.signal,
-        { tracker: this.tracker, chatRecorder, systemRecorder },
-        `${this.messageId}_${executionId}`,
-        this.retrievalSignal || this.signal, // Use retrievalSignal if available, fallback to signal
-        this.userLocation,
-        this.userProfile,
-      );
+      const runConfig = createAgentRunConfig({
+        chatModelRef: {
+          provider: selectedModelRef.provider,
+          name: selectedModelRef.model,
+        },
+        systemModelRef: {
+          provider: this.systemModelRef.provider,
+          name: this.systemModelRef.model,
+        },
+        focusMode: 'webSearch',
+        fileIds,
+        personaInstructions: '',
+        methodologyInstructions: '',
+        userLocation: this.userLocation ?? null,
+        userProfile: this.userProfile ?? null,
+        workspaceId: null,
+        isPrivate: false,
+        chatId: null,
+        messageId: `${this.messageId}_${executionId}`,
+        aiMessageId: null,
+        interactiveSession: false,
+        workspaceSuffix: '',
+        memoryEnabled: false,
+        panel: null,
+      });
+      const subagent = new SimplifiedAgent({
+        dependencies: {
+          chatLlm: selectedLlm,
+          systemLlm: this.systemLlm,
+          embeddings: this.embeddings,
+          emitter: isolatedEmitter,
+          tokenTracking: {
+            tracker: this.tracker,
+            chatRecorder,
+            systemRecorder,
+          },
+        },
+        run: runConfig,
+        context: {
+          signal: this.signal,
+          retrievalSignal: this.retrievalSignal || this.signal,
+          memorySection: '',
+          invokedSkillNames: [],
+        },
+      });
 
       // Limit context to avoid token bloat
       const limitedContext = context.slice(-5);
@@ -183,14 +216,12 @@ export class SubagentExecutor {
 
       // Execute the subagent with custom tools and system prompt
       // Note: searchAndAnswer returns void and streams via emitter
-      await subagent.searchAndAnswer(
-        task,
-        limitedContext,
-        fileIds,
-        'webSearch', // Focus mode (tools are already filtered)
-        filteredTools,
-        this.definition.systemPrompt,
-      );
+      await subagent.searchAndAnswer({
+        query: task,
+        history: limitedContext,
+        customTools: filteredTools,
+        customSystemPrompt: this.definition.systemPrompt,
+      });
 
       // Wait a bit for all events to be processed
       await new Promise((resolve) => setTimeout(resolve, 100));

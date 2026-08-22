@@ -11,6 +11,27 @@ import { streamChatUntil, collectSseEvents, type ChatEvent } from './sse';
 const E2E_DB_PATH = path.resolve('e2e/.test-data/db.sqlite');
 const E2E_UPLOADS_DIR = path.resolve('e2e/.test-data/uploads');
 
+/** Overwrite a paused chat's durable config for invalid-snapshot transport tests. */
+export function overwriteActiveRunConfigSnapshot(
+  chatId: string,
+  snapshot: unknown,
+): void {
+  const db = new Database(E2E_DB_PATH);
+  try {
+    db.pragma('busy_timeout = 5000');
+    const result = db
+      .prepare('UPDATE chats SET active_run_config_snapshot = ? WHERE id = ?')
+      .run(JSON.stringify(snapshot), chatId);
+    if (result.changes !== 1) {
+      throw new Error(
+        `overwriteActiveRunConfigSnapshot: chat ${chatId} was not found`,
+      );
+    }
+  } finally {
+    db.close();
+  }
+}
+
 async function postJson(
   request: APIRequestContext,
   url: string,

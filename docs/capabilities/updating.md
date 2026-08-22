@@ -5,9 +5,10 @@ Update a deployment from a reviewed release, not from an unexamined image or wor
 ## Before an update
 
 1. Review the release notes for the target release. Look for database migrations, required configuration changes, image requirements, and known rollback limits.
-2. Choose a stable semver image tag or commit/tag. The Compose file uses `boarder2/yaawc:latest`, which is a mutable channel; it is convenient for tracking the default published channel but is not reproducible. Prefer a pinned semver tag or image digest for production, and record the previous value for rollback.
-3. Stop writes while taking the backup. Preserve the SQLite database, uploads, workspace-file blobs, the SearXNG configuration directory, and the exact `config.toml` or environment source that contains the passphrase.
-4. Store the passphrase separately from the database backup. It is required to decrypt credentials after the update; changing it is not an update procedure.
+2. Finish or cancel every chat run that is `running` or `awaiting_user` before replacing the deployment. These turns depend on their active LangGraph checkpoint and are not an update-safe handoff; use `/api/chat/runs/active` to confirm the active-run list is empty before proceeding.
+3. Choose a stable semver image tag or commit/tag. The Compose file uses `boarder2/yaawc:latest`, which is a mutable channel; it is convenient for tracking the default published channel but is not reproducible. Prefer a pinned semver tag or image digest for production, and record the previous value for rollback.
+4. Stop writes while taking the backup. Preserve the SQLite database, uploads, workspace-file blobs, the SearXNG configuration directory, and the exact `config.toml` or environment source that contains the passphrase.
+5. Store the passphrase separately from the database backup. It is required to decrypt credentials after the update; changing it is not an update procedure.
 
 For a Compose deployment, do not use `docker compose down -v`: that removes named volumes. Stop the app without removing its volumes, then archive the mounted `app-data` volume using your deployment's actual Compose volume name, or use an equivalent volume-backup tool:
 

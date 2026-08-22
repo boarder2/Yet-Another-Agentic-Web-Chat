@@ -9,10 +9,14 @@ vi.mock('@/lib/search/simplifiedAgent', () => ({
       emit: (channel: string, event: unknown) => void;
     };
 
-    constructor(...args: unknown[]) {
-      this.emitter = args[3] as {
-        emit: (channel: string, event: unknown) => void;
+    constructor(options: {
+      dependencies: {
+        emitter: {
+          emit: (channel: string, event: unknown) => void;
+        };
       };
+    }) {
+      this.emitter = options.dependencies.emitter;
     }
 
     async searchAndAnswer(): Promise<void> {

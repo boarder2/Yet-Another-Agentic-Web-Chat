@@ -29,6 +29,7 @@ const FLUSH_THRESHOLD = 50;
 const MILESTONE_TYPES = new Set<string>([
   'sources',
   'sources_added',
+  'stats',
   'tool_call_started',
   'tool_call_success',
   'tool_call_error',

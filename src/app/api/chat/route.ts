@@ -57,6 +57,7 @@ import { buildOrchestratorSynthesisContext } from '@/lib/prompts/panel/orchestra
 import { validatePanelConfig, type PanelConfig } from '@/lib/types/panel';
 import { buildMcpLangchainTools } from '@/lib/mcp/toolFactory';
 import { TurnChartRegistry } from '@/lib/chart/turnChartRegistry';
+import { createAgentRunConfig } from '@/lib/search/agentRunConfig';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -552,43 +553,48 @@ export const POST = async (req: Request) => {
       history = buildHistoryFromDb(historyMessages);
     }
 
-    const handler = new SimplifiedAgent(
-      chatLlm,
-      systemLlm!,
-      embedding,
-      stream,
-      personaInstructionsContent,
-      abortController.signal,
-      { tracker, chatRecorder, systemRecorder },
-      message.messageId,
-      retrievalController.signal,
-      body.userLocation,
-      body.userProfile,
-      body.memoryEnabled,
-      memorySection,
-      message.chatId,
-      true,
-      methodologyInstructions,
-      body.isPrivate,
-      workspaceSuffix,
-      resolvedWorkspaceId,
-      aiMessageId,
-      chartRegistry,
-    );
-
-    // Tell the agent which skills the user explicitly invoked. It forces their
-    // resolved bodies into the current turn; the rows above preserve them for
-    // subsequent turns.
-    handler.setInvokedSkillNames(invokedSkillNames);
-    // Store model refs so the agent can build a config snapshot for resume.
-    handler.setModelRefs(body.chatModel, body.systemModel);
-    if (panelConfig) handler.setPanelConfig(panelConfig);
-
     // Build a stable thread_id for LangGraph checkpointing: messageId:startedAt
     // Using startedAt avoids collisions on regenerate/retry of the same user message.
     const runStartedAt = Date.now();
     const threadId = `${humanMessageId}:${runStartedAt}`;
-    handler.setThreadId(threadId);
+    const runConfig = createAgentRunConfig({
+      chatModelRef: body.chatModel,
+      systemModelRef: body.systemModel ?? body.chatModel,
+      focusMode: body.focusMode,
+      fileIds: body.files ?? [],
+      personaInstructions: personaInstructionsContent,
+      methodologyInstructions,
+      userLocation: body.userLocation ?? null,
+      userProfile: body.userProfile ?? null,
+      workspaceId: resolvedWorkspaceId,
+      isPrivate: body.isPrivate ?? false,
+      chatId: message.chatId,
+      messageId: humanMessageId,
+      aiMessageId,
+      interactiveSession: true,
+      workspaceSuffix,
+      memoryEnabled: body.memoryEnabled ?? false,
+      panel: panelConfig ?? null,
+    });
+
+    const handler = new SimplifiedAgent({
+      dependencies: {
+        chatLlm,
+        systemLlm: systemLlm!,
+        embeddings: embedding,
+        emitter: stream,
+        tokenTracking: { tracker, chatRecorder, systemRecorder },
+      },
+      run: runConfig,
+      context: {
+        signal: abortController.signal,
+        retrievalSignal: retrievalController.signal,
+        threadId,
+        memorySection,
+        invokedSkillNames,
+        chartRegistry,
+      },
+    });
 
     // Register run in hub (idempotent — isNew=false if already live)
     const { run, isNew } = startRun({
@@ -605,14 +611,10 @@ export const POST = async (req: Request) => {
     if (isNew) {
       try {
         // Wire event listeners + insert empty assistant row
-        const configSnapshot = handler.buildConfigSnapshot(
-          body.focusMode,
-          body.files ?? [],
-        );
         await attachRunHost({
           run,
           startTime,
-          userMessageId: message.messageId,
+          userMessageId: humanMessageId,
           usedLocation: body.userLocation
             ? body.userLocation.length > 0
             : false,
@@ -620,7 +622,7 @@ export const POST = async (req: Request) => {
             ? body.userProfile.length > 0
             : false,
           memoriesUsed,
-          configSnapshot,
+          configSnapshot: runConfig,
           titleGen: {
             systemLlm: systemLlm!,
             systemRecorder,
@@ -711,17 +713,13 @@ export const POST = async (req: Request) => {
               new SystemMessage(synthesisContext),
             ];
 
-            await handler.searchAndAnswer(
-              message.content,
-              orchestratorHistory,
-              body.files,
-              body.focusMode,
-              undefined,
-              undefined,
-              body.messageImageIds,
-              workspaceTools,
-              mergedSources,
-            );
+            await handler.searchAndAnswer({
+              query: message.content,
+              history: orchestratorHistory,
+              messageImageIds: body.messageImageIds,
+              extraTools: workspaceTools,
+              initialDocuments: mergedSources,
+            });
           } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : String(err);
             console.error('[panel] coordination failed:', err);
@@ -730,16 +728,12 @@ export const POST = async (req: Request) => {
         })();
       } else {
         // Fire agent (not awaited — runs independently until end/error)
-        handler.searchAndAnswer(
-          message.content,
+        handler.searchAndAnswer({
+          query: message.content,
           history,
-          body.files,
-          body.focusMode,
-          undefined,
-          undefined,
-          body.messageImageIds,
-          workspaceTools,
-        );
+          messageImageIds: body.messageImageIds,
+          extraTools: workspaceTools,
+        });
       }
 
       // Post-response automatic memory extraction (fire-and-forget)

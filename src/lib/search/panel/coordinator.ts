@@ -41,6 +41,7 @@ import type { TokenTracker } from '@/lib/tokens/tracker';
 import { TurnChartRegistry } from '@/lib/chart/turnChartRegistry';
 import { stripStreamedChartTags } from '@/lib/utils/contentStripping';
 import { neutralizeSpoofedFences } from '@/lib/widgets/envelope';
+import { createAgentRunConfig } from '@/lib/search/agentRunConfig';
 
 export type { PanelUsage };
 
@@ -262,41 +263,63 @@ export class PanelCoordinator {
     });
 
     try {
-      const agent = new SimplifiedAgent(
-        executor.llm,
-        this.systemLlm,
-        this.embeddings,
-        isolated,
-        this.personaInstructions, // executors research in the user's configured voice
-        this.signal,
-        { tracker: this.tracker, chatRecorder, systemRecorder },
-        `${this.messageId}_panel_${idx}`,
-        this.retrievalSignal ?? this.signal,
-        this.userLocation,
-        this.userProfile,
-        false, // memory tools off for executors
-        this.memorySection, // but inject retrieved memory context
-        undefined, // chatId
-        false, // interactiveSession
-        this.methodologyInstructions,
-        false, // isPrivate
-        '', // workspaceSuffix
-        undefined, // workspaceId
-        undefined, // aiMessageId
-        chartRegistry,
-      );
-
       const tools = executorToolsForFocusMode(focusMode, fileIds);
+      const runConfig = createAgentRunConfig({
+        chatModelRef: {
+          provider: executor.ref.provider,
+          name: executor.ref.name,
+          ...(executor.ref.contextWindowSize !== undefined && {
+            contextWindowSize: executor.ref.contextWindowSize,
+          }),
+        },
+        systemModelRef: {
+          provider: this.systemModelRef.provider,
+          name: this.systemModelRef.model,
+        },
+        focusMode,
+        fileIds,
+        personaInstructions: this.personaInstructions,
+        methodologyInstructions: this.methodologyInstructions,
+        userLocation: this.userLocation ?? null,
+        userProfile: this.userProfile ?? null,
+        workspaceId: null,
+        isPrivate: false,
+        chatId: null,
+        messageId: `${this.messageId}_panel_${idx}`,
+        aiMessageId: null,
+        interactiveSession: false,
+        workspaceSuffix: '',
+        memoryEnabled: false,
+        panel: null,
+      });
+      const agent = new SimplifiedAgent({
+        dependencies: {
+          chatLlm: executor.llm,
+          systemLlm: this.systemLlm,
+          embeddings: this.embeddings,
+          emitter: isolated,
+          tokenTracking: {
+            tracker: this.tracker,
+            chatRecorder,
+            systemRecorder,
+          },
+        },
+        run: runConfig,
+        context: {
+          signal: this.signal,
+          retrievalSignal: this.retrievalSignal ?? this.signal,
+          memorySection: this.memorySection,
+          invokedSkillNames: [],
+          chartRegistry,
+        },
+      });
 
-      await agent.searchAndAnswer(
+      await agent.searchAndAnswer({
         query,
         history,
-        fileIds,
-        focusMode,
-        tools,
-        undefined,
+        customTools: tools,
         messageImageIds,
-      );
+      });
 
       // `searchAndAnswer` emits all of its events (response tokens, the final
       // `sources` set, model stats, then `end`) synchronously before it

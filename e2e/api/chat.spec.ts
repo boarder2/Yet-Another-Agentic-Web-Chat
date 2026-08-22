@@ -7,6 +7,7 @@ import {
   seedWorkspaceFile,
   seedAwaitingApproval,
   cancelAwaitingRun,
+  overwriteActiveRunConfigSnapshot,
 } from '../utils/seed';
 import {
   collectSseEvents,
@@ -1108,6 +1109,135 @@ test.describe('POST /api/chat/runs/resume', () => {
       `/api/approvals/pending?chatId=${chatId}`,
     );
     expect((await pendingRes.json()).pending).toEqual([]);
+  });
+
+  test('resuming preserves whole-turn stats and does not replay a tool start', async ({
+    request,
+  }) => {
+    const paused = await seedAwaitingApproval({ content: 'resume-totals' });
+    const pausedStatsEvents = eventsOfType(paused.events, 'stats');
+    expect(pausedStatsEvents.length).toBeGreaterThan(0);
+    const pausedStats = pausedStatsEvents[pausedStatsEvents.length - 1]
+      .data as {
+      perModel: Array<{ usage: { total_tokens: number } }>;
+    };
+    const pausedTotal = pausedStats.perModel.reduce(
+      (total, row) => total + row.usage.total_tokens,
+      0,
+    );
+
+    const pausedStarts = eventsOfType(paused.events, 'tool_call_started').map(
+      (event) => (event.data as { toolCallId: string }).toolCallId,
+    );
+    const resumeRes = await request.post('/api/chat/runs/resume', {
+      data: {
+        approvalId: paused.approvalId,
+        response: { selectedOptions: ['Red'] },
+      },
+    });
+    expect(resumeRes.status()).toBe(200);
+
+    const events = await collectSseEvents(
+      await request.get(`/api/chat/runs/${paused.messageId}/stream`),
+    );
+    const end = eventsOfType(events, 'messageEnd');
+    expect(end).toHaveLength(1);
+    const finalStats = end[0].modelStats as {
+      version: number;
+      perModel: Array<{
+        provider: string;
+        model: string;
+        usage: {
+          input_tokens: number;
+          output_tokens: number;
+          total_tokens: number;
+        };
+      }>;
+      firstChatCallInputTokens?: number;
+    };
+
+    // test-ask-user reports 16 tokens for the interrupted call and 19 for the
+    // deterministic answer after resume. The terminal row must contain both.
+    const finalTotal = finalStats.perModel.reduce(
+      (total, row) => total + row.usage.total_tokens,
+      0,
+    );
+    expect(finalTotal).toBe(pausedTotal + 19);
+
+    const lastWireStats = eventsOfType(events, 'stats').at(-1)?.data as {
+      perModel: typeof finalStats.perModel;
+      firstChatCallInputTokens?: number;
+    };
+    expect(lastWireStats.perModel).toEqual(finalStats.perModel);
+    expect(lastWireStats.firstChatCallInputTokens).toBe(
+      finalStats.firstChatCallInputTokens,
+    );
+
+    const resumedStarts = eventsOfType(events, 'tool_call_started').map(
+      (event) => (event.data as { toolCallId: string }).toolCallId,
+    );
+    expect(resumedStarts).toEqual(pausedStarts);
+    expect(eventsOfType(events, 'ask_user_answered')).toHaveLength(1);
+    expect(
+      eventsOfType(events, 'tool_call_success').some(
+        (event) => (event.data as { status: string }).status === 'success',
+      ),
+    ).toBe(true);
+
+    const chatRes = await request.get(`/api/chats/${paused.chatId}`);
+    const chatBody = await chatRes.json();
+    const assistant = (
+      chatBody.messages as Array<{ role: string; metadata?: string }>
+    ).find((message) => message.role === 'assistant');
+    expect(assistant).toBeTruthy();
+    const metadata = JSON.parse(assistant!.metadata ?? '{}') as {
+      modelStats?: { perModel: typeof finalStats.perModel };
+    };
+    expect(metadata.modelStats?.perModel).toEqual(finalStats.perModel);
+  });
+
+  test('rejects an invalid snapshot with 410 without resolving its approval', async ({
+    request,
+  }) => {
+    const paused = await seedAwaitingApproval({ content: 'invalid-snapshot' });
+    try {
+      overwriteActiveRunConfigSnapshot(paused.chatId, {
+        version: 1,
+        unexpected: true,
+      });
+
+      const res = await request.post('/api/chat/runs/resume', {
+        data: {
+          approvalId: paused.approvalId,
+          response: { selectedOptions: ['Red'] },
+        },
+      });
+      expect(res.status()).toBe(410);
+
+      const pendingRes = await request.get(
+        `/api/approvals/pending?chatId=${paused.chatId}`,
+      );
+      const pending = (await pendingRes.json()).pending as Array<{
+        approvalId: string;
+      }>;
+      expect(pending.map((approval) => approval.approvalId)).toContain(
+        paused.approvalId,
+      );
+
+      const activeRes = await request.get('/api/chat/runs/active');
+      const active = (await activeRes.json()).active as Array<{
+        messageId: string;
+        status: string;
+      }>;
+      expect(
+        active.find((run) => run.messageId === paused.messageId),
+      ).toMatchObject({ status: 'awaiting_user' });
+    } finally {
+      await cancelAwaitingRun(request, {
+        messageId: paused.messageId,
+        chatId: paused.chatId,
+      });
+    }
   });
 });
 

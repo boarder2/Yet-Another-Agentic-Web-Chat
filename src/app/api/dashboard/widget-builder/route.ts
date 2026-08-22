@@ -15,6 +15,7 @@ import {
 } from '@/lib/tools/agents/widgetBuilderTools';
 import { allAgentTools } from '@/lib/tools/agents';
 import { WidgetTheme } from '@/lib/types/widget';
+import { createAgentRunConfig } from '@/lib/search/agentRunConfig';
 
 interface WidgetBuilderRequest {
   message: string;
@@ -103,17 +104,42 @@ export async function POST(req: NextRequest) {
     body.systemModel ?? body.chatModel ?? unknownModel,
   );
 
-  const agent = new SimplifiedAgent(
-    chatLlm,
-    systemLlm,
-    embedding,
-    emitter,
-    '',
-    abortController.signal,
-    { tracker, chatRecorder, systemRecorder },
-    `widget-builder-${Date.now()}`,
-    abortController.signal,
-  );
+  const agentMessageId = `widget-builder-${Date.now()}`;
+  const runConfig = createAgentRunConfig({
+    chatModelRef: body.chatModel ?? unknownModel,
+    systemModelRef: body.systemModel ?? body.chatModel ?? unknownModel,
+    focusMode: 'chat',
+    fileIds: [],
+    personaInstructions: '',
+    methodologyInstructions: '',
+    userLocation: null,
+    userProfile: null,
+    workspaceId: null,
+    isPrivate: false,
+    chatId: null,
+    messageId: agentMessageId,
+    aiMessageId: null,
+    interactiveSession: false,
+    workspaceSuffix: '',
+    memoryEnabled: false,
+    panel: null,
+  });
+  const agent = new SimplifiedAgent({
+    dependencies: {
+      chatLlm,
+      systemLlm,
+      embeddings: embedding,
+      emitter,
+      tokenTracking: { tracker, chatRecorder, systemRecorder },
+    },
+    run: runConfig,
+    context: {
+      signal: abortController.signal,
+      retrievalSignal: abortController.signal,
+      memorySection: '',
+      invokedSkillNames: [],
+    },
+  });
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
@@ -145,14 +171,12 @@ export async function POST(req: NextRequest) {
       // Tool allowlist is enforced server-side: we only ever pass our 4 tools.
       // Cast to satisfy the agent's tool array type.
       agent
-        .searchAndAnswer(
-          body.message,
+        .searchAndAnswer({
+          query: body.message,
           history,
-          [],
-          'chat',
-          tools as unknown as typeof allAgentTools,
+          customTools: tools as unknown as typeof allAgentTools,
           customSystemPrompt,
-        )
+        })
         .catch((e) => {
           send({ type: 'error', data: String(e) });
           try {

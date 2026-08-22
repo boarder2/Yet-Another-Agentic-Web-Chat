@@ -66,6 +66,12 @@ interface Entry {
   recorded: boolean;
 }
 
+interface SeededModel {
+  provider: string;
+  model: string;
+  usage: TokenUsage;
+}
+
 /**
  * Normalize usage metadata from different LLM providers into the canonical
  * `{input_tokens, output_tokens, total_tokens}` shape.
@@ -104,6 +110,7 @@ export function normalizeUsageMetadata(
 export class TokenTracker {
   private emitter: EventEmitter;
   private entries: Entry[] = [];
+  private seededModels = new Map<string, SeededModel>();
   private rootChatKey: string | null = null;
   private rootChatRecorded = false;
   private firstChatCallInputTokens = 0;
@@ -156,12 +163,46 @@ export class TokenTracker {
     };
   }
 
+  /**
+   * Seed the tracker with the cumulative v2 snapshot emitted before a resume.
+   * The seed is a baseline, not a new usage record, so every later recorder
+   * call adds only post-resume usage and emits one cumulative snapshot.
+   */
+  seed(stats: ModelStatsV2): void {
+    this.seededModels.clear();
+    for (const row of stats.perModel) {
+      const key = modelKey(row.provider, row.model);
+      const existing = this.seededModels.get(key);
+      if (existing) {
+        existing.usage = addUsage(existing.usage, row.usage);
+      } else {
+        this.seededModels.set(key, {
+          provider: row.provider,
+          model: row.model,
+          usage: { ...row.usage },
+        });
+      }
+    }
+
+    if (stats.firstChatCallInputTokens !== undefined) {
+      this.firstChatCallInputTokens = stats.firstChatCallInputTokens;
+      this.rootChatRecorded = true;
+    }
+  }
+
   /** Per-model rollup across all scopes/roles: chat model first, then total desc. */
   perModel(): ModelStatsV2['perModel'] {
     const map = new Map<
       string,
       { provider: string; model: string; usage: TokenUsage }
     >();
+    for (const seeded of this.seededModels.values()) {
+      map.set(modelKey(seeded.provider, seeded.model), {
+        provider: seeded.provider,
+        model: seeded.model,
+        usage: { ...seeded.usage },
+      });
+    }
     for (const e of this.entries) {
       if (!e.recorded) continue;
       const key = modelKey(e.provider, e.model);
@@ -190,6 +231,15 @@ export class TokenTracker {
   scopeUsage(scope: string): PanelUsage {
     let usageChat = { ...ZERO_USAGE };
     let usageSystem = { ...ZERO_USAGE };
+    if (scope === ROOT_SCOPE) {
+      for (const seeded of this.seededModels.values()) {
+        if (modelKey(seeded.provider, seeded.model) === this.rootChatKey) {
+          usageChat = addUsage(usageChat, seeded.usage);
+        } else {
+          usageSystem = addUsage(usageSystem, seeded.usage);
+        }
+      }
+    }
     for (const e of this.entries) {
       if (e.scope !== scope) continue;
       if (e.role === 'chat') {

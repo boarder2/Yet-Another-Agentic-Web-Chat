@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { EventEmitter } from 'events';
-import { onStreamEvent } from '@/lib/streaming/events';
+import { onStreamEvent, type ModelStatsV2 } from '@/lib/streaming/events';
 import {
   TokenTracker,
   normalizeUsageMetadata,
@@ -191,6 +191,74 @@ describe('TokenTracker', () => {
     expect(tracker.statsV2().firstChatCallInputTokens).toBe(42);
     chat.record(usage(99, 1));
     expect(tracker.statsV2().firstChatCallInputTokens).toBe(42);
+  });
+
+  it('hydrates a cumulative baseline regardless of recorder registration order', () => {
+    const baseline = {
+      version: 2 as const,
+      perModel: [
+        { provider: 'anthropic', model: 'claude', usage: usage(30, 10) },
+        { provider: 'openai', model: 'gpt-5', usage: usage(100, 20) },
+      ],
+      firstChatCallInputTokens: 100,
+    };
+
+    for (const seedFirst of [false, true]) {
+      const tracker = new TokenTracker(new EventEmitter());
+      if (seedFirst) tracker.seed(baseline);
+      const chat = tracker.register({
+        provider: 'openai',
+        model: 'gpt-5',
+        role: 'chat',
+      });
+      tracker.register({
+        provider: 'anthropic',
+        model: 'claude',
+        role: 'system',
+      });
+      if (!seedFirst) tracker.seed(baseline);
+
+      chat.record(usage(7, 3));
+
+      expect(tracker.perModel()).toEqual([
+        { provider: 'openai', model: 'gpt-5', usage: usage(107, 23) },
+        { provider: 'anthropic', model: 'claude', usage: usage(30, 10) },
+      ]);
+      expect(tracker.statsV2().firstChatCallInputTokens).toBe(100);
+    }
+  });
+
+  it('emits repeated cumulative resume snapshots without double-adding a repeated seed', () => {
+    const emitter = new EventEmitter();
+    const seen: ModelStatsV2[] = [];
+    onStreamEvent(emitter, (event) => {
+      if (event.type === 'model_stats') seen.push(event.data as ModelStatsV2);
+    });
+
+    const tracker = new TokenTracker(emitter);
+    const chat = tracker.register({
+      provider: 'openai',
+      model: 'gpt-5',
+      role: 'chat',
+    });
+    const baseline = {
+      version: 2 as const,
+      perModel: [{ provider: 'openai', model: 'gpt-5', usage: usage(10, 5) }],
+      firstChatCallInputTokens: 10,
+    };
+    tracker.seed(baseline);
+    tracker.seed(baseline);
+
+    chat.record(usage(2, 1));
+    chat.record(usage(4, 3));
+
+    expect(seen.map((stats) => stats.perModel)).toEqual([
+      [{ provider: 'openai', model: 'gpt-5', usage: usage(12, 6) }],
+      [{ provider: 'openai', model: 'gpt-5', usage: usage(16, 9) }],
+    ]);
+    expect(seen.map((stats) => stats.firstChatCallInputTokens)).toEqual([
+      10, 10,
+    ]);
   });
 
   it('exposes the root-scope identity registered for a role', () => {

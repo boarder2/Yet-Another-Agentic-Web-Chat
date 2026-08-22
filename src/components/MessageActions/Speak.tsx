@@ -1,5 +1,5 @@
 import { Pause, Play, Square, Volume2 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useSpeech } from 'react-text-to-speech';
 import { toSpeechText } from '@/lib/utils/contentStripping';
 import Select from '@/components/ui/Select';
@@ -86,6 +86,11 @@ const Speak = ({
   // Plain text for the browser Web Speech engine / fallback (it can't take
   // markdown). Derived from `markdown` when present, else the `text` prop.
   const browserText = markdown ? toSpeechText(markdown) : (text ?? '');
+  const browserSpeechId = useId();
+
+  // Supplying an id prevents react-text-to-speech from requiring
+  // crypto.randomUUID(), which is unavailable in some browser contexts.
+  const browserSpeechOptions = { text: browserText, id: browserSpeechId };
 
   // Browser-TTS fallback. Its `start` doubles as resume when speechStatus is
   // 'paused' (it calls speechSynthesis.resume() internally).
@@ -94,7 +99,7 @@ const Speak = ({
     start: startBrowser,
     pause: pauseBrowser,
     stop: stopBrowser,
-  } = useSpeech({ text: browserText });
+  } = useSpeech(browserSpeechOptions);
 
   // Stop and detach the audio element so its in-flight stream is aborted.
   const teardown = () => {

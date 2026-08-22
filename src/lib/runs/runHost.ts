@@ -49,6 +49,7 @@ import {
   normalizeStreamEvent,
   panelExecutorTokens,
   type ModelStats,
+  type ModelStatsV2,
   type ToolKind,
   type LangGraphInterrupt,
   type StreamEvent,
@@ -70,10 +71,17 @@ import {
 import { eq, sql, and, isNull, ne, asc } from 'drizzle-orm';
 import { createHash } from 'crypto';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import type { Document } from '@langchain/core/documents';
 import type { Recorder, TokenTracker } from '@/lib/tokens/tracker';
 import { generateChatTitle } from '@/lib/utils/chatTitle';
 import { popCallbackRunId } from '@/lib/sandbox/codeExecutionCorrelation';
 import { popCallbackRunId as popQuestionCallbackRunId } from '@/lib/userQuestion/questionCorrelation';
+import {
+  decodeAgentRunConfig,
+  encodeAgentRunConfig,
+  type AgentRunConfig,
+} from '@/lib/search/agentRunConfig';
+import { deduplicateDocuments } from '@/lib/search/agentStreamDriver';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -98,6 +106,98 @@ function scrubRunningToolMarkup(content: string): string {
   return content
     .replace(/"status":"running"/g, '"status":"error"')
     .replace(/status="running"/g, 'status="error"');
+}
+
+function isModelStatsV2(value: unknown): value is ModelStatsV2 {
+  if (!value || typeof value !== 'object') return false;
+  const stats = value as Partial<ModelStatsV2>;
+  return stats.version === 2 && Array.isArray(stats.perModel);
+}
+
+function latestModelStatsV2(
+  eventLog: readonly { ev: StreamEvent }[],
+): ModelStatsV2 | undefined {
+  for (let i = eventLog.length - 1; i >= 0; i--) {
+    const event = eventLog[i]?.ev;
+    if (event?.type === 'stats' && isModelStatsV2(event.data)) {
+      return event.data;
+    }
+  }
+  return undefined;
+}
+
+function sourcesFromEventLog(
+  eventLog: readonly { ev: StreamEvent }[],
+): Document[] {
+  let sources: Document[] = [];
+  for (const { ev } of eventLog) {
+    if (ev.type === 'sources') {
+      sources = deduplicateDocuments(ev.data);
+    } else if (ev.type === 'sources_added') {
+      sources = deduplicateDocuments([...sources, ...ev.data]);
+    }
+  }
+  return sources;
+}
+
+function addModelStatsDelta(
+  base: ModelStatsV2,
+  before: ModelStatsV2,
+  after: ModelStatsV2,
+): ModelStatsV2 {
+  const beforeByModel = new Map(
+    before.perModel.map((row) => [`${row.provider}::${row.model}`, row.usage]),
+  );
+  const rows = base.perModel.map((row) => ({
+    ...row,
+    usage: { ...row.usage },
+  }));
+
+  for (const row of after.perModel) {
+    const key = `${row.provider}::${row.model}`;
+    const prior = beforeByModel.get(key);
+    const delta = {
+      input_tokens: Math.max(
+        0,
+        row.usage.input_tokens - (prior?.input_tokens ?? 0),
+      ),
+      output_tokens: Math.max(
+        0,
+        row.usage.output_tokens - (prior?.output_tokens ?? 0),
+      ),
+      total_tokens: Math.max(
+        0,
+        row.usage.total_tokens - (prior?.total_tokens ?? 0),
+      ),
+    };
+    if (
+      delta.input_tokens === 0 &&
+      delta.output_tokens === 0 &&
+      delta.total_tokens === 0
+    ) {
+      continue;
+    }
+
+    const existing = rows.find(
+      (candidate) =>
+        candidate.provider === row.provider && candidate.model === row.model,
+    );
+    if (existing) {
+      existing.usage = {
+        input_tokens: existing.usage.input_tokens + delta.input_tokens,
+        output_tokens: existing.usage.output_tokens + delta.output_tokens,
+        total_tokens: existing.usage.total_tokens + delta.total_tokens,
+      };
+    } else {
+      rows.push({
+        provider: row.provider,
+        model: row.model,
+        usage: delta,
+      });
+    }
+  }
+
+  return { ...base, perModel: rows };
 }
 
 /** Pop the markup correlation ID for a given tool kind + key. */
@@ -522,7 +622,18 @@ async function performResume(items: ResumeItem[]): Promise<void> {
     const chat = await db.query.chats.findFirst({
       where: eq(chats.id, first.chatId),
     });
-    if (!chat?.activeRunThreadId)
+    if (!chat) throw new RunGoneError(`Chat for ${first.messageId} not found`);
+
+    let runConfig: AgentRunConfig;
+    try {
+      runConfig = decodeAgentRunConfig(chat.activeRunConfigSnapshot);
+    } catch (err) {
+      const detail = err instanceof Error ? `: ${err.message}` : '';
+      throw new RunGoneError(
+        `Run for ${first.messageId} has no valid resumable config${detail}`,
+      );
+    }
+    if (!chat.activeRunThreadId)
       throw new RunGoneError(`Run for ${first.messageId} has no active thread`);
 
     const { SimplifiedAgent } = await import('@/lib/search/simplifiedAgent');
@@ -530,17 +641,22 @@ async function performResume(items: ResumeItem[]): Promise<void> {
       await import('@/lib/providers/resolveModels');
     const { getRun } = await import('./runHub');
 
-    const snapshot = chat.activeRunConfigSnapshot as Record<
-      string,
-      unknown
-    > | null;
-    if (!snapshot)
-      throw new RunGoneError(`No config snapshot for ${first.messageId}`);
-
-    const userMessageId = first.messageId;
+    if (
+      !runConfig.interactiveSession ||
+      !runConfig.chatId ||
+      !runConfig.messageId ||
+      !runConfig.aiMessageId ||
+      runConfig.chatId !== first.chatId ||
+      runConfig.messageId !== first.messageId
+    ) {
+      throw new RunGoneError(
+        `Run for ${first.messageId} has incomplete or mismatched resumable identity`,
+      );
+    }
+    const userMessageId = runConfig.messageId;
 
     let run = getRun(userMessageId);
-    if (!run) run = await reconstructAwaitingRun(chat, snapshot);
+    if (!run) run = await reconstructAwaitingRun(chat, runConfig);
 
     if (run.status !== 'awaiting_user') {
       throw new RaceError(
@@ -549,14 +665,8 @@ async function performResume(items: ResumeItem[]): Promise<void> {
     }
 
     const resolved = await resolveChatAndEmbedding({
-      chatModel: snapshot.chatModelRef as {
-        provider: string;
-        name: string;
-      } | null,
-      systemModel: snapshot.systemModelRef as {
-        provider: string;
-        name: string;
-      } | null,
+      chatModel: runConfig.chatModelRef,
+      systemModel: runConfig.systemModelRef,
     });
 
     // Count unresolved interrupts BEFORE marking resolved. With more than one
@@ -635,46 +745,33 @@ async function performResume(items: ResumeItem[]): Promise<void> {
       else emitAnsweredAndMarkup(run, approval, response);
     }
 
-    const resumeChatModelRef = snapshot.chatModelRef as {
-      provider: string;
-      name: string;
-    };
-    const resumeSystemModelRef =
-      (snapshot.systemModelRef as { provider: string; name: string } | null) ??
-      resumeChatModelRef;
     const { createTurnTracker } = await import('@/lib/tokens/tracker');
     const { tracker, chatRecorder, systemRecorder } = createTurnTracker(
       run.emitter,
-      resumeChatModelRef,
-      resumeSystemModelRef,
+      runConfig.chatModelRef,
+      runConfig.systemModelRef,
     );
+    const prePauseStats = latestModelStatsV2(run.eventLog);
+    if (prePauseStats) tracker.seed(prePauseStats);
 
-    const handler = new SimplifiedAgent(
-      resolved.chatLlm,
-      resolved.systemLlm,
-      resolved.embedding,
-      run.emitter,
-      (snapshot.personaInstructions as string) ?? '',
-      run.abortController.signal,
-      { tracker, chatRecorder, systemRecorder },
-      userMessageId,
-      run.retrievalController.signal,
-      snapshot.userLocation as string | undefined,
-      snapshot.userProfile as string | undefined,
-      (snapshot.memoryEnabled as boolean) ?? false,
-      '',
-      (snapshot.chatId as string) ?? run.chatId,
-      (snapshot.interactiveSession as boolean) ?? true,
-      (snapshot.methodologyInstructions as string) ?? '',
-      (snapshot.isPrivate as boolean) ?? false,
-      (snapshot.workspaceSuffix as string) ?? '',
-      snapshot.workspaceId as string | null | undefined,
-      (snapshot.aiMessageId as string) ?? run.aiMessageId,
-      run.chartRegistry,
-    );
-    handler.setThreadId(chat.activeRunThreadId);
-    handler.setModelRefs(resumeChatModelRef, resumeSystemModelRef);
-
+    const handler = new SimplifiedAgent({
+      dependencies: {
+        chatLlm: resolved.chatLlm,
+        systemLlm: resolved.systemLlm,
+        embeddings: resolved.embedding,
+        emitter: run.emitter,
+        tokenTracking: { tracker, chatRecorder, systemRecorder },
+      },
+      run: runConfig,
+      context: {
+        signal: run.abortController.signal,
+        retrievalSignal: run.retrievalController.signal,
+        threadId: chat.activeRunThreadId,
+        memorySection: '',
+        invokedSkillNames: [],
+        chartRegistry: run.chartRegistry,
+      },
+    });
     // Single pending interrupt → bare value; multiple → map keyed by the
     // engine interrupt id so LangGraph routes each value to the right interrupt.
     let resumeArg: unknown;
@@ -717,15 +814,15 @@ async function performResume(items: ResumeItem[]): Promise<void> {
       if (markupId) mcpMarkupIds[a.toolCallId] = markupId;
     }
 
+    const existingDocuments = sourcesFromEventLog(run.eventLog);
     const resumedRun = run;
     handler
-      .doResume(
-        (snapshot.focusMode as string) ?? 'webSearch',
-        (snapshot.fileIds as string[]) ?? [],
+      .doResume({
         resumeArg,
         pinnedMcpDescriptors,
         mcpMarkupIds,
-      )
+        existingDocuments,
+      })
       .catch((err: unknown) => {
         console.error('[resumeRun] doResume error:', err);
         // Without this the run stays `running` forever on a doResume failure
@@ -771,14 +868,20 @@ export async function resumeRunMulti(
 
 async function reconstructAwaitingRun(
   chat: typeof chats.$inferSelect,
-  snapshot: Record<string, unknown>,
+  runConfig: AgentRunConfig,
 ): Promise<Run> {
   const { EventEmitter } = await import('events');
   const emitter = new EventEmitter();
   const abortController = new AbortController();
   const retrievalController = new AbortController();
 
-  const messageId = chat.activeRunMessageId ?? '';
+  if (!runConfig.messageId || !runConfig.aiMessageId) {
+    throw new RunGoneError('Run config has no resumable message identity');
+  }
+  if (!chat.activeRunThreadId) {
+    throw new RunGoneError('Run has no active checkpoint thread');
+  }
+  const messageId = runConfig.messageId;
 
   // Register the fresh controllers so a Stop (POST /api/chat/cancel) can reach
   // this run. Without this, a reconstructed run (after eviction or a server
@@ -793,10 +896,7 @@ async function reconstructAwaitingRun(
   // The assistant message row is keyed by aiMessageId (distinct from the user
   // message id stored in activeRunMessageId). Recover it from the config
   // snapshot so content persistence + event routing target the right row.
-  const aiMessageId =
-    (snapshot.aiMessageId as string | undefined) ??
-    chat.activeRunMessageId ??
-    '';
+  const aiMessageId = runConfig.aiMessageId;
 
   // Load persisted assistant content so post-resume tokens append correctly
   let persistedContent = '';
@@ -835,7 +935,7 @@ async function reconstructAwaitingRun(
     chatId: chat.id,
     messageId,
     aiMessageId,
-    threadId: chat.activeRunThreadId ?? '',
+    threadId: chat.activeRunThreadId,
     status: 'awaiting_user' as RunStatus,
     emitter,
     eventLog,
@@ -875,7 +975,7 @@ export async function attachRunHost(params: {
   usedLocation: boolean;
   usedPersonalization: boolean;
   memoriesUsed: Array<{ id: string; content: string }>;
-  configSnapshot?: Record<string, unknown> | null;
+  configSnapshot?: AgentRunConfig | null;
   isResume?: boolean;
   /** When present, the first assistant turn's completion generates a chat title. */
   titleGen?: TitleGenContext;
@@ -913,7 +1013,9 @@ export async function attachRunHost(params: {
         activeRunStartedAt: run.startedAt,
         activeRunStatus: 'running',
         activeRunThreadId: run.threadId,
-        activeRunConfigSnapshot: configSnapshot ?? null,
+        activeRunConfigSnapshot: configSnapshot
+          ? encodeAgentRunConfig(configSnapshot)
+          : null,
         lastRunViewed: 0,
       })
       .where(eq(chats.id, chatId))
@@ -1013,10 +1115,14 @@ export async function attachRunHost(params: {
     run.recievedMessage = recievedMessage;
   }
 
-  let sources: Record<string, unknown>[] = [];
+  let sources: Document[] = isResume ? sourcesFromEventLog(run.eventLog) : [];
   let searchQuery: string | undefined;
   let searchUrl: string | undefined;
-  let modelStats: ModelStats = { version: 2, perModel: [] };
+  let modelStats: ModelStats = (isResume &&
+    latestModelStatsV2(run.eventLog)) || {
+    version: 2,
+    perModel: [],
+  };
   let terminated = false;
   // Set once `messageEnd` is on the wire. After that, late recorder activity
   // (the auto-title system call) must not push another `stats` event — the
@@ -1189,7 +1295,10 @@ export async function attachRunHost(params: {
         searchUrl,
       });
 
-      sources = event.data as unknown as Record<string, unknown>[];
+      sources =
+        event.type === 'sources'
+          ? deduplicateDocuments(event.data)
+          : deduplicateDocuments([...sources, ...event.data]);
       scheduleFlush(true);
     } else if (event.type === 'tool_call_started') {
       pushEvent(run, { ...event, messageId: aiMessageId });
@@ -1546,6 +1655,10 @@ export async function attachRunHost(params: {
       // are recorded on the turn tracker; recompute modelStats so the persisted
       // DB row is complete (the already-sent messageEnd undercounts, ephemeral).
       if (titleGen?.autoTitleEnabled) {
+        const modelStatsBeforeTitle = isModelStatsV2(modelStats)
+          ? modelStats
+          : undefined;
+        const titleStatsBefore = titleGen.tracker.statsV2();
         await maybeGenerateTitle({
           run,
           chatId,
@@ -1553,12 +1666,20 @@ export async function attachRunHost(params: {
           answer: recievedMessage,
           ctx: titleGen,
         });
-        // The title call may have recorded system-model tokens, which the
-        // model_stats handler folds into `modelStats` (dropping responseTime,
-        // and without pushing a post-end `stats`). Recompute from the tracker so
-        // the persisted row carries the true totals + responseTime.
+        // The title call uses the original turn tracker even when this agent
+        // was reconstructed for a resume. Merge only the title-call delta into
+        // the cumulative resume stats instead of replacing them with that
+        // tracker's pre-pause snapshot.
+        const titleStatsAfter = titleGen.tracker.statsV2();
+        modelStats = modelStatsBeforeTitle
+          ? addModelStatsDelta(
+              modelStatsBeforeTitle,
+              titleStatsBefore,
+              titleStatsAfter,
+            )
+          : titleStatsAfter;
         modelStats = {
-          ...titleGen.tracker.statsV2(),
+          ...modelStats,
           responseTime: endTime - startTime,
           usedLocation,
           usedPersonalization,
@@ -1608,12 +1729,13 @@ export async function attachRunHost(params: {
  * seeds recievedMessage + markup-correlation maps from the existing run state.
  */
 export async function attachResumedRunHost(run: Run): Promise<void> {
+  const priorStats = latestModelStatsV2(run.eventLog);
   return attachRunHost({
     run,
     userMessageId: run.messageId,
-    startTime: Date.now(),
-    usedLocation: false,
-    usedPersonalization: false,
+    startTime: run.startedAt,
+    usedLocation: priorStats?.usedLocation ?? false,
+    usedPersonalization: priorStats?.usedPersonalization ?? false,
     memoriesUsed: [],
     configSnapshot: null,
     isResume: true,

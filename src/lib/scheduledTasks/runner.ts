@@ -47,6 +47,7 @@ import { resolveChartPlacement } from '@/lib/chart/placement';
 import { ChartSpecSchema, type ChartSpec } from '@/lib/chart/chartSpec';
 import { stripStreamedChartTags } from '@/lib/utils/contentStripping';
 import { resolveWorkflowRun } from '@/lib/workflows/resolveWorkflowRun';
+import { createAgentRunConfig } from '@/lib/search/agentRunConfig';
 
 export async function runSchedule(
   scheduleId: string,
@@ -141,28 +142,41 @@ export async function runSchedule(
       run.chatModel,
       run.systemModel,
     );
-    const agent = new SimplifiedAgent(
-      chatLlm,
-      systemLlm,
-      embedding,
-      emitter,
-      personaInstructionsContent,
-      abortController.signal,
-      { tracker, chatRecorder, systemRecorder },
-      userMessageId,
-      abortController.signal,
-      undefined, // userLocation
-      undefined, // userProfile
-      false, // memoryEnabled
-      '', // memorySection
-      chatId,
-      false, // interactiveSession
+    const runConfig = createAgentRunConfig({
+      chatModelRef: run.chatModel,
+      systemModelRef: run.systemModel ?? run.chatModel,
+      focusMode: run.focusMode,
+      fileIds: [],
+      personaInstructions: personaInstructionsContent,
       methodologyInstructions,
-      false, // isPrivate
-      '', // workspaceSuffix
-      undefined, // workspaceId
+      userLocation: null,
+      userProfile: null,
+      workspaceId: null,
+      isPrivate: false,
+      chatId,
+      messageId: userMessageId,
       aiMessageId,
-    );
+      interactiveSession: false,
+      workspaceSuffix: '',
+      memoryEnabled: false,
+      panel: null,
+    });
+    const agent = new SimplifiedAgent({
+      dependencies: {
+        chatLlm,
+        systemLlm,
+        embeddings: embedding,
+        emitter,
+        tokenTracking: { tracker, chatRecorder, systemRecorder },
+      },
+      run: runConfig,
+      context: {
+        signal: abortController.signal,
+        retrievalSignal: abortController.signal,
+        memorySection: '',
+        invokedSkillNames: [],
+      },
+    });
 
     let receivedMessage = '';
     let sources: Array<Record<string, unknown>> = [];
@@ -228,15 +242,10 @@ export async function runSchedule(
         }
       });
 
-      agent.searchAndAnswer(
-        composedQuery,
-        [],
-        [],
-        run.focusMode,
-        undefined,
-        undefined,
-        undefined,
-      );
+      agent.searchAndAnswer({
+        query: composedQuery,
+        history: [],
+      });
     });
 
     if (modelStats) {

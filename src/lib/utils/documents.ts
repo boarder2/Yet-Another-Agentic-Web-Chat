@@ -115,20 +115,77 @@ const extractYoutubeVideoId = (url: string): string | null => {
   return m ? m[1] : null;
 };
 
-const ANDROID_VR_CLIENT = {
-  clientName: 'ANDROID_VR',
-  clientVersion: '1.60.19',
-  deviceMake: 'Oculus',
-  deviceModel: 'Quest 3',
-  androidSdkVersion: 32,
-  userAgent:
-    'com.google.android.apps.youtube.vr.oculus/1.60.19 (Linux; U; Android 12; en_US; Quest 3 Build/SQ3A.220705.003)',
-  osName: 'Android',
-  osVersion: '12',
-  hl: 'en',
-  gl: 'US',
-} as const;
-const ANDROID_VR_CLIENT_ID = '28';
+type InnerTubeClient = {
+  label: string;
+  clientId: string;
+  clientVersion: string;
+  context: {
+    client: Record<string, string | number>;
+  };
+};
+
+const INNER_TUBE_CLIENTS: Record<
+  'androidVr' | 'android' | 'ios',
+  InnerTubeClient
+> = {
+  androidVr: {
+    label: 'Android VR',
+    clientId: '28',
+    clientVersion: '1.60.19',
+    context: {
+      client: {
+        clientName: 'ANDROID_VR',
+        clientVersion: '1.60.19',
+        deviceMake: 'Oculus',
+        deviceModel: 'Quest 3',
+        androidSdkVersion: 32,
+        userAgent:
+          'com.google.android.apps.youtube.vr.oculus/1.60.19 (Linux; U; Android 12; en_US; Quest 3 Build/SQ3A.220705.003)',
+        osName: 'Android',
+        osVersion: '12',
+        hl: 'en',
+        gl: 'US',
+      },
+    },
+  },
+  android: {
+    label: 'Android',
+    clientId: '3',
+    clientVersion: '21.26.364',
+    context: {
+      client: {
+        clientName: 'ANDROID',
+        clientVersion: '21.26.364',
+        androidSdkVersion: 30,
+        userAgent:
+          'com.google.android.youtube/21.26.364 (Linux; U; Android 11) gzip',
+        osName: 'Android',
+        osVersion: '11',
+        hl: 'en',
+        gl: 'US',
+      },
+    },
+  },
+  ios: {
+    label: 'iOS',
+    clientId: '5',
+    clientVersion: '21.26.4',
+    context: {
+      client: {
+        clientName: 'IOS',
+        clientVersion: '21.26.4',
+        deviceMake: 'Apple',
+        deviceModel: 'iPhone16,2',
+        userAgent:
+          'com.google.ios.youtube/21.26.4 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)',
+        osName: 'iPhone',
+        osVersion: '18.3.2.22D82',
+        hl: 'en',
+        gl: 'US',
+      },
+    },
+  },
+};
 
 type YoutubePageData = {
   playerResponse: unknown;
@@ -136,8 +193,17 @@ type YoutubePageData = {
   visitorData: string | null;
 };
 
-/** The two independent ways a transcript can be read out of the page. */
-type TranscriptSource = 'panel' | 'json3';
+/** Ordered transcript retrieval methods; `json3` is the Android VR path. */
+type TranscriptSource = 'panel' | 'json3' | 'android' | 'ios';
+
+const INNER_TUBE_SOURCE_CLIENTS: Record<
+  Exclude<TranscriptSource, 'panel'>,
+  InnerTubeClient
+> = {
+  json3: INNER_TUBE_CLIENTS.androidVr,
+  android: INNER_TUBE_CLIENTS.android,
+  ios: INNER_TUBE_CLIENTS.ios,
+};
 
 const readYoutubePageData = async (page: Page): Promise<YoutubePageData> =>
   page.evaluate(() => {
@@ -196,27 +262,29 @@ const readYoutubePageData = async (page: Page): Promise<YoutubePageData> =>
     };
   });
 
-const retrieveAndroidVrPlayerResponse = async (
+const retrieveInnerTubePlayerResponse = async (
   page: Page,
   videoId: string,
   apiKey: string,
   visitorData: string | null,
+  client: InnerTubeClient,
 ): Promise<unknown> =>
   page.evaluate(
-    async ({ videoId, apiKey, visitorData, client, clientId }) => {
+    async ({ videoId, apiKey, visitorData, client }) => {
       const response = await fetch(
         `https://www.youtube.com/youtubei/v1/player?key=${encodeURIComponent(apiKey)}`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-YouTube-Client-Name': clientId,
+            'X-YouTube-Client-Name': client.clientId,
             'X-YouTube-Client-Version': client.clientVersion,
           },
           body: JSON.stringify({
             context: {
+              ...client.context,
               client: {
-                ...client,
+                ...client.context.client,
                 ...(visitorData ? { visitorData } : {}),
               },
             },
@@ -226,7 +294,7 @@ const retrieveAndroidVrPlayerResponse = async (
       );
       if (!response.ok) {
         throw new Error(
-          `Android VR player request failed with HTTP ${response.status}`,
+          `${client.label} player request failed with HTTP ${response.status}`,
         );
       }
       return (await response.json()) as unknown;
@@ -235,8 +303,7 @@ const retrieveAndroidVrPlayerResponse = async (
       videoId,
       apiKey,
       visitorData,
-      client: ANDROID_VR_CLIENT,
-      clientId: ANDROID_VR_CLIENT_ID,
+      client,
     },
   );
 
@@ -266,32 +333,52 @@ const retrieveJson3Captions = async (
 };
 
 /**
- * Fetch captions through the browser's Android VR InnerTube client. Used when
- * the rendered panel cannot serve a track, and as the lead source for Gemini
- * tracks, whose watch-page caption URLs return an empty body.
+ * Fetch captions through one of the browser's InnerTube clients. Each client
+ * gets its own player response and signed JSON3 track before the next source
+ * is attempted.
  */
-const readAndroidVrCaptions = async (
+const readInnerTubeCaptions = async (
   page: Page,
   videoId: string | null,
   pageData: YoutubePageData,
+  client: InnerTubeClient,
 ): Promise<string | null> => {
   if (!videoId) throw new Error('the video ID could not be determined');
   if (!pageData.apiKey)
     throw new Error('the InnerTube API key was unavailable');
 
-  const playerResponse = await retrieveAndroidVrPlayerResponse(
+  const playerResponse = await retrieveInnerTubePlayerResponse(
     page,
     videoId,
     pageData.apiKey,
     pageData.visitorData,
+    client,
   );
+  const availability = describeCaptionAvailability(playerResponse);
   console.log(
-    '[retrieveYoutubeTranscript] Android VR caption availability:',
-    JSON.stringify(describeCaptionAvailability(playerResponse)),
+    `[retrieveYoutubeTranscript] ${client.label} caption availability:`,
+    JSON.stringify(availability),
   );
 
+  if (
+    availability.playabilityStatus &&
+    availability.playabilityStatus !== 'OK'
+  ) {
+    throw new Error(
+      `player response was gated (${availability.playabilityStatus}${availability.playabilityReason ? `: ${availability.playabilityReason}` : ''})`,
+    );
+  }
+
   const track = selectCaptionTrack(playerResponse);
-  if (!track) throw new Error('no original caption track was returned');
+  if (!track) {
+    if (availability.advertisedTrackCount === 0) {
+      throw new Error('no caption tracks were returned');
+    }
+    if (availability.usableTrackCount === 0) {
+      throw new Error('no usable caption track was returned');
+    }
+    throw new Error('no original caption track was returned');
+  }
 
   return retrieveJson3Captions(page, track);
 };
@@ -343,6 +430,16 @@ const readPanelTranscript = async (page: Page): Promise<string> => {
     .join('\n');
 };
 
+const sanitizeTranscriptFailure = (error: unknown): string => {
+  const message = error instanceof Error ? error.message : String(error);
+  return message
+    .replace(/https?:\/\/[^\s"'<>]+/gi, '[redacted URL]')
+    .replace(
+      /\b(api[_-]?key|visitor[_-]?data|signature|sig|sparams)\s*[:=]\s*["']?[^,\s"'<>]+/gi,
+      '$1=[redacted]',
+    );
+};
+
 const saveYoutubeTranscript = async (
   page: Page,
   url: string,
@@ -372,10 +469,10 @@ const saveYoutubeTranscript = async (
  * Retrieves a YouTube video's transcript by driving a real browser.
  *
  * YouTube's watch-page player response advertises the available caption tracks.
- * Two independent sources can then produce the text: the rendered transcript
- * panel, and signed JSON3 captions fetched through the browser's native Android
- * VR InnerTube client. Conventional tracks lead with the panel and Gemini
- * tracks lead with JSON3; either way the other source is the fallback. Returns
+ * Sources can then produce the text through the rendered transcript panel or
+ * signed JSON3 captions fetched through the browser's Android VR, Android, and
+ * iOS InnerTube clients. Conventional tracks lead with the panel and Gemini
+ * tracks lead with Android VR; Android and iOS are appended fallbacks. Returns
  * null only when no caption tracks are advertised. Advertised tracks that no
  * source can render throw a retrieval error naming each attempt, so callers can
  * distinguish absence from failure.
@@ -482,11 +579,11 @@ export const retrieveYoutubeTranscript = async (
     }
 
     // Gemini tracks render in the panel but their watch-page caption URLs come
-    // back empty, so JSON3 leads for them and the panel leads otherwise. Both
-    // sources fail independently, so whichever does not lead is the fallback.
+    // back empty, so JSON3 leads for them and the panel leads otherwise. Android
+    // and iOS remain the final fallbacks for either track type.
     const sources: TranscriptSource[] = isGeminiCaptionTrack(selectedTrack)
-      ? ['json3', 'panel']
-      : ['panel', 'json3'];
+      ? ['json3', 'panel', 'android', 'ios']
+      : ['panel', 'json3', 'android', 'ios'];
     console.log(
       `[retrieveYoutubeTranscript] Selected track ${selectedTrack.languageCode ?? '?'}; source order: ${sources.join(' then ')}`,
     );
@@ -501,13 +598,18 @@ export const retrieveYoutubeTranscript = async (
         pageContent =
           source === 'panel'
             ? await readPanelTranscript(page)
-            : await readAndroidVrCaptions(page, videoId, pageData);
+            : await readInnerTubeCaptions(
+                page,
+                videoId,
+                pageData,
+                INNER_TUBE_SOURCE_CLIENTS[source],
+              );
+        if (signal?.aborted) return null;
         if (pageContent) break;
         failures.push(`${source} produced no caption text`);
       } catch (error) {
-        failures.push(
-          `${source} failed: ${error instanceof Error ? error.message : String(error)}`,
-        );
+        if (signal?.aborted) return null;
+        failures.push(`${source} failed: ${sanitizeTranscriptFailure(error)}`);
       }
       console.warn(
         `[retrieveYoutubeTranscript] ${failures[failures.length - 1]}`,

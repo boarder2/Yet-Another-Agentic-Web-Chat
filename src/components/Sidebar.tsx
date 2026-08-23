@@ -113,9 +113,7 @@ const Sidebar = ({ children }: { children: React.ReactNode }) => {
 
     const currentIds = new Set(activeRunsData.active.map((r) => r.chatId));
     const prev = prevActiveChatIds.current;
-    const hasTransitions =
-      [...prev].some((id) => !currentIds.has(id)) ||
-      activeRunsData.stale.length > 0;
+    const hasTransitions = [...prev].some((id) => !currentIds.has(id));
 
     if (hasTransitions) {
       qc.invalidateQueries({ queryKey: qk.chatsInfiniteRoot });

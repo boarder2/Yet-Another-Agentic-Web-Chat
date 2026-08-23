@@ -285,6 +285,22 @@ const loadMessages = async (
 
   const unread =
     data.chat.lastRunViewed === 0 && data.chat.lastRunStatus != null;
+
+  // The chat's active-run marker is durable; assistant-row metadata is only a
+  // render snapshot and can lag while a tool is the latest persisted event.
+  // Normalize the trailing assistant row from that marker so attachToRun and
+  // the composer continue to show the run as live after a remount.
+  if (
+    data.chat.activeRunMessageId &&
+    data.chat.activeRunStatus !== 'awaiting_user'
+  ) {
+    for (let i = finalMessages.length - 1; i >= 0; i--) {
+      if (finalMessages[i].role === 'assistant') {
+        finalMessages[i] = { ...finalMessages[i], runStatus: 'running' };
+        break;
+      }
+    }
+  }
   setMessages(finalMessages);
 
   // If a run is still active (e.g. we just remounted onto /c/[chatId] right
@@ -292,8 +308,7 @@ const loadMessages = async (
   // setMessages. attachToRun does this too, but it runs a microtask later — by
   // then the partial assistant row has already rendered its "completed" footer
   // (rewrite/images/videos/related), causing a visible flicker before loading
-  // hides it again. Gate on the same condition attachToRun uses (a running
-  // assistant row present) so the two never disagree and leave loading stuck.
+  // hides it again.
   const hasRunningAssistantRow = finalMessages.some(
     (m) => m.role === 'assistant' && m.runStatus === 'running',
   );

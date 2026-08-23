@@ -1,13 +1,10 @@
 import db from '@/lib/db';
 import { chats } from '@/lib/db/schema';
-import { getRun } from '@/lib/runs/runHub';
 import { isNotNull, isNull, eq, and, count } from 'drizzle-orm';
 
 export const GET = async () => {
   try {
-    // Scheduled runs set the same activeRunMessageId marker but run headless
-    // (no hub Run), so they'd always fall into `stale` here. Exclude them — the
-    // schedules list tracks their in-progress state separately.
+    // Scheduled runs have separate in-progress state in the schedules list.
     const activeRows = await db
       .select({
         id: chats.id,
@@ -21,40 +18,19 @@ export const GET = async () => {
         and(isNotNull(chats.activeRunMessageId), isNull(chats.scheduleId)),
       );
 
-    const active: {
-      chatId: string;
-      messageId: string;
-      startedAt: number;
-      status: 'running' | 'awaiting_user';
-      chatTitle?: string;
-    }[] = [];
-    const stale: string[] = [];
-
-    for (const row of activeRows) {
-      const messageId = row.activeRunMessageId!;
-      const hubRun = getRun(messageId);
-
-      if (row.activeRunStatus === 'awaiting_user') {
-        // Durable paused run — include regardless of hub presence (may be evicted)
-        active.push({
-          chatId: row.id,
-          messageId,
-          startedAt: row.activeRunStartedAt ?? 0,
-          status: 'awaiting_user',
-          chatTitle: row.title,
-        });
-      } else if (hubRun?.status === 'running') {
-        active.push({
-          chatId: row.id,
-          messageId,
-          startedAt: row.activeRunStartedAt ?? hubRun.startedAt,
-          status: 'running',
-          chatTitle: row.title,
-        });
-      } else {
-        stale.push(row.id);
-      }
-    }
+    // The chat marker is durable and is also what History uses for its status.
+    // Do not derive UI state from the process-local run hub: a reconnect can
+    // reach a different handler instance while the original run is still live.
+    const active = activeRows.map((row) => ({
+      chatId: row.id,
+      messageId: row.activeRunMessageId!,
+      startedAt: row.activeRunStartedAt ?? 0,
+      status:
+        row.activeRunStatus === 'awaiting_user'
+          ? ('awaiting_user' as const)
+          : ('running' as const),
+      chatTitle: row.title,
+    }));
 
     const awaitingAttentionCount = active.filter(
       (r) => r.status === 'awaiting_user',
@@ -77,7 +53,9 @@ export const GET = async () => {
 
     return Response.json({
       active,
-      stale,
+      // Retained for clients that consumed the old response shape. Durable
+      // chat markers now define active state, so there are no stale entries.
+      stale: [],
       unreadCount,
       awaitingAttentionCount,
     });

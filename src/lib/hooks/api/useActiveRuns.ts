@@ -14,6 +14,7 @@ export interface ActiveRun {
 
 export interface ActiveRunsData {
   active: ActiveRun[];
+  /** Legacy response field; durable chat markers leave this empty. */
   stale: string[];
   unreadCount: number;
   awaitingAttentionCount: number;

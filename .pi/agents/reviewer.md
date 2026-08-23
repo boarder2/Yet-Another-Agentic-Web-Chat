@@ -44,7 +44,7 @@ constants for one concept, hand-rolled versions of shared modules, copies that h
 Cite the existing thing by path.
 
 **Style.** Judge each file against the code around it, then `CLAUDE.md`/`AGENTS.md` and the
-relevant `.claude/skills/` doc: naming, layout, error shape, imports, typing (no stray `any`, no
+relevant `.agents/skills/` doc: naming, layout, error shape, imports, typing (no stray `any`, no
 casts hiding a real mismatch). Comments are rare and explain a non-obvious _why_ — flag ones
 restating code, and surprising code with none.
 

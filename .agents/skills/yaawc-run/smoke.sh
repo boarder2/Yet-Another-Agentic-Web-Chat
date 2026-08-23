@@ -2,7 +2,7 @@
 # Smoke harness for YAAWC: launch the dev server (if not already up),
 # drive it with playwright-cli, and capture a DOM/accessibility snapshot
 # of the home + settings surfaces.
-# Run from the repo root:  bash .claude/skills/yaawc-run/smoke.sh
+# Run from the repo root:  bash .agents/skills/yaawc-run/smoke.sh
 #
 # Observation is the text `snapshot` (diffable, greppable) — that's what
 # this repo's playwright-cli skill prefers. Set SHOT=1 to also save PNG

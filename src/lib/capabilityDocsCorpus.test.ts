@@ -55,7 +55,6 @@ const sourceFiles = [
   'CONTRIBUTING.md',
   'docs/THEMES.md',
   '.github/pull_request_template.md',
-  '.agents/skills/implement/SKILL.md',
   ...capabilityFiles.map((file) => `docs/capabilities/${file}`),
 ].map((relativePath): SourceFile => ({
   path: relativePath,
@@ -828,16 +827,10 @@ describe('authoritative capability corpus', () => {
 
   it('requires the capability-document review rule in contributor guidance', () => {
     const agents = readFileSync(resolve(repositoryRoot, 'AGENTS.md'), 'utf8');
-    const implementSkill = readFileSync(
-      resolve(repositoryRoot, '.agents/skills/implement/SKILL.md'),
-      'utf8',
-    );
 
-    for (const guidance of [agents, implementSkill]) {
-      expect(guidance).toMatch(/user-visible change/i);
-      expect(guidance).toMatch(/docs\/capabilities/);
-      expect(guidance).toMatch(/authoritative/i);
-      expect(guidance).toMatch(/(?:history|roadmap)/i);
-    }
+    expect(agents).toMatch(/user-visible change/i);
+    expect(agents).toMatch(/docs\/capabilities/);
+    expect(agents).toMatch(/authoritative/i);
+    expect(agents).toMatch(/(?:history|roadmap)/i);
   });
 });

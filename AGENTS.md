@@ -16,7 +16,7 @@ Stack: Next.js App Router + React 19 + Tailwind 4, TanStack Query, LangChain/Lan
 
 ## Architecture
 
-Subsystem detail lives in the `.claude/skills/yaawc-*` skills — read the relevant one before working in an area.
+Subsystem detail lives in the `.agents/skills/yaawc-*` skills — read the relevant one before working in an area.
 
 - **Stream events** (`src/lib/streaming/`): the one agent↔UI seam. Producers emit typed `AgentEmitEvent`s; `runHost` synthesizes the NDJSON `StreamEvent`s; the client folds each through one pure reducer shared by live and reconnect paths; `ChatWindow` performs the returned `StreamEffect`s.
 - **Widget envelopes** (`src/lib/widgets/envelope.ts`): in-message widgets (tool calls, subagents, panel columns, artifact cards) are ` ```yaawc:<kind> ` fences with a single-line JSON payload — writer-appended only; model-streamed `yaawc:` fences are neutralized, so spoofing is structurally impossible. `MarkdownRenderer` dispatches them to typed components.

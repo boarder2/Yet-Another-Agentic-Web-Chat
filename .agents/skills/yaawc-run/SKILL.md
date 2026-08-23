@@ -3,7 +3,7 @@ name: yaawc-run
 description: Build, run, and drive YAAWC. Use when asked to start the dev server, build, smoke-test, screenshot the UI, or interact with the running app in a browser.
 ---
 
-YAAWC is a Next.js (App Router) web app: start `npm run dev`, then drive headless Chromium with `playwright-cli`. The harness `.claude/skills/yaawc-run/smoke.sh` wraps the whole loop. Paths are relative to repo root.
+YAAWC is a Next.js (App Router) web app: start `npm run dev`, then drive headless Chromium with `playwright-cli`. The harness `.agents/skills/yaawc-run/smoke.sh` wraps the whole loop. Paths are relative to repo root.
 
 **Observe with `snapshot` (DOM/a11y tree as text — diffable, greppable), not screenshots.** Screenshots are opt-in (`SHOT=1`), only worth it for visual bugs (layout, image-heavy widgets).
 
@@ -18,8 +18,8 @@ For a fresh clone: Node ≥ 24, npm, `playwright-cli` on PATH (else `npx playwri
 ## Run (agent path) — the harness
 
 ```bash
-bash .claude/skills/yaawc-run/smoke.sh          # snapshot-only (default)
-SHOT=1 bash .claude/skills/yaawc-run/smoke.sh   # also save PNGs
+bash .agents/skills/yaawc-run/smoke.sh          # snapshot-only (default)
+SHOT=1 bash .agents/skills/yaawc-run/smoke.sh   # also save PNGs
 ```
 
 It: reuses or starts `npm run dev` (logs → `/tmp/yaawc-dev.log`, up to 90s for first compile); captures home → `/tmp/yaawc-smoke/home.yaml` and `/settings` → `settings.yaml` (`.png` too with `SHOT=1`); fills the chat input and reads it back to prove React's controlled input took the keystrokes; prints console errors.

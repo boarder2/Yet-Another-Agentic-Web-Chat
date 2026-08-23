@@ -1,3 +1,7 @@
+const allowedDevOrigins = process.env.YAAWC_ALLOWED_DEV_ORIGINS?.split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
@@ -22,6 +26,7 @@ const nextConfig = {
       './docs/capabilities/**/*.md',
     ],
   },
+  allowedDevOrigins,
 };
 
 export default nextConfig;

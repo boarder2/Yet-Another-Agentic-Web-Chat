@@ -1,6 +1,6 @@
 ---
 name: yaawc-settings-persistence
-description: Use when working on app settings — the config.toml-vs-DB split, localStorage⇄DB sync (MIGRATED_SETTING_KEYS, persist.ts), SettingsPanel, model selection persistence, or reading settings server-side.
+description: Settings sync, model selection, config/DB boundary, encrypted credentials, and server-side reads.
 ---
 
 # Settings & Persistence
@@ -45,4 +45,4 @@ Sections live in `src/app/settings/sections/*`; section components in `src/app/s
 - **Ambient settings** (memory flags, personalization, `autoTitleEnabled`) ARE read server-side and are no longer sent in request bodies. `autoTitleEnabled` (instance-wide, **default `true`**) gates auto-generated chat titles; the chat route reads it via `getBooleanSetting(..., true)`.
 - The **memory-processing model** and the **embedding model** have their OWN keys (`memoryModel*`, `embeddingModel*`), independent of the chat picker's `systemModel`.
 
-Related: `yaawc-api-endpoints` (the `/api/settings` route), `yaawc-agent-panel` (`panelPresets`/`panelSelection` keys), `yaawc-dashboard-widgets` (`yaawc_dashboard_*` keys), `yaawc-db-migrations` (the `app_settings` schema).
+Related: `yaawc-api-endpoints` (the `/api/settings` route), `yaawc-agent-panel` (`panelPresets`/`panelSelection` keys), `yaawc-dashboard-widgets` (`yaawc_dashboard_*` keys), `yaawc-database` (the `app_settings` schema).

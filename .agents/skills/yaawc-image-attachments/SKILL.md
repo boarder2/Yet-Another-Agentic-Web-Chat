@@ -1,6 +1,6 @@
 ---
 name: yaawc-image-attachments
-description: Use when working on image upload/display, the uploads API, clipboard paste, multimodal messages, or vision model integration.
+description: Image upload/storage, attachment UX, multimodal messages, vision gating, and display.
 ---
 
 # Image Attachments

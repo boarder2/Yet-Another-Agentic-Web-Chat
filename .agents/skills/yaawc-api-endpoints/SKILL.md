@@ -1,6 +1,6 @@
 ---
 name: yaawc-api-endpoints
-description: Use when adding, modifying, or debugging API routes, request/response schemas, or the chat route handler.
+description: Generic HTTP route conventions and /api/chat run flow; defer subsystem routes to their specialized skills.
 ---
 
 # API Endpoints & Data Flow
@@ -84,50 +84,29 @@ If `systemModel` is omitted it falls back to `chatModel`. Backgrounded runs pers
 | `/api/respond-now`           | POST             | Soft-stop / early synthesis. `{ messageId }`                                                                  |
 | `/api/opensearch`            | GET              | OpenSearch description XML                                                                                    |
 
-## Workspaces
+## Subsystem Routes
 
-| Endpoint                                | Method           | Purpose                                                      |
-| --------------------------------------- | ---------------- | ------------------------------------------------------------ |
-| `/api/workspaces`                       | GET/POST         | List (`archived=true`) / create                              |
-| `/api/workspaces/[id]`                  | GET/PATCH/DELETE | CRUD; `/archive` + `/unarchive` POST sub-routes              |
-| `/api/workspaces/[id]/files(/[fileId])` | CRUD             | Files. PUT `{ content, expectedSha }` — CAS write, see below |
-| `/api/workspaces/[id]/system-prompts`   | GET              | Workspace-scoped prompts                                     |
+Domain skills own their route contracts and failure semantics:
 
-File PUT is a compare-and-swap: `expectedSha` required (`400` without); a stale sha gets `409` + `{ error, currentSha }` — the editor shows a conflict banner, the agent maps it to `stale_state`.
+- `/api/workspaces/*` — `yaawc-workspace-files`
+- `/api/artifacts/*` — `yaawc-artifacts`
+- `/api/workflows/*`, `/api/schedules/*` — `yaawc-automation`
+- `/api/skills/*` — `yaawc-runtime-skills`
+- `/api/dashboard/*` — `yaawc-dashboard-widgets`
+- `/api/mcp/*` — `yaawc-mcp-integration`
+- `/api/uploads/images/*` — `yaawc-image-attachments`
+- `/api/settings` — `yaawc-settings-persistence`
 
-## Artifacts
+Memory routes remain generic CRUD under `/api/memories/*`; preserve scoped filtering, paging, wipe-all semantics, and `/reindex` behavior.
 
-| Endpoint                  | Method     | Purpose                                                                                                                                                                                                                                                                        |
-| ------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `/api/artifacts`          | GET        | List-all Artifact History as typed `page`/`image` items. Supports `type=all`, `type=pages`, or `type=images`, plus optional comma-separated `workspaceIds` (`none` selects chat-scoped items). `chatId` or singular `workspaceId` preserves the existing page-only list modes. |
-| `/api/artifacts/[id]`     | GET/DELETE | One + versions (no content). DELETE workspace docs only — `400` for chat-scoped                                                                                                                                                                                                |
-| `/api/artifacts/[id]/raw` | GET        | Serve one version's HTML. `version`, `download=1`                                                                                                                                                                                                                              |
+## Adding a route
 
-`raw` is the security boundary — the only route emitting `text/html`; its response CSP carries `sandbox` (no `allow-same-origin`) and `default-src 'none'` (no network), because the same bytes are reachable top-level where an iframe attribute wouldn't apply. `download=1` injects the network half as a `<meta>` tag.
+Use Next.js App Router named `GET`/`POST`/`PATCH`/`PUT`/`DELETE` exports. Parse and validate at the boundary, return structured JSON errors with the established status code, and keep domain logic in `src/lib/` rather than the route. Streaming responses use `TransformStream` and the existing typed NDJSON/SSE vocabulary.
 
-## Memories & Skills
-
-| Endpoint               | Method | Purpose                                                                                                                                                                                                           |
-| ---------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/api/memories(/[id])` | CRUD   | List (`q`, `category`, `workspaceId`, `sort`, paging) / create / update / delete; DELETE on collection wipes all; `/reindex` re-embeds                                                                            |
-| `/api/skills(/[id])`   | CRUD   | List (`workspaceId`, `enabled=true`) / create / patch / delete. `409` on reserved names or `(name, scope)` collisions — a workspace skill may shadow a same-named global one; `workspaceId: null` moves to global |
-
-## Workflows & Schedules
-
-| Endpoint                        | Method           | Purpose                                                                                                                                                                            |
-| ------------------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/api/workflows(/[id])`         | CRUD             | POST requires `name, prompt, chatModel`; `400` on prompt parse error. PATCH re-parses, auto-disables invalidated child schedules. DELETE cascades schedules, nulls chat provenance |
-| `/api/workflows/[id]/run`       | POST             | Manual run. `{ values }`; `400 { missing }` on incomplete inputs → `{ chatId }` (201)                                                                                              |
-| `/api/workflows/[id]/schedules` | GET/POST         | Schedules for a workflow; POST validates cron + fill-set                                                                                                                           |
-| `/api/schedules(/[id])`         | GET/PATCH/DELETE | PATCH re-validates + reschedules; DELETE keeps past run chats, nulls `scheduleId`; `/[id]/run` fires now                                                                           |
-
-## Other Subsystem Routes
-
-- `/api/dashboard/*` — see `yaawc-dashboard-widgets`
-- `/api/mcp/*` — see `yaawc-mcp-integration`
-- `/api/settings` — see `yaawc-settings-persistence`
+For UI callers, add a TanStack Query hook under `src/lib/hooks/api/` using `apiFetch` and keys from `qk`; mutations invalidate their owned keys. Add the lowest-level test that proves the route boundary.
 
 ## Conventions
 
-- Export named HTTP method functions; try/catch with structured error JSON via `NextResponse.json()`
-- Streaming endpoints use `TransformStream` + JSON lines (see chat route)
+- Export named HTTP method functions; catch expected failures and return structured `NextResponse.json()` errors.
+- Never expose secrets or unscoped rows in response payloads.
+- Streaming endpoints use `TransformStream` plus typed JSON lines; the chat vocabulary belongs to `yaawc-streaming-events`.

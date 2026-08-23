@@ -1,6 +1,6 @@
 ---
 name: yaawc-agent-panel
-description: Use when working on the Agent Panel composer mode — PanelCoordinator, executor models/toolset, panel_executor_* events, PanelColumns, or panel presets/selection.
+description: 'Agent Panel parallel executor/synthesis mode: configuration, tool restrictions, events, persistence, and composer UI.'
 ---
 
 # Agent Panel
@@ -49,4 +49,4 @@ Phase 1 runs only on a **new** message; **resume never re-runs Phase 1** (it reu
 - The final `sources` event re-emits the executor's COMPLETE document set — **replace**, don't append, or you double-count (`sources_added` batches accumulate; `sources` replaces). Capability-document sections are internal sources and keep their exact `/docs/capabilities/...#...` URLs through this merge.
 - Phase 1 is fired in a non-awaited async IIFE so the HTTP response can subscribe immediately; errors emit a stream `error` event. Deep-research subagents still receive their unchanged static whitelist and do not receive `search_yaawc_docs`.
 
-Related: `yaawc-streaming-events`, `yaawc-subagent-architecture`, `yaawc-settings-persistence`, `yaawc-prompt-system`.
+Related: `yaawc-streaming-events`, `yaawc-deep-research-subagents`, `yaawc-settings-persistence`, `yaawc-prompt-system`.

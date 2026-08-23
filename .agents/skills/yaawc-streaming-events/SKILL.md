@@ -1,6 +1,6 @@
 ---
 name: yaawc-streaming-events
-description: Use when working on stream events, the reducer/vocabulary (src/lib/streaming/), widget envelopes, runHost, tool-call/subagent/todo streaming, or debugging missing streaming output.
+description: 'Agent-to-UI stream contract: NDJSON events, runHost, reducer/effects, replay, widget envelopes, and approvals.'
 ---
 
 # Streaming Events
@@ -48,7 +48,7 @@ Events carry structured payloads — never markup. The two writers (`reducer.ts`
 | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `response`                                       | Assistant tokens (through `neutralizeSpoofedFences`); buffered client-side                                                                                                                              |
 | `todo_update`                                    | `{ data: { todos: [{content,status}] } }` → transient `TodoWidget` above the input (clears on completion, not persisted)                                                                                |
-| `subagent_started/_data/_completed/_error`       | Patch the `yaawc:subagent` widget — see `yaawc-subagent-architecture`                                                                                                                                   |
+| `subagent_started/_data/_completed/_error`       | Patch the `yaawc:subagent` widget — see `yaawc-deep-research-subagents`                                                                                                                                 |
 | `panel_executor_started/_data/_completed/_error` | Patch columns in the ONE shared `yaawc:panel` widget (`startPanelColumn`/`appendPanelColumnToken`/`setPanelColumnStatus`); `_data` not persisted — see `yaawc-agent-panel`                              |
 | `artifact_saved`                                 | `{ data: { artifactId, title, version, action } }` → `upsertArtifactWidget` card + opens viewer. Card written in replay too; only the `openArtifact`/`invalidateArtifacts` effects are `inReplay`-gated |
 | `sources` / `sources_added`                      | Final set (replace) / streaming batches (append)                                                                                                                                                        |

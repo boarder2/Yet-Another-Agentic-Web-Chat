@@ -1,6 +1,6 @@
 ---
 name: yaawc-mcp-integration
-description: Use when working on MCP remote servers — CRUD, connection layer, OAuth/auth, tool injection, approval gating, or the MCP settings UI.
+description: Remote MCP server auth, transport, tool injection, approvals, workspace scope, APIs, and settings UI.
 ---
 
 # MCP Integration

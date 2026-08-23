@@ -1,11 +1,11 @@
 ---
-name: yaawc-db-migrations
-description: Use when changing the database — the Drizzle schema, tables/columns, migrations (db:generate/db:push), or DB query helpers.
+name: yaawc-database
+description: SQLite/Drizzle schema, generated migrations, and query helpers; never hand-edit generated drizzle output.
 ---
 
-# DB Schema & Migrations
+# Database
 
-SQLite + Drizzle ORM. The DB file is `db.sqlite` at the repo root (a working file is required for `npm run build`).
+SQLite + Drizzle ORM. Always set one explicit `DATA_DIR` for Drizzle, build, dev, tests, and runtime commands. Runtime defaults to `<cwd>/data/db.sqlite`, while Drizzle defaults to `<cwd>/db.sqlite` when `DATA_DIR` is unset; mixing defaults silently targets different databases. A build needs a working DB at `$DATA_DIR/db.sqlite`.
 
 ## Golden rules
 
@@ -16,7 +16,7 @@ SQLite + Drizzle ORM. The DB file is `db.sqlite` at the repo root (a working fil
 
 1. Edit `src/lib/db/schema.ts` (add/change a table or column using Drizzle's `sqliteTable` builders).
 2. Run `npm run db:generate` (`drizzle-kit generate`) → emits a new numbered migration in `drizzle/` (e.g. `0010_*.sql`). Commit the generated file alongside the schema change.
-3. Apply with `npm run db:push` (`drizzle-kit migrate && drizzle-kit push`). `npm run build` runs `db:push` first, so a build also applies pending migrations. `src/lib/db/migrate.ts` runs the migrator against the `drizzle/` folder at startup.
+3. Apply with `DATA_DIR=/explicit/path npm run db:push` (`drizzle-kit migrate && drizzle-kit push`). Use that same `DATA_DIR` for build/dev/runtime. `npm run build` runs `db:push` first, so a build also applies pending migrations. `src/lib/db/migrate.ts` runs the migrator against the `drizzle/` folder at startup.
 
 ## Where things live
 
@@ -34,6 +34,6 @@ The trap that motivated it: SQLite refuses `DROP COLUMN` while an index referenc
 ## Notes
 
 - New settings usually do **not** need a schema change — they go in the `app_settings` key/value table via the allowlist (see the `yaawc-settings-persistence` skill).
-- Client-side server-state reads go through TanStack Query hooks in `src/lib/hooks/api/` (see CLAUDE.md "Data Fetching"), not direct DB access.
+- Client-side server-state reads go through TanStack Query hooks in `src/lib/hooks/api/`, not direct DB access.
 
 Related: `yaawc-settings-persistence`, `yaawc-api-endpoints`.

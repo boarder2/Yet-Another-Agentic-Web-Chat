@@ -1,6 +1,6 @@
 ---
 name: yaawc-prompt-system
-description: Use when modifying agent prompts, focus-mode prompts, citations, personalization/memory context injection, personas, or debugging agent responses.
+description: 'Agent prompt composition: focus modes, personas, citations, personalization, memory, artifacts, and model-visible runtime skills.'
 ---
 
 # Prompt System
@@ -44,6 +44,6 @@ Read-only `Prompt` objects, selectable as personas by `id` (resolved in-memory, 
 - Agent behavior → focus-mode prompt file
 - Citation format → `templates.ts` (+ register in `utils/prompts.ts`)
 - Personalization/memory context → their builders above
-- New focus mode → see `yaawc-adding-features`
+- New focus mode → see `yaawc-agent-extension-points`
 
 Specs assert prompt composition through the `test-prompt-echo` model, which answers with the system prompt it was given. The capability variants in `e2e/CLAUDE.md` exercise the real docs-tool loop and source/citation path.

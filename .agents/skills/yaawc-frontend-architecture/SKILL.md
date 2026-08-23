@@ -1,6 +1,6 @@
 ---
 name: yaawc-frontend-architecture
-description: Use when modifying React components, ChatWindow, MessageBox, MarkdownRenderer, ModelPicker, frontend state, or debugging UI rendering.
+description: React hierarchy, client state, data fetching, and rendering behavior; pair with yaawc-design-system for styling.
 ---
 
 # Frontend Architecture

@@ -1,6 +1,6 @@
 ---
-name: yaawc-subagent-architecture
-description: Use when working on the deep_research tool, SubagentExecutor, subagent tool restrictions, or subagent event flow.
+name: yaawc-deep-research-subagents
+description: 'deep_research child agents: scoped tools/context, token tracking, isolated events, and subagent widgets.'
 ---
 
 # Subagent Architecture

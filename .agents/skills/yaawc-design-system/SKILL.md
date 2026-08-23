@@ -1,6 +1,6 @@
 ---
 name: yaawc-design-system
-description: MUST be used for any UI work — components, Tailwind/CSS, styling, color/spacing/radius/shadow/typography decisions, globals.css, or anything under src/components or src/app.
+description: 'Required for all UI component work: visual tokens, styling, and shared primitives; pair with yaawc-frontend-architecture for behavior.'
 ---
 
 # YAAWC Design System

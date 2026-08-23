@@ -2,14 +2,14 @@
 # Smoke harness for YAAWC: launch the dev server (if not already up),
 # drive it with playwright-cli, and capture a DOM/accessibility snapshot
 # of the home + settings surfaces.
-# Run from the repo root:  bash .agents/skills/yaawc-run/smoke.sh
+# Run from the repo root:  bash .agents/skills/yaawc-dev-smoke/smoke.sh
 #
 # Observation is the text `snapshot` (diffable, greppable) — that's what
 # this repo's playwright-cli skill prefers. Set SHOT=1 to also save PNG
 # screenshots (only worth it for visual/layout bugs).
 #
 # Proves the app boots and renders. Does NOT exercise LLM responses
-# (those need a configured model + provider key — see SKILL.md).
+# (those need configured models + an encrypted provider credential — see SKILL.md).
 set -u
 
 # next dev binds 5005 (npm run dev passes -p 5005), but can auto-bump when the

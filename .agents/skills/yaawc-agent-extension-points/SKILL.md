@@ -1,11 +1,11 @@
 ---
-name: yaawc-adding-features
-description: Use when adding agent tools, LLM providers, API routes, or focus modes, or when asked how to add new functionality.
+name: yaawc-agent-extension-points
+description: Add an agent tool, model provider, or focus mode; use yaawc-api-endpoints for routes.
 ---
 
-# Adding Features
+# Agent Extension Points
 
-Established recipes for extending the core subsystems. Match existing files in each directory.
+Established recipes for extending agent tools, model providers, and focus modes. Match existing files in each directory. Generic HTTP routes belong to `yaawc-api-endpoints`; subsystem routes belong to their domain skill.
 
 ## New Agent Tool (`src/lib/tools/agents/`)
 
@@ -41,10 +41,6 @@ Conventions: use `systemLlm` for internal LLM calls (never the chat LLM); emit e
 1. Create `myProvider.ts` exporting `PROVIDER_INFO = { key, displayName }` and an async `loadMyProviderChatModels()` that fetches the model list from the provider API (not hardcoded), filters non-chat models, wraps each in the LangChain class (`ChatOpenAI`, …), and returns `{}` on any error (graceful degradation).
 2. **API key is DB-backed, never config.toml** (the `MODELS` config block is legacy, read only by the one-time boot migration): add `'model.myprovider'` to `CREDENTIAL_KEYS` in `src/lib/credentials.ts`, an exported getter in `src/lib/config.ts` (`getMyProviderApiKey = () => getCredential('model.myprovider')`), and a field in Settings → API Keys (`ApiKeysSection` + `/api/config` plumbing).
 3. Register: add to `PROVIDER_METADATA` in `src/lib/providers/metadata.ts` (a keyed object, deliberately import-free so client components can use it) and the `chatModelProviders` map in `src/lib/providers/index.ts`; optionally `embeddingModelProviders`.
-
-## New API Route (`src/app/api/`)
-
-Next.js App Router: export named `GET`/`POST`/`DELETE` handlers, try/catch with structured error JSON. Streaming responses use `TransformStream` + JSON lines — copy the chat route pattern. Route tables and payload shapes: `yaawc-api-endpoints`.
 
 ## New Focus Mode
 

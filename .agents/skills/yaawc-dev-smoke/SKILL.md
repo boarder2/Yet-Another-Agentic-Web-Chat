@@ -1,9 +1,9 @@
 ---
-name: yaawc-run
-description: Build, run, and drive YAAWC. Use when asked to start the dev server, build, smoke-test, screenshot the UI, or interact with the running app in a browser.
+name: yaawc-dev-smoke
+description: Start, build, or manually smoke-test YAAWC; use playwright-cli for browser commands and yaawc-testing for regressions.
 ---
 
-YAAWC is a Next.js (App Router) web app: start `npm run dev`, then drive headless Chromium with `playwright-cli`. The harness `.agents/skills/yaawc-run/smoke.sh` wraps the whole loop. Paths are relative to repo root.
+YAAWC is a Next.js App Router app: start `npm run dev`, then drive Chromium with `playwright-cli`. The harness `.agents/skills/yaawc-dev-smoke/smoke.sh` wraps the whole loop. Paths are relative to repo root.
 
 **Observe with `snapshot` (DOM/a11y tree as text — diffable, greppable), not screenshots.** Screenshots are opt-in (`SHOT=1`), only worth it for visual bugs (layout, image-heavy widgets).
 
@@ -13,13 +13,13 @@ This skill drives a live dev server for manual/exploratory checks — LLM-backed
 
 ## Prerequisites
 
-For a fresh clone: Node ≥ 24, npm, `playwright-cli` on PATH (else `npx playwright-cli`), `config.toml` at repo root (if absent, `cp sample.config.toml config.toml` — never overwrite an existing one; secrets/infra only — models are DB-backed in `db.sqlite`), and `npm install`. macOS has no GNU `timeout`; the harness polls with a `seq`/`sleep` loop.
+For a fresh clone: Node ≥ 24, npm, `playwright-cli` on PATH (else `npx playwright-cli`), `config.toml` at repo root (if absent, `cp sample.config.toml config.toml`—never overwrite an existing one), and `npm install`. `config.toml` holds infrastructure plus the required encryption passphrase; models, endpoints, and encrypted provider credentials are DB-backed. Use one explicit `DATA_DIR` across build/dev/runtime commands. macOS has no GNU `timeout`; the harness polls with a `seq`/`sleep` loop.
 
 ## Run (agent path) — the harness
 
 ```bash
-bash .agents/skills/yaawc-run/smoke.sh          # snapshot-only (default)
-SHOT=1 bash .agents/skills/yaawc-run/smoke.sh   # also save PNGs
+bash .agents/skills/yaawc-dev-smoke/smoke.sh          # snapshot-only (default)
+SHOT=1 bash .agents/skills/yaawc-dev-smoke/smoke.sh   # also save PNGs
 ```
 
 It: reuses or starts `npm run dev` (logs → `/tmp/yaawc-dev.log`, up to 90s for first compile); captures home → `/tmp/yaawc-smoke/home.yaml` and `/settings` → `settings.yaml` (`.png` too with `SHOT=1`); fills the chat input and reads it back to prove React's controlled input took the keystrokes; prints console errors.
@@ -52,13 +52,13 @@ curl -s -m 10 http://localhost:5005/api/config | head -c 200   # model providers
 curl -s http://localhost:5005/api/models                        # available model ids
 ```
 
-LLM endpoints (`/api/chat`, `/api/search`) need a chat+system model (DB-backed, set in Settings) and a provider key in `config.toml`; the `yaawc-api-endpoints` skill has the `/api/chat` payload shape. To exercise these without a real provider, use the env-gated `test` provider (`YAAWC_TEST_MODE=true`) — see `e2e/CLAUDE.md`.
+LLM endpoints need Chat/System models plus an encrypted provider credential configured in Settings. The `yaawc-api-endpoints` skill has the `/api/chat` payload; `yaawc-settings-persistence` owns credential storage. For automated coverage without a real provider, use `yaawc-testing` and its env-gated test provider.
 
 ## Run (human path)
 
 ```bash
 npm run dev    # → localhost:5005, hot reload, Ctrl-C to stop (fastest for just viewing)
-npm run build  # db:push (drizzle migrate+push) then next build — needs working db.sqlite
+DATA_DIR=/explicit/path npm run build  # db:push then next build
 npm start      # serve the production build
 ```
 
@@ -70,7 +70,7 @@ npm start      # serve the production build
 - **One benign console error per page:** `RangeError: invalid language tag: "undefined"` from `ReactQueryDevtools` (dev only) — ignore; a _second_ error is real.
 - **React inputs:** `eval el.value=…` won't fire onChange — use `fill`/`type`; you can still `eval` to _read_ the value.
 - **First `goto` is slow** (turbopack compiles routes on demand); the harness reuses the session so later navs are fast.
-- **Widgets/LLM need config:** dashboard renders widgets from `db.sqlite`, chat needs a model+key; a bare boot still renders the shell.
+- **Widgets/LLM need settings:** dashboard renders widgets from the active `$DATA_DIR/db.sqlite`; chat needs models and an encrypted provider credential. A bare boot still renders the shell.
 
 ## Troubleshooting
 

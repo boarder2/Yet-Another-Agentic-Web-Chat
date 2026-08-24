@@ -1,0 +1,10 @@
+export const STATE_VERSION = 1 as const;
+export const DEFAULT_LOG_PATH = '/tmp/yaawc-dev.log';
+export const HEALTH_PATH = '/api/config';
+export const OWNERSHIP_TOKEN_ENV = 'YAAWC_RUN_APP_TOKEN';
+export const TAIL_PANE_TITLE = 'YAAWC logs';
+export const PORT_START = 5005;
+export const PORT_END = 5015;
+export const STARTUP_TIMEOUT_MS = 90_000;
+export const HEALTH_INTERVAL_MS = 5_000;
+export const TERM_GRACE_MS = 5_000;

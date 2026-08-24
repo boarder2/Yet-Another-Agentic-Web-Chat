@@ -1,0 +1,24 @@
+{
+  "name": "yaawc-run-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "pi extension: explicitly run and inspect a local YAAWC dev server",
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.83.0",
+    "typescript": "^5",
+    "vitest": "^4.1.9"
+  }
+}

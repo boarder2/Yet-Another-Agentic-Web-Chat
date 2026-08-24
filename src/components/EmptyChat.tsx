@@ -229,7 +229,7 @@ const EmptyChat = ({
           // fixed sliver (HOME_PEEK_REVEAL) for the widget board to poke into.
           <div
             className={cn(
-              'flex flex-col items-center justify-center w-full',
+              'relative z-20 flex flex-col items-center justify-center w-full',
               HOME_PEEK_MIN_HEIGHT,
             )}
           >
@@ -241,7 +241,7 @@ const EmptyChat = ({
           // dead-center regardless of its height. Widgets flow right after it.
           <>
             <div className="h-[50vh] shrink-0" aria-hidden />
-            <div className="w-full flex flex-col items-center -translate-y-1/2">
+            <div className="relative z-20 w-full flex flex-col items-center -translate-y-1/2">
               {inputCard}
             </div>
           </>

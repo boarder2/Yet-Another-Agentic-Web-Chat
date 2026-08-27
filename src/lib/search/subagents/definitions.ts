@@ -6,6 +6,8 @@
  * single request context for focused investigation.
  */
 
+import { mathGuidance } from '@/lib/prompts/simplifiedAgent/mathGuidance';
+
 export interface SubagentDefinition {
   /** Unique identifier for the subagent */
   name: string;
@@ -52,6 +54,8 @@ You have been assigned a specific, focused research subtask as part of a larger 
 - Include diverse perspectives and sources
 - Structure your findings clearly so the main agent can easily extract and integrate them
 - Your findings will be integrated into the main agent's response alongside findings from other research tasks
+
+${mathGuidance}
 
 ## Critical Instructions
 - Run a maximum of 8 web_search queries total. If you reach this cap with information still outstanding, summarize your findings and note what you would have investigated further.

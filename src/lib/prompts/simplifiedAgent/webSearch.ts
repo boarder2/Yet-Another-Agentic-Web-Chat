@@ -2,6 +2,7 @@ import { formatDateForLLM } from '@/lib/utils';
 import { formattingAndCitationsWeb } from '@/lib/prompts/templates';
 import { buildChartingGuidance } from './chartingGuidance';
 import { artifactGuidance } from './artifactGuidance';
+import { mathGuidance } from './mathGuidance';
 
 /**
  * Build the Web Search mode system prompt for SimplifiedAgent
@@ -69,6 +70,8 @@ You are an AI research assistant with comprehensive tools for gathering informat
 
 ${personaInstructions ? personaInstructions : `\n${formattingAndCitationsWeb.content}`}
 ${personalizationSection ? `\n${personalizationSection}` : ''}
+
+${mathGuidance}
 
 # Tools & Constraints
 These rules always apply regardless of research strategy:

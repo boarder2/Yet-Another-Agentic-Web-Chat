@@ -45,7 +45,7 @@ Non-secret settings are DB-backed with a localStorage cache — the sync layer, 
 
 ## Markdown Rendering
 
-`MarkdownRenderer.tsx` uses `markdown-to-jsx` with overrides:
+`MarkdownRenderer.tsx` uses the shared `FormulaMarkdown` wrapper around `markdown-to-jsx` with overrides. The formula layer resolves safe KaTeX only from visible Markdown text, while the renderer's widget, citation, legacy-tag, chart, think-block, and dangerous-tag overrides remain caller-owned. `CapabilityMarkdown` intentionally bypasses this shared formula layer and does not render formulas.
 
 - **Widget fences** — the `code` override dispatches known `yaawc:<kind>` fences (parsed by `src/lib/widgets/envelope.ts`) to typed components: `ToolCall`, `SubagentExecution`, `PanelColumns`, `ArtifactCard`, and writer-owned `ChartEnvelope`. Unknown/invalid `yaawc:*` fences fall back to `CodeBlock`.
 - **Legacy path (frozen, read-only)** — pre-migration `<ToolCall>`/`<SubagentExecution>`/`<PanelColumns>` tag markup still renders (base64-decoded attrs); historical chat and dashboard `<Chart>` placeholders still resolve through `ChartElement`. New chat model tags are stripped in streaming and nothing new writes legacy chat tags; agents use `show_chart`.

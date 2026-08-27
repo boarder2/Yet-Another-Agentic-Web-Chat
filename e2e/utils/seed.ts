@@ -171,6 +171,105 @@ export async function seedExpandableToolChat(
   }
 }
 
+/**
+ * Seed a completed historical chat whose assistant message contains normal
+ * Markdown plus writer-owned panel/subagent envelopes. The fixture keeps the
+ * LaTeX source in the database so the browser exercises the render-time path.
+ */
+export async function seedFormulaChat(
+  request: APIRequestContext,
+): Promise<{ chatId: string; content: string }> {
+  const chatId = await seedChat(request, {
+    content: 'User-authored formula: $u+1$.',
+  });
+  const content = [
+    'Formula fixture: inline $x^2$ and \\(y + 1\\).',
+    '',
+    '$$',
+    '\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}',
+    '$$',
+    '',
+    '\\[',
+    '\\int_0^1 x^2\\,dx = \\frac{1}{3}',
+    '\\]',
+    '',
+    'Visible label [result $q$](https://example.test/$destination$).',
+    'Valid amount: $20$.',
+    'Currency remains literal: $20 and $30.',
+    'Bold currency remains formatted: **$5.62/gallon**.',
+    '',
+    '| Region | Avg. regular gasoline ($/gal) |',
+    '|---|---|',
+    '| **United States** | **$4.085** |',
+    '| **West Coast** | $5.147 |',
+    '',
+    'Inline code: `$not-a-formula$`.',
+    '',
+    '```text',
+    '$fenced-formula$',
+    '```',
+    '',
+    'Invalid: $\\frac{1$.',
+    'Unsupported: $\\href{https://example.test}{unsafe}$.',
+    '',
+    '$$',
+    'x_1+x_2+x_3+x_4+x_5+x_6+x_7+x_8+x_9+x_{10}+x_{11}+x_{12}+x_{13}+x_{14}+x_{15}+x_{16}+x_{17}+x_{18}+x_{19}+x_{20}',
+    '$$',
+  ].join('\n');
+
+  let renderedContent = content;
+  renderedContent = appendWidget(renderedContent, 'panel', {
+    id: 'formula-panel',
+    columns: [
+      {
+        idx: 0,
+        model: 'formula-panel-model',
+        status: 'success',
+        responseText: ['Panel inline $a^2$.', '', '$$\\frac{a}{b}$$'].join(
+          '\n',
+        ),
+      },
+    ],
+  });
+  renderedContent = appendWidget(renderedContent, 'subagent', {
+    id: 'formula-subagent',
+    name: 'Deep Research',
+    task: 'Formula rendering fixture',
+    status: 'success',
+    toolCalls: [],
+    summary: [
+      'Subagent inline \\(b^2\\).',
+      '',
+      '\\[',
+      '\\sum_{j=1}^{m} j',
+      '\\]',
+      '',
+      'Code `$subagent-code$`.',
+    ].join('\n'),
+  });
+
+  const sqlite = new Database(E2E_DB_PATH);
+  try {
+    const assistant = sqlite
+      .prepare(
+        "SELECT id FROM messages WHERE chatId = ? AND type = 'assistant' ORDER BY id DESC LIMIT 1",
+      )
+      .get(chatId) as { id: number } | undefined;
+    if (!assistant) {
+      throw new Error('seedFormulaChat: expected assistant row');
+    }
+    sqlite
+      .prepare(
+        'UPDATE messages SET content = ?, sanitized_content = ? WHERE id = ?',
+      )
+      .run(renderedContent, '', assistant.id);
+  } finally {
+    sqlite.close();
+  }
+
+  return { chatId, content: renderedContent };
+}
+
 export interface SeededGeneratedImage {
   id: string;
   chatId: string;

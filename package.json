@@ -66,6 +66,7 @@
     "isomorphic-dompurify": "^3.17.0",
     "jsdom": "^28.1.0",
     "jspdf": "^4.1.0",
+    "katex": "^0.18.4",
     "kokoro-js": "^1.2.1",
     "langchain": "^1.2.24",
     "lucide-react": "^0.564.0",

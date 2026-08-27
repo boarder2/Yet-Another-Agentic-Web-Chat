@@ -12,7 +12,8 @@ import {
 } from 'lucide-react';
 import { decodeHtmlEntities } from '@/lib/utils/html';
 import { Card } from '@/components/ui/Card';
-import Markdown, { MarkdownToJSX } from 'markdown-to-jsx';
+import { type MarkdownToJSX } from 'markdown-to-jsx';
+import FormulaMarkdown from '@/components/FormulaMarkdown';
 import { cn } from '@/lib/utils';
 import { ToolCall } from './ToolCall';
 import type { ToolCallPayload } from '@/lib/widgets/envelope';
@@ -230,9 +231,9 @@ export const SubagentExecution: React.FC<SubagentExecutionProps> = ({
                     'wrap-break-word',
                   )}
                 >
-                  <Markdown options={responseMarkdownOptions}>
+                  <FormulaMarkdown options={responseMarkdownOptions}>
                     {responseContent}
-                  </Markdown>
+                  </FormulaMarkdown>
                 </div>
               )}
             </div>

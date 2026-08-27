@@ -37,6 +37,21 @@ Responses stream into the conversation while the agent works. The answer can sho
 
 A citation is usable only when the corresponding tool returned a source document. Search snippets may be followed by URL retrieval, PDF text extraction, or a YouTube transcript before the final answer is written. A provider error, blocked page, missing transcript, or empty result can leave a tool without a source.
 
+## Mathematical notation
+
+Formula rendering is always on for visible Markdown in shared chat surfaces, including historical content and nested Agent Panel and deep-research responses. It is not applied to capability-document pages.
+
+Use KaTeX formulas with these delimiters:
+
+- Inline: `$...$` or `\(...\)`
+- Display: `$$...$$` or `\[...\]`
+
+Display formulas are kept inside the content width and scroll horizontally when necessary. Inline and display formulas inherit the current theme's text color. KaTeX is bundled with the application, so rendering works offline and does not require a provider or network request.
+
+Formula parsing is limited to visible Markdown text. Inline and fenced code, widget payloads, HTML tags and attributes, and link or image destinations remain literal; visible link labels, lists, tables, and blockquotes can contain formulas. Incomplete, malformed, unsupported, or unsafe formulas remain visible as their original source instead of showing a rendering error.
+
+Rendering is display-only. The original Markdown and LaTeX remain the source for persistence, copying, Markdown/PDF export, search, rewriting, and text-to-speech. There is no formula setting or composer preview.
+
 ## Control a conversation
 
 - Stop an in-progress run from the composer. **Answer now** asks the agent to synthesize from sources already gathered instead of continuing retrieval.

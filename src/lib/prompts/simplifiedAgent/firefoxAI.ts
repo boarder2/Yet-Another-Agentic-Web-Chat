@@ -1,4 +1,5 @@
 import { formatDateForLLM } from '@/lib/utils';
+import { mathGuidance } from './mathGuidance';
 
 /**
  * Build the Firefox AI mode system prompt for SimplifiedAgent
@@ -55,5 +56,7 @@ ${
     : ''
 }
 ${personalizationSection ? `\n\n${personalizationSection}` : ''}
+
+${mathGuidance}
 `;
 }

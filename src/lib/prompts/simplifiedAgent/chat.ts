@@ -1,6 +1,7 @@
 import { formatDateForLLM } from '@/lib/utils';
 import { formattingChat } from '@/lib/prompts/templates';
 import { buildChartingGuidance } from './chartingGuidance';
+import { mathGuidance } from './mathGuidance';
 
 /**
  * Build the Chat mode system prompt for SimplifiedAgent
@@ -50,6 +51,8 @@ You are a conversational AI assistant designed for creative and engaging dialogu
 - Structure responses logically
 
 ${personaBlock}${personalizationBlock}
+
+${mathGuidance}
 
 ${buildChartingGuidance(codeExecutionEnabled)}
 

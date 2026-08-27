@@ -2,6 +2,7 @@ import { formatDateForLLM } from '@/lib/utils';
 import { formattingAndCitationsLocal } from '@/lib/prompts/templates';
 import { buildChartingGuidance } from './chartingGuidance';
 import { artifactGuidance } from './artifactGuidance';
+import { mathGuidance } from './mathGuidance';
 
 /**
  * Build the Local Research mode system prompt for SimplifiedAgent
@@ -61,6 +62,8 @@ Your task is to provide answers that are:
 
 ${personaInstructions ? personaInstructions : `\n${formattingAndCitationsLocal.content}`}
 ${personalizationSection ? `\n${personalizationSection}` : ''}
+
+${mathGuidance}
 
 # Tools & Constraints
 These rules always apply regardless of research strategy:

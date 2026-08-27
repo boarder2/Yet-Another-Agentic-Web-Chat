@@ -6,7 +6,8 @@ import {
   Users,
   ChevronDown,
 } from 'lucide-react';
-import Markdown, { MarkdownToJSX } from 'markdown-to-jsx';
+import { type MarkdownToJSX } from 'markdown-to-jsx';
+import FormulaMarkdown from '@/components/FormulaMarkdown';
 import { cn } from '@/lib/utils';
 import { Card } from '@/components/ui/Card';
 import ChartElement, { spaceChartTags } from '../ChartElement';
@@ -139,7 +140,9 @@ const Column: React.FC<{ ex: PanelColumnPayload }> = ({ ex }) => {
               'wrap-break-word',
             )}
           >
-            <Markdown options={columnMarkdownOptions}>{text}</Markdown>
+            <FormulaMarkdown options={columnMarkdownOptions}>
+              {text}
+            </FormulaMarkdown>
           </div>
         ) : (
           <div className="text-xs text-fg-muted italic">Researching…</div>

@@ -2,7 +2,8 @@
 
 import { memo } from 'react';
 import { cn } from '@/lib/utils';
-import Markdown, { MarkdownToJSX } from 'markdown-to-jsx';
+import { type MarkdownToJSX } from 'markdown-to-jsx';
+import FormulaMarkdown from './FormulaMarkdown';
 import ThinkBox from './ThinkBox';
 import { CodeBlock } from './CodeBlock';
 import { Document } from '@langchain/core/documents';
@@ -450,9 +451,9 @@ const MarkdownRenderer = ({
     if (!stripped || stripped.length === 0) return null;
     return (
       <div className="relative">
-        <Markdown className={proseClassName} options={markdownOverrides}>
+        <FormulaMarkdown className={proseClassName} options={markdownOverrides}>
           {forMarkdown(stripped)}
-        </Markdown>
+        </FormulaMarkdown>
       </div>
     );
   }
@@ -466,9 +467,9 @@ const MarkdownRenderer = ({
   if (segments.length === 1 && segments[0].type === 'markdown') {
     return (
       <div className="relative">
-        <Markdown className={proseClassName} options={markdownOverrides}>
+        <FormulaMarkdown className={proseClassName} options={markdownOverrides}>
           {forMarkdown(masked)}
-        </Markdown>
+        </FormulaMarkdown>
       </div>
     );
   }
@@ -498,13 +499,13 @@ const MarkdownRenderer = ({
         const trimmed = segment.content.trim();
         if (!trimmed) return null;
         return (
-          <Markdown
+          <FormulaMarkdown
             key={segment.id}
             className={proseClassName}
             options={markdownOverrides}
           >
             {forMarkdown(segment.content)}
-          </Markdown>
+          </FormulaMarkdown>
         );
       })}
     </div>

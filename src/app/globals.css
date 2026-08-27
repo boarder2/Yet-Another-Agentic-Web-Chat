@@ -5,6 +5,36 @@
 @import 'tailwindcss';
 @plugin '@tailwindcss/typography';
 
+@layer components {
+  .yaawc-formula {
+    color: inherit;
+  }
+
+  .yaawc-formula-inline {
+    display: inline-block;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    vertical-align: middle;
+  }
+
+  .yaawc-formula-display {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .yaawc-formula .katex {
+    color: inherit;
+  }
+
+  .yaawc-formula-display > .katex-display {
+    margin: 0;
+    min-width: max-content;
+  }
+}
+
 /* Make dark: variants depend on html.dark or [data-theme="dark"] */
 @custom-variant dark (&:where(.dark, .dark *, [data-theme='dark'], [data-theme='dark'] *));
 

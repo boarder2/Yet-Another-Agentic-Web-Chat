@@ -35,12 +35,57 @@ const payload: MapPayload = {
   attribution: '© OpenStreetMap contributors',
 };
 
+const secondSpec: PersistableMapSpec = {
+  ...spec,
+  places: [
+    {
+      ...spec.places[0],
+      provider: 'provider-a',
+      attribution: 'Place provider',
+    },
+    {
+      ...spec.places[0],
+      id: 'node/2',
+      name: 'North Library',
+      sourceUrl: 'https://www.openstreetmap.org/node/2',
+      attribution: 'Routing provider',
+      provider: 'provider-b',
+    },
+  ],
+  attribution: 'Place provider',
+  attributions: ['Place provider', 'Routing provider'],
+  title: 'A second grouping',
+};
+
+const secondPayload: MapPayload = {
+  ...payload,
+  id: 'map_placement_2',
+  mapId: 'private-map-2',
+  title: 'A second grouping',
+};
+
+const invalidSpec = {
+  ...spec,
+  places: [{ ...spec.places[0], coordinate: { lat: 91, lon: -75 } }],
+} as unknown as PersistableMapSpec;
+
 function providerValue(
   mapId = 'private-map-1',
 ): ComponentProps<typeof MapSpecContext.Provider>['value'] {
   return {
     getMapSpecById: (id) => (id === mapId ? spec : undefined),
   };
+}
+
+function multiProviderValue(): ComponentProps<
+  typeof MapSpecContext.Provider
+>['value'] {
+  const specs: Record<string, PersistableMapSpec> = {
+    'private-map-1': spec,
+    'private-map-2': secondSpec,
+    'invalid-map': invalidSpec,
+  };
+  return { getMapSpecById: (id) => specs[id] };
 }
 
 describe('MapEnvelope', () => {
@@ -88,5 +133,66 @@ describe('MapEnvelope', () => {
     expect(markup).toContain('data-map-envelope');
     expect(markup).toContain('Central Cafe');
     expect(markup).not.toContain('yaawc:map');
+  });
+
+  it('renders multiple placements, including repeated equivalent maps, in message order', () => {
+    const content = [
+      'Answer',
+      appendMapWidget('', payload),
+      appendMapWidget('', secondPayload),
+      appendMapWidget('', { ...payload, id: 'map_placement_3' }),
+    ].join('\n');
+    const markup = renderToStaticMarkup(
+      createElement(
+        MapSpecContext.Provider,
+        { value: multiProviderValue() },
+        createElement(MarkdownRenderer, { content }),
+      ),
+    );
+
+    expect((markup.match(/data-map-envelope/g) ?? []).length).toBe(3);
+    expect(markup.indexOf('Central Cafe')).toBeLessThan(
+      markup.indexOf('North Library'),
+    );
+    expect(markup.match(/aria-label="Mapped places"/g)).toHaveLength(3);
+    expect(markup).toContain('A second grouping');
+  });
+
+  it('renders every registered attribution for a composed map', () => {
+    const markup = renderToStaticMarkup(
+      createElement(
+        MapSpecContext.Provider,
+        { value: multiProviderValue() },
+        createElement(MapEnvelope, { payload: secondPayload }),
+      ),
+    );
+
+    expect(markup).toContain('Map attributions:');
+    expect(markup).toContain('Place provider');
+    expect(markup).toContain('Routing provider');
+  });
+
+  it('isolates an invalid map from a valid sibling placement', () => {
+    const invalidPayload: MapPayload = {
+      ...payload,
+      id: 'map_placement_invalid',
+      mapId: 'invalid-map',
+    };
+    const markup = renderToStaticMarkup(
+      createElement(
+        MapSpecContext.Provider,
+        { value: multiProviderValue() },
+        createElement(
+          'div',
+          null,
+          createElement(MapEnvelope, { payload }),
+          createElement(MapEnvelope, { payload: invalidPayload }),
+        ),
+      ),
+    );
+
+    expect(markup).toContain('Central Cafe');
+    expect(markup).toContain('Map data is unavailable.');
+    expect((markup.match(/data-map-envelope/g) ?? []).length).toBe(2);
   });
 });

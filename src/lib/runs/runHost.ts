@@ -31,7 +31,9 @@ import {
   MapSessionOverlaySchema,
   MapSpecSchema,
   PersistableMapSpecSchema,
+  redactMapRoute,
   toPersistableMapSpec,
+  type PersistableMapRoute,
   type PersistableMapSpec,
   type MapSpec,
 } from '@/lib/maps/types';
@@ -64,6 +66,8 @@ import {
   enqueueRunEvent,
   flushRunEvents,
   dropRunEventBuffer,
+  mapDiscoveryEventForPersistence,
+  mapEventForPersistence,
   sanitizeLocationMilestone,
 } from './runEventsPersistence';
 import {
@@ -228,6 +232,34 @@ function sourcesFromEventLog(
     }
   }
   return sources;
+}
+
+function mapRoutesMatch(
+  left: PersistableMapRoute,
+  right: PersistableMapRoute,
+): boolean {
+  return (
+    left.provider === right.provider &&
+    left.mode === right.mode &&
+    left.destination.lat === right.destination.lat &&
+    left.destination.lon === right.destination.lon &&
+    left.distanceMeters === right.distanceMeters &&
+    left.durationSeconds === right.durationSeconds &&
+    left.attribution === right.attribution &&
+    ('routeNotRetained' in left || 'routeNotRetained' in right
+      ? true
+      : left.origin.lat === right.origin.lat &&
+        left.origin.lon === right.origin.lon)
+  );
+}
+
+function runHasTransientLocation(
+  run: Pick<Run, 'locationToken' | 'locationRetention'>,
+): boolean {
+  return (
+    run.locationRetention === 'once' ||
+    (run.locationToken !== undefined && run.locationRetention !== 'save')
+  );
 }
 
 function addModelStatsDelta(
@@ -1639,6 +1671,19 @@ async function reconstructAwaitingRun(
       if (!safe) return [];
       return [{ seq: e.seq, ev: safe }];
     }
+    if (
+      eventType === 'map_places_discovered' ||
+      eventType === 'map_place_discovered' ||
+      eventType === 'map_places_discovery' ||
+      eventType === 'map_route_discovered' ||
+      eventType === 'map_route_discovery' ||
+      eventType === 'map_spec' ||
+      eventType === 'map_placement'
+    ) {
+      const safe = mapEventForPersistence(normalized);
+      if (!safe) return [];
+      return [{ seq: e.seq, ev: safe }];
+    }
     return [{ seq: e.seq, ev: normalized }];
   });
   const chartRegistry = new TurnChartRegistry();
@@ -1874,6 +1919,7 @@ export async function attachRunHost(params: {
 
   const persistableSpecForRun = (
     value: MapSpec | PersistableMapSpec,
+    mapId?: string,
   ): PersistableMapSpec => {
     const parsed = MapSpecSchema.safeParse(value);
     if (!parsed.success) return toPersistableMapSpec(value);
@@ -1885,7 +1931,18 @@ export async function attachRunHost(params: {
     const transientLocation =
       run.locationRetention === 'once' ||
       (run.locationToken !== undefined && run.locationRetention !== 'save');
-    if (transientLocation && (parsed.data.route || parsed.data.origin)) {
+    const mapRegistration = mapId
+      ? run.mapRegistry.resolveById(mapId)
+      : undefined;
+    const hasLiveLocationOverlay = mapId
+      ? run.mapRegistry.resolveSessionOverlay(mapId) !== undefined
+      : false;
+    const shouldRedactLegacyLocationMap = mapRegistration?.handle !== undefined;
+    if (
+      transientLocation &&
+      (parsed.data.route || parsed.data.origin) &&
+      (hasLiveLocationOverlay || shouldRedactLegacyLocationMap || !mapId)
+    ) {
       return toPersistableMapSpec(parsed.data, {
         retainRoute: false,
         retainOrigin: false,
@@ -2401,6 +2458,106 @@ export async function attachRunHost(params: {
         messageId: aiMessageId,
       });
       scheduleFlush(true);
+    } else if (
+      event.type === 'map_places_discovered' ||
+      event.type === 'map_place_discovered'
+    ) {
+      const discovery = mapDiscoveryEventForPersistence(
+        {
+          type: event.type,
+          data: event.data,
+          messageId: aiMessageId,
+        } as StreamEvent,
+        {
+          retainRoute: !runHasTransientLocation(run),
+          retainOrigin: !runHasTransientLocation(run),
+        },
+      );
+      if (!discovery || discovery.type !== 'map_places_discovered') return;
+      const places = discovery.data.places.flatMap((entry) => {
+        const existing = run.mapRegistry.resolvePlace(entry.handle);
+        if (
+          existing &&
+          (existing.place.provider !== entry.place.provider ||
+            existing.place.id !== entry.place.id)
+        ) {
+          return [];
+        }
+        try {
+          const registration =
+            existing ?? run.mapRegistry.registerKnownPlace(entry);
+          return [
+            {
+              handle: registration.handle,
+              place: registration.place,
+              ...(registration.retrievedAt
+                ? { retrievedAt: registration.retrievedAt }
+                : {}),
+            },
+          ];
+        } catch {
+          return [];
+        }
+      });
+      if (places.length === 0) return;
+      pushEvent(run, {
+        type: 'map_places_discovered',
+        data: { places },
+        messageId: aiMessageId,
+      });
+    } else if (event.type === 'map_route_discovered') {
+      const discovery = mapDiscoveryEventForPersistence(
+        {
+          type: event.type,
+          data: event.data,
+          messageId: aiMessageId,
+        } as StreamEvent,
+        {
+          retainRoute: !runHasTransientLocation(run),
+          retainOrigin: !runHasTransientLocation(run),
+        },
+      );
+      if (!discovery || discovery.type !== 'map_route_discovered') return;
+      const existing = run.mapRegistry.resolveRoute(discovery.data.handle);
+      if (existing && !mapRoutesMatch(existing.route, discovery.data.route)) {
+        return;
+      }
+      let registration = existing;
+      if (!registration) {
+        try {
+          registration = run.mapRegistry.registerKnownRoute(discovery.data);
+        } catch {
+          return;
+        }
+      }
+      const route =
+        registration.routeRetained === false
+          ? redactMapRoute(registration.route)
+          : registration.route;
+      pushEvent(run, {
+        type: 'map_route_discovered',
+        data: {
+          handle: registration.handle,
+          route,
+          ...(registration.placeHandles
+            ? { placeHandles: [...registration.placeHandles] }
+            : {}),
+          ...(registration.routeRetained !== false &&
+          registration.originPlaceHandle
+            ? { originPlaceHandle: registration.originPlaceHandle }
+            : {}),
+          ...(registration.destinationPlaceHandle
+            ? { destinationPlaceHandle: registration.destinationPlaceHandle }
+            : {}),
+          ...(registration.retrievedAt
+            ? { retrievedAt: registration.retrievedAt }
+            : {}),
+          ...(registration.routeRetained === false
+            ? { routeRetained: false }
+            : {}),
+        },
+        messageId: aiMessageId,
+      });
     } else if (event.type === 'map_spec') {
       const { mapId, spec } = event.data;
       const full = MapSpecSchema.safeParse(spec);
@@ -2446,7 +2603,7 @@ export async function attachRunHost(params: {
       const handle = registration.handle;
       // The registry is the trusted registration boundary. Do not let an
       // event carrying a known handle replace its canonical provider snapshot.
-      const safeSpec = persistableSpecForRun(registration.spec);
+      const safeSpec = persistableSpecForRun(registration.spec, mapId);
       mapSpecs[mapId] = safeSpec;
       const source =
         typeof event.data.source === 'string' &&
@@ -2459,7 +2616,7 @@ export async function attachRunHost(params: {
         type: 'map_spec',
         data: {
           mapId,
-          handle,
+          ...(handle ? { handle } : {}),
           spec: safeSpec,
           ...(source ? { source } : {}),
         },
@@ -2494,7 +2651,7 @@ export async function attachRunHost(params: {
         data: {
           placementId: placement.placementId,
           mapId: placement.mapId,
-          handle: placement.handle,
+          ...(placement.handle ? { handle: placement.handle } : {}),
           placementNumber: placement.placementNumber,
         },
         messageId: aiMessageId,

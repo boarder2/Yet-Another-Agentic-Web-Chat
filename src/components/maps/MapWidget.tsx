@@ -24,7 +24,11 @@ import {
   type PersistableMapRoute,
   type PersistableMapSpec,
 } from '@/lib/maps/types';
-import { formatMapRouteSummary, mapSpecLinks } from '@/lib/maps/presentation';
+import {
+  formatMapAttributions,
+  formatMapRouteSummary,
+  mapSpecLinks,
+} from '@/lib/maps/presentation';
 
 export interface MapWidgetProps {
   spec: PersistableMapSpec;
@@ -232,6 +236,7 @@ function MapWidgetLayout({
   statusMessage,
   showCanvas,
   canvasRef,
+  viewportRef,
 }: {
   spec: PersistableMapSpec;
   title: string;
@@ -241,14 +246,17 @@ function MapWidgetLayout({
   statusMessage?: string;
   showCanvas: boolean;
   canvasRef?: React.RefObject<HTMLDivElement | null>;
+  viewportRef?: React.RefObject<HTMLDivElement | null>;
 }) {
   const fullRoute =
     displayRoute && isFullRoute(displayRoute) ? displayRoute : undefined;
   const links = mapSpecLinks(spec, fullRoute);
+  const attributions = formatMapAttributions(spec);
   const routeWasRedacted = displayRoute ? isRedactedRoute(displayRoute) : false;
 
   return (
     <Card
+      ref={viewportRef}
       data-map-widget
       data-map-render-state={status}
       className="overflow-hidden"
@@ -361,7 +369,18 @@ function MapWidgetLayout({
         )}
 
         <div className="mt-3 border-t border-surface-2 pt-2 text-xs text-fg-subtle">
-          <p>Map attribution: {spec.attribution}</p>
+          {attributions.length === 1 ? (
+            <p>Map attribution: {attributions[0]}</p>
+          ) : (
+            <>
+              <p>Map attributions:</p>
+              <ul className="mt-1 list-inside list-disc space-y-1">
+                {attributions.map((attribution) => (
+                  <li key={attribution}>{attribution}</li>
+                ))}
+              </ul>
+            </>
+          )}
           {tileAttribution && (
             <p className="mt-1">Tile attribution: {tileAttribution}</p>
           )}
@@ -457,12 +476,42 @@ function InteractiveMapWidget({
     };
   }, [displayRoute, spec.origin, spec.places, validOverlay]);
   const hasGeometry = renderData.bounds.length > 0;
-  const canInitialize = Boolean(
-    config?.available && config.capabilities.tiles && hasGeometry,
-  );
+  const mapAttributions = useMemo(() => formatMapAttributions(spec), [spec]);
   const [mapStatus, setMapStatus] = useState<MapRenderStatus>('idle');
+  const [nearViewport, setNearViewport] = useState(
+    () => typeof IntersectionObserver === 'undefined',
+  );
+  const viewportRef = useRef<HTMLDivElement | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
+
+  useEffect(() => {
+    const element = viewportRef.current;
+    if (!element || nearViewport) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (
+          entries.some(
+            (entry) => entry.isIntersecting || entry.intersectionRatio > 0,
+          )
+        ) {
+          setNearViewport(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '300px 0px' },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [nearViewport]);
+
+  const canInitialize = Boolean(
+    nearViewport &&
+    config?.available &&
+    config.capabilities.tiles &&
+    hasGeometry,
+  );
 
   useEffect(() => {
     if (!canInitialize || !config || !mapContainerRef.current) return;
@@ -486,7 +535,9 @@ function InteractiveMapWidget({
           zoomControl: true,
         });
         mapRef.current = map;
-        map.attributionControl.addAttribution(spec.attribution);
+        for (const attribution of mapAttributions) {
+          map.attributionControl.addAttribution(attribution);
+        }
 
         const tileLayer = leaflet.tileLayer(config.tile.url, {
           attribution: config.tile.attribution,
@@ -620,7 +671,7 @@ function InteractiveMapWidget({
         }
       }
     };
-  }, [canInitialize, config, renderData, spec.attribution, spec.places]);
+  }, [canInitialize, config, mapAttributions, renderData, spec.places]);
 
   const statusMessage = mapStatusMessage(
     config,
@@ -630,7 +681,9 @@ function InteractiveMapWidget({
     mapStatus,
     hasGeometry,
   );
-  const showCanvas = canInitialize;
+  // Reserve the map surface independently of Leaflet initialization so lazy
+  // maps do not change the answer's layout when they approach the viewport.
+  const showCanvas = true;
 
   return (
     <MapWidgetLayout
@@ -642,14 +695,15 @@ function InteractiveMapWidget({
       statusMessage={statusMessage}
       showCanvas={showCanvas}
       canvasRef={mapContainerRef}
+      viewportRef={viewportRef}
     />
   );
 }
 
 /**
  * Render validated map details immediately, then initialize Leaflet only after
- * hydration. This keeps server-rendered and no-JavaScript output useful and
- * avoids importing Leaflet in the server bundle.
+ * hydration and near-viewport observation. This keeps server-rendered and
+ * no-JavaScript output useful and avoids importing Leaflet for distant maps.
  */
 const subscribeToNothing = () => () => {};
 const getClientSnapshot = () => true;

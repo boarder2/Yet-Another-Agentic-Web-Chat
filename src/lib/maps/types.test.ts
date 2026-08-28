@@ -3,10 +3,13 @@ import {
   GeoJsonLineStringSchema,
   MAP_LIMITS,
   MapAttributionSchema,
+  MapAttributionsSchema,
   MapPlaceSchema,
   MapSafeUrlSchema,
   MapDomainValidationError,
+  PersistableMapSpecSchema,
   formatCoordinate,
+  mapSpecAttributions,
   normalizeCoordinate,
   redactMapSpec,
   toPersistableMapSpec,
@@ -101,6 +104,52 @@ describe('mapping domain contracts', () => {
       }),
     ).toThrow();
     expect(MapPlaceSchema.safeParse({}).success).toBe(false);
+  });
+
+  it('deduplicates new attribution sets while retaining legacy single-attribution specs', () => {
+    const legacy = {
+      places: [
+        {
+          id: 'node/legacy',
+          name: 'Legacy place',
+          coordinate: { lat: 40, lon: -75 },
+          sourceUrl: 'https://www.openstreetmap.org/node/legacy',
+          provider: 'openstreetmap',
+          attribution: 'Place provider',
+        },
+      ],
+      attribution: 'Legacy provider',
+      retrievedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const parsedLegacy = PersistableMapSpecSchema.parse(legacy);
+
+    expect(parsedLegacy).not.toHaveProperty('attributions');
+    expect(mapSpecAttributions(parsedLegacy)).toEqual([
+      'Legacy provider',
+      'Place provider',
+    ]);
+    expect(toPersistableMapSpec(parsedLegacy).attributions).toEqual([
+      'Legacy provider',
+      'Place provider',
+    ]);
+
+    expect(
+      MapAttributionsSchema.parse(['Provider A', 'Provider A', 'Provider B']),
+    ).toEqual(['Provider A', 'Provider B']);
+    const modern = validateMapSpec({
+      ...legacy,
+      attribution: 'Provider A',
+      attributions: ['Provider A', 'Provider B', 'Provider A'],
+      places: [
+        {
+          ...legacy.places[0],
+          attribution: 'Provider B',
+        },
+      ],
+    });
+    expect(modern.attribution).toBe('Provider A');
+    expect(modern.attributions).toEqual(['Provider A', 'Provider B']);
+    expect(mapSpecAttributions(modern)).toEqual(['Provider A', 'Provider B']);
   });
 
   it('redacts an exact route into a destination-only durable snapshot', () => {

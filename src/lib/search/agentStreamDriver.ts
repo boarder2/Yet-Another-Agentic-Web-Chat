@@ -1090,8 +1090,23 @@ export class AgentStreamDriver {
       if (typeof input.mode === 'string') attrs.mode = input.mode;
     }
     if (toolName === 'show_map') {
-      const handle = input.handle ?? input.mapHandle;
-      if (typeof handle === 'string') attrs.query = handle.slice(0, 80);
+      const placeHandles = Array.isArray(input.placeHandles)
+        ? input.placeHandles.filter(
+            (handle): handle is string => typeof handle === 'string',
+          )
+        : [];
+      const routeHandle =
+        typeof input.routeHandle === 'string' ? input.routeHandle : undefined;
+      const selection = [
+        ...(placeHandles.length > 0
+          ? [`places: ${placeHandles.join(', ')}`]
+          : []),
+        ...(routeHandle ? [`route: ${routeHandle}`] : []),
+      ].join(' · ');
+      if (selection) attrs.query = selection.slice(0, TOOL_ARG_MAX_LENGTH);
+      if (typeof input.title === 'string') {
+        attrs.description = input.title.slice(0, 100);
+      }
     }
     if (toolName === 'workspace_read' && typeof input.file === 'string') {
       attrs.query = input.file.slice(0, TOOL_ARG_MAX_LENGTH);

@@ -66,7 +66,7 @@ export type Run = {
   recievedMessage: string;
   /** Turn-local chart handles shared by tools, runHost, and resume. */
   chartRegistry: TurnChartRegistry;
-  /** Turn-local map handles shared by tools, runHost, and resume. */
+  /** Turn-local place and route handles shared by tools, runHost, and resume. */
   mapRegistry: TurnMapRegistry;
   /** Server-only mapping facade and its initial configuration snapshot. */
   mappingConfig?: MappingConfiguration | null;
@@ -383,26 +383,9 @@ export function pushEvent(run: Run, ev: StreamEvent): void {
     if (!clientSessionId) return;
     if (ev.messageId !== undefined && ev.messageId !== run.aiMessageId) return;
 
-    // Older in-memory map callers could emit a session-shaped overlay before
-    // page-session binding was threaded through the run. Keep that event live
-    // only for the legacy, unregistered path; it is never retained or replayed.
-    // Real precise-location overlays always have a bound run and registered
-    // provider map, so they take the strict path below.
-    if (!run.clientSessionId && run.mapRegistry.registrationCount === 0) {
-      for (const [id, sub] of run.subscribers) {
-        if (sub.clientSessionId === undefined) {
-          enqueueSubscriber(run, id, sub, {
-            type: 'map_session_overlay',
-            ...(ev.messageId ? { messageId: ev.messageId } : {}),
-            data: overlay,
-          });
-        }
-      }
-      return;
-    }
-
     // A precise overlay is valid only for a page-bound run and a registered
-    // provider map. There is no unbound delivery path for registered maps.
+    // provider map. There is no unbound delivery path, even for an empty
+    // registry; every overlay belongs to a composed map placement.
     if (
       !run.clientSessionId ||
       overlay.clientSessionId !== run.clientSessionId ||
@@ -492,17 +475,7 @@ export function terminateRun(
   run.locationApprovalId = undefined;
   run.locationRetention = undefined;
   clearSessionOverlays(run);
-  try {
-    run.mapRegistry.restore({
-      registrations: [],
-      nextHandle: 1,
-      placementCount: 0,
-      placedHandles: [],
-      placementIds: [],
-    });
-  } catch {
-    // The persisted map milestones and assistant content are already safe.
-  }
+  run.mapRegistry.clear();
   clearLocationTokensForRun(run.messageId);
   clearLocationTokensForRun(run.threadId);
 
@@ -573,17 +546,7 @@ function _evictRun(run: Run): void {
   run.locationApprovalId = undefined;
   run.locationRetention = undefined;
   clearSessionOverlays(run);
-  try {
-    run.mapRegistry.restore({
-      registrations: [],
-      nextHandle: 1,
-      placementCount: 0,
-      placedHandles: [],
-      placementIds: [],
-    });
-  } catch {
-    // Best-effort cleanup after replay data has been written.
-  }
+  run.mapRegistry.clear();
   clearLocationTokensForRun(run.messageId);
   clearLocationTokensForRun(run.threadId);
   const reg = getRegistry();

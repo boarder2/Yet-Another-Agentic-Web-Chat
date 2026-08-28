@@ -119,7 +119,6 @@ export interface ChatStreamState {
   pendingLocationApprovals: Record<string, PendingLocationApproval[]>;
   chartSpecsByMessage: Record<string, Record<string, ChartSpec>>;
   mapSpecsByMessage: Record<string, Record<string, PersistableMapSpec>>;
-  mapHandlesByMessage: Record<string, Record<string, string>>;
   mapSessionOverlaysByMessage: Record<string, MapSessionOverlay[]>;
   mapPlacementIdsByMessage: Record<string, string[]>;
 }
@@ -180,7 +179,6 @@ export function initialChatStreamState(
     pendingLocationApprovals: {},
     chartSpecsByMessage: {},
     mapSpecsByMessage: {},
-    mapHandlesByMessage: {},
     mapSessionOverlaysByMessage: {},
     mapPlacementIdsByMessage: {},
   };
@@ -333,6 +331,9 @@ const isSafeMapIdentity = (value: unknown): value is string =>
   value !== '__proto__' &&
   value !== 'constructor' &&
   value !== 'prototype';
+
+const hasOwn = (value: object, key: PropertyKey): boolean =>
+  Object.prototype.hasOwnProperty.call(value, key);
 
 // ── reducer ──────────────────────────────────────────────────────────────────
 
@@ -825,25 +826,15 @@ function reduceStreamAction(
     case 'map_spec': {
       const msgId = msgIdFor(state, action);
       const { mapId } = action.data;
-      const handle = action.data.handle ?? action.data.turnHandle;
       const parsed = PersistableMapSpecSchema.safeParse(action.data.spec);
-      if (
-        !isSafeMapIdentity(mapId) ||
-        !parsed.success ||
-        (action.data.handle !== undefined &&
-          action.data.turnHandle !== undefined &&
-          action.data.handle !== action.data.turnHandle) ||
-        (handle !== undefined &&
-          (typeof handle !== 'string' || !/^map_[1-9]\d*$/.test(handle)))
-      ) {
+      if (!isSafeMapIdentity(mapId) || !parsed.success) {
         return { state, effects };
       }
       const current = state.mapSpecsByMessage[msgId] ?? {};
-      // One answer can expose one canonical map. Replayed registration events
-      // for that same map are idempotent; a second map is ignored.
-      if (current[mapId] || Object.keys(current).length >= 1) {
-        return { state, effects };
-      }
+      // Registration is keyed by the private map ID. Replayed registration
+      // events for that ID are idempotent, while independent maps remain
+      // available to later placements in the same answer.
+      if (hasOwn(current, mapId)) return { state, effects };
       return {
         state: {
           ...state,
@@ -851,17 +842,6 @@ function reduceStreamAction(
             ...state.mapSpecsByMessage,
             [msgId]: { ...current, [mapId]: parsed.data },
           },
-          ...(handle !== undefined
-            ? {
-                mapHandlesByMessage: {
-                  ...state.mapHandlesByMessage,
-                  [msgId]: {
-                    ...(state.mapHandlesByMessage[msgId] ?? {}),
-                    [mapId]: handle,
-                  },
-                },
-              }
-            : {}),
         },
         effects,
       };
@@ -869,39 +849,34 @@ function reduceStreamAction(
 
     case 'map_placement': {
       const msgId = msgIdFor(state, action);
-      const { placementId, mapId, handle } = action.data;
-      const spec = state.mapSpecsByMessage[msgId]?.[mapId];
-      const registeredHandle = state.mapHandlesByMessage[msgId]?.[mapId];
+      const { placementId, mapId } = action.data;
+      const specs = state.mapSpecsByMessage[msgId];
+      const spec = specs && hasOwn(specs, mapId) ? specs[mapId] : undefined;
       if (
         !isSafeMapIdentity(placementId) ||
         !isSafeMapIdentity(mapId) ||
         !spec ||
         (action.data.placementNumber !== undefined &&
-          (!Number.isInteger(action.data.placementNumber) ||
-            action.data.placementNumber < 1 ||
-            action.data.placementNumber > 1)) ||
-        (handle !== undefined &&
-          (typeof handle !== 'string' || !/^map_[1-9]\d*$/.test(handle))) ||
-        (handle !== undefined && registeredHandle === undefined) ||
-        (registeredHandle !== undefined &&
-          handle !== undefined &&
-          handle !== registeredHandle)
+          (!Number.isSafeInteger(action.data.placementNumber) ||
+            action.data.placementNumber < 1))
       ) {
         return { state, effects };
       }
       const placements = state.mapPlacementIdsByMessage[msgId] ?? [];
       if (placements.includes(placementId)) return { state, effects };
-      if (placements.length >= 1) return { state, effects };
       const payload = mapSpecToPayload(mapId, placementId, spec);
       const receivedMessage = appendMapWidget(state.receivedMessage, payload);
       if (receivedMessage === state.receivedMessage) {
         // Attach starts from persisted content, which may already contain the
         // writer envelope before its placement milestone is replayed. Record
-        // that ID so the one-placement cap remains effective without a second
-        // render.
-        if (
-          !findWidget<MapPayload>(state.receivedMessage, 'map', placementId)
-        ) {
+        // only the matching placement so a colliding ID cannot authorize a
+        // different map.
+        const existing = findWidget<MapPayload>(
+          state.receivedMessage,
+          'map',
+          placementId,
+        );
+        if (!existing || existing.mapId !== mapId) {
           return { state, effects };
         }
         return {
@@ -938,7 +913,8 @@ function reduceStreamAction(
       if (!parsed.success || !parsed.data.clientSessionId) {
         return { state, effects };
       }
-      if (!state.mapSpecsByMessage[msgId]?.[parsed.data.mapId]) {
+      const specs = state.mapSpecsByMessage[msgId];
+      if (!specs || !hasOwn(specs, parsed.data.mapId)) {
         return { state, effects };
       }
       const previous = state.mapSessionOverlaysByMessage[msgId] ?? [];
@@ -1077,6 +1053,14 @@ function reduceStreamAction(
 
     case 'location_answered':
       return reduceLocationAnswered(state, action, effects);
+
+    // Discovery milestones rebuild the server-side turn registry. They are
+    // intentionally not rendered by the client; map specs and placements are
+    // the writer-owned UI events.
+    case 'map_places_discovered':
+    case 'map_place_discovered':
+    case 'map_route_discovered':
+      return { state, effects };
 
     // ── finalization ───────────────────────────────────────────────────────────
     case 'messageEnd':

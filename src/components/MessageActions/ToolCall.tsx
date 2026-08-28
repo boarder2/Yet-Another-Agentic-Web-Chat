@@ -127,8 +127,6 @@ export const ToolCall = ({
   origin,
   destination,
   mode,
-  handle,
-  mapHandle,
   videoId,
   count,
   status,
@@ -160,8 +158,6 @@ export const ToolCall = ({
   origin?: string;
   destination?: string;
   mode?: string;
-  handle?: string;
-  mapHandle?: string;
   videoId?: string;
   count?: string | number;
   status?: string; // running | success | error
@@ -372,9 +368,9 @@ export const ToolCall = ({
         <>
           <span className="mr-2">{getIcon(type)}</span>
           <span>Showing map</span>
-          {(handle || mapHandle || query) && (
+          {(query || description) && (
             <ArgChip bordered>
-              {decodeHtmlEntities(handle || mapHandle || query || '')}
+              {decodeHtmlEntities(query || description || '')}
             </ArgChip>
           )}
         </>

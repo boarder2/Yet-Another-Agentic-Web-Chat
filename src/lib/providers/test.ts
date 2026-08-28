@@ -25,6 +25,8 @@ export const CHART_ANSWER_PREFIX = 'Charted the deterministic findings';
 /** Fixed answers used by the deterministic mapping e2e model variants. */
 export const MAPPING_NEARBY_ANSWER =
   'Validated nearby places:\n\n1. Deterministic Central Cafe — 1 Test Way, Testville [1].\n\nThe inline map shows the provider-validated result.';
+export const MAPPING_MULTI_ANSWER =
+  'Selected provider-validated groups:\n\n1. Deterministic Central Cafe and Deterministic North Market [1].\n\n2. Deterministic South Museum and Deterministic Central Cafe [1].\n\n3. Deterministic North Market [1].\n\nEach inline map is an independent grouping.';
 export const MAPPING_BUSINESS_ANSWER =
   'Deterministic Central Cafe is a provider-validated business. Hours: Mo-Su 08:00-18:00 [1].\n\nThe inline map shows the business.';
 export const MAPPING_ROUTE_ANSWER =
@@ -346,9 +348,11 @@ class FakeChatModel extends BaseChatModel {
 
     // Mapping variants exercise the real provider-backed tool lifecycle without
     // contacting a geocoder, places, routing, or tile service. Tool results
-    // hand the next call a short handle, just as the production prompt does.
+    // hand the next call short turn-local handles, just as the production
+    // prompt does.
     const isMappingVariant =
       this.modelName.includes('map-nearby') ||
+      this.modelName.includes('map-multi') ||
       this.modelName.includes('map-business') ||
       this.modelName.includes('map-route') ||
       this.modelName.includes('map-location') ||
@@ -370,6 +374,71 @@ class FakeChatModel extends BaseChatModel {
           );
           return;
         }
+      } else if (this.modelName.includes('map-multi')) {
+        const discovered = toolResultPaths(messages, [
+          'places',
+          0,
+          'placeHandle',
+        ]);
+        const placeHandle = (index: number) =>
+          discovered[index] ?? `place_${index + 1}`;
+        if (!hasToolResult) {
+          yield lifecycleToolChunk(
+            'search_places',
+            { query: 'central', category: 'cafe', limit: 1 },
+            'test-map-multi-search-central-1',
+          );
+          return;
+        }
+        if (toolResultCount === 1) {
+          yield lifecycleToolChunk(
+            'search_places',
+            { query: 'north', limit: 1 },
+            'test-map-multi-search-north-1',
+          );
+          return;
+        }
+        if (toolResultCount === 2) {
+          yield lifecycleToolChunk(
+            'search_places',
+            { query: 'south', limit: 1 },
+            'test-map-multi-search-south-1',
+          );
+          return;
+        }
+        if (toolResultCount === 3) {
+          yield lifecycleToolChunk(
+            'show_map',
+            {
+              placeHandles: [placeHandle(0), placeHandle(1)],
+              title: 'Central and North',
+            },
+            'test-map-multi-show-1',
+          );
+          return;
+        }
+        if (toolResultCount === 4) {
+          yield lifecycleToolChunk(
+            'show_map',
+            {
+              placeHandles: [placeHandle(2), placeHandle(0)],
+              title: 'South and Central',
+            },
+            'test-map-multi-show-2',
+          );
+          return;
+        }
+        if (toolResultCount === 5) {
+          yield lifecycleToolChunk(
+            'show_map',
+            {
+              placeHandles: [placeHandle(1)],
+              title: 'North only',
+            },
+            'test-map-multi-show-3',
+          );
+          return;
+        }
       } else if (this.modelName.includes('map-nearby')) {
         if (!hasToolResult) {
           yield lifecycleToolChunk(
@@ -388,7 +457,11 @@ class FakeChatModel extends BaseChatModel {
           yield lifecycleToolChunk(
             'show_map',
             {
-              handle: lastToolResultField(messages, 'mapHandle') || 'map_1',
+              placeHandles: [
+                lastToolResultPath(messages, ['places', 0, 'placeHandle']) ||
+                  'place_1',
+              ],
+              title: 'Places near Deterministic Central Cafe',
             },
             'test-map-nearby-show-1',
           );
@@ -419,7 +492,10 @@ class FakeChatModel extends BaseChatModel {
           yield lifecycleToolChunk(
             'show_map',
             {
-              handle: lastToolResultField(messages, 'mapHandle') || 'map_1',
+              placeHandles: [
+                lastToolResultPath(messages, ['places', 0, 'placeHandle']) ||
+                  'place_1',
+              ],
             },
             'test-map-business-show-1',
           );
@@ -438,8 +514,9 @@ class FakeChatModel extends BaseChatModel {
           yield lifecycleToolChunk(
             'show_map',
             {
-              handle:
-                lastToolResultPath(messages, ['route', 'mapHandle']) || 'map_1',
+              routeHandle:
+                lastToolResultPath(messages, ['route', 'routeHandle']) ||
+                'route_1',
             },
             'test-map-route-show-1',
           );
@@ -470,8 +547,9 @@ class FakeChatModel extends BaseChatModel {
           yield lifecycleToolChunk(
             'show_map',
             {
-              handle:
-                lastToolResultPath(messages, ['route', 'mapHandle']) || 'map_1',
+              routeHandle:
+                lastToolResultPath(messages, ['route', 'routeHandle']) ||
+                'route_1',
             },
             'test-map-location-show-1',
           );
@@ -628,6 +706,8 @@ class FakeChatModel extends BaseChatModel {
       answer = MAPPING_DISABLED_ANSWER;
     } else if (this.modelName.includes('map-nearby')) {
       answer = MAPPING_NEARBY_ANSWER;
+    } else if (this.modelName.includes('map-multi')) {
+      answer = MAPPING_MULTI_ANSWER;
     } else if (this.modelName.includes('map-business')) {
       answer = MAPPING_BUSINESS_ANSWER;
     } else if (this.modelName.includes('map-route')) {
@@ -854,6 +934,31 @@ function artifactToolChunk(
   });
 }
 
+/** Read every matching value from JSON tool results in conversation order. */
+function toolResultPaths(
+  messages: BaseMessage[],
+  path: readonly (string | number)[],
+): string[] {
+  const values: string[] = [];
+  for (const m of messages) {
+    if (m.getType() !== 'tool' || typeof m.content !== 'string') continue;
+    try {
+      let value: unknown = JSON.parse(m.content);
+      for (const key of path) {
+        if (value === null || typeof value !== 'object') {
+          value = undefined;
+          break;
+        }
+        value = (value as Record<string | number, unknown>)[key];
+      }
+      if (typeof value === 'string') values.push(value);
+    } catch {
+      // not a JSON tool result
+    }
+  }
+  return values;
+}
+
 /**
  * Read a value back out of the most recent JSON tool result that carries it —
  * how a scripted model picks up a value a tool just handed it (`create_chart`'s
@@ -950,6 +1055,12 @@ export async function loadTestChatModels(): Promise<Record<string, ChatModel>> {
       displayName: 'Test (mapping nearby)',
       model: new FakeChatModel({
         modelName: 'test-map-nearby',
+      }) as unknown as BaseChatModel,
+    },
+    'test-map-multi': {
+      displayName: 'Test (mapping multiple maps)',
+      model: new FakeChatModel({
+        modelName: 'test-map-multi',
       }) as unknown as BaseChatModel,
     },
     'test-map-business': {

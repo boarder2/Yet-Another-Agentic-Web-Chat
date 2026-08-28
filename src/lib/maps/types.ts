@@ -13,12 +13,15 @@ export const MAP_LIMITS = {
   maxResponseBytes: 2_000_000,
   maxUrlLength: 2_048,
   maxAttributionLength: 500,
+  maxAttributions: 13,
 } as const;
 
 export const MAX_MAP_PLACES = MAP_LIMITS.maxPlaces;
 export const MAX_ROUTE_GEOMETRY_POINTS = MAP_LIMITS.maxRouteGeometryPoints;
+export const MAX_MAP_ATTRIBUTIONS = MAP_LIMITS.maxAttributions;
 export const MAP_MAX_PLACES = MAP_LIMITS.maxPlaces;
 export const MAP_MAX_ROUTE_GEOMETRY_POINTS = MAP_LIMITS.maxRouteGeometryPoints;
+export const MAP_MAX_ATTRIBUTIONS = MAP_LIMITS.maxAttributions;
 
 export const MAP_ROUTE_MODES = ['driving', 'walking', 'cycling'] as const;
 export const MapRouteModeSchema = z.enum(MAP_ROUTE_MODES);
@@ -100,6 +103,14 @@ export const MapAttributionSchema = z
     'attribution contains unsupported characters',
   );
 
+/** The complete, ordered set of provider attributions used by one map. */
+export const MapAttributionsSchema = z
+  .array(MapAttributionSchema)
+  .min(1)
+  .max(MAP_LIMITS.maxAttributions)
+  .transform((values) => [...new Set(values)]);
+export type MapAttributions = z.infer<typeof MapAttributionsSchema>;
+
 export const MapPlaceSchema = z.object({
   id: z.string().min(1).max(MAP_LIMITS.maxPlaceIdLength),
   name: z.string().trim().min(1).max(240),
@@ -142,16 +153,60 @@ export type MapRoute = z.infer<typeof MapRouteSchema>;
 /** A validated, provider-grounded payload consumed by later map stream chunks. */
 export const GeometrySchema = GeoJsonLineStringSchema;
 
-export const MapSpecSchema = z.object({
-  places: z.array(MapPlaceSchema).max(MAP_LIMITS.maxPlaces),
-  /** Exact browser origin is present only when explicitly saved in this answer. */
-  origin: MapCoordinateSchema.optional(),
-  route: MapRouteSchema.optional(),
-  attribution: MapAttributionSchema,
-  retrievedAt: z.string().datetime({ offset: true }),
-  title: z.string().max(240).optional(),
-  summary: z.string().max(2_000).optional(),
-});
+function normalizeMapSpecAttributionInput(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+
+  const record = { ...(value as Record<string, unknown>) };
+  const legacy = record.attribution;
+  const plural = record.attributions;
+
+  // New writers use `attributions`; the singular value is retained as the
+  // first-value compatibility field. A legacy array in `attribution` is also
+  // accepted because a few callers construct persisted specs as plain data.
+  // Leave the old single-attribution shape untouched so historical persisted
+  // data remains read-only compatible.
+  if (plural !== undefined) {
+    if (Array.isArray(plural)) {
+      record.attributions = plural;
+      record.attribution = plural[0];
+    }
+    return record;
+  }
+  if (Array.isArray(legacy)) {
+    record.attributions = legacy;
+    record.attribution = legacy[0];
+  }
+  return record;
+}
+
+const MapSpecShape = z
+  .object({
+    places: z.array(MapPlaceSchema).max(MAP_LIMITS.maxPlaces),
+    /** Exact browser origin is present only when explicitly saved in this answer. */
+    origin: MapCoordinateSchema.optional(),
+    route: MapRouteSchema.optional(),
+    /** The first value is retained as the legacy single-attribution field. */
+    attribution: MapAttributionSchema,
+    /** Ordered, deduplicated provider attributions used by new map writers. */
+    attributions: MapAttributionsSchema.optional(),
+    retrievedAt: z.string().datetime({ offset: true }),
+    title: z.string().max(240).optional(),
+    summary: z.string().max(2_000).optional(),
+  })
+  .superRefine((spec, ctx) => {
+    if (mapSpecAttributions(spec).length > MAP_LIMITS.maxAttributions) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['attributions'],
+        message: 'map attributions exceed the supported limit',
+      });
+    }
+  });
+
+export const MapSpecSchema = z.preprocess(
+  normalizeMapSpecAttributionInput,
+  MapSpecShape,
+);
 export type MapSpec = z.infer<typeof MapSpecSchema>;
 
 /**
@@ -190,18 +245,24 @@ export type PersistableMapRoute = z.infer<typeof PersistableMapRouteSchema>;
 
 /** The redacted map snapshot stored in assistant metadata and run milestones. */
 export const PersistableMapSpecSchema = z
-  .object({
-    places: z.array(MapPlaceSchema).max(MAP_LIMITS.maxPlaces),
-    /** Exact browser origin retained only in an explicit save-in-answer snapshot. */
-    origin: MapCoordinateSchema.optional(),
-    route: PersistableMapRouteSchema.optional(),
-    /** Set when the exact origin/route was intentionally kept out of storage. */
-    routeNotRetained: z.boolean().optional(),
-    attribution: MapAttributionSchema,
-    retrievedAt: z.string().datetime({ offset: true }),
-    title: z.string().max(240).optional(),
-    summary: z.string().max(2_000).optional(),
-  })
+  .preprocess(
+    normalizeMapSpecAttributionInput,
+    z.object({
+      places: z.array(MapPlaceSchema).max(MAP_LIMITS.maxPlaces),
+      /** Exact browser origin retained only in an explicit save-in-answer snapshot. */
+      origin: MapCoordinateSchema.optional(),
+      route: PersistableMapRouteSchema.optional(),
+      /** Set when the exact origin/route was intentionally kept out of storage. */
+      routeNotRetained: z.boolean().optional(),
+      /** The first value is retained as the legacy single-attribution field. */
+      attribution: MapAttributionSchema,
+      /** Ordered, deduplicated provider attributions used by new map writers. */
+      attributions: MapAttributionsSchema.optional(),
+      retrievedAt: z.string().datetime({ offset: true }),
+      title: z.string().max(240).optional(),
+      summary: z.string().max(2_000).optional(),
+    }),
+  )
   .superRefine((spec, ctx) => {
     const redactedRoute = spec.route && 'routeNotRetained' in spec.route;
     if (spec.routeNotRetained && !redactedRoute) {
@@ -209,6 +270,13 @@ export const PersistableMapSpecSchema = z
         code: 'custom',
         path: ['route'],
         message: 'routeNotRetained requires a redacted route',
+      });
+    }
+    if (mapSpecAttributions(spec).length > MAP_LIMITS.maxAttributions) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['attributions'],
+        message: 'map attributions exceed the supported limit',
       });
     }
   });
@@ -220,6 +288,45 @@ export const PersistedMapSpecSchema = PersistableMapSpecSchema;
 export type PersistedMapSpec = PersistableMapSpec;
 export const MapSpecPersistableSchema = PersistableMapSpecSchema;
 export type MapSpecPersistable = PersistableMapSpec;
+
+/**
+ * Return the complete provider attribution set in deterministic first-seen
+ * order. Legacy persisted specs expose only `attribution`, while new specs
+ * carry the full set in `attributions`.
+ */
+export function mapSpecAttributions(value: {
+  attribution?: unknown;
+  attributions?: unknown;
+  places?: readonly { attribution?: unknown }[];
+  route?: { attribution?: unknown };
+}): string[] {
+  const values: unknown[] = [];
+  // An explicit plural set is already ordered by the composing writer. For a
+  // legacy spec, the singular field is the only map-level attribution and is
+  // therefore the first value before provider records are considered.
+  if (Array.isArray(value.attributions)) {
+    values.push(...value.attributions);
+  } else if (Array.isArray(value.attribution)) {
+    values.push(...value.attribution);
+  } else if (typeof value.attribution === 'string') {
+    values.push(value.attribution);
+  }
+  if (Array.isArray(value.places)) {
+    values.push(...value.places.map((place) => place.attribution));
+  }
+  if (value.route && typeof value.route === 'object') {
+    values.push(value.route.attribution);
+  }
+  const result: string[] = [];
+  for (const candidate of values) {
+    const parsed = MapAttributionSchema.safeParse(candidate);
+    if (parsed.success && !result.includes(parsed.data))
+      result.push(parsed.data);
+  }
+  return result;
+}
+
+export const getMapSpecAttributions = mapSpecAttributions;
 
 /**
  * Exact browser-origin data is carried only by the live stream overlay. This
@@ -291,7 +398,38 @@ function cloneMapRoute(route: PersistableMapRoute): PersistableMapRoute {
   };
 }
 
+/**
+ * Project a validated route into the safe representation used by durable
+ * discovery milestones. A transient route keeps only its destination and
+ * provider-grounded summary; its origin, geometry, and URL query data remain
+ * session-only.
+ */
+export function toPersistableMapRoute(
+  value: MapRoute | PersistableMapRoute,
+  options: { retainRoute?: boolean } = {},
+): PersistableMapRoute {
+  const parsed = PersistableMapRouteSchema.parse(value);
+  if (options.retainRoute !== false || 'routeNotRetained' in parsed) {
+    return cloneMapRoute(parsed);
+  }
+  return {
+    mode: parsed.mode,
+    destination: { ...parsed.destination },
+    distanceMeters: parsed.distanceMeters,
+    durationSeconds: parsed.durationSeconds,
+    provider: parsed.provider,
+    attribution: parsed.attribution,
+    routeNotRetained: true,
+  };
+}
+
+export const redactMapRoute = (
+  value: MapRoute | PersistableMapRoute,
+): MapRouteRedacted =>
+  toPersistableMapRoute(value, { retainRoute: false }) as MapRouteRedacted;
+
 function clonePersistableMapSpec(spec: PersistableMapSpec): PersistableMapSpec {
+  const attributions = mapSpecAttributions(spec);
   return {
     ...spec,
     places: spec.places.map((place) => ({
@@ -300,6 +438,11 @@ function clonePersistableMapSpec(spec: PersistableMapSpec): PersistableMapSpec {
     })),
     ...(spec.origin ? { origin: { ...spec.origin } } : {}),
     ...(spec.route ? { route: cloneMapRoute(spec.route) } : {}),
+    ...(attributions.length > 1
+      ? { attributions }
+      : spec.attributions
+        ? { attributions: [...spec.attributions] }
+        : {}),
   };
 }
 

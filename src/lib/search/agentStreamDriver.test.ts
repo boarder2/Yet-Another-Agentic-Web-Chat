@@ -730,6 +730,41 @@ describe('AgentStreamDriver', () => {
     ]);
   });
 
+  it('summarizes explicit show_map selections without exposing private map identities', () => {
+    const { driver } = makeHarness();
+    const extract = (
+      driver as unknown as {
+        extractToolAttributes: (
+          toolName: string,
+          input: Record<string, unknown>,
+          runId: string,
+        ) => Record<string, unknown>;
+      }
+    ).extractToolAttributes.bind(driver);
+
+    expect(
+      extract(
+        'show_map',
+        {
+          placeHandles: ['place_2', 'place_1'],
+          routeHandle: 'route_1',
+          title: 'Route and places',
+        },
+        'map-call',
+      ),
+    ).toEqual({
+      query: 'places: place_2, place_1 · route: route_1',
+      description: 'Route and places',
+    });
+    expect(
+      extract(
+        'show_map',
+        { mapHandle: 'map_1', handle: 'map_1' },
+        'legacy-map-call',
+      ),
+    ).toEqual({});
+  });
+
   it('suppresses system skill and specialized tool chrome but keeps user skills visible', () => {
     const systemSkill: Skill = {
       source: 'system',

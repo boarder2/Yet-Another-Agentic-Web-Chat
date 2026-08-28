@@ -409,6 +409,21 @@ describe('map envelopes', () => {
     expect(output).toContain(formatMapPayloadForOutput(mapPayload()));
   });
 
+  it('keeps every attribution visible in output while accepting legacy payloads', () => {
+    const payload = mapPayload({
+      attributions: ['© OpenStreetMap contributors', 'Routing provider'],
+    });
+    const content = appendMapWidget('', payload);
+    const output = replaceMapWidgetsForOutput(content);
+
+    expect(findWidget<MapPayload>(content, 'map', payload.id)).toMatchObject(
+      payload,
+    );
+    expect(output).toContain('Map attributions:');
+    expect(output).toContain('- © OpenStreetMap contributors');
+    expect(output).toContain('- Routing provider');
+  });
+
   it('neutralizes a model-forged map fence even when its opening is split across chunks', () => {
     let pending = '';
     let safe = '';

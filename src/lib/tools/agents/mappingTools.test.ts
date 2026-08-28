@@ -16,7 +16,7 @@ import {
 } from './getPlaceDetailsTool';
 import { getRouteTool } from './getRouteTool';
 import { searchPlacesTool, SearchPlacesToolSchema } from './searchPlacesTool';
-import { showMapTool } from './showMapTool';
+import { showMapTool, ShowMapToolSchema } from './showMapTool';
 
 type InvokableTool = {
   invoke(input: unknown, config: unknown): Promise<unknown>;
@@ -44,12 +44,14 @@ const makeService = () => {
   return createMappingService(provider, { useCache: false });
 };
 
+type MappingService = ReturnType<typeof makeService>;
+
 const makeRuntime = (
   toolCallId: string,
   mapRegistry: TurnMapRegistry,
   options: {
-    service?: ReturnType<typeof makeService> | null;
-    resolver?: () => ReturnType<typeof makeService> | null;
+    service?: MappingService | null;
+    resolver?: () => MappingService | null;
     retrievalSignal?: AbortSignal;
   } = {},
 ) => ({
@@ -109,8 +111,11 @@ const eventsFor = (emitter: EventEmitter): AgentEmitEvent[] => {
   return events;
 };
 
+const eventTypes = (events: readonly AgentEmitEvent[]) =>
+  events.map((event) => event.type);
+
 describe('named-location mapping tools', () => {
-  it('searches validated places, registers private handles, emits a map spec, and returns source documents', async () => {
+  it('searches validated places into turn-local handles without constructing a map', async () => {
     const mapRegistry = makeRegistry();
     const service = makeService();
     const runtime = makeRuntime('search-1', mapRegistry, { service });
@@ -136,23 +141,24 @@ describe('named-location mapping tools', () => {
     });
     expect(places[0]).not.toHaveProperty('id');
     expect(places[0]).not.toHaveProperty('coordinate');
-    expect(output.mapHandle).toBe('map_1');
+    expect(output).not.toHaveProperty('mapHandle');
+    expect(output).not.toHaveProperty('mapNote');
 
-    const registration = mapRegistry.resolve('map_1');
-    expect(registration).toMatchObject({
-      mapId: 'private-map-1',
-      spec: { places: [TEST_MAPPING_PLACES[0]] },
+    expect(mapRegistry.placeCount).toBe(1);
+    expect(mapRegistry.registrationCount).toBe(0);
+    expect(eventTypes(events)).toEqual(['map_places_discovered']);
+    expect(events[0]).toMatchObject({
+      type: 'map_places_discovered',
+      data: {
+        places: [
+          {
+            handle: 'place_1',
+            place: TEST_MAPPING_PLACES[0],
+            retrievedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      },
     });
-    expect(events).toContainEqual(
-      expect.objectContaining({
-        type: 'map_spec',
-        data: expect.objectContaining({
-          mapId: 'private-map-1',
-          handle: 'map_1',
-          source: 'search_places',
-        }),
-      }),
-    );
 
     const update = resultUpdate(result);
     expect(update.relevantDocuments).toHaveLength(1);
@@ -163,6 +169,7 @@ describe('named-location mapping tools', () => {
         placeHandle: 'place_1',
         url: 'https://www.openstreetmap.org/node/910001',
         provider: 'test',
+        searchQuery: 'central',
       },
     });
   });
@@ -171,6 +178,7 @@ describe('named-location mapping tools', () => {
     const mapRegistry = makeRegistry();
     const service = makeService();
     const runtime = makeRuntime('nearby-1', mapRegistry, { service });
+    const events = eventsFor(runtime.context.emitter);
 
     const result = await invoke(
       searchPlacesTool,
@@ -187,12 +195,16 @@ describe('named-location mapping tools', () => {
 
     expect(places).toHaveLength(1);
     expect(places[0]).toMatchObject({
+      placeHandle: 'place_1',
       name: 'Deterministic Central Cafe',
       category: 'cafe',
     });
     expect(places[0]).not.toHaveProperty('rating');
     expect(places[0]).not.toHaveProperty('reviewCount');
-    expect(output.mapHandle).toBe('map_1');
+    expect(output).not.toHaveProperty('mapHandle');
+    expect(output).not.toHaveProperty('mapNote');
+    expect(mapRegistry.registrationCount).toBe(0);
+    expect(eventTypes(events)).toEqual(['map_places_discovered']);
     expect(resultUpdate(result).relevantDocuments?.[0]?.metadata).toMatchObject(
       {
         searchQuery: 'cafe near Testville',
@@ -200,10 +212,67 @@ describe('named-location mapping tools', () => {
     );
   });
 
+  it('keeps concurrent discoveries independent and assigns handles to the provider result that completed', async () => {
+    const mapRegistry = makeRegistry();
+    const baseService = makeService();
+    const delayedService = {
+      searchPlaces: async (
+        request: Parameters<MappingService['searchPlaces']>[0],
+        signal?: AbortSignal,
+      ) => {
+        if (request.query === 'central') {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        return baseService.searchPlaces(request, signal);
+      },
+      getPlaceDetails: baseService.getPlaceDetails.bind(baseService),
+      getRoute: baseService.getRoute.bind(baseService),
+    } as unknown as MappingService;
+    const centralRuntime = makeRuntime('search-central', mapRegistry, {
+      service: delayedService,
+    });
+    const northRuntime = makeRuntime('search-north', mapRegistry, {
+      service: delayedService,
+    });
+    const centralEvents = eventsFor(centralRuntime.context.emitter);
+    const northEvents = eventsFor(northRuntime.context.emitter);
+
+    const [centralResult, northResult] = await Promise.all([
+      invoke(searchPlacesTool, { query: 'central' }, centralRuntime),
+      invoke(searchPlacesTool, { query: 'north' }, northRuntime),
+    ]);
+    const central = resultJson(centralResult).places as Array<
+      Record<string, unknown>
+    >;
+    const north = resultJson(northResult).places as Array<
+      Record<string, unknown>
+    >;
+
+    expect(central[0]?.placeHandle).toBe('place_2');
+    expect(north[0]?.placeHandle).toBe('place_1');
+    expect(mapRegistry.placeCount).toBe(2);
+    expect(mapRegistry.registrationCount).toBe(0);
+    expect(eventTypes(centralEvents)).toEqual(['map_places_discovered']);
+    expect(eventTypes(northEvents)).toEqual(['map_places_discovered']);
+
+    const shown = await invoke(
+      showMapTool,
+      {
+        placeHandles: [central[0]?.placeHandle, north[0]?.placeHandle],
+      },
+      centralRuntime,
+    );
+    expect(resultJson(shown)).toMatchObject({
+      pinCount: 2,
+      hasRoute: false,
+    });
+  });
+
   it('omits a map and factual claims when the provider has no validated place', async () => {
     const mapRegistry = makeRegistry();
     const service = makeService();
     const runtime = makeRuntime('search-empty', mapRegistry, { service });
+    const events = eventsFor(runtime.context.emitter);
 
     const result = await invoke(
       searchPlacesTool,
@@ -216,6 +285,8 @@ describe('named-location mapping tools', () => {
     expect(output.note).toContain('No validated places found');
     expect(output).not.toHaveProperty('mapHandle');
     expect(mapRegistry.registrationCount).toBe(0);
+    expect(mapRegistry.placeCount).toBe(0);
+    expect(events).toEqual([]);
     expect(resultUpdate(result).relevantDocuments).toEqual([]);
   });
 
@@ -300,10 +371,11 @@ describe('named-location mapping tools', () => {
     expect(resultUpdate(result).relevantDocuments).toEqual([]);
   });
 
-  it('builds a named route with handles, structured route citations, and an external navigation link', async () => {
+  it('builds a named route with place and route handles but no map handle or map capacity note', async () => {
     const mapRegistry = makeRegistry();
     const service = makeService();
     const runtime = makeRuntime('route-1', mapRegistry, { service });
+    const events = eventsFor(runtime.context.emitter);
 
     const result = await invoke(
       getRouteTool,
@@ -318,20 +390,39 @@ describe('named-location mapping tools', () => {
       destination: 'Deterministic North Market',
       mode: 'driving',
       routeHandle: 'route_1',
-      mapHandle: 'map_1',
       sourceUrl: expect.stringContaining('deterministic-route'),
       navigationUrl: expect.stringContaining('https://example.test/directions'),
       provider: 'test',
       attribution: 'Deterministic mapping test data',
     });
+    expect(route).not.toHaveProperty('mapHandle');
+    expect(output).not.toHaveProperty('mapNote');
     expect(route.distanceMeters).toEqual(expect.any(Number));
     expect(route.durationSeconds).toEqual(expect.any(Number));
     expect(output.origin).toMatchObject({ placeHandle: 'place_1' });
     expect(output.destination).toMatchObject({ placeHandle: 'place_2' });
+    expect(mapRegistry.registrationCount).toBe(0);
+    expect(mapRegistry.placeCount).toBe(2);
+    expect(mapRegistry.routeCount).toBe(1);
     expect(mapRegistry.resolveRoute('route_1')).toMatchObject({
-      mapHandle: 'map_1',
-      mapId: 'private-map-1',
+      placeHandles: ['place_1', 'place_2'],
+      originPlaceHandle: 'place_1',
+      destinationPlaceHandle: 'place_2',
       route: { mode: 'driving' },
+    });
+    expect(eventTypes(events)).toEqual([
+      'map_places_discovered',
+      'map_route_discovered',
+    ]);
+    expect(events[1]).toMatchObject({
+      type: 'map_route_discovered',
+      data: {
+        handle: 'route_1',
+        placeHandles: ['place_1', 'place_2'],
+        originPlaceHandle: 'place_1',
+        destinationPlaceHandle: 'place_2',
+        retrievedAt: '2026-01-01T00:00:00.000Z',
+      },
     });
     expect(resultUpdate(result).relevantDocuments?.[0]).toMatchObject({
       pageContent: expect.stringContaining('Driving route'),
@@ -352,44 +443,234 @@ describe('named-location mapping tools', () => {
 
     expect(resultText(result)).toContain('does not support walking routes');
     expect(mapRegistry.registrationCount).toBe(0);
+    expect(mapRegistry.placeCount).toBe(0);
+    expect(mapRegistry.routeCount).toBe(0);
     expect(resultUpdate(result).relevantDocuments).toEqual([]);
   });
 
-  it('shows only a registered map or route once and keeps guessed handles out of the stream', async () => {
+  it('composes an explicitly selected grouping, emits one canonical spec and placement, and allows repeated maps', async () => {
     const mapRegistry = makeRegistry();
     const service = makeService();
     const runtime = makeRuntime('show-1', mapRegistry, { service });
     const events = eventsFor(runtime.context.emitter);
 
     await invoke(searchPlacesTool, { query: 'central' }, runtime);
+    await invoke(searchPlacesTool, { query: 'north' }, runtime);
     events.length = 0;
 
-    const shown = await invoke(showMapTool, { handle: 'map_1' }, runtime);
-    expect(resultJson(shown)).toMatchObject({
-      handle: 'map_1',
-      mapHandle: 'map_1',
-      pinCount: 1,
+    const shown = await invoke(
+      showMapTool,
+      {
+        placeHandles: ['place_2', 'place_1', 'place_2'],
+        title: 'Selected places',
+      },
+      runtime,
+    );
+    expect(resultJson(shown)).toEqual({
+      title: 'Selected places',
+      pinCount: 2,
       hasRoute: false,
     });
-    expect(events).toEqual([
-      {
-        type: 'map_placement',
-        data: {
-          placementId: 'map_placement_1',
-          mapId: 'private-map-1',
-          handle: 'map_1',
-          placementNumber: 1,
+    expect(events).toHaveLength(2);
+    expect(events[0]).toMatchObject({
+      type: 'map_spec',
+      data: {
+        mapId: 'private-map-1',
+        source: 'show_map',
+        spec: {
+          title: 'Selected places',
+          places: [TEST_MAPPING_PLACES[1], TEST_MAPPING_PLACES[0]],
         },
       },
+    });
+    expect(events[0]).not.toHaveProperty('handle');
+    expect(events[1]).toEqual({
+      type: 'map_placement',
+      data: {
+        placementId: 'map_placement_1',
+        mapId: 'private-map-1',
+        placementNumber: 1,
+      },
+    });
+    expect(events[1]).not.toHaveProperty('handle');
+
+    const repeated = await invoke(
+      showMapTool,
+      { placeHandles: ['place_1', 'place_2'], title: 'Same grouping again' },
+      runtime,
+    );
+    expect(resultJson(repeated)).toEqual({
+      title: 'Same grouping again',
+      pinCount: 2,
+      hasRoute: false,
+    });
+    expect(mapRegistry.registrationCount).toBe(2);
+    expect(mapRegistry.placementCount).toBe(2);
+    expect(eventTypes(events)).toEqual([
+      'map_spec',
+      'map_placement',
+      'map_spec',
+      'map_placement',
     ]);
+    expect(events[2]).toMatchObject({
+      type: 'map_spec',
+      data: { mapId: 'private-map-2' },
+    });
+    expect(events[3]).toMatchObject({
+      type: 'map_placement',
+      data: {
+        mapId: 'private-map-2',
+        placementId: 'map_placement_2',
+        placementNumber: 2,
+      },
+    });
+    expect(JSON.stringify(resultJson(shown))).not.toContain('mapId');
+    expect(JSON.stringify(resultJson(shown))).not.toContain('placementId');
+    expect(JSON.stringify(resultJson(shown))).not.toContain('mapHandle');
+  });
 
-    const repeated = await invoke(showMapTool, { handle: 'map_1' }, runtime);
-    expect(resultText(repeated)).toContain('at most 1 time');
-    expect(events).toHaveLength(1);
+  it('composes a route with a separately discovered place and includes endpoint pins in route order', async () => {
+    const mapRegistry = makeRegistry();
+    const service = makeService();
+    const runtime = makeRuntime('route-map', mapRegistry, { service });
+    const events = eventsFor(runtime.context.emitter);
 
-    const guessed = await invoke(showMapTool, { handle: 'map_99' }, runtime);
-    expect(resultText(guessed)).toContain('No registered map matches');
-    expect(events).toHaveLength(1);
+    const routeResult = await invoke(
+      getRouteTool,
+      { origin: 'central', destination: 'north', mode: 'driving' },
+      runtime,
+    );
+    await invoke(searchPlacesTool, { query: 'south' }, runtime);
+    events.length = 0;
+
+    const shown = await invoke(
+      showMapTool,
+      {
+        placeHandles: ['place_3'],
+        routeHandle: 'route_1',
+        title: 'Route and museum',
+      },
+      runtime,
+    );
+    expect(resultJson(shown)).toEqual({
+      title: 'Route and museum',
+      pinCount: 3,
+      hasRoute: true,
+    });
+    expect(events).toHaveLength(2);
+    expect(events[0]).toMatchObject({
+      type: 'map_spec',
+      data: {
+        mapId: 'private-map-1',
+        spec: {
+          title: 'Route and museum',
+          places: [
+            TEST_MAPPING_PLACES[2],
+            TEST_MAPPING_PLACES[0],
+            TEST_MAPPING_PLACES[1],
+          ],
+          route: { mode: 'driving' },
+        },
+      },
+    });
+    expect(events[1]).toMatchObject({
+      type: 'map_placement',
+      data: {
+        placementId: 'map_placement_1',
+        mapId: 'private-map-1',
+        placementNumber: 1,
+      },
+    });
+    expect(resultText(routeResult)).not.toContain('mapHandle');
+  });
+
+  it('rejects an invalid selection atomically and leaves valid handles available', async () => {
+    const mapRegistry = makeRegistry();
+    const service = makeService();
+    const runtime = makeRuntime('show-invalid', mapRegistry, { service });
+    const events = eventsFor(runtime.context.emitter);
+
+    await invoke(searchPlacesTool, { query: 'central' }, runtime);
+    events.length = 0;
+
+    const invalid = await invoke(
+      showMapTool,
+      { placeHandles: ['place_1', 'place_999'] },
+      runtime,
+    );
+    expect(resultText(invalid)).toContain('Unknown place handle "place_999"');
+    expect(mapRegistry.registrationCount).toBe(0);
+    expect(mapRegistry.placementCount).toBe(0);
+    expect(events).toEqual([]);
+
+    const valid = await invoke(
+      showMapTool,
+      { placeHandles: ['place_1'] },
+      runtime,
+    );
+    expect(resultJson(valid)).toMatchObject({ pinCount: 1, hasRoute: false });
+    expect(mapRegistry.resolveById('private-map-1')).toBeDefined();
+    expect(mapRegistry.placementCount).toBe(1);
+    expect(events).toHaveLength(2);
+  });
+
+  it('describes discovery handles and explicit repeatable map composition without legacy map handles', () => {
+    expect(searchPlacesTool.description).toContain(
+      'discovery does not place a map',
+    );
+    expect(searchPlacesTool.description).toContain(
+      'select the desired grouping later with show_map',
+    );
+    expect(searchPlacesTool.description).not.toContain('mapHandle');
+
+    expect(getRouteTool.description).toContain(
+      'routeHandle valid only in this turn',
+    );
+    expect(getRouteTool.description).toContain(
+      'discovery does not place a map',
+    );
+    expect(getRouteTool.description).not.toContain('mapHandle');
+
+    expect(showMapTool.description).toContain(
+      'selected placeHandles and an optional routeHandle',
+    );
+    expect(showMapTool.description).toContain(
+      'may be repeated for different groupings',
+    );
+    expect(showMapTool.description).toContain('no per-answer map-count limit');
+    expect(showMapTool.description).toContain(
+      'at most 12 unique pins including route endpoints',
+    );
+    expect(showMapTool.description).toContain(
+      'Invalid handle selections fail atomically',
+    );
+    expect(showMapTool.description).not.toContain('mapHandle');
+  });
+
+  it('accepts only place and route handles in the show_map contract', async () => {
+    expect(ShowMapToolSchema.safeParse({ handle: 'map_1' }).success).toBe(
+      false,
+    );
+    expect(ShowMapToolSchema.safeParse({ mapHandle: 'map_1' }).success).toBe(
+      false,
+    );
+    expect(ShowMapToolSchema.safeParse({}).success).toBe(false);
+    expect(
+      ShowMapToolSchema.safeParse({ routeHandle: 'route_1' }).success,
+    ).toBe(true);
+    expect(
+      ShowMapToolSchema.safeParse({ placeHandles: ['place_1'] }).success,
+    ).toBe(true);
+
+    const runtime = makeRuntime('schema-1', makeRegistry(), {
+      service: makeService(),
+    });
+    await expect(
+      invoke(showMapTool, { handle: 'map_1' }, runtime),
+    ).rejects.toThrow();
+    await expect(
+      invoke(showMapTool, { placeHandles: [] }, runtime),
+    ).rejects.toThrow();
   });
 
   it('does not contact a provider when mapping is unavailable or cancelled', async () => {
@@ -452,6 +733,8 @@ describe('named-location mapping tools', () => {
     expect(resultText(result)).toContain('Mapping is unavailable');
     expect(resolver).toHaveBeenCalledTimes(2);
     expect(runtime.context.mapRegistry.registrationCount).toBe(0);
+    expect(runtime.context.mapRegistry.placeCount).toBe(0);
+    expect(runtime.context.mapRegistry.routeCount).toBe(0);
   });
 
   it('rejects model-authored coordinates and unsupported route modes', async () => {

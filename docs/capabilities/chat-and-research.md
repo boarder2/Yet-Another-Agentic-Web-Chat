@@ -12,7 +12,7 @@ The composer has three focus modes. The Web Search mode is labelled **All** in t
 | **Chat** (`chat`)                    | Conversation, drafting, explanation, and creative work without web or file research | Conversational tools such as history lookup, skills, interactive questions, charts, code when enabled, and image generation when configured |
 | **Local Research** (`localResearch`) | Ask questions about attached documents with citations                               | File search plus core interaction, chart, artifact, and configured image-generation tools; no web search                                    |
 
-Web Search can also use attached chat documents when files are supplied. When the operator enables Mapping, an ordinary interactive Web Search turn can use validated named-place, nearby-business, place-detail, and driving/walking/cycling route tools and place one inline numbered map. Mapping is not added to Chat, Local Research, Agent Panel, subagent, workflow, schedule, dashboard, or other non-interactive paths. A workspace adds its own file and workspace tools; see [Files and workspaces](./files-and-workspaces.md).
+Web Search can also use attached chat documents when files are supplied. When the operator enables Mapping, an ordinary interactive Web Search turn can use validated named-place, nearby-business, place-detail, and driving/walking/cycling route tools. The agent selects turn-local place and route handles for each inline map, so one answer can contain any number of independently composed numbered maps; each map is limited to 12 unique pins, including route endpoints, and one route. Mapping is not added to Chat, Local Research, Agent Panel, subagent, workflow, schedule, dashboard, or other non-interactive paths. A workspace adds its own file and workspace tools; see [Files and workspaces](./files-and-workspaces.md).
 
 ## Compose a message
 
@@ -34,7 +34,7 @@ Responses stream into the conversation while the agent works. The answer can sho
 - Source cards with titles, previews, processing indicators, and numbered citation links.
 - Images and Videos panels when the resolved search capabilities support them.
 - Related suggestions after completion when automatic suggestions are enabled, or after selecting **Load suggestions**.
-- A provider-grounded map for geographic Web Search requests. The answer retains an equivalent numbered prose list, provider attribution, normal citations for factual business claims, and external place or navigation links; one answer can contain at most 12 pins and one route.
+- Provider-grounded maps for geographic Web Search requests. Each successful map placement has an explicit turn-local grouping, retains an equivalent numbered prose summary, provider attribution, normal citations for factual business claims, and external place or navigation links. A map can contain at most 12 unique pins, counting route endpoints, and one route; failed selections or provider/tile operations do not suppress other maps.
 
 A citation is usable only when the corresponding tool returned a source document. Search snippets may be followed by URL retrieval, PDF text extraction, or a YouTube transcript before the final answer is written. A provider error, blocked page, missing transcript, or empty result can leave a tool without a source.
 
@@ -73,10 +73,10 @@ YAAWC publishes an OpenSearch descriptor at `/api/opensearch`. A browser search-
 - File research needs an embedding model and processable attached content. See [Files and workspaces](./files-and-workspaces.md) for document formats and indexing behavior.
 - Agent Panel mode is available only in Web Search and Local Research and needs two to four usable executor models. See [Agent capabilities](./agent-capabilities.md).
 - Firefox AI prompts that match the page-selection format are handled conversationally with external and action tools disabled for that turn. The local capability-documentation lookup remains available when a YAAWC claim must be verified.
-- Mapping is disabled by default and requires explicit operator enablement. Public OpenStreetMap-compatible endpoints also require the operator's acknowledgement; self-hosted endpoints still require mapping enablement. Browser location requires a separate approval after which the browser permission prompt is requested.
+- Mapping is disabled by default and requires explicit operator enablement. Public OpenStreetMap-compatible endpoints also require the operator's acknowledgement; self-hosted endpoints still require mapping enablement. Each map is explicitly composed from validated handles and has no per-answer map-count ceiling, but retains the 12-unique-pin and one-route limits. Browser location requires a separate approval after which the browser permission prompt is requested.
 
 ## If a run does not work
 
 A missing model or encryption passphrase is reported before the run starts. Search providers can return no results or fail to provide a particular capability; the UI reflects unavailable image or video panels rather than inventing results. Mapping provider, routing, tile, or permission failures leave validated prose and place data available while omitting unavailable map data. A URL that cannot be fetched, a PDF without extractable text, or a video without a usable transcript cannot be cited. If a run is stopped, cancelled, interrupted for user input, or disconnected, open it again from History to see its persisted state.
 
-For data boundaries, external services, private sessions, and deletion behavior, see [Privacy and data](./privacy-and-data.md). For provider setup, see [Models and providers](./models-and-providers.md).
+For data boundaries, external services, private sessions, and deletion behavior, see [Privacy and data](./privacy-and-data.md). Invalid map selections fail without a partial placement; mapping or tile failures leave validated prose and other maps available. For provider setup, see [Models and providers](./models-and-providers.md).

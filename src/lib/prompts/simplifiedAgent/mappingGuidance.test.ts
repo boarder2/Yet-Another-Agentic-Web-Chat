@@ -21,6 +21,30 @@ describe('mapping guidance', () => {
     expect(mappingGuidance).toContain('Transit, live traffic');
   });
 
+  it('teaches explicit, repeatable map composition without a model-facing map handle', () => {
+    expect(mappingGuidance).toContain(
+      'Discovery and presentation are separate.',
+    );
+    expect(mappingGuidance).toContain('placeHandles');
+    expect(mappingGuidance).toContain('routeHandle');
+    expect(mappingGuidance).toContain('title of at most 240 characters');
+    expect(mappingGuidance).toContain(
+      'Repeated place handles are deduplicated',
+    );
+    expect(mappingGuidance).toContain(
+      'route automatically contributes its validated endpoint pins',
+    );
+    expect(mappingGuidance).toContain(
+      'one independent immutable writer-owned map placement',
+    );
+    expect(mappingGuidance).toContain('no per-answer map-count ceiling');
+    expect(mappingGuidance).toContain('Handle selection is atomic');
+    expect(mappingGuidance).toContain(
+      'Do not retry the same invalid selection',
+    );
+    expect(mappingGuidance).not.toContain('mapHandle');
+  });
+
   it('is present only when mapping is enabled in the Web Search prompt', () => {
     const enabled = buildWebSearchPrompt(
       '',

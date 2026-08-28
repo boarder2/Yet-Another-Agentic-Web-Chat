@@ -14,12 +14,10 @@ import {
   mappingToolError,
   mappingUnavailable,
   outputPlace,
-  registerMapSpec,
   registerPlaces,
   registerRoute,
   routeDocument,
   routePublicSummary,
-  emitLocationOverlay,
   currentLocationForPurpose,
   isCurrentLocationText,
   isSavedLocationText,
@@ -227,51 +225,46 @@ export const getRouteTool = defineTool(
       }
       const places = originIsCurrent
         ? [destinationPlace]
-        : originPlace && originPlace.id === destinationPlace.id
+        : originPlace &&
+            originPlace.id === destinationPlace.id &&
+            originPlace.provider === destinationPlace.provider
           ? [originPlace]
           : originPlace
             ? [originPlace, destinationPlace]
             : [destinationPlace];
-      const mapSpec = {
-        places,
-        route,
-        attribution: routeResult.attribution,
-        retrievedAt: routeResult.retrievedAt,
-        title: `Route: ${input.origin} to ${input.destination}`.slice(0, 240),
-        summary: `${input.mode} route from ${input.origin} to ${input.destination}.`,
-      };
-      const mapRegistration = registerMapSpec(runtime, mapSpec, 'get_route', {
-        // Keep this decision stable for the whole provider operation. If the
-        // ten-minute token expires after routing returns, the exact route must
-        // still never enter the registry or a durable map milestone.
-        retainRoute:
-          !originIsCurrent || currentLocationSession?.retention === 'save',
-      });
       const placeRegistrations = registerPlaces(runtime, places, {
-        mapHandle: mapRegistration?.handle,
-        mapId: mapRegistration?.mapId,
+        retrievedAt: routeResult.retrievedAt,
       });
-      if (originIsCurrent && mapRegistration && currentLocationSession) {
-        emitLocationOverlay(runtime, mapRegistration.mapId, {
-          origin: originCoordinate,
-          route,
-        });
-      }
-      const routeRegistration =
-        originIsCurrent && currentLocationSession?.retention !== 'save'
-          ? undefined
-          : registerRoute(runtime, route, {
-              mapHandle: mapRegistration?.handle,
-              mapId: mapRegistration?.mapId,
-            });
       const originHandle = originPlace
         ? placeRegistrations.find(
-            (candidate) => candidate.place.id === originPlace?.id,
+            (candidate) =>
+              candidate.place.id === originPlace?.id &&
+              candidate.place.provider === originPlace?.provider,
           )?.handle
         : undefined;
       const destinationHandle = placeRegistrations.find(
-        (candidate) => candidate.place.id === destinationPlace.id,
+        (candidate) =>
+          candidate.place.id === destinationPlace.id &&
+          candidate.place.provider === destinationPlace.provider,
       )?.handle;
+      // Keep this decision stable for the whole provider operation. If the
+      // ten-minute token expires after routing returns, the exact route must
+      // still never enter the registry or a durable map milestone.
+      const routeRegistration = registerRoute(runtime, route, {
+        ...(originHandle ? { originPlaceHandle: originHandle } : {}),
+        ...(destinationHandle
+          ? { destinationPlaceHandle: destinationHandle }
+          : {}),
+        retrievedAt: routeResult.retrievedAt,
+        retainRoute:
+          !originIsCurrent || currentLocationSession?.retention === 'save',
+        ...(originIsCurrent && currentLocationSession
+          ? {
+              locationOrigin: originCoordinate,
+              locationRetention: currentLocationSession.retention,
+            }
+          : {}),
+      });
       const document = routeDocument(
         route,
         currentDocumentCount() + 1,
@@ -287,8 +280,7 @@ export const getRouteTool = defineTool(
             route,
             originName,
             destinationPlace.name,
-            routeRegistration?.handle,
-            mapRegistration?.handle,
+            routeRegistration.handle,
             { hideExactLinks: originIsCurrent },
           ),
           ...(originHandle && originPlace
@@ -297,12 +289,6 @@ export const getRouteTool = defineTool(
           ...(destinationHandle
             ? { destination: outputPlace(destinationPlace, destinationHandle) }
             : {}),
-          ...(mapRegistration
-            ? {}
-            : {
-                mapNote:
-                  'The route was validated, but this turn has no remaining map registration capacity; keep the textual route summary and links.',
-              }),
           provider: routeResult.provider,
           attribution: routeResult.attribution,
           retrievedAt: routeResult.retrievedAt,
@@ -317,7 +303,7 @@ export const getRouteTool = defineTool(
   {
     name: 'get_route',
     description:
-      'Build one provider-validated driving, walking, or cycling route between named places. Never send coordinates. The result includes a short routeHandle/mapHandle, distance, duration estimate, attribution, and external navigation link; transit, traffic, and navigation-grade turn-by-turn claims are unavailable.',
+      'Discover one provider-validated driving, walking, or cycling route between named places. Never send coordinates. The result includes a short routeHandle valid only in this turn for later show_map selections, validated distance and duration estimates, endpoint place handles when available, attribution, and an external navigation link; discovery does not place a map, and transit, traffic, and navigation-grade turn-by-turn claims are unavailable.',
     schema: GetRouteToolSchema,
   },
 );

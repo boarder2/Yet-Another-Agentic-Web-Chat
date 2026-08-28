@@ -86,6 +86,8 @@ describe('isAgentControlEvent', () => {
       'panel_executor_chart',
       'map_spec',
       'map_placement',
+      'map_places_discovered',
+      'map_route_discovered',
       'map_session_overlay',
     ]) {
       expect(isAgentControlEvent({ type })).toBe(false);
@@ -130,6 +132,45 @@ describe('structured map events', () => {
           mapId: 'private-map-1',
           handle: 'map_1',
           placementNumber: 1,
+        },
+      },
+      {
+        type: 'map_places_discovered',
+        messageId: 'm1',
+        data: {
+          places: [
+            {
+              handle: 'place_1',
+              place: spec.places[0],
+              retrievedAt: '2026-08-27T12:00:00.000Z',
+            },
+          ],
+        },
+      },
+      {
+        type: 'map_route_discovered',
+        messageId: 'm1',
+        data: {
+          handle: 'route_1',
+          route: {
+            mode: 'driving',
+            origin: { lat: 40, lon: -75 },
+            destination: { lat: 40.1, lon: -75.1 },
+            distanceMeters: 1_000,
+            durationSeconds: 120,
+            geometry: {
+              type: 'LineString',
+              coordinates: [
+                [-75, 40],
+                [-75.1, 40.1],
+              ],
+            },
+            sourceUrl: 'https://router.example/route',
+            navigationUrl: 'https://router.example/nav',
+            provider: 'test',
+            attribution: 'Test routing provider',
+          },
+          placeHandles: ['place_1'],
         },
       },
       {

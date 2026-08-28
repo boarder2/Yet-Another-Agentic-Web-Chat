@@ -1884,7 +1884,7 @@ const ChatWindow = ({
   }, [messages, mapSpecsByMessage]);
 
   const flatMapSessionOverlays = useMemo(() => {
-    const flat: Record<string, MapSessionOverlay> = {};
+    const flat: Record<string, MapSessionOverlay> = Object.create(null);
     for (const overlays of Object.values(mapSessionOverlaysByMessage)) {
       for (const overlay of overlays) {
         // Keep the defense at the render boundary as well as in runHub: a

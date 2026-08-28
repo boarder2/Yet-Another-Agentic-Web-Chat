@@ -12,9 +12,7 @@ import {
   mappingUnavailable,
   outputPlace,
   placeDocument,
-  registerMapSpec,
   registerPlaces,
-  emitLocationOverlay,
   currentLocationForPurpose,
   isCurrentLocationText,
   isSavedLocationText,
@@ -134,7 +132,6 @@ export const searchPlacesTool = defineTool(
         : undefined;
       let result;
       let searchQuery = input.query ?? category ?? '';
-      let localityName: string | undefined;
       let currentLocationSession:
         ReturnType<typeof currentLocationForPurpose> | undefined;
 
@@ -158,7 +155,6 @@ export const searchPlacesTool = defineTool(
           },
           signal,
         );
-        localityName = 'your current location';
         searchQuery = input.query ?? `${category ?? 'business'} near me`;
       } else if (near && isSavedLocationText(near)) {
         if (
@@ -189,7 +185,6 @@ export const searchPlacesTool = defineTool(
             runtime.toolCallId,
           );
         }
-        localityName = `${locality.name} central area (approximate)`;
         const freshService = currentMappingService(runtime.context);
         if (!freshService)
           return messageResult(mappingUnavailable(), runtime.toolCallId);
@@ -223,7 +218,6 @@ export const searchPlacesTool = defineTool(
             runtime.toolCallId,
           );
         }
-        localityName = locality.name;
         const freshService = currentMappingService(runtime.context);
         if (!freshService)
           return messageResult(mappingUnavailable(), runtime.toolCallId);
@@ -262,44 +256,25 @@ export const searchPlacesTool = defineTool(
         0,
         input.limit ?? MAP_LIMITS.maxPlaces,
       );
-      const mapTitle = localityName
-        ? `Places near ${localityName}`
-        : input.query
-          ? `Places for ${input.query}`
-          : 'Validated places';
-      const mapSpec = {
-        places,
-        ...(currentLocationSession
-          ? { origin: currentLocationSession.coordinate }
-          : {}),
-        attribution: result.attribution,
-        retrievedAt: result.retrievedAt,
-        title: mapTitle.slice(0, 240),
-        summary: `${places.length} provider-validated place${places.length === 1 ? '' : 's'} found.`,
-      };
-      const registration =
-        places.length > 0
-          ? registerMapSpec(runtime, mapSpec, 'search_places', {
-              ...(currentLocationSession
-                ? {
-                    retainOrigin: currentLocationSession.retention === 'save',
-                  }
-                : {}),
-            })
-          : null;
-      const placeRegistrations = registerPlaces(runtime, places, {
-        mapHandle: registration?.handle,
-        mapId: registration?.mapId,
-      });
-      if (currentLocationSession && registration) {
-        emitLocationOverlay(runtime, registration.mapId, {
-          origin: currentLocationSession.coordinate,
-        });
+      if (currentLocationSession) {
+        currentLocationSession =
+          currentLocationForPurpose(runtime.context, 'nearby') ?? undefined;
       }
+      const placeRegistrations = registerPlaces(runtime, places, {
+        retrievedAt: result.retrievedAt,
+        ...(currentLocationSession
+          ? {
+              locationOrigin: currentLocationSession.coordinate,
+              locationRetention: currentLocationSession.retention,
+            }
+          : {}),
+      });
       const sourceStart = currentDocumentCount();
       const documents = places.map((place, index) => {
         const reference = placeRegistrations.find(
-          (candidate) => candidate.place.id === place.id,
+          (candidate) =>
+            candidate.place.id === place.id &&
+            candidate.place.provider === place.provider,
         );
         const handle = reference?.handle ?? `place_${index + 1}`;
         return placeDocument(
@@ -311,7 +286,9 @@ export const searchPlacesTool = defineTool(
       });
       const responsePlaces = places.map((place, index) => {
         const reference = placeRegistrations.find(
-          (candidate) => candidate.place.id === place.id,
+          (candidate) =>
+            candidate.place.id === place.id &&
+            candidate.place.provider === place.provider,
         );
         return outputPlace(place, reference?.handle ?? `place_${index + 1}`);
       });
@@ -319,13 +296,6 @@ export const searchPlacesTool = defineTool(
       return messageResult(
         JSON.stringify({
           places: responsePlaces,
-          ...(registration ? { mapHandle: registration.handle } : {}),
-          ...(places.length > 0 && !registration
-            ? {
-                mapNote:
-                  'The turn already has its one map placement available; keep the numbered prose and use the existing map handle if appropriate.',
-              }
-            : {}),
           ...(places.length === 0
             ? { note: 'No validated places found; omit unavailable facts.' }
             : {}),
@@ -343,7 +313,7 @@ export const searchPlacesTool = defineTool(
   {
     name: 'search_places',
     description:
-      'Find provider-validated named places or nearby businesses. Use names/addresses and supported categories only; never provide coordinates. Each result has a short placeHandle, and a successful result may include a mapHandle for show_map. Preserve the numbered list in prose and omit facts the provider did not return.',
+      'Discover provider-validated named places or nearby businesses. Use names/addresses and supported categories only; never provide coordinates. Each result has a short placeHandle valid only in this turn; discovery does not place a map, so collect handles and select the desired grouping later with show_map. Preserve the numbered list in prose and omit facts the provider did not return.',
     schema: SearchPlacesToolSchema,
   },
 );

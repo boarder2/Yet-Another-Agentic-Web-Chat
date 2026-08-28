@@ -33,6 +33,9 @@ vi.mock('@/lib/runs/runEventsPersistence', () => ({
   enqueueRunEvent: mocks.enqueueRunEvent,
   flushRunEvents: mocks.flushRunEvents,
   dropRunEventBuffer: mocks.dropRunEventBuffer,
+  mapDiscoveryEventForPersistence: (event: unknown) => event,
+  mapEventForPersistence: (event: unknown) => event,
+  sanitizeLocationMilestone: (event: unknown) => event,
 }));
 vi.mock('@/lib/runs/checkpointer', () => ({
   deleteCheckpoint: mocks.deleteCheckpoint,
@@ -138,10 +141,13 @@ afterEach(() => {
 });
 
 describe('runHost map durability boundary', () => {
-  it('writes safe map specs and placements to content/metadata while dropping overlays from durable state', async () => {
+  it('writes an explicitly composed map and placement to content/metadata while dropping overlays from durable state', async () => {
     const run = makeRun();
-    const registration = run.mapRegistry.register(mapSpec);
-    const placement = run.mapRegistry.place(registration.handle);
+    const [place] = run.mapRegistry.registerPlaces([mapSpec.places[0]]);
+    const placement = run.mapRegistry.composeMap({
+      placeHandles: [place.handle],
+      title: 'Nearby places',
+    });
 
     await attachRunHost({
       run,
@@ -156,10 +162,9 @@ describe('runHost map durability boundary', () => {
     emitStreamEvent(run.emitter, {
       type: 'map_spec',
       data: {
-        mapId: registration.mapId,
-        handle: registration.handle,
-        spec: mapSpec,
-        source: 'mapping-tool',
+        mapId: placement.mapId,
+        spec: placement.spec,
+        source: 'show_map',
       },
     });
     emitStreamEvent(run.emitter, {
@@ -167,14 +172,13 @@ describe('runHost map durability boundary', () => {
       data: {
         placementId: placement.placementId,
         mapId: placement.mapId,
-        handle: placement.handle,
         placementNumber: placement.placementNumber,
       },
     });
     emitStreamEvent(run.emitter, {
       type: 'map_session_overlay',
       data: {
-        mapId: registration.mapId,
+        mapId: placement.mapId,
         origin: { lat: 40.1, lon: -75.1 },
         clientSessionId: 'page-1',
       },
@@ -203,7 +207,7 @@ describe('runHost map durability boundary', () => {
       content: expect.stringContaining('```yaawc:map'),
       metadata: {
         mapSpecs: {
-          [registration.mapId]: expect.objectContaining({
+          [placement.mapId]: expect.objectContaining({
             title: 'Nearby places',
           }),
         },
@@ -212,7 +216,112 @@ describe('runHost map durability boundary', () => {
     expect(JSON.stringify(finalUpdate?.[1].metadata)).not.toContain('40.1');
   });
 
-  it('rebuilds the writer-owned map envelope and registry from persisted milestones', async () => {
+  it('rebuilds all explicit map placements and discovery handles from persisted milestones', async () => {
+    const source = new TurnMapRegistry({
+      idFactory: (() => {
+        let value = 0;
+        return () => `private-map-${++value}`;
+      })(),
+    });
+    const [firstPlace, secondPlace] = source.registerPlaces([
+      mapSpec.places[0],
+      {
+        ...mapSpec.places[0],
+        id: 'node/2',
+        name: 'North Market',
+        coordinate: { lat: 40.1, lon: -75.1 },
+        sourceUrl: 'https://www.openstreetmap.org/node/2',
+      },
+    ]);
+    const first = source.composeMap({
+      placeHandles: [firstPlace.handle, secondPlace.handle],
+      title: 'Both places',
+    });
+    const second = source.composeMap({
+      placeHandles: [secondPlace.handle],
+      title: 'One place',
+    });
+    const snapshot = source.snapshot();
+
+    const run = makeRun('awaiting_user');
+    run.recievedMessage = 'Answer';
+    run.eventLog = [
+      {
+        seq: 1,
+        ev: {
+          type: 'map_places_discovered',
+          messageId: run.aiMessageId,
+          data: { places: snapshot.places ?? [] },
+        },
+      },
+      {
+        seq: 2,
+        ev: {
+          type: 'map_spec',
+          messageId: run.aiMessageId,
+          data: {
+            mapId: first.mapId,
+            spec: first.spec,
+          },
+        },
+      },
+      {
+        seq: 3,
+        ev: {
+          type: 'map_spec',
+          messageId: run.aiMessageId,
+          data: {
+            mapId: second.mapId,
+            spec: second.spec,
+          },
+        },
+      },
+      {
+        seq: 4,
+        ev: {
+          type: 'map_placement',
+          messageId: run.aiMessageId,
+          data: {
+            placementId: first.placementId,
+            mapId: first.mapId,
+            placementNumber: first.placementNumber,
+          },
+        },
+      },
+      {
+        seq: 5,
+        ev: {
+          type: 'map_placement',
+          messageId: run.aiMessageId,
+          data: {
+            placementId: second.placementId,
+            mapId: second.mapId,
+            placementNumber: second.placementNumber,
+          },
+        },
+      },
+    ];
+
+    await attachResumedRunHost(run);
+
+    expect(run.mapRegistry.placeCount).toBe(2);
+    expect(run.mapRegistry.registrationCount).toBe(2);
+    expect(run.mapRegistry.placementCount).toBe(2);
+    expect(run.mapRegistry.resolvePlace('place_1')?.place.name).toBe(
+      'Central Cafe',
+    );
+    expect(run.mapRegistry.resolveById(first.mapId)?.title).toBe('Both places');
+    expect(run.mapRegistry.resolveById(second.mapId)?.title).toBe('One place');
+    expect(run.mapRegistry.isPlacementAccepted(first.placementId)).toBe(true);
+    expect(run.mapRegistry.isPlacementAccepted(second.placementId)).toBe(true);
+    expect(run.recievedMessage).toContain('Answer');
+    expect(run.recievedMessage.match(/```yaawc:map/g)).toHaveLength(2);
+    expect(run.recievedMessage).toContain('Central Cafe');
+    expect(run.recievedMessage).toContain('North Market');
+    expect(mocks.updateAssistantRow).not.toHaveBeenCalled();
+  });
+
+  it('retains the legacy map registration reconstruction path for historical widgets', async () => {
     const run = makeRun('awaiting_user');
     run.recievedMessage = 'Answer';
     run.eventLog = [

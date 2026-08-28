@@ -117,6 +117,9 @@ export interface MapPayload {
   /** Safe semantic summary used before/without a map renderer. */
   fallback: string;
   links?: MapLinkPayload[];
+  /** Complete attribution set; old widgets contain only `attribution`. */
+  attributions?: string[];
+  /** First/legacy attribution retained for persisted widget compatibility. */
   attribution: string;
 }
 
@@ -309,6 +312,16 @@ function isSafeMapUrl(value: unknown): value is string {
   }
 }
 
+function isSafeMapAttributions(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.length <= 13 &&
+    value.every((attribution) => isSafeMapText(attribution, 500)) &&
+    new Set(value).size === value.length
+  );
+}
+
 function isMapPayload(value: unknown): value is MapPayload {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const payload = value as Partial<MapPayload>;
@@ -316,7 +329,9 @@ function isMapPayload(value: unknown): value is MapPayload {
     !isSafeMapText(payload.id, 160) ||
     !isSafeMapText(payload.mapId, 160) ||
     !isSafeMapFallback(payload.fallback) ||
-    !isSafeMapText(payload.attribution, 500)
+    !isSafeMapText(payload.attribution, 500) ||
+    (payload.attributions !== undefined &&
+      !isSafeMapAttributions(payload.attributions))
   ) {
     return false;
   }
@@ -368,7 +383,16 @@ export function formatMapPayloadForOutput(payload: MapPayload): string {
       ...links.map((link) => `- [${escapeMapLabel(link.label)}](${link.url})`),
     );
   }
-  lines.push('', `Map attribution: ${payload.attribution.trim()}`);
+  const attributions = payload.attributions ?? [payload.attribution];
+  if (attributions.length === 1) {
+    lines.push('', `Map attribution: ${attributions[0].trim()}`);
+  } else {
+    lines.push(
+      '',
+      'Map attributions:',
+      ...attributions.map((value) => `- ${value.trim()}`),
+    );
+  }
   return lines.join('\n');
 }
 

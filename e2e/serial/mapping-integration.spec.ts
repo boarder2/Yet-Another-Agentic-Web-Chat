@@ -128,6 +128,44 @@ test.describe('mapping interactive integration', () => {
     ).toContainText('Deterministic Central Cafe');
   });
 
+  test('composes several searches into independently rendered map groupings', async ({
+    page,
+  }) => {
+    const chat = await openMappingChat(page, 'Test (mapping multiple maps)');
+    await chat.sendMessage(
+      'Search for the central cafe, north market, and south museum, then show the selected groups on separate maps.',
+    );
+    await chat.waitForStreamComplete();
+
+    const widgets = page.locator('[data-map-widget]');
+    await expect(widgets).toHaveCount(3);
+    await expect(page.locator('body')).toContainText(
+      'Each inline map is an independent grouping.',
+    );
+    await expect(widgets.nth(0)).toContainText('Central and North');
+    await expect(widgets.nth(0)).toContainText('Deterministic Central Cafe');
+    await expect(widgets.nth(0)).toContainText('Deterministic North Market');
+    await expect(widgets.nth(0)).not.toContainText(
+      'Deterministic South Museum',
+    );
+
+    await expect(widgets.nth(1)).toContainText('South and Central');
+    await expect(widgets.nth(1)).toContainText('Deterministic South Museum');
+    await expect(widgets.nth(1)).toContainText('Deterministic Central Cafe');
+    await expect(widgets.nth(1)).not.toContainText(
+      'Deterministic North Market',
+    );
+
+    await expect(widgets.nth(2)).toContainText('North only');
+    await expect(widgets.nth(2)).toContainText('Deterministic North Market');
+    await expect(widgets.nth(2)).not.toContainText(
+      'Deterministic Central Cafe',
+    );
+    await expect(widgets.nth(2)).not.toContainText(
+      'Deterministic South Museum',
+    );
+  });
+
   test('renders a named route with a single polyline and external navigation link', async ({
     page,
   }) => {

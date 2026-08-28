@@ -3,8 +3,11 @@ import { runEvents } from '@/lib/db/schema';
 import type { SeqEvent } from './runHub';
 import type { StreamEvent } from '@/lib/streaming/events';
 import {
-  PersistableMapSpecSchema,
+  MapPlaceSchema,
   MapSpecSchema,
+  PersistableMapRouteSchema,
+  PersistableMapSpecSchema,
+  redactMapRoute,
   toPersistableMapSpec,
 } from '@/lib/maps/types';
 import {
@@ -53,6 +56,11 @@ const MILESTONE_TYPES = new Set<string>([
   'chart_spec',
   'chart_placement',
   'panel_executor_chart',
+  'map_places_discovered',
+  'map_place_discovered',
+  'map_places_discovery',
+  'map_route_discovered',
+  'map_route_discovery',
   'map_spec',
   'map_placement',
   'workspace_file_changed',
@@ -72,6 +80,8 @@ export function isMilestoneEvent(type: string | undefined): boolean {
  * live-only data, not a reconstruction milestone.
  */
 const MAP_HANDLE_PATTERN = /^map_[1-9]\d*$/;
+const PLACE_HANDLE_PATTERN = /^place_[1-9]\d*$/;
+const ROUTE_HANDLE_PATTERN = /^route_[1-9]\d*$/;
 
 function isSafeMapIdentity(value: unknown): value is string {
   return (
@@ -85,8 +95,25 @@ function isSafeMapIdentity(value: unknown): value is string {
   );
 }
 
+function isSafeSequenceHandle(
+  value: unknown,
+  pattern: RegExp,
+): value is string {
+  if (!isSafeMapIdentity(value) || !pattern.test(value)) return false;
+  const suffix = Number(value.slice(value.indexOf('_') + 1));
+  return Number.isSafeInteger(suffix) && suffix > 0;
+}
+
 function isSafeMapHandle(value: unknown): value is string {
-  return typeof value === 'string' && MAP_HANDLE_PATTERN.test(value);
+  return isSafeSequenceHandle(value, MAP_HANDLE_PATTERN);
+}
+
+function isSafePlaceHandle(value: unknown): value is string {
+  return isSafeSequenceHandle(value, PLACE_HANDLE_PATTERN);
+}
+
+function isSafeRouteHandle(value: unknown): value is string {
+  return isSafeSequenceHandle(value, ROUTE_HANDLE_PATTERN);
 }
 
 function isSafeMapSource(value: unknown): value is string {
@@ -101,7 +128,7 @@ function isSafeMapSource(value: unknown): value is string {
 function isValidMapPlacementNumber(value: unknown): value is number {
   return (
     value === undefined ||
-    (typeof value === 'number' && Number.isInteger(value) && value === 1)
+    (typeof value === 'number' && Number.isSafeInteger(value) && value >= 1)
   );
 }
 
@@ -122,6 +149,170 @@ function isSafeApprovalText(value: unknown): value is string {
     !/[\u0000-\u001f\u007f<>]/.test(value) &&
     !containsCoordinateText(value)
   );
+}
+
+function isSafeRetrievedAt(value: unknown): value is string {
+  return (
+    value === undefined ||
+    (typeof value === 'string' &&
+      value.length <= 64 &&
+      Number.isFinite(Date.parse(value)))
+  );
+}
+
+function safeEventMessageId(event: StreamEvent): { messageId?: string } {
+  const messageId = (event as { messageId?: unknown }).messageId;
+  return isSafeApprovalId(messageId) ? { messageId } : {};
+}
+
+/** Sanitize a place discovery without retaining any legacy map association. */
+function mapPlacesEventForPersistence(event: StreamEvent): StreamEvent | null {
+  const raw = event as unknown as { type: string; data?: unknown };
+  const data = raw.data;
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+  const record = data as Record<string, unknown>;
+  const rawEntries =
+    event.type === 'map_place_discovered' ? [record] : record.places;
+  if (
+    !Array.isArray(rawEntries) ||
+    rawEntries.length === 0 ||
+    rawEntries.length > 12
+  ) {
+    return null;
+  }
+
+  const places: Array<Record<string, unknown>> = [];
+  for (const rawEntry of rawEntries) {
+    if (!rawEntry || typeof rawEntry !== 'object' || Array.isArray(rawEntry)) {
+      return null;
+    }
+    const entry = rawEntry as Record<string, unknown>;
+    const handle = entry.handle ?? entry.placeHandle;
+    const parsedPlace = MapPlaceSchema.safeParse(entry.place);
+    if (
+      !isSafePlaceHandle(handle) ||
+      !parsedPlace.success ||
+      !isSafeRetrievedAt(entry.retrievedAt)
+    ) {
+      return null;
+    }
+    places.push({
+      handle,
+      place: parsedPlace.data,
+      ...(typeof entry.retrievedAt === 'string'
+        ? { retrievedAt: entry.retrievedAt }
+        : {}),
+    });
+  }
+
+  return {
+    type: 'map_places_discovered',
+    ...safeEventMessageId(event),
+    data: { places },
+  } as StreamEvent;
+}
+
+/** Sanitize a route discovery and project transient routes before storage. */
+function mapRouteEventForPersistence(
+  event: StreamEvent,
+  options: { retainRoute?: boolean; retainOrigin?: boolean } = {},
+): StreamEvent | null {
+  const raw = event as unknown as { data?: unknown };
+  const data = raw.data;
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+  const record = data as Record<string, unknown>;
+  const handle = record.handle ?? record.routeHandle;
+  const parsedRoute = PersistableMapRouteSchema.safeParse(record.route);
+  if (
+    (record.routeRetained !== undefined &&
+      typeof record.routeRetained !== 'boolean') ||
+    (record.routeNotRetained !== undefined &&
+      typeof record.routeNotRetained !== 'boolean') ||
+    !isSafeRouteHandle(handle) ||
+    !parsedRoute.success ||
+    !isSafeRetrievedAt(record.retrievedAt)
+  ) {
+    return null;
+  }
+
+  const rawPlaceHandles = record.placeHandles ?? record.endpointPlaceHandles;
+  if (
+    rawPlaceHandles !== undefined &&
+    (!Array.isArray(rawPlaceHandles) ||
+      rawPlaceHandles.length > 2 ||
+      rawPlaceHandles.some((value) => !isSafePlaceHandle(value)))
+  ) {
+    return null;
+  }
+  const rawOrigin = record.originPlaceHandle ?? record.originHandle;
+  const rawDestination =
+    record.destinationPlaceHandle ?? record.destinationHandle;
+  if (
+    (rawOrigin !== undefined && !isSafePlaceHandle(rawOrigin)) ||
+    (rawDestination !== undefined && !isSafePlaceHandle(rawDestination))
+  ) {
+    return null;
+  }
+  const supplied = Array.isArray(rawPlaceHandles)
+    ? (rawPlaceHandles as string[])
+    : [];
+  const originPlaceHandle = (rawOrigin as string | undefined) ?? supplied[0];
+  const destinationPlaceHandle =
+    (rawDestination as string | undefined) ?? supplied[1];
+  const transient =
+    options.retainRoute === false ||
+    options.retainOrigin === false ||
+    record.routeRetained === false ||
+    record.routeNotRetained === true ||
+    'routeNotRetained' in parsedRoute.data;
+  const route = transient ? redactMapRoute(parsedRoute.data) : parsedRoute.data;
+  const outputPlaceHandles = transient
+    ? destinationPlaceHandle
+      ? [destinationPlaceHandle]
+      : []
+    : [originPlaceHandle, destinationPlaceHandle].filter(
+        (value): value is string => value !== undefined,
+      );
+
+  return {
+    type: 'map_route_discovered',
+    ...safeEventMessageId(event),
+    data: {
+      handle,
+      route,
+      ...(outputPlaceHandles.length > 0
+        ? { placeHandles: outputPlaceHandles }
+        : {}),
+      ...(!transient && originPlaceHandle ? { originPlaceHandle } : {}),
+      ...(destinationPlaceHandle ? { destinationPlaceHandle } : {}),
+      ...(typeof record.retrievedAt === 'string'
+        ? { retrievedAt: record.retrievedAt }
+        : {}),
+      ...(transient ? { routeRetained: false } : {}),
+    },
+  } as StreamEvent;
+}
+
+/** Sanitize safe turn-local map discovery milestones. */
+export function mapDiscoveryEventForPersistence(
+  event: StreamEvent,
+  options: { retainRoute?: boolean; retainOrigin?: boolean } = {},
+): StreamEvent | null {
+  const eventType = (event as { type: string }).type;
+  if (
+    eventType === 'map_places_discovered' ||
+    eventType === 'map_place_discovered' ||
+    eventType === 'map_places_discovery'
+  ) {
+    return mapPlacesEventForPersistence(event);
+  }
+  if (
+    eventType === 'map_route_discovered' ||
+    eventType === 'map_route_discovery'
+  ) {
+    return mapRouteEventForPersistence(event, options);
+  }
+  return null;
 }
 
 /**
@@ -225,6 +416,16 @@ export function mapEventForPersistence(
   if (event.type === 'map_session_overlay') return null;
   if (event.type.startsWith('location_')) {
     return locationEventForPersistence(event);
+  }
+  const eventType = (event as { type: string }).type;
+  if (
+    eventType === 'map_places_discovered' ||
+    eventType === 'map_place_discovered' ||
+    eventType === 'map_places_discovery' ||
+    eventType === 'map_route_discovered' ||
+    eventType === 'map_route_discovery'
+  ) {
+    return mapDiscoveryEventForPersistence(event, options);
   }
   if (event.type === 'map_spec') {
     if (!event.data || typeof event.data !== 'object') return null;

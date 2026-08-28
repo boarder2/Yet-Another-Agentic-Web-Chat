@@ -23,8 +23,11 @@ import type { Document } from '@langchain/core/documents';
 import type { SubagentExecution } from '@/lib/state/chatAgentState';
 import type { ChartSpec } from '@/lib/chart/chartSpec';
 import type {
+  MapPlace,
+  MapRoute,
   MapSessionOverlay,
   MapSpec,
+  PersistableMapRoute,
   PersistableMapSpec,
 } from '@/lib/maps/types';
 
@@ -157,7 +160,7 @@ export type MapSpecData = {
   mapId: string;
   /** Producers may carry the full route until the run host redacts it. */
   spec: MapSpec | PersistableMapSpec;
-  /** Short current-turn handle shown to trusted tools, not the model output. */
+  /** Legacy fields accepted only while replaying trusted historical events. */
   handle?: string;
   turnHandle?: string;
   source?: string;
@@ -174,8 +177,35 @@ export type MapPlacementData = {
   placementId: string;
   /** Private canonical map ID referenced by the writer envelope. */
   mapId: string;
+  /** Present only on historical trusted map events; new writers omit it. */
   handle?: string;
   placementNumber?: number;
+};
+
+export type MapPlaceDiscovery = {
+  handle: string;
+  place: MapPlace;
+  retrievedAt?: string;
+};
+
+/** Safe provider-grounded place records used to rebuild turn-local handles. */
+export type MapPlacesDiscoveredData = {
+  places: MapPlaceDiscovery[];
+};
+
+/** A singular alias is accepted for bridges that emit one place per event. */
+export type MapPlaceDiscoveredData = MapPlaceDiscovery;
+
+/** Safe provider-grounded route data used to rebuild a turn-local handle. */
+export type MapRouteDiscoveredData = {
+  handle: string;
+  route: MapRoute | PersistableMapRoute;
+  placeHandles?: string[];
+  endpointPlaceHandles?: string[];
+  originPlaceHandle?: string;
+  destinationPlaceHandle?: string;
+  retrievedAt?: string;
+  routeRetained?: boolean;
 };
 
 /** Exact browser-origin data; this event is live-only and never a milestone. */
@@ -231,6 +261,9 @@ export type AgentEmitEvent =
   | { type: 'chart_placement'; data: ChartPlacementData }
   | { type: 'map_spec'; data: MapSpecData }
   | { type: 'map_placement'; data: MapPlacementData }
+  | { type: 'map_places_discovered'; data: MapPlacesDiscoveredData }
+  | { type: 'map_place_discovered'; data: MapPlaceDiscoveredData }
+  | { type: 'map_route_discovered'; data: MapRouteDiscoveredData }
   | { type: 'map_session_overlay'; data: MapSessionOverlayData }
   | {
       type: 'panel_executor_chart';
@@ -328,6 +361,18 @@ export type StreamEvent =
   | ({ type: 'chart_placement'; data: ChartPlacementData } & WithMessageId)
   | ({ type: 'map_spec'; data: PersistableMapSpecData } & WithMessageId)
   | ({ type: 'map_placement'; data: MapPlacementData } & WithMessageId)
+  | ({
+      type: 'map_places_discovered';
+      data: MapPlacesDiscoveredData;
+    } & WithMessageId)
+  | ({
+      type: 'map_place_discovered';
+      data: MapPlaceDiscoveredData;
+    } & WithMessageId)
+  | ({
+      type: 'map_route_discovered';
+      data: MapRouteDiscoveredData;
+    } & WithMessageId)
   | ({
       type: 'map_session_overlay';
       data: MapSessionOverlayData;

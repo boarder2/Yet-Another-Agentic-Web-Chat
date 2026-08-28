@@ -42,18 +42,26 @@ describe('mapping tool call chrome', () => {
       }),
     ).toContain('Finding driving');
     expect(
-      renderTool({ type: 'show_map', handle: 'map_1', status: 'success' }),
+      renderTool({
+        type: 'show_map',
+        query: 'places: place_2, place_1 · route: route_1',
+        description: 'Route and places',
+        status: 'success',
+      }),
     ).toContain('Showing map');
   });
 
   it('does not fall back to generic tool chrome for show_map', () => {
     const markup = renderTool({
       type: 'show_map',
-      handle: 'map_1',
+      query: 'places: place_1, place_2 · route: route_1',
+      description: 'Route and places',
       status: 'success',
     });
 
     expect(markup).toContain('Showing map');
+    expect(markup).toContain('places: place_1, place_2');
+    expect(markup).not.toContain('map_1');
     expect(markup).not.toContain('Using tool:');
   });
 });

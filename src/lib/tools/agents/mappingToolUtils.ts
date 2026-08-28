@@ -3,18 +3,15 @@ import { getCurrentTaskInput } from '@langchain/langgraph';
 import { emitStreamEvent } from '@/lib/streaming/events';
 import {
   MapPlaceSchema,
-  MapSpecSchema,
-  toPersistableMapSpec,
+  redactMapRoute,
   type MapCoordinate,
   type MapPlace,
   type MapRoute,
-  type MapSpec,
 } from '@/lib/maps/types';
 import { sanitizeMapError } from '@/lib/maps/request';
 import type { MappingService } from '@/lib/maps/service';
 import type {
   TurnMapPlaceRegistration,
-  TurnMapRegistration,
   TurnMapRouteRegistration,
 } from '@/lib/maps/turnMapRegistry';
 import type { ToolContext } from '@/lib/tools/toolContext';
@@ -339,65 +336,79 @@ export function routeDocument(
   });
 }
 
-export function registerMapSpec(
-  runtime: Pick<MappingToolRuntime, 'context'>,
-  spec: MapSpec,
-  source: string,
-  options: { retainRoute?: boolean; retainOrigin?: boolean } = {},
-): TurnMapRegistration | null {
-  const parsed = MapSpecSchema.safeParse(spec);
-  if (!parsed.success) return null;
-  const routingLocation = currentLocationForPurpose(runtime.context, 'routing');
-  const nearbyLocation = currentLocationForPurpose(runtime.context, 'nearby');
-  const transientLocation = routingLocation ?? nearbyLocation;
-  // A transient browser-origin map is useful to the approving page only. Keep
-  // precise origin/route data redacted in the registry and writer event; the
-  // route/origin travels separately through the live session overlay. Explicit
-  // options preserve that decision even if the token expires between the
-  // provider response and this registration.
-  const registrySpec = toPersistableMapSpec(parsed.data, {
-    retainRoute: options.retainRoute ?? transientLocation?.retention !== 'once',
-    retainOrigin:
-      options.retainOrigin ?? transientLocation?.retention !== 'once',
-  });
-  const registry = runtime.context.mapRegistry;
-  const snapshot = registry.snapshot();
-  try {
-    const registration = registry.register(registrySpec);
-    emitStreamEvent(runtime.context.emitter, {
-      type: 'map_spec',
-      data: {
-        mapId: registration.mapId,
-        handle: registration.handle,
-        spec: registration.spec,
-        source,
-      },
-    });
-    return registration;
-  } catch {
-    try {
-      registry.restore(snapshot);
-    } catch {
-      // A failed rollback must not turn a map lookup into a chat failure.
-    }
-    return null;
-  }
-}
-
 export function registerPlaces(
   runtime: Pick<MappingToolRuntime, 'context'>,
-  places: MapPlace[],
-  options?: { mapHandle?: string; mapId?: string },
+  places: readonly MapPlace[],
+  options: {
+    retrievedAt?: string;
+    locationOrigin?: MapCoordinate;
+    locationRetention?: 'once' | 'save';
+  } = {},
 ): TurnMapPlaceRegistration[] {
-  return runtime.context.mapRegistry.registerPlaces(places, options);
+  const registrations = runtime.context.mapRegistry.registerPlaces(
+    places,
+    options,
+  );
+  if (registrations.length > 0) {
+    emitStreamEvent(runtime.context.emitter, {
+      type: 'map_places_discovered',
+      data: {
+        places: registrations.map(({ handle, place, retrievedAt }) => ({
+          handle,
+          place,
+          ...(retrievedAt ? { retrievedAt } : {}),
+        })),
+      },
+    });
+  }
+  return registrations;
 }
 
 export function registerRoute(
   runtime: Pick<MappingToolRuntime, 'context'>,
   route: MapRoute,
-  options?: { mapHandle?: string; mapId?: string },
+  options: {
+    placeHandles?: readonly string[];
+    endpointPlaceHandles?: readonly string[];
+    originPlaceHandle?: string;
+    destinationPlaceHandle?: string;
+    originHandle?: string;
+    destinationHandle?: string;
+    retrievedAt?: string;
+    retainRoute?: boolean;
+    routeRetained?: boolean;
+    locationOrigin?: MapCoordinate;
+    locationRetention?: 'once' | 'save';
+  } = {},
 ): TurnMapRouteRegistration {
-  return runtime.context.mapRegistry.registerRoute(route, options);
+  const registration = runtime.context.mapRegistry.registerRoute(
+    route,
+    options,
+  );
+  emitStreamEvent(runtime.context.emitter, {
+    type: 'map_route_discovered',
+    data: {
+      handle: registration.handle,
+      route:
+        registration.routeRetained === false
+          ? redactMapRoute(registration.route)
+          : registration.route,
+      ...(registration.placeHandles
+        ? { placeHandles: [...registration.placeHandles] }
+        : {}),
+      ...(registration.originPlaceHandle
+        ? { originPlaceHandle: registration.originPlaceHandle }
+        : {}),
+      ...(registration.destinationPlaceHandle
+        ? { destinationPlaceHandle: registration.destinationPlaceHandle }
+        : {}),
+      ...(registration.retrievedAt
+        ? { retrievedAt: registration.retrievedAt }
+        : {}),
+      ...(registration.routeRetained === false ? { routeRetained: false } : {}),
+    },
+  });
+  return registration;
 }
 
 export function routePublicSummary(
@@ -405,7 +416,6 @@ export function routePublicSummary(
   originName: string,
   destinationName: string,
   routeHandle?: string,
-  mapHandle?: string,
   options: { hideExactLinks?: boolean } = {},
 ): Record<string, unknown> {
   const summary: Record<string, unknown> = {
@@ -421,7 +431,6 @@ export function routePublicSummary(
     attribution: route.attribution,
   };
   optionalValue(summary, 'routeHandle', routeHandle);
-  optionalValue(summary, 'mapHandle', mapHandle);
   return summary;
 }
 
@@ -430,17 +439,6 @@ export function placeByHandle(
   handle: string,
 ): TurnMapPlaceRegistration | undefined {
   return runtime.context.mapRegistry.resolvePlace(handle);
-}
-
-export function mapForHandle(
-  runtime: Pick<MappingToolRuntime, 'context'>,
-  handle: string,
-): TurnMapRegistration | undefined {
-  const direct = runtime.context.mapRegistry.resolve(handle);
-  if (direct) return direct;
-  const route = runtime.context.mapRegistry.resolveRoute(handle);
-  if (!route?.mapHandle) return undefined;
-  return runtime.context.mapRegistry.resolve(route.mapHandle);
 }
 
 export function outputPlace(

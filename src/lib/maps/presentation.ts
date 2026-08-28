@@ -3,6 +3,7 @@ import {
   MapAttributionSchema,
   MapSafeUrlSchema,
   PersistableMapSpecSchema,
+  mapSpecAttributions,
   type MapRoute,
   type PersistableMapSpec,
 } from './types';
@@ -22,6 +23,12 @@ function formatDuration(durationSeconds: number): string {
   const hours = Math.floor(minutes / 60);
   const remaining = minutes % 60;
   return remaining === 0 ? `${hours} hr` : `${hours} hr ${remaining} min`;
+}
+
+/** Return every validated attribution in the order it was first used. */
+export function formatMapAttributions(value: PersistableMapSpec): string[] {
+  const spec = PersistableMapSpecSchema.parse(value);
+  return mapSpecAttributions(spec);
 }
 
 function routeNotRetained(spec: PersistableMapSpec): boolean {
@@ -92,6 +99,11 @@ export function formatMapSpecFallback(value: PersistableMapSpec): string {
     lines.push('Route not retained.');
   }
 
+  const attributions = formatMapAttributions(parsed);
+  if (attributions.length > 1) {
+    lines.push(`Attribution: ${attributions.join(' · ')}`);
+  }
+
   if (lines.length === 0) lines.push('Validated map data is available.');
   lines.push(`Retrieved: ${parsed.retrievedAt}`);
   return lines.join('\n').slice(0, MAX_FALLBACK_LENGTH);
@@ -133,6 +145,7 @@ export function mapSpecToPayload(
   value: PersistableMapSpec,
 ): MapPayload {
   const spec = PersistableMapSpecSchema.parse(value);
+  const attributions = formatMapAttributions(spec);
   const attribution = MapAttributionSchema.parse(spec.attribution);
   const title = spec.title ? safeFallbackText(spec.title) : '';
   return {
@@ -141,6 +154,7 @@ export function mapSpecToPayload(
     ...(title ? { title } : {}),
     fallback: formatMapSpecFallback(spec),
     links: mapSpecLinks(spec),
+    ...(attributions.length > 1 ? { attributions } : {}),
     attribution,
   };
 }

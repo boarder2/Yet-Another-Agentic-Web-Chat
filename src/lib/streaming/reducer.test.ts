@@ -410,6 +410,7 @@ describe('structured map registration and placement', () => {
   const placement = (
     mapId = 'private-map-1',
     placementId = 'map_placement_1',
+    placementNumber = 1,
   ) =>
     ev({
       type: 'map_placement',
@@ -417,54 +418,88 @@ describe('structured map registration and placement', () => {
         mapId,
         placementId,
         handle: 'map_1',
-        placementNumber: 1,
+        placementNumber,
       },
     });
 
-  it('records a grounded map without rendering it until a placement arrives', () => {
-    const registered = reduceStreamEvent(liveStart(), registration()).state;
+  it('records grounded maps without rendering them until a placement arrives', () => {
+    const registered = run(liveStart(), [
+      registration(),
+      registration('private-map-2'),
+    ]).state;
 
     expect(registered.messages).toHaveLength(0);
     expect(registered.receivedMessage).toBe('');
-    expect(registered.mapSpecsByMessage[AI]['private-map-1']).toEqual(mapSpec);
-    expect(registered.mapHandlesByMessage[AI]['private-map-1']).toBe('map_1');
+    expect(registered.mapSpecsByMessage[AI]).toEqual({
+      'private-map-1': mapSpec,
+      'private-map-2': mapSpec,
+    });
   });
 
-  it('accepts only the registered private map and enforces one map per answer', () => {
+  it('does not retain a legacy map-handle collection in client stream state', () => {
+    const state = reduceStreamEvent(liveStart(), registration()).state;
+
+    expect(
+      Object.prototype.hasOwnProperty.call(state, 'mapHandlesByMessage'),
+    ).toBe(false);
+  });
+
+  it('accepts every registered private map and preserves repeated placement order', () => {
     const { state } = run(liveStart(), [
       registration(),
       registration('private-map-2'),
       placement(),
-      placement('private-map-1', 'map_placement_2'),
-      placement('guessed-map', 'map_placement_3'),
+      placement('private-map-1', 'map_placement_2', 2),
+      placement('private-map-2', 'map_placement_3', 3),
+      placement('guessed-map', 'map_placement_4', 4),
     ]);
 
-    expect(Object.keys(state.mapSpecsByMessage[AI])).toEqual(['private-map-1']);
-    expect(state.mapPlacementIdsByMessage[AI]).toEqual(['map_placement_1']);
-    const widget = findWidget<MapPayload>(
-      rowContent(state)!,
-      'map',
+    expect(Object.keys(state.mapSpecsByMessage[AI])).toEqual([
+      'private-map-1',
+      'private-map-2',
+    ]);
+    expect(state.mapPlacementIdsByMessage[AI]).toEqual([
       'map_placement_1',
-    );
-    expect(widget).toMatchObject({
+      'map_placement_2',
+      'map_placement_3',
+    ]);
+    expect(rowContent(state)?.match(/```yaawc:map/g)).toHaveLength(3);
+    expect(
+      findWidget<MapPayload>(rowContent(state)!, 'map', 'map_placement_1'),
+    ).toMatchObject({
       mapId: 'private-map-1',
       fallback: expect.stringContaining('1. Central Cafe'),
       attribution: '© OpenStreetMap contributors',
     });
-    expect(rowContent(state)?.match(/```yaawc:map/g)).toHaveLength(1);
+    expect(
+      findWidget<MapPayload>(rowContent(state)!, 'map', 'map_placement_3'),
+    ).toMatchObject({ mapId: 'private-map-2' });
   });
 
-  it('deduplicates a replayed placement and can reconstruct the same row from an attach stream', () => {
-    const live = run(liveStart(), [registration(), placement()]).state;
+  it('deduplicates replayed placements and reconstructs repeated maps on attach', () => {
+    const live = run(liveStart(), [
+      registration(),
+      registration('private-map-2'),
+      placement(),
+      placement('private-map-1', 'map_placement_2'),
+      placement('private-map-2', 'map_placement_3'),
+    ]).state;
     const attached = run(attachStart(live.receivedMessage), [
       registration(),
+      registration('private-map-2'),
       placement(),
+      placement('private-map-1', 'map_placement_2', 2),
+      placement('private-map-2', 'map_placement_3', 3),
       ev({ type: 'replay_complete', content: live.receivedMessage }),
     ]).state;
 
     expect(attached.receivedMessage).toBe(live.receivedMessage);
     expect(rowContent(attached)).toBe(rowContent(live));
-    expect(attached.mapPlacementIdsByMessage[AI]).toEqual(['map_placement_1']);
+    expect(attached.mapPlacementIdsByMessage[AI]).toEqual([
+      'map_placement_1',
+      'map_placement_2',
+      'map_placement_3',
+    ]);
     expect(attached.inReplay).toBe(false);
   });
 
@@ -514,19 +549,22 @@ describe('structured map registration and placement', () => {
     expect(reset.mapSessionOverlaysByMessage).toEqual({});
   });
 
-  it('ignores overlays before registration and malformed or mismatched placements', () => {
+  it('ignores overlays before registration and rejects malformed placements', () => {
     const overlay = ev({
       type: 'map_session_overlay',
-      data: { mapId: 'private-map-1', origin: { lat: 40, lon: -75 } },
+      data: {
+        mapId: 'private-map-1',
+        origin: { lat: 40, lon: -75 },
+        clientSessionId: 'page-1',
+      },
     });
     const unregisteredPlacement = placement();
-    const mismatchedPlacement = ev({
+    const malformedPlacement = ev({
       type: 'map_placement',
       data: {
         placementId: 'map_placement_1',
         mapId: 'private-map-1',
-        handle: 'map_2',
-        placementNumber: 1,
+        placementNumber: 0,
       },
     });
 
@@ -537,19 +575,11 @@ describe('structured map registration and placement', () => {
     const after = run(liveStart(), [
       unregisteredPlacement,
       registration(),
-      mismatchedPlacement,
-      ev({
-        type: 'map_placement',
-        data: {
-          placementId: 'map_placement_1',
-          mapId: 'private-map-1',
-          handle: 'map_1',
-          placementNumber: 2,
-        },
-      }),
+      malformedPlacement,
+      placement(),
     ]).state;
-    expect(after.mapPlacementIdsByMessage).toEqual({});
-    expect(after.messages).toHaveLength(0);
+    expect(after.mapPlacementIdsByMessage[AI]).toEqual(['map_placement_1']);
+    expect(after.messages).toHaveLength(1);
   });
 });
 

@@ -18,6 +18,7 @@ import {
 } from '@/lib/streaming/events';
 import { getRouteTool } from './getRouteTool';
 import { searchPlacesTool } from './searchPlacesTool';
+import { showMapTool } from './showMapTool';
 
 type InvokableTool = {
   invoke(input: unknown, config: unknown): Promise<unknown>;
@@ -95,7 +96,7 @@ function makeRuntime(
         chatId: 'chat-1',
         messageId: 'message-1',
       },
-      toolCallId: `route-${retention}`,
+      toolCallId: `mapping-${retention}`,
       state: {},
       config: {},
       store: null,
@@ -104,7 +105,7 @@ function makeRuntime(
   };
 }
 
-async function invoke(runtime: Runtime): Promise<unknown> {
+async function invokeRoute(runtime: Runtime): Promise<unknown> {
   return (getRouteTool as unknown as InvokableTool).invoke(
     {
       type: 'tool_call',
@@ -137,7 +138,25 @@ async function invokeNearby(runtime: Runtime): Promise<unknown> {
   );
 }
 
+async function invokeShowMap(
+  runtime: Runtime,
+  args: Record<string, unknown>,
+): Promise<unknown> {
+  return (showMapTool as unknown as InvokableTool).invoke(
+    {
+      type: 'tool_call',
+      name: 'show_map',
+      id: runtime.toolCallId,
+      args,
+    },
+    runtime,
+  );
+}
+
 function resultText(result: unknown): string {
+  if (typeof result === 'string') return result;
+  const directContent = (result as { content?: unknown }).content;
+  if (typeof directContent === 'string') return directContent;
   const update = (
     result as { update?: { messages?: Array<{ content?: unknown }> } }
   ).update;
@@ -146,22 +165,57 @@ function resultText(result: unknown): string {
   return content;
 }
 
+function resultJson(result: unknown): Record<string, unknown> {
+  return JSON.parse(resultText(result)) as Record<string, unknown>;
+}
+
 afterEach(() => locationTokenStore.clear());
 
-describe('current-location route privacy', () => {
-  it('redacts a transient route from the map snapshot and model-visible result while emitting one exact live overlay', async () => {
+describe('current-location mapping privacy and explicit map composition', () => {
+  it('keeps a transient route reusable in-memory, redacts its durable discovery, and emits the exact overlay only when shown', async () => {
     const { runtime, token, events } = makeRuntime('once');
-    const result = await invoke(runtime);
-    const text = resultText(result);
+    const result = await invokeRoute(runtime);
+    const routeOutput = resultJson(result).route as Record<string, unknown>;
     const mapRegistry = runtime.context.mapRegistry as TurnMapRegistry;
-    const registration = mapRegistry.resolve('map_1');
 
-    expect(text).toContain('Current location');
-    expect(text).toContain('navigationLink');
-    expect(text).not.toContain(token);
-    expect(text).not.toContain('40.1234');
-    expect(text).not.toContain('-75.5678');
-    expect(mapRegistry.resolveRoute('route_1')).toBeUndefined();
+    expect(routeOutput.routeHandle).toBe('route_1');
+    expect(routeOutput).not.toHaveProperty('mapHandle');
+    expect(resultText(result)).not.toContain(token);
+    expect(resultText(result)).not.toContain('40.1234');
+    expect(resultText(result)).not.toContain('-75.5678');
+    expect(mapRegistry.resolveRoute('route_1')).toMatchObject({
+      routeRetained: false,
+      locationRetention: 'once',
+      route: {
+        origin: { lat: 40.1234, lon: -75.5678 },
+      },
+    });
+    expect(events.map((event) => event.type)).toEqual([
+      'map_places_discovered',
+      'map_route_discovered',
+    ]);
+    expect(events[1]).toMatchObject({
+      type: 'map_route_discovered',
+      data: {
+        handle: 'route_1',
+        route: {
+          routeNotRetained: true,
+          destination: { lat: 40.004, lon: -75.002 },
+        },
+      },
+    });
+    expect(JSON.stringify(events[1])).not.toContain('40.1234');
+    expect(JSON.stringify(events[1])).not.toContain('deterministic-route');
+
+    const shown = await invokeShowMap(runtime, { routeHandle: 'route_1' });
+    const registration = mapRegistry.resolveById('private-map-1');
+
+    expect(resultJson(shown)).toEqual({
+      title: 'Map',
+      pinCount: 2,
+      hasRoute: true,
+    });
+    expect(registration?.handle).toBeUndefined();
     expect(registration?.spec.route).toMatchObject({
       destination: { lat: 40.004, lon: -75.002 },
       routeNotRetained: true,
@@ -170,65 +224,149 @@ describe('current-location route privacy', () => {
     expect(JSON.stringify(registration?.spec)).not.toContain(
       'deterministic-route',
     );
-
-    expect(events).toHaveLength(2);
-    expect(events[0]).toMatchObject({
+    expect(events.map((event) => event.type)).toEqual([
+      'map_places_discovered',
+      'map_route_discovered',
+      'map_spec',
+      'map_placement',
+      'map_session_overlay',
+    ]);
+    expect(events[2]).toMatchObject({
       type: 'map_spec',
       data: { mapId: 'private-map-1', spec: { routeNotRetained: true } },
     });
-    expect(events[1]).toMatchObject({
+    expect(events[3]).toMatchObject({
+      type: 'map_placement',
+      data: {
+        mapId: 'private-map-1',
+        placementId: 'map_placement_1',
+      },
+    });
+    expect(events[4]).toMatchObject({
       type: 'map_session_overlay',
       data: {
         mapId: 'private-map-1',
         clientSessionId: 'page-1',
         origin: { lat: 40.1234, lon: -75.5678 },
-        route: {
-          origin: { lat: 40.1234, lon: -75.5678 },
-        },
+        route: { origin: { lat: 40.1234, lon: -75.5678 } },
       },
     });
   });
 
-  it('retains the exact route only for an explicit save choice and never emits a transient overlay', async () => {
-    const { runtime, events } = makeRuntime('save');
-    const result = await invoke(runtime);
-    const text = resultText(result);
-    const mapRegistry = runtime.context.mapRegistry as TurnMapRegistry;
-    const registration = mapRegistry.resolve('map_1');
+  it('attaches an approved transient route overlay independently to every composed map', async () => {
+    const { runtime, events } = makeRuntime('once');
+    await invokeRoute(runtime);
+    events.length = 0;
 
-    expect(text).toContain('navigationLink');
-    expect(text).not.toContain('40.1234');
-    expect(text).not.toContain('Route not retained');
-    expect(registration?.spec.route).toMatchObject({
-      origin: { lat: 40.1234, lon: -75.5678 },
-      navigationUrl: expect.stringContaining('directions'),
+    await invokeShowMap(runtime, {
+      routeHandle: 'route_1',
+      title: 'First view',
     });
-    expect(mapRegistry.resolveRoute('route_1')).toBeDefined();
-    expect(events.map((event) => event.type)).toEqual(['map_spec']);
+    await invokeShowMap(runtime, {
+      routeHandle: 'route_1',
+      title: 'Second view',
+    });
+
+    expect(events.map((event) => event.type)).toEqual([
+      'map_spec',
+      'map_placement',
+      'map_session_overlay',
+      'map_spec',
+      'map_placement',
+      'map_session_overlay',
+    ]);
+    expect(
+      events
+        .filter((event) => event.type === 'map_session_overlay')
+        .map((event) => event.data.mapId),
+    ).toEqual(['private-map-1', 'private-map-2']);
+    expect(
+      events
+        .filter((event) => event.type === 'map_session_overlay')
+        .every((event) => JSON.stringify(event).includes('40.1234')),
+    ).toBe(true);
+
+    const mapRegistry = runtime.context.mapRegistry as TurnMapRegistry;
+    expect(mapRegistry.registrationCount).toBe(2);
+    expect(mapRegistry.placementCount).toBe(2);
   });
 
-  it('retains the approved origin in a saved current-location nearby map', async () => {
+  it('retains a saved current-location route only after explicit composition and never emits a transient overlay', async () => {
+    const { runtime, events } = makeRuntime('save');
+    const result = await invokeRoute(runtime);
+    const routeOutput = resultJson(result).route as Record<string, unknown>;
+
+    expect(routeOutput.routeHandle).toBe('route_1');
+    expect(resultText(result)).not.toContain('40.1234');
+    expect(resultText(result)).not.toContain('mapHandle');
+    expect(events.map((event) => event.type)).toEqual([
+      'map_places_discovered',
+      'map_route_discovered',
+    ]);
+
+    const shown = await invokeShowMap(runtime, {
+      routeHandle: 'route_1',
+      title: 'Saved route',
+    });
+    const mapRegistry = runtime.context.mapRegistry as TurnMapRegistry;
+    const registration = mapRegistry.resolveById('private-map-1');
+
+    expect(resultJson(shown)).toEqual({
+      title: 'Saved route',
+      pinCount: 2,
+      hasRoute: true,
+    });
+    expect(registration?.spec).toMatchObject({
+      title: 'Saved route',
+      origin: { lat: 40.1234, lon: -75.5678 },
+      route: {
+        origin: { lat: 40.1234, lon: -75.5678 },
+        navigationUrl: expect.stringContaining('directions'),
+      },
+    });
+    expect(events.map((event) => event.type)).toEqual([
+      'map_places_discovered',
+      'map_route_discovered',
+      'map_spec',
+      'map_placement',
+    ]);
+    expect(events.some((event) => event.type === 'map_session_overlay')).toBe(
+      false,
+    );
+  });
+
+  it('retains an approved origin in a saved nearby map only after selecting its place handle', async () => {
     const { runtime, events } = makeRuntime('save', {
       purpose: 'nearby',
       coordinate: { lat: 40, lon: -75 },
     });
     const result = await invokeNearby(runtime);
-    const text = resultText(result);
-    const mapRegistry = runtime.context.mapRegistry as TurnMapRegistry;
-    const registration = mapRegistry.resolve('map_1');
+    const places = resultJson(result).places as Array<Record<string, unknown>>;
 
-    expect(text).toContain('Deterministic Central Cafe');
-    expect(text).not.toContain('40.000');
-    expect(text).not.toContain('-75.000');
+    expect(places).toHaveLength(1);
+    expect(places[0]?.placeHandle).toBe('place_1');
+    expect(resultText(result)).not.toContain('40.000');
+    expect(resultText(result)).not.toContain('-75.000');
+    expect(events.map((event) => event.type)).toEqual([
+      'map_places_discovered',
+    ]);
+
+    await invokeShowMap(runtime, { placeHandles: ['place_1'] });
+    const mapRegistry = runtime.context.mapRegistry as TurnMapRegistry;
+    const registration = mapRegistry.resolveById('private-map-1');
+
     expect(registration?.spec).toMatchObject({
       origin: { lat: 40, lon: -75 },
       places: [expect.objectContaining({ name: 'Deterministic Central Cafe' })],
     });
-    expect(events.map((event) => event.type)).toEqual(['map_spec']);
-    expect(events[0]).toMatchObject({
-      type: 'map_spec',
-      data: { spec: { origin: { lat: 40, lon: -75 } } },
-    });
+    expect(events.map((event) => event.type)).toEqual([
+      'map_places_discovered',
+      'map_spec',
+      'map_placement',
+    ]);
+    expect(events.some((event) => event.type === 'map_session_overlay')).toBe(
+      false,
+    );
   });
 
   it('refuses a current-location route when the token lacks routing authorization', async () => {
@@ -250,11 +388,12 @@ describe('current-location route privacy', () => {
     });
     runtime.context.locationToken = replacement.token;
 
-    const result = await invoke(runtime);
+    const result = await invokeRoute(runtime);
 
     expect(resultText(result)).toContain('No approved current location');
     expect(
       (runtime.context.mapRegistry as TurnMapRegistry).registrationCount,
     ).toBe(0);
+    expect((runtime.context.mapRegistry as TurnMapRegistry).routeCount).toBe(0);
   });
 });

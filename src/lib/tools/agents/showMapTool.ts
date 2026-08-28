@@ -3,49 +3,58 @@ import { emitStreamEvent } from '@/lib/streaming/events';
 import { MAP_LIMITS } from '@/lib/maps/types';
 import { TurnMapRegistryError } from '@/lib/maps/turnMapRegistry';
 import { defineTool } from '@/lib/tools/defineTool';
-import { mapForHandle, type MappingToolRuntime } from './mappingToolUtils';
+import {
+  emitLocationOverlay,
+  type MappingToolRuntime,
+} from './mappingToolUtils';
+
+const ShortPlaceHandleSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(MAP_LIMITS.maxPlaceIdLength)
+  .regex(
+    /^place_[1-9]\d*$/,
+    'only a placeHandle returned by search_places is valid',
+  );
+
+const ShortRouteHandleSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(MAP_LIMITS.maxPlaceIdLength)
+  .regex(
+    /^route_[1-9]\d*$/,
+    'only a routeHandle returned by get_route is valid',
+  );
 
 export const ShowMapToolSchema = z
   .object({
-    handle: z
+    placeHandles: z
+      .array(ShortPlaceHandleSchema)
+      .max(128)
+      .optional()
+      .describe('Selected placeHandles returned by search_places.'),
+    routeHandle: ShortRouteHandleSchema.optional().describe(
+      'Optional routeHandle returned by get_route.',
+    ),
+    title: z
       .string()
       .trim()
-      .min(1)
-      .max(MAP_LIMITS.maxPlaceIdLength)
+      .max(240)
       .optional()
-      .describe('A mapHandle or routeHandle returned by a mapping tool.'),
-    /** Alias for clients that name the field after the map handle. */
-    mapHandle: z
-      .string()
-      .trim()
-      .min(1)
-      .max(MAP_LIMITS.maxPlaceIdLength)
-      .optional()
-      .describe('Alias for handle; use only a registered short handle.'),
+      .describe('Optional short title for this map.'),
   })
   .strict()
   .superRefine((input, ctx) => {
-    const handle = input.handle ?? input.mapHandle;
-    if (!handle) {
+    if (
+      (!input.placeHandles || input.placeHandles.length === 0) &&
+      !input.routeHandle
+    ) {
       ctx.addIssue({
         code: 'custom',
-        path: ['handle'],
-        message: 'handle or mapHandle is required',
-      });
-      return;
-    }
-    if (input.mapHandle && input.handle && input.mapHandle !== input.handle) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['mapHandle'],
-        message: 'handle and mapHandle must match',
-      });
-    }
-    if (!/^map_[1-9]\d*$/.test(handle) && !/^route_[1-9]\d*$/.test(handle)) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['handle'],
-        message: 'only a registered mapHandle or routeHandle may be used',
+        path: ['placeHandles'],
+        message: 'select at least one placeHandle or provide a routeHandle',
       });
     }
   });
@@ -58,41 +67,45 @@ export const showMapTool = defineTool(
     if (runtime.context.retrievalSignal?.aborted || runtime.signal?.aborted) {
       return 'Mapping operation was cancelled.';
     }
-    // Placement uses only the provider-validated snapshot already in the
-    // current-turn registry; it does not make a provider call.
-    const handle = input.handle ?? input.mapHandle;
-    if (!handle)
-      return 'Error: A registered mapHandle or routeHandle is required.';
-    const registration = mapForHandle(runtime, handle);
-    if (!registration) {
-      return `Error: No registered map matches "${handle}". Use a mapHandle returned by search_places or get_route.`;
-    }
 
-    const snapshot = runtime.context.mapRegistry.snapshot();
     try {
-      const placement = runtime.context.mapRegistry.place(registration.handle);
+      // Composition is the only map-construction boundary. Discovery tools
+      // leave validated records in the turn registry for this explicit call.
+      const placement = runtime.context.mapRegistry.composeMap({
+        ...(input.placeHandles ? { placeHandles: input.placeHandles } : {}),
+        ...(input.routeHandle ? { routeHandle: input.routeHandle } : {}),
+        ...(input.title !== undefined ? { title: input.title } : {}),
+      });
+      emitStreamEvent(runtime.context.emitter, {
+        type: 'map_spec',
+        data: {
+          mapId: placement.mapId,
+          spec: placement.spec,
+          source: 'show_map',
+        },
+      });
       emitStreamEvent(runtime.context.emitter, {
         type: 'map_placement',
         data: {
           placementId: placement.placementId,
           mapId: placement.mapId,
-          handle: placement.handle,
           placementNumber: placement.placementNumber,
         },
       });
+
+      const overlay = runtime.context.mapRegistry.resolveSessionOverlay(
+        placement.mapId,
+      );
+      if (overlay) {
+        emitLocationOverlay(runtime, placement.mapId, overlay);
+      }
+
       return JSON.stringify({
-        handle,
-        mapHandle: placement.handle,
         title: placement.title,
-        pinCount: placement.spec.places.length,
+        pinCount: placement.pinCount ?? placement.spec.places.length,
         hasRoute: Boolean(placement.spec.route),
       });
     } catch (error) {
-      try {
-        runtime.context.mapRegistry.restore(snapshot);
-      } catch {
-        // Keep a placement failure isolated from the ordinary answer.
-      }
       if (error instanceof TurnMapRegistryError) {
         return `Error: ${error.message}`;
       }
@@ -102,7 +115,7 @@ export const showMapTool = defineTool(
   {
     name: 'show_map',
     description:
-      'Place the one writer-owned inline map for this answer. Pass only a mapHandle or routeHandle returned by search_places or get_route; never write map markup, coordinates, or internal IDs. Keep the equivalent numbered prose list in the answer. A turn can show at most one map.',
+      'Compose and display one independent writer-owned inline map from selected placeHandles and an optional routeHandle returned by mapping tools. Never write map markup, coordinates, or private IDs. Each successful call creates one immutable placement and may be repeated for different groupings; there is no per-answer map-count limit. A map needs at least one selected place or route, contains at most 12 unique pins including route endpoints, and has at most one route. Invalid handle selections fail atomically without a partial map. Keep the equivalent numbered prose in the answer.',
     schema: ShowMapToolSchema,
   },
 );

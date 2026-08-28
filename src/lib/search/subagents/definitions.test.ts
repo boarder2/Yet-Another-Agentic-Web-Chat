@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getSubagentDefinition } from './definitions';
+import { MAPPING_TOOL_NAMES } from '@/lib/tools/agents';
 import { filterSubagentTools } from './executor';
 
 const deepResearchTools = [
@@ -26,5 +27,8 @@ describe('deep-research subagent tool restrictions', () => {
     expect(names).not.toContain('show_chart');
     expect(names).not.toContain('create_artifact');
     expect(names).toContain('web_search');
+    for (const mappingTool of MAPPING_TOOL_NAMES) {
+      expect(names).not.toContain(mappingTool);
+    }
   });
 });

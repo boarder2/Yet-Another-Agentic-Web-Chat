@@ -8,7 +8,11 @@ import {
 import type { StreamEvent, ModelStatsV1 } from './events';
 import type { Message } from './chatState';
 import { normalizeChartInput } from '@/lib/chart/chartInput';
-import { findWidget, type PanelPayload } from '@/lib/widgets/envelope';
+import {
+  findWidget,
+  type MapPayload,
+  type PanelPayload,
+} from '@/lib/widgets/envelope';
 
 const AI = 'ai1';
 const chartSpec = normalizeChartInput({
@@ -371,6 +375,181 @@ describe('structured chart placement', () => {
     expect(rowContent(state)).toBe('Before ');
     expect(rowContent(state)).not.toContain('<Chart');
     expect(rowContent(state)).not.toContain('Loading chart');
+  });
+});
+
+describe('structured map registration and placement', () => {
+  const mapSpec = {
+    places: [
+      {
+        id: 'node/1',
+        name: 'Central Cafe',
+        coordinate: { lat: 40, lon: -75 },
+        sourceUrl: 'https://www.openstreetmap.org/node/1',
+        provider: 'openstreetmap',
+        attribution: '© OpenStreetMap contributors',
+      },
+    ],
+    attribution: '© OpenStreetMap contributors',
+    retrievedAt: '2026-08-27T12:00:00.000Z',
+    title: 'Nearby places',
+    summary: 'One grounded place',
+  };
+
+  const registration = (mapId = 'private-map-1') =>
+    ev({
+      type: 'map_spec',
+      data: {
+        mapId,
+        handle: 'map_1',
+        spec: mapSpec,
+        source: 'mapping-tool',
+      },
+    });
+
+  const placement = (
+    mapId = 'private-map-1',
+    placementId = 'map_placement_1',
+  ) =>
+    ev({
+      type: 'map_placement',
+      data: {
+        mapId,
+        placementId,
+        handle: 'map_1',
+        placementNumber: 1,
+      },
+    });
+
+  it('records a grounded map without rendering it until a placement arrives', () => {
+    const registered = reduceStreamEvent(liveStart(), registration()).state;
+
+    expect(registered.messages).toHaveLength(0);
+    expect(registered.receivedMessage).toBe('');
+    expect(registered.mapSpecsByMessage[AI]['private-map-1']).toEqual(mapSpec);
+    expect(registered.mapHandlesByMessage[AI]['private-map-1']).toBe('map_1');
+  });
+
+  it('accepts only the registered private map and enforces one map per answer', () => {
+    const { state } = run(liveStart(), [
+      registration(),
+      registration('private-map-2'),
+      placement(),
+      placement('private-map-1', 'map_placement_2'),
+      placement('guessed-map', 'map_placement_3'),
+    ]);
+
+    expect(Object.keys(state.mapSpecsByMessage[AI])).toEqual(['private-map-1']);
+    expect(state.mapPlacementIdsByMessage[AI]).toEqual(['map_placement_1']);
+    const widget = findWidget<MapPayload>(
+      rowContent(state)!,
+      'map',
+      'map_placement_1',
+    );
+    expect(widget).toMatchObject({
+      mapId: 'private-map-1',
+      fallback: expect.stringContaining('1. Central Cafe'),
+      attribution: '© OpenStreetMap contributors',
+    });
+    expect(rowContent(state)?.match(/```yaawc:map/g)).toHaveLength(1);
+  });
+
+  it('deduplicates a replayed placement and can reconstruct the same row from an attach stream', () => {
+    const live = run(liveStart(), [registration(), placement()]).state;
+    const attached = run(attachStart(live.receivedMessage), [
+      registration(),
+      placement(),
+      ev({ type: 'replay_complete', content: live.receivedMessage }),
+    ]).state;
+
+    expect(attached.receivedMessage).toBe(live.receivedMessage);
+    expect(rowContent(attached)).toBe(rowContent(live));
+    expect(attached.mapPlacementIdsByMessage[AI]).toEqual(['map_placement_1']);
+    expect(attached.inReplay).toBe(false);
+  });
+
+  it('keeps a session overlay live-only in reducer state and replaces it for the same map', () => {
+    const firstOverlay = ev({
+      type: 'map_session_overlay',
+      data: {
+        mapId: 'private-map-1',
+        origin: { lat: 40.1, lon: -75.1 },
+        clientSessionId: 'page-1',
+        expiresAt: '2026-08-27T12:10:00.000Z',
+      },
+    });
+    const secondOverlay = ev({
+      type: 'map_session_overlay',
+      data: {
+        mapId: 'private-map-1',
+        origin: { lat: 40.2, lon: -75.2 },
+        clientSessionId: 'page-1',
+        expiresAt: '2026-08-27T12:11:00.000Z',
+      },
+    });
+
+    const withOverlay = run(liveStart(), [
+      registration(),
+      firstOverlay,
+      secondOverlay,
+    ]).state;
+    expect(withOverlay.mapSessionOverlaysByMessage[AI]).toEqual([
+      {
+        mapId: 'private-map-1',
+        origin: { lat: 40.2, lon: -75.2 },
+        clientSessionId: 'page-1',
+        expiresAt: '2026-08-27T12:11:00.000Z',
+      },
+    ]);
+    expect(withOverlay.receivedMessage).not.toContain('40.2');
+    expect(rowContent(withOverlay)).toBeUndefined();
+
+    const reset = reduceStreamEvent(withOverlay, {
+      type: 'stream_started',
+      mode: 'attach',
+      chatId: 'c1',
+      aiMessageId: AI,
+      seedContent: withOverlay.receivedMessage,
+    }).state;
+    expect(reset.mapSessionOverlaysByMessage).toEqual({});
+  });
+
+  it('ignores overlays before registration and malformed or mismatched placements', () => {
+    const overlay = ev({
+      type: 'map_session_overlay',
+      data: { mapId: 'private-map-1', origin: { lat: 40, lon: -75 } },
+    });
+    const unregisteredPlacement = placement();
+    const mismatchedPlacement = ev({
+      type: 'map_placement',
+      data: {
+        placementId: 'map_placement_1',
+        mapId: 'private-map-1',
+        handle: 'map_2',
+        placementNumber: 1,
+      },
+    });
+
+    const before = reduceStreamEvent(liveStart(), overlay).state;
+    expect(before.mapSessionOverlaysByMessage).toEqual({});
+    expect(before.receivedMessage).toBe('');
+
+    const after = run(liveStart(), [
+      unregisteredPlacement,
+      registration(),
+      mismatchedPlacement,
+      ev({
+        type: 'map_placement',
+        data: {
+          placementId: 'map_placement_1',
+          mapId: 'private-map-1',
+          handle: 'map_1',
+          placementNumber: 2,
+        },
+      }),
+    ]).state;
+    expect(after.mapPlacementIdsByMessage).toEqual({});
+    expect(after.messages).toHaveLength(0);
   });
 });
 

@@ -34,7 +34,7 @@ export const myTool = defineTool(
 
 `search_yaawc_docs` is a built-in system tool, not a user-toggleable tool: append it only through the dynamic top-level getters so chats, private/workflow/scheduled runs, panel executors, and panel synthesis receive it. Keep it out of `allAgentTools` and other static deep-subagent arrays; the final capability-grounding prompt layer is assembled by `SimplifiedAgent`.
 
-Conventions: use `systemLlm` for internal LLM calls (never the chat LLM); emit extra events via `emitStreamEvent(runtime.context.emitter, …)` (like `todoListTool`); check `runtime.context.retrievalSignal?.aborted` in long loops for hard cancellation.
+Conventions: use `systemLlm` for internal LLM calls (never the chat LLM); emit extra events via `emitStreamEvent(runtime.context.emitter, …)` (like `todoListTool`); check `runtime.context.retrievalSignal?.aborted` in long loops for hard cancellation. Mapping is a separate provider boundary: its tools are only eligible for ordinary interactive Web Search and must use the turn-local map registry rather than model-authored coordinates or markup.
 
 ## New LLM Provider (`src/lib/providers/`)
 

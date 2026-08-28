@@ -1,6 +1,7 @@
 /* React Grid Layout styles */
 @import 'react-grid-layout/css/styles.css';
 @import 'react-resizable/css/styles.css';
+@import 'leaflet/dist/leaflet.css' layer(leaflet);
 
 @import 'tailwindcss';
 @plugin '@tailwindcss/typography';
@@ -32,6 +33,106 @@
   .yaawc-formula-display > .katex-display {
     margin: 0;
     min-width: max-content;
+  }
+
+  /* Leaflet is initialized directly by MapWidget. Keep its chrome on the
+   * semantic theme surface instead of Leaflet's fixed light palette. */
+  .yaawc-map-canvas.leaflet-container {
+    background: var(--color-well);
+    color: var(--color-fg);
+    font: inherit;
+  }
+
+  .yaawc-map-canvas .leaflet-bar,
+  .yaawc-map-canvas .leaflet-control-attribution {
+    border: 1px solid var(--color-surface-2);
+    box-shadow: var(--shadow-resting);
+  }
+
+  .yaawc-map-canvas .leaflet-bar a {
+    background: var(--color-surface);
+    border-bottom-color: var(--color-surface-2);
+    color: var(--color-fg);
+  }
+
+  .yaawc-map-canvas .leaflet-bar a:last-child {
+    border-bottom: 0;
+  }
+
+  .yaawc-map-canvas .leaflet-bar a:hover,
+  .yaawc-map-canvas .leaflet-bar a:focus-visible {
+    background: var(--color-surface-2);
+    color: var(--color-accent);
+  }
+
+  .yaawc-map-canvas .leaflet-bar a:focus-visible {
+    outline: 1px solid var(--color-accent);
+    outline-offset: -1px;
+  }
+
+  .yaawc-map-canvas .leaflet-control-attribution {
+    border-radius: var(--radius-control);
+    background: color-mix(in oklch, var(--color-surface), transparent 8%);
+    color: var(--color-fg-muted);
+  }
+
+  .yaawc-map-canvas .leaflet-control-attribution a,
+  .yaawc-map-popup-link {
+    color: var(--color-accent);
+  }
+
+  .yaawc-map-canvas .leaflet-popup-content-wrapper,
+  .yaawc-map-canvas .leaflet-popup-tip {
+    background: var(--color-surface);
+    color: var(--color-fg);
+    box-shadow: var(--shadow-raised);
+  }
+
+  .yaawc-map-canvas .leaflet-popup-content {
+    margin: 0.75rem 1rem;
+  }
+
+  .yaawc-map-canvas .leaflet-popup-close-button {
+    color: var(--color-fg-muted) !important;
+  }
+
+  .yaawc-map-canvas .leaflet-popup-close-button:hover,
+  .yaawc-map-canvas .leaflet-popup-close-button:focus-visible {
+    color: var(--color-accent) !important;
+  }
+
+  .yaawc-map-canvas .yaawc-map-numbered-marker {
+    display: grid;
+    width: 2rem;
+    height: 2rem;
+    place-items: center;
+    border: 2px solid var(--color-surface);
+    border-radius: var(--radius-pill);
+    background: var(--color-accent);
+    box-shadow: var(--shadow-raised);
+    color: var(--color-accent-fg);
+    font-size: var(--text-caption);
+    font-weight: var(--weight-strong);
+  }
+
+  .yaawc-map-canvas .yaawc-map-numbered-marker:focus-visible {
+    outline: 1px solid var(--color-accent);
+    outline-offset: 1px;
+  }
+
+  .yaawc-map-canvas .yaawc-map-route,
+  .yaawc-map-canvas .yaawc-map-route-endpoint,
+  .yaawc-map-canvas .yaawc-map-current-location {
+    stroke: var(--color-accent) !important;
+  }
+
+  .yaawc-map-canvas .yaawc-map-route-endpoint,
+  .yaawc-map-canvas .yaawc-map-current-location {
+    fill: var(--color-accent) !important;
+  }
+
+  .yaawc-map-canvas .yaawc-map-current-location {
+    fill-opacity: 0.25;
   }
 }
 

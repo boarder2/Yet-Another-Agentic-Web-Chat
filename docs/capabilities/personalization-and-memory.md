@@ -6,7 +6,7 @@ Personalization changes how a response is written for the current user. Memory s
 
 Open **Settings → Personalization** to save an optional location and an **About Me** profile. The composer can enable or disable sending each saved value for a message. Location can improve regional relevance; profile text can influence explanations, examples, or tone.
 
-The prompt layer tells the agent to treat personalization as private internal context and to keep it out of tool calls, web requests, and citations. The latest user message takes precedence when it conflicts with saved context. A private session strips both values even if they are enabled in Settings.
+The prompt layer tells the agent to treat personalization as private internal context and to keep it out of ordinary retrieval tool calls, web requests, and citations. Mapping has a separate operator-controlled **Allow saved location for mapping** consent: only an enabled, non-private Web Search mapping turn may resolve that saved text to an approximate central-area locality and send it to the disclosed mapping provider. The latest user message takes precedence when it conflicts with saved context. A private session strips both values even if they are enabled in Settings.
 
 ## Enable memory
 
@@ -31,6 +31,10 @@ A workspace has its own Memory tab. Workspace memories are retrieved only in cha
 
 Deleting a workspace detaches its memories into the global scope instead of deleting them. Use the Memory settings or workspace Memory tab to remove them explicitly.
 
+## Mapping and precise browser location
+
+A saved personalization location is not a precise browser coordinate. Mapping treats an imprecise named or saved location as a central-area estimate and describes resulting claims as approximate. A route using the browser's current location first shows an approval panel listing every provider and tile host; only **Use once** or **Use and save** then requests browser permission. **Use once** keeps the exact origin and route in the approving page session for the current turn. **Use and save** retains the exact origin and route only in that answer snapshot and never writes a reusable profile or memory location. Private sessions never offer saving.
+
 ## Sensitive information and limits
 
 Automatic extraction blocks content that matches common credit-card, Social Security number, API-key/token, or password patterns. Automatic detection can also skip, update, deduplicate, or remove conflicting facts. A user who manually adds a memory is responsible for deciding whether its content is appropriate; do not store secrets in memory.
@@ -39,6 +43,6 @@ Memory retrieval needs a configured embedding model and can fail independently o
 
 ## Privacy and storage
 
-Memories are stored separately from chat messages in the local YAAWC database. When retrieval or automatic detection is enabled, selected memory content is placed in model context for the configured model operation. Personalization and memory are not automatically sent to web, URL, image, or other retrieval tools. Private sessions do not retrieve, create, or expose memory content.
+Memories are stored separately from chat messages in the local YAAWC database. When retrieval or automatic detection is enabled, selected memory content is placed in model context for the configured model operation. Personalization and memory are not automatically sent to web, URL, image, or other retrieval tools. The saved-location mapping opt-in is the explicit exception described above and is limited to mapping's disclosed provider hosts. Private sessions do not retrieve, create, or expose memory content, and do not send saved personalization to mapping providers.
 
 For provider data handling and private-session deletion, see [Privacy and data](./privacy-and-data.md). For the memory and embedding model choices, see [Models and providers](./models-and-providers.md).

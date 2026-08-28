@@ -17,6 +17,7 @@ import ArtifactMention from './Artifacts/ArtifactMention';
 import { parseArtifactHref } from '@/lib/artifacts/mention';
 import ChartElement, { spaceChartTags } from './ChartElement';
 import ChartEnvelope from './ChartEnvelope';
+import MapEnvelope from './maps/MapEnvelope';
 import {
   maskWidgets,
   parseWidgetCodeBlock,
@@ -246,6 +247,7 @@ const WidgetOrCodeBlock = ({
     if (parsed.kind === 'artifact') return <ArtifactCard {...parsed.payload} />;
     if (parsed.kind === 'chart')
       return <ChartEnvelope chartId={parsed.payload.chartId} />;
+    if (parsed.kind === 'map') return <MapEnvelope payload={parsed.payload} />;
     return <PanelColumns columns={parsed.payload.columns} />;
   }
   if (className) {

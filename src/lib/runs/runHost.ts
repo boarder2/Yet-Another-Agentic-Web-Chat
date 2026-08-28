@@ -7,8 +7,11 @@ import {
   appendPanelColumnToken,
   setPanelColumnStatus,
   appendChartWidget,
+  appendMapWidget,
   appendPanelColumnChart,
   neutralizeSpoofedFences,
+  consumeSpoofedFenceChunk,
+  flushSpoofedFenceChunk,
   upsertArtifactWidget,
   type ToolCallPayload,
   type SubagentPayload,
@@ -19,6 +22,25 @@ import {
 } from '@/lib/utils/contentStripping';
 import { ChartSpecSchema, type ChartSpec } from '@/lib/chart/chartSpec';
 import { resolveChartPlacement } from '@/lib/chart/placement';
+import {
+  restoreTurnMapRegistryFromMilestones,
+  resolveTurnMapPlacement,
+  TurnMapRegistry,
+} from '@/lib/maps/turnMapRegistry';
+import {
+  MapSessionOverlaySchema,
+  MapSpecSchema,
+  PersistableMapSpecSchema,
+  toPersistableMapSpec,
+  type PersistableMapSpec,
+  type MapSpec,
+} from '@/lib/maps/types';
+import { mapSpecToPayload } from '@/lib/maps/presentation';
+import {
+  createMappingRunRuntime,
+  mappingConfigurationFingerprint,
+  resolveFreshMappingService,
+} from '@/lib/maps/runtime';
 import {
   restoreTurnChartRegistryFromMilestones,
   TurnChartRegistry,
@@ -42,6 +64,7 @@ import {
   enqueueRunEvent,
   flushRunEvents,
   dropRunEventBuffer,
+  sanitizeLocationMilestone,
 } from './runEventsPersistence';
 import {
   emitStreamEvent,
@@ -82,15 +105,82 @@ import {
   type AgentRunConfig,
 } from '@/lib/search/agentRunConfig';
 import { deduplicateDocuments } from '@/lib/search/agentStreamDriver';
+import {
+  LocationApprovalPayloadSchema,
+  LocationApprovalResponseSchema,
+  LocationTokenResumeResponseSchema,
+  clearLocationTokensForRun,
+  getLocationSession,
+  isLocationApprovalExpired,
+  isLocationApprovalWindowBounded,
+  locationHostsMatch,
+  type LocationApprovalResponse,
+  type LocationPurpose,
+  type LocationRetention,
+  type LocationSession,
+  type LocationTokenResumeResponse,
+} from '@/lib/maps/locationSessions';
+import {
+  mappingLocationHosts,
+  type MappingConfiguration,
+} from '@/lib/maps/config';
+import { getMappingConfiguration } from '@/lib/settings/server';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
 // In-memory lock to prevent concurrent resumes for the same approvalId
 const resumeLocks = new Set<string>();
 
+type LocationApprovalTimer = {
+  messageId: string;
+  timer: ReturnType<typeof setTimeout>;
+};
+
+// Location prompts must expire even when the approving page closes before its
+// client-side timer runs. The timer stores only an approval/message identity;
+// the disclosure payload and any coordinate stay out of this process-local
+// scheduler state.
+const locationApprovalTimers = new Map<string, LocationApprovalTimer>();
+
+function clearLocationApprovalTimer(approvalId: string): void {
+  const entry = locationApprovalTimers.get(approvalId);
+  if (!entry) return;
+  clearTimeout(entry.timer);
+  locationApprovalTimers.delete(approvalId);
+}
+
+function clearLocationApprovalTimersForMessage(messageId: string): void {
+  for (const [approvalId, entry] of locationApprovalTimers) {
+    if (entry.messageId === messageId) clearLocationApprovalTimer(approvalId);
+  }
+}
+
+function scheduleLocationApprovalExpiry(
+  approvalId: string,
+  messageId: string,
+  expiresAt: number,
+): void {
+  clearLocationApprovalTimer(approvalId);
+  const delay = Math.max(1, expiresAt - Date.now());
+  const timer = setTimeout(() => {
+    locationApprovalTimers.delete(approvalId);
+    void expireLocationApproval(approvalId).catch(() => undefined);
+  }, delay);
+  locationApprovalTimers.set(approvalId, { messageId, timer });
+  const unref = (timer as unknown as { unref?: () => void }).unref;
+  if (unref) unref.call(timer);
+}
+
 // Persist milestone events for cross-restart reconstruction. Registered once.
 setEventPersister((run, seqEvent) => {
-  enqueueRunEvent(run.messageId, run.chatId, seqEvent);
+  enqueueRunEvent(run.messageId, run.chatId, seqEvent, {
+    retainRoute:
+      run.locationRetention !== 'once' &&
+      (run.locationRetention === 'save' || run.locationToken === undefined),
+    retainOrigin:
+      run.locationRetention !== 'once' &&
+      (run.locationRetention === 'save' || run.locationToken === undefined),
+  });
 });
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -232,14 +322,38 @@ async function markOpenApprovals(
     .execute();
 }
 
+/** Remove any precise data from legacy or tampered location rows. */
+async function scrubLocationApprovalRows(messageId: string): Promise<void> {
+  await db
+    .update(approvalRequests)
+    .set({ payload: {}, snapshot: null, response: null })
+    .where(
+      and(
+        eq(approvalRequests.messageId, messageId),
+        eq(approvalRequests.toolKind, 'location'),
+      ),
+    )
+    .execute();
+}
+
 /** Mark all open approvals for a message as interrupted (server restart). */
-export function markOpenApprovalsInterrupted(messageId: string): Promise<void> {
-  return markOpenApprovals(messageId, 'interrupted');
+export async function markOpenApprovalsInterrupted(
+  messageId: string,
+): Promise<void> {
+  clearLocationTokensForRun(messageId);
+  await markOpenApprovals(messageId, 'interrupted');
+  await scrubLocationApprovalRows(messageId);
+  clearLocationApprovalTimersForMessage(messageId);
 }
 
 /** Mark all open approvals for a message as cancelled. */
-export function markOpenApprovalsCancelled(messageId: string): Promise<void> {
-  return markOpenApprovals(messageId, 'cancelled');
+export async function markOpenApprovalsCancelled(
+  messageId: string,
+): Promise<void> {
+  clearLocationTokensForRun(messageId);
+  await markOpenApprovals(messageId, 'cancelled');
+  await scrubLocationApprovalRows(messageId);
+  clearLocationApprovalTimersForMessage(messageId);
 }
 
 /** Get pending (unresolved) approvals for a message. */
@@ -255,6 +369,43 @@ export async function getPendingApprovalsForMessage(
         isNull(approvalRequests.resolvedAt),
       ),
     );
+}
+
+/** Re-arm location approval expiry after an application restart. */
+export async function schedulePendingLocationApprovalExpiries(): Promise<void> {
+  const rows = await db
+    .select({
+      id: approvalRequests.id,
+      messageId: approvalRequests.messageId,
+      payload: approvalRequests.payload,
+      snapshot: approvalRequests.snapshot,
+      response: approvalRequests.response,
+    })
+    .from(approvalRequests)
+    .where(
+      and(
+        eq(approvalRequests.toolKind, 'location'),
+        isNull(approvalRequests.resolvedAt),
+      ),
+    );
+  for (const row of rows) {
+    const staleReason =
+      row.snapshot != null || row.response != null
+        ? 'Location approval contains invalid durable data.'
+        : 'Location approval data is invalid; ask for a named origin instead.';
+    const payload = sanitizeLocationApprovalPayload(row.payload);
+    if (row.snapshot != null || row.response != null || !payload) {
+      await resumeLocationApprovalStale(row.id, staleReason).catch(() =>
+        markLocationApprovalStale(row.id, staleReason),
+      );
+      continue;
+    }
+    if (isLocationApprovalExpired(payload)) {
+      await expireLocationApproval(row.id).catch(() => undefined);
+      continue;
+    }
+    scheduleLocationApprovalExpiry(row.id, row.messageId, payload.expiresAt);
+  }
 }
 
 // ── auto-title ────────────────────────────────────────────────────────────────
@@ -344,12 +495,75 @@ async function maybeGenerateTitle(params: {
 
 // ── handleInterrupts ────────────────────────────────────────────────────────
 
+export function sanitizeLocationApprovalPayload(
+  value: unknown,
+): import('@/lib/maps/locationSessions').LocationApprovalPayload | null {
+  const parsed = LocationApprovalPayloadSchema.safeParse(value);
+  if (!parsed.success) return null;
+  if (
+    parsed.data.expiresAt <= parsed.data.createdAt ||
+    parsed.data.expiresAt - parsed.data.createdAt > 10 * 60 * 1000 ||
+    !isLocationApprovalWindowBounded(parsed.data)
+  ) {
+    return null;
+  }
+  return parsed.data;
+}
+
+function isSafeLocationIdentifier(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= 200 &&
+    !/[\u0000-\u001f\u007f<>]/.test(value)
+  );
+}
+
 async function handleInterrupts(
   run: Run,
   interrupts: LangGraphInterrupt[],
 ): Promise<void> {
   for (const i of interrupts) {
     const { kind, toolCallId, markupKey, payload, snapshot } = i.value;
+    if (
+      kind === 'location' &&
+      (!isSafeLocationIdentifier(i.id) || !isSafeLocationIdentifier(toolCallId))
+    ) {
+      throw new Error('Invalid location approval identity');
+    }
+    const safePayload =
+      kind === 'location' ? sanitizeLocationApprovalPayload(payload) : payload;
+    if (kind === 'location' && !safePayload) {
+      throw new Error('Invalid location approval payload');
+    }
+    if (kind === 'location') {
+      const locationPayload =
+        safePayload as import('@/lib/maps/locationSessions').LocationApprovalPayload;
+      if (locationPayload.aiMessageId !== run.aiMessageId) {
+        throw new Error(
+          'Location approval assistant identity does not match the run',
+        );
+      }
+      if (
+        !run.clientSessionId ||
+        run.clientSessionId !== locationPayload.clientSessionId
+      ) {
+        throw new Error(
+          'Location approval page session does not match the run',
+        );
+      }
+      if (!run.mappingConfig?.available) {
+        throw new Error('Location approval mapping configuration is stale');
+      }
+      const currentHosts = mappingLocationHosts(run.mappingConfig);
+      if (
+        mappingConfigurationFingerprint(run.mappingConfig) !==
+          locationPayload.configHash ||
+        !locationHostsMatch(locationPayload.authorizedHosts, currentHosts)
+      ) {
+        throw new Error('Location approval mapping configuration is stale');
+      }
+    }
 
     const insert = await db
       .insert(approvalRequests)
@@ -361,8 +575,11 @@ async function handleInterrupts(
         toolCallId,
         engineInterruptId: i.id,
         toolKind: kind,
-        payload,
-        snapshot: snapshot ?? null,
+        payload: safePayload,
+        // Location interrupts carry no external snapshot. In particular, do
+        // not trust a producer-supplied snapshot at this boundary because it
+        // could retain precise browser data in the approval row.
+        snapshot: kind === 'location' ? null : (snapshot ?? null),
         createdAt: Date.now(),
       })
       .onConflictDoNothing()
@@ -372,12 +589,28 @@ async function handleInterrupts(
     // *_pending event was emitted on first observation, so don't duplicate it.
     if ((insert as unknown as { changes?: number })?.changes === 0) continue;
 
+    if (kind === 'location') {
+      const locationPayload = safePayload as {
+        expiresAt: number;
+      };
+      scheduleLocationApprovalExpiry(
+        i.id,
+        run.messageId,
+        locationPayload.expiresAt,
+      );
+    }
+
     const markupToolCallId = resolveMarkupToolCallId(kind, markupKey);
 
     // pushEvent enqueues the *_pending event via the registered persister.
     pushEvent(run, {
       type: `${kind}_pending`,
-      data: { approvalId: i.id, toolCallId, markupToolCallId, ...payload },
+      data: {
+        approvalId: i.id,
+        toolCallId,
+        markupToolCallId,
+        ...(safePayload as Record<string, unknown>),
+      },
       messageId: run.aiMessageId,
     });
   }
@@ -414,6 +647,75 @@ export class RunGoneError extends Error {
   }
 }
 
+function mappingRuntimeForConfig(config: AgentRunConfig) {
+  const runtime = createMappingRunRuntime(
+    config.interactiveSession &&
+      config.focusMode === 'webSearch' &&
+      config.panel === null &&
+      config.mappingAvailable === true,
+  );
+  if (
+    runtime.service &&
+    config.mappingConfigHash &&
+    runtime.config &&
+    mappingConfigurationFingerprint(runtime.config) !== config.mappingConfigHash
+  ) {
+    return { ...runtime, service: null };
+  }
+  return runtime;
+}
+
+/** Resolve the opaque location token for this run without storing its coordinate. */
+function locationSessionForRun(
+  run: Run,
+  purpose?: LocationPurpose,
+): LocationSession | null {
+  if (!run.locationToken || !run.clientSessionId) return null;
+  const session = getLocationSession(run.locationToken, {
+    binding: {
+      runId: run.threadId,
+      chatId: run.chatId,
+      messageId: run.messageId,
+      aiMessageId: run.aiMessageId,
+      clientSessionId: run.clientSessionId,
+      ...(run.locationApprovalId ? { approvalId: run.locationApprovalId } : {}),
+    },
+    ...(purpose ? { purpose } : {}),
+  });
+  if (!session) return null;
+  if (run.locationRetention && session.retention !== run.locationRetention) {
+    return null;
+  }
+  const config = run.mappingConfig;
+  if (!config || !config.available) return null;
+  const hosts = mappingLocationHosts(config);
+  if (
+    session.configHash !== mappingConfigurationFingerprint(config) ||
+    !locationHostsMatch(session.authorizedHosts, hosts)
+  ) {
+    return null;
+  }
+  // Re-check the live configuration at the sensitive delivery boundary. A
+  // setting change after a provider call must not allow its exact result to
+  // reach the page or extend the old approval's authorization.
+  try {
+    const current = getMappingConfiguration();
+    if (
+      !current.available ||
+      mappingConfigurationFingerprint(current) !== session.configHash ||
+      !locationHostsMatch(
+        session.authorizedHosts,
+        mappingLocationHosts(current),
+      )
+    ) {
+      return null;
+    }
+  } catch {
+    return null;
+  }
+  return session;
+}
+
 /**
  * Whether a resume response declines the proposed action (so no external state
  * is touched and the staleness guard is irrelevant). Only workspace/skill edits
@@ -428,13 +730,224 @@ function isRejection(toolKind: ToolKind, response: unknown): boolean {
   if (toolKind === 'skill_edit') {
     return decision === 'reject';
   }
-  if (toolKind === 'mcp_tool') {
+  if (toolKind === 'mcp_tool' || toolKind === 'location') {
     return (
       (response as { approved?: boolean } | null | undefined)?.approved ===
       false
     );
   }
   return false;
+}
+
+const LOCATION_STALE_RESUME = Symbol('yaawc-location-stale-resume');
+
+type LocationStaleResume = {
+  [LOCATION_STALE_RESUME]: true;
+  reason: string;
+};
+
+type PreparedLocationResume = {
+  engineResponse: LocationTokenResumeResponse | LocationApprovalResponse;
+  storedResponse: LocationApprovalResponse;
+  staleReason?: string;
+  /** Only the opaque token crosses into the resumed graph context. */
+  locationToken?: string;
+  locationRetention?: LocationRetention;
+};
+
+function isLocationStaleResume(value: unknown): value is LocationStaleResume {
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    (value as Partial<LocationStaleResume>)[LOCATION_STALE_RESUME] === true &&
+    typeof (value as { reason?: unknown }).reason === 'string'
+  );
+}
+
+function safeLocationStaleReason(reason: string): string {
+  const normalized = reason.toLowerCase();
+  if (normalized.includes('expir')) {
+    return 'Location approval expired; ask for a named origin instead.';
+  }
+  if (normalized.includes('config') || normalized.includes('host')) {
+    return 'Mapping configuration changed; ask for a named origin instead.';
+  }
+  return 'Location approval is no longer valid; ask for a named origin instead.';
+}
+
+function currentLocationHosts(config: MappingConfiguration): string[] {
+  return mappingLocationHosts(config);
+}
+
+/** Validate a location resume without ever returning the browser coordinate. */
+function prepareLocationResume(params: {
+  approval: typeof approvalRequests.$inferSelect;
+  response: unknown;
+  run: Run;
+  runConfig: AgentRunConfig;
+}): PreparedLocationResume {
+  const { approval, response, run, runConfig } = params;
+  const staleResume = isLocationStaleResume(response);
+  const hasForbiddenDurableData =
+    approval.snapshot != null || approval.response != null;
+  const payload = sanitizeLocationApprovalPayload(approval.payload);
+  if (hasForbiddenDurableData || !payload) {
+    if (!staleResume) {
+      throw new StaleSnapshotError(
+        'This location approval is invalid or has expired; ask for a named origin instead.',
+      );
+    }
+    // A malformed persisted prompt cannot provide a page binding, but the
+    // internal stale marker is still a coordinate-free, safe way to unblock
+    // its checkpoint. Do not leave the run paused behind an unusable row.
+    const staleReason = safeLocationStaleReason(response.reason);
+    const reason = staleReason.includes('expired')
+      ? ('expired' as const)
+      : ('unavailable' as const);
+    return {
+      engineResponse: { approved: false, retention: 'once', reason },
+      storedResponse: { approved: false, retention: 'once', reason },
+      staleReason,
+    };
+  }
+  if (
+    payload.aiMessageId !== runConfig.aiMessageId ||
+    approval.chatId !== run.chatId ||
+    approval.threadId !== run.threadId ||
+    approval.messageId !== run.messageId ||
+    run.clientSessionId !== payload.clientSessionId
+  ) {
+    throw new StaleSnapshotError(
+      'This location approval no longer belongs to the active page session; ask for a named origin instead.',
+    );
+  }
+
+  if (staleResume) {
+    const staleReason = safeLocationStaleReason(response.reason);
+    const declined: LocationApprovalResponse = {
+      approved: false,
+      retention: 'once',
+      reason: staleReason.includes('expired') ? 'expired' : 'unavailable',
+      clientSessionId: payload.clientSessionId,
+    };
+    return {
+      engineResponse: declined,
+      storedResponse: {
+        approved: false,
+        retention: 'once',
+        reason: declined.reason,
+      },
+      staleReason,
+    };
+  }
+
+  const tokenResponse = LocationTokenResumeResponseSchema.safeParse(response);
+  if (!tokenResponse.success) {
+    const declined = LocationApprovalResponseSchema.safeParse(response);
+    if (
+      !declined.success ||
+      declined.data.approved ||
+      declined.data.clientSessionId !== payload.clientSessionId
+    ) {
+      throw new StaleSnapshotError(
+        'The location approval response was invalid or belongs to another page session; ask for a named origin instead.',
+      );
+    }
+    const storedResponse: LocationApprovalResponse = {
+      approved: false,
+      retention: 'once',
+      ...(declined.data.reason ? { reason: declined.data.reason } : {}),
+    };
+    // A denial contains no precise data, so it remains safe to use to close an
+    // approval that expired while the browser prompt was open.
+    return { engineResponse: storedResponse, storedResponse };
+  }
+
+  if (isLocationApprovalExpired(payload)) {
+    throw new StaleSnapshotError(
+      'This location approval has expired; ask for a named origin instead.',
+    );
+  }
+
+  if (
+    tokenResponse.data.clientSessionId !== payload.clientSessionId ||
+    tokenResponse.data.clientSessionId !== run.clientSessionId
+  ) {
+    throw new StaleSnapshotError(
+      'This location approval belongs to another page session; ask for a named origin instead.',
+    );
+  }
+  if (
+    !runConfig.interactiveSession ||
+    runConfig.focusMode !== 'webSearch' ||
+    runConfig.panel !== null ||
+    runConfig.mappingAvailable !== true ||
+    !runConfig.mappingConfigHash ||
+    runConfig.mappingConfigHash !== payload.configHash
+  ) {
+    throw new StaleSnapshotError(
+      'This location approval is not valid for an interactive mapping turn; ask for a named origin instead.',
+    );
+  }
+
+  if (runConfig.isPrivate && tokenResponse.data.retention === 'save') {
+    throw new StaleSnapshotError(
+      'Saving a precise route is unavailable in a private chat.',
+    );
+  }
+  if (!payload.allowSave && tokenResponse.data.retention === 'save') {
+    throw new StaleSnapshotError(
+      'This location approval does not allow saving the route in the answer.',
+    );
+  }
+  let config: MappingConfiguration;
+  try {
+    config = getMappingConfiguration();
+  } catch {
+    throw new StaleSnapshotError(
+      'Mapping configuration is unavailable; ask for a named origin instead.',
+    );
+  }
+  if (
+    !config.available ||
+    mappingConfigurationFingerprint(config) !== payload.configHash ||
+    (runConfig.mappingConfigHash !== undefined &&
+      mappingConfigurationFingerprint(config) !==
+        runConfig.mappingConfigHash) ||
+    !locationHostsMatch(payload.authorizedHosts, currentLocationHosts(config))
+  ) {
+    throw new StaleSnapshotError(
+      'Mapping configuration changed while location approval was pending; ask for a named origin instead.',
+    );
+  }
+
+  const session = getLocationSession(tokenResponse.data.locationToken, {
+    binding: {
+      approvalId: approval.id,
+      runId: approval.threadId,
+      chatId: approval.chatId,
+      messageId: approval.messageId,
+      aiMessageId: payload.aiMessageId,
+      clientSessionId: tokenResponse.data.clientSessionId,
+    },
+    authorizedHosts: currentLocationHosts(config),
+    configHash: payload.configHash,
+  });
+  if (!session || session.retention !== tokenResponse.data.retention) {
+    throw new StaleSnapshotError(
+      'This location approval token is expired or belongs to another page session.',
+    );
+  }
+  const storedResponse: LocationApprovalResponse = {
+    approved: true,
+    retention: tokenResponse.data.retention,
+  };
+  return {
+    engineResponse: tokenResponse.data,
+    storedResponse,
+    locationToken: session.token,
+    locationRetention: tokenResponse.data.retention,
+  };
 }
 
 /**
@@ -548,6 +1061,107 @@ function emitStaleAndMarkup(
     type: 'tool_call_error',
     data: { toolCallId: markupToolCallId, status: 'error', error: reason },
   });
+}
+
+/** Close a pending location approval when its browser/config snapshot expires. */
+export async function markLocationApprovalStale(
+  approvalId: string,
+  reason: string,
+): Promise<void> {
+  const approval = await db.query.approvalRequests.findFirst({
+    where: eq(approvalRequests.id, approvalId),
+  });
+  if (!approval || approval.toolKind !== 'location' || approval.resolvedAt) {
+    return;
+  }
+  const staleReason = safeLocationStaleReason(reason);
+  const safeResponse: LocationApprovalResponse = {
+    approved: false,
+    retention: 'once',
+    reason: staleReason.includes('expired') ? 'expired' : 'unavailable',
+  };
+  const safePayload = sanitizeLocationApprovalPayload(approval.payload);
+  const result = await db
+    .update(approvalRequests)
+    .set({
+      payload: safePayload ?? {},
+      snapshot: null,
+      resolvedAt: Date.now(),
+      resolutionKind: 'stale_snapshot',
+      response: safeResponse,
+    })
+    .where(
+      and(
+        eq(approvalRequests.id, approvalId),
+        isNull(approvalRequests.resolvedAt),
+      ),
+    )
+    .execute();
+  if ((result as unknown as { changes?: number })?.changes === 0) {
+    clearLocationApprovalTimer(approvalId);
+    return;
+  }
+  clearLocationApprovalTimer(approvalId);
+  clearLocationTokensForRun(approval.messageId);
+  const { getRun } = await import('./runHub');
+  const run = getRun(approval.messageId);
+  if (run) {
+    // Keep a transient retention marker so a late provider event is still
+    // redacted even after the token itself has expired or been revoked.
+    run.locationToken = undefined;
+    run.locationApprovalId = undefined;
+    emitStaleAndMarkup(run, approval, staleReason);
+  }
+}
+
+/** Resume a stale location approval with an opaque, coordinate-free denial. */
+export async function resumeLocationApprovalStale(
+  approvalId: string,
+  reason: string,
+): Promise<void> {
+  await performResume([
+    {
+      approvalId,
+      response: {
+        [LOCATION_STALE_RESUME]: true,
+        reason: safeLocationStaleReason(reason),
+      } satisfies LocationStaleResume,
+    },
+  ]);
+}
+
+/**
+ * Close an expired location prompt without requiring a browser response. A
+ * denial is safe to pass through the checkpoint because it carries no token or
+ * coordinate; the fallback marks the approval stale if the run is no longer
+ * resumable.
+ */
+export async function expireLocationApproval(
+  approvalId: string,
+): Promise<boolean> {
+  const approval = await db.query.approvalRequests.findFirst({
+    where: eq(approvalRequests.id, approvalId),
+  });
+  if (!approval || approval.toolKind !== 'location' || approval.resolvedAt) {
+    return false;
+  }
+  const payload = sanitizeLocationApprovalPayload(approval.payload);
+  if (!payload || !isLocationApprovalExpired(payload)) return false;
+
+  try {
+    await resumeRun(approvalId, {
+      approved: false,
+      retention: 'once',
+      reason: 'expired',
+      clientSessionId: payload.clientSessionId,
+    });
+  } catch {
+    await markLocationApprovalStale(
+      approvalId,
+      'Location approval expired; ask for a named origin instead.',
+    ).catch(() => undefined);
+  }
+  return true;
 }
 
 /** Emit the answered event (closes modals on all tabs) + update the tool-call
@@ -674,6 +1288,22 @@ async function performResume(items: ResumeItem[]): Promise<void> {
     // un-resumed interrupts stay pending; a single interrupt uses a bare value.
     const pendingForRun = await getPendingApprovalsForMessage(userMessageId);
     const useKeyedMap = pendingForRun.length > 1;
+    const responseById = new Map(items.map((i) => [i.approvalId, i.response]));
+    const preparedLocations = new Map<string, PreparedLocationResume>();
+    const staleReasons = new Map<string, string>();
+    for (const approval of approvals.values()) {
+      if (approval.toolKind !== 'location') continue;
+      const prepared = prepareLocationResume({
+        approval,
+        response: responseById.get(approval.id),
+        run,
+        runConfig,
+      });
+      preparedLocations.set(approval.id, prepared);
+      if (prepared.staleReason) {
+        staleReasons.set(approval.id, prepared.staleReason);
+      }
+    }
 
     // Stale-state guard for each approval. If external state changed while paused
     // (file sha / skill content), the approved preview can't be applied verbatim —
@@ -681,8 +1311,6 @@ async function performResume(items: ResumeItem[]): Promise<void> {
     // "stale" rejection. The resumed tool recognizes it and returns an informative
     // error, so the agent can re-read and retry on its own. Rejections skip the
     // check: a rejected edit is never applied, so underlying changes don't matter.
-    const responseById = new Map(items.map((i) => [i.approvalId, i.response]));
-    const staleReasons = new Map<string, string>();
     for (const a of approvals.values()) {
       if (isRejection(a.toolKind, responseById.get(a.id))) continue;
       try {
@@ -706,13 +1334,28 @@ async function performResume(items: ResumeItem[]): Promise<void> {
         : i,
     );
 
-    // Mark each resolved (first-write-wins via WHERE resolvedAt IS NULL).
+    const storedResponseFor = (approvalId: string, response: unknown) =>
+      preparedLocations.get(approvalId)?.storedResponse ?? response;
+    const engineResponseFor = (approvalId: string, response: unknown) =>
+      preparedLocations.get(approvalId)?.engineResponse ?? response;
+
+    // Mark each resolved (first-write-wins via WHERE resolvedAt IS NULL). A
+    // location token is deliberately replaced by its coordinate-free choice
+    // before the approval row is written.
     for (const { approvalId, response } of effectiveItems) {
+      const approval = approvals.get(approvalId)!;
       const result = await db
         .update(approvalRequests)
         .set({
+          ...(approval.toolKind === 'location'
+            ? {
+                payload:
+                  sanitizeLocationApprovalPayload(approval.payload) ?? {},
+                snapshot: null,
+              }
+            : {}),
           resolvedAt: Date.now(),
-          response,
+          response: storedResponseFor(approvalId, response),
           resolutionKind: staleReasons.has(approvalId)
             ? 'stale_snapshot'
             : 'user',
@@ -729,6 +1372,25 @@ async function performResume(items: ResumeItem[]): Promise<void> {
           `Race: approval ${approvalId} resolved by another request`,
         );
       }
+      clearLocationApprovalTimer(approvalId);
+    }
+
+    for (const prepared of preparedLocations.values()) {
+      if (prepared.locationToken) {
+        // Keep only the opaque bearer in the run and graph context. The token
+        // store remains the sole owner of the precise coordinate.
+        run.locationToken = prepared.locationToken;
+        run.locationRetention = prepared.locationRetention;
+      }
+    }
+    for (const [approvalId, prepared] of preparedLocations) {
+      if (!prepared.locationToken) continue;
+      run.locationApprovalId = approvalId;
+      const approval = approvals.get(approvalId);
+      const payload = approval
+        ? sanitizeLocationApprovalPayload(approval.payload)
+        : null;
+      if (payload) run.clientSessionId = payload.clientSessionId;
     }
 
     setRunStatus(run, 'running');
@@ -742,7 +1404,12 @@ async function performResume(items: ResumeItem[]): Promise<void> {
       const approval = approvals.get(approvalId)!;
       const staleReason = staleReasons.get(approvalId);
       if (staleReason) emitStaleAndMarkup(run, approval, staleReason);
-      else emitAnsweredAndMarkup(run, approval, response);
+      else
+        emitAnsweredAndMarkup(
+          run,
+          approval,
+          storedResponseFor(approvalId, response),
+        );
     }
 
     const { createTurnTracker } = await import('@/lib/tokens/tracker');
@@ -753,6 +1420,12 @@ async function performResume(items: ResumeItem[]): Promise<void> {
     );
     const prePauseStats = latestModelStatsV2(run.eventLog);
     if (prePauseStats) tracker.seed(prePauseStats);
+
+    // Re-resolve the provider facade on resume. A paused run keeps its
+    // capability snapshot, but current settings decide whether a call may run.
+    const mappingRuntime = mappingRuntimeForConfig(runConfig);
+    run.mappingConfig = mappingRuntime.config;
+    run.mappingService = mappingRuntime.service;
 
     const handler = new SimplifiedAgent({
       dependencies: {
@@ -770,6 +1443,19 @@ async function performResume(items: ResumeItem[]): Promise<void> {
         memorySection: '',
         invokedSkillNames: [],
         chartRegistry: run.chartRegistry,
+        mapRegistry: run.mapRegistry,
+        mappingConfig: run.mappingConfig,
+        mappingService: run.mappingService,
+        mappingServiceResolver: () =>
+          resolveFreshMappingService(
+            runConfig.mappingAvailable === true,
+            runConfig.mappingConfigHash,
+          ),
+        mappingSavedLocationEnabled:
+          runConfig.mappingSavedLocationEnabled === true,
+        locationToken: run.locationToken,
+        locationApprovalId: run.locationApprovalId,
+        clientSessionId: run.clientSessionId,
       },
     });
     // Single pending interrupt → bare value; multiple → map keyed by the
@@ -779,11 +1465,17 @@ async function performResume(items: ResumeItem[]): Promise<void> {
       const map: Record<string, unknown> = {};
       for (const { approvalId, response } of effectiveItems) {
         const a = approvals.get(approvalId)!;
-        map[a.engineInterruptId ?? a.id] = response;
+        map[a.engineInterruptId ?? a.id] = engineResponseFor(
+          approvalId,
+          response,
+        );
       }
       resumeArg = map;
     } else {
-      resumeArg = effectiveItems[0].response;
+      resumeArg = engineResponseFor(
+        effectiveItems[0].approvalId,
+        effectiveItems[0].response,
+      );
     }
 
     // Extract pinned MCP descriptor snapshots from the approvals being resumed.
@@ -816,6 +1508,9 @@ async function performResume(items: ResumeItem[]): Promise<void> {
 
     const existingDocuments = sourcesFromEventLog(run.eventLog);
     const resumedRun = run;
+    const includesLocationResume = effectiveItems.some(
+      (item) => approvals.get(item.approvalId)?.toolKind === 'location',
+    );
     handler
       .doResume({
         resumeArg,
@@ -824,7 +1519,17 @@ async function performResume(items: ResumeItem[]): Promise<void> {
         existingDocuments,
       })
       .catch((err: unknown) => {
-        console.error('[resumeRun] doResume error:', err);
+        // Location resume state contains a bearer token. Keep both logs and
+        // the client-facing failure coordinate/token-free even if an engine
+        // error happens to stringify its resume input.
+        const safeError = includesLocationResume
+          ? 'The approved location could not be used; ask for a named origin instead.'
+          : String(err);
+        if (includesLocationResume) {
+          console.error('[resumeRun] doResume failed for location approval');
+        } else {
+          console.error('[resumeRun] doResume error:', err);
+        }
         // Without this the run stays `running` forever on a doResume failure
         // (no `end`/`error` event ⇒ terminate() never fires). Emit `error` on
         // the run emitter so the run transitions to `errored` and clients stop
@@ -833,7 +1538,7 @@ async function performResume(items: ResumeItem[]): Promise<void> {
         try {
           emitStreamEvent(resumedRun.emitter, {
             type: 'agent_error',
-            data: String(err),
+            data: safeError,
           });
         } catch {
           // emitter already torn down; nothing more to do
@@ -919,17 +1624,57 @@ async function reconstructAwaitingRun(
     .from(runEvents)
     .where(eq(runEvents.messageId, messageId))
     .orderBy(asc(runEvents.seq));
-  const eventLog = persistedEvents.map((e) => ({
-    seq: e.seq,
+  const eventLog = persistedEvents.flatMap((e) => {
     // Persisted rows may use pre-canonical approval type names; normalize so
     // resume seeding and replay match the current vocabulary.
-    ev: normalizeStreamEvent(e.data) as StreamEvent,
-  }));
+    const normalized = normalizeStreamEvent(e.data) as StreamEvent;
+    const eventType = (normalized as { type?: unknown }).type;
+    if (typeof eventType !== 'string') return [];
+    // A legacy/tampered database row must not resurrect a precise live-only
+    // overlay. New overlays are ineligible for persistence, but fail closed on
+    // read as well.
+    if (eventType === 'map_session_overlay') return [];
+    if (eventType.startsWith('location_')) {
+      const safe = sanitizeLocationMilestone(normalized);
+      if (!safe) return [];
+      return [{ seq: e.seq, ev: safe }];
+    }
+    return [{ seq: e.seq, ev: normalized }];
+  });
   const chartRegistry = new TurnChartRegistry();
   restoreTurnChartRegistryFromMilestones(
     chartRegistry,
     eventLog.map(({ ev }) => ev),
   );
+  const mapRegistry = new TurnMapRegistry();
+  restoreTurnMapRegistryFromMilestones(
+    mapRegistry,
+    eventLog.map(({ ev }) => ev),
+  );
+  const mappingRuntime = mappingRuntimeForConfig(runConfig);
+  let clientSessionId: string | undefined;
+  for (const { ev } of eventLog) {
+    if (ev.type !== 'location_pending') continue;
+    const candidate = (ev.data as Record<string, unknown>).clientSessionId;
+    if (typeof candidate === 'string' && candidate.length > 0) {
+      clientSessionId = candidate;
+      break;
+    }
+  }
+  // The approval row is a second coordinate-free source of the page binding.
+  // Use it when a transient persistence failure dropped the pending milestone;
+  // never reconstruct the binding from a token or a browser payload.
+  if (!clientSessionId) {
+    const pendingApprovals = await getPendingApprovalsForMessage(messageId);
+    for (const approval of pendingApprovals) {
+      if (approval.toolKind !== 'location') continue;
+      const payload = sanitizeLocationApprovalPayload(approval.payload);
+      if (payload) {
+        clientSessionId = payload.clientSessionId;
+        break;
+      }
+    }
+  }
 
   const run: Run = {
     chatId: chat.id,
@@ -946,6 +1691,11 @@ async function reconstructAwaitingRun(
     startedAt: chat.activeRunStartedAt ?? Date.now(),
     recievedMessage: persistedContent,
     chartRegistry,
+    mapRegistry,
+    mappingConfig: mappingRuntime.config,
+    mappingService: mappingRuntime.service,
+    clientSessionId,
+    sessionOverlays: new Map(),
   };
 
   registerReconstructedRun(run);
@@ -992,6 +1742,8 @@ export async function attachRunHost(params: {
     titleGen,
   } = params;
   const { emitter, aiMessageId, chatId } = run;
+  let effectiveUsedLocation =
+    usedLocation || Boolean(run.locationToken || run.locationRetention);
 
   if (!isResume) {
     // Insert empty assistant row immediately so a refresh can see partial state
@@ -1025,11 +1777,11 @@ export async function attachRunHost(params: {
   // For resumed runs, seed from the persisted pre-pause content so post-resume
   // tokens APPEND rather than overwrite. For new runs, start from empty.
   let recievedMessage = isResume ? run.recievedMessage : '';
+  let pendingResponseFence = '';
   if (isResume) {
-    restoreTurnChartRegistryFromMilestones(
-      run.chartRegistry,
-      run.eventLog.map(({ ev }) => ev),
-    );
+    const milestones = run.eventLog.map(({ ev }) => ev);
+    restoreTurnChartRegistryFromMilestones(run.chartRegistry, milestones);
+    restoreTurnMapRegistryFromMilestones(run.mapRegistry, milestones);
   }
 
   // Markup-correlation maps: code_execution_result and user_question_answered
@@ -1090,6 +1842,58 @@ export async function attachRunHost(params: {
     return visible;
   };
 
+  const mapSpecs: Record<string, PersistableMapSpec> = Object.create(null);
+  const handledMapPlacementIds = new Set<string>();
+  const shownMapIds = new Set<string>();
+  for (const { ev } of run.eventLog) {
+    if (ev.type === 'map_spec') {
+      const parsed = PersistableMapSpecSchema.safeParse(ev.data.spec);
+      if (typeof ev.data.mapId === 'string' && parsed.success) {
+        mapSpecs[ev.data.mapId] = parsed.data;
+      }
+    } else if (ev.type === 'map_placement') {
+      if (
+        typeof ev.data.mapId === 'string' &&
+        typeof ev.data.placementId === 'string' &&
+        mapSpecs[ev.data.mapId] &&
+        run.mapRegistry.isPlacementAccepted(ev.data.placementId)
+      ) {
+        handledMapPlacementIds.add(ev.data.placementId);
+        shownMapIds.add(ev.data.mapId);
+      }
+    }
+  }
+  const visibleMapMetadata = (): Record<string, PersistableMapSpec> => {
+    const visible: Record<string, PersistableMapSpec> = Object.create(null);
+    for (const mapId of shownMapIds) {
+      const spec = mapSpecs[mapId];
+      if (spec) visible[mapId] = spec;
+    }
+    return visible;
+  };
+
+  const persistableSpecForRun = (
+    value: MapSpec | PersistableMapSpec,
+  ): PersistableMapSpec => {
+    const parsed = MapSpecSchema.safeParse(value);
+    if (!parsed.success) return toPersistableMapSpec(value);
+
+    // A transient location must never be retained in any route from this
+    // answer, even if its token expires or a provider returns unexpected
+    // endpoints between the call and this writer event. The run itself stores
+    // no precise coordinate.
+    const transientLocation =
+      run.locationRetention === 'once' ||
+      (run.locationToken !== undefined && run.locationRetention !== 'save');
+    if (transientLocation && (parsed.data.route || parsed.data.origin)) {
+      return toPersistableMapSpec(parsed.data, {
+        retainRoute: false,
+        retainOrigin: false,
+      });
+    }
+    return toPersistableMapSpec(parsed.data);
+  };
+
   // A placement milestone can outlive the last partial-content flush when a
   // process pauses for approval or restarts. Rebuild its writer envelope before
   // replay_complete is sent so the authoritative accumulated content cannot
@@ -1110,6 +1914,22 @@ export async function attachRunHost(params: {
             payload,
           );
         }
+      } else if (ev.type === 'map_placement') {
+        if (
+          typeof ev.data.placementId !== 'string' ||
+          !run.mapRegistry.isPlacementAccepted(ev.data.placementId)
+        )
+          continue;
+        const placement = resolveTurnMapPlacement(run.mapRegistry, ev.data);
+        if (!placement) continue;
+        const spec = mapSpecs[placement.mapId];
+        if (!spec) continue;
+        const payload = mapSpecToPayload(
+          placement.mapId,
+          placement.placementId,
+          spec,
+        );
+        recievedMessage = appendMapWidget(recievedMessage, payload);
       }
     }
     run.recievedMessage = recievedMessage;
@@ -1164,10 +1984,30 @@ export async function attachRunHost(params: {
         ...(Object.keys(visibleChartMetadata()).length > 0 && {
           chartSpecs: visibleChartMetadata(),
         }),
+        ...(Object.keys(visibleMapMetadata()).length > 0 && {
+          mapSpecs: visibleMapMetadata(),
+        }),
       },
     }).catch((err: unknown) =>
       console.warn('[runHost] incremental flush failed:', err),
     );
+  };
+
+  const flushPendingResponseFence = (moreTextMayFollow: boolean) => {
+    if (!pendingResponseFence) return;
+    const data = flushSpoofedFenceChunk(
+      pendingResponseFence,
+      moreTextMayFollow,
+    );
+    pendingResponseFence = '';
+    if (!data) return;
+    recievedMessage = stripStreamedChartTags(recievedMessage + data);
+    pushEvent(run, {
+      type: 'response',
+      data,
+      messageId: aiMessageId,
+    });
+    scheduleFlush(false);
   };
 
   const terminate = async (
@@ -1175,6 +2015,7 @@ export async function attachRunHost(params: {
     finalMetadata: Record<string, unknown>,
   ) => {
     if (terminated) return;
+    flushPendingResponseFence(false);
     terminated = true;
     if (flushTimer) {
       clearTimeout(flushTimer);
@@ -1195,6 +2036,15 @@ export async function attachRunHost(params: {
     terminateRun(run, status);
     cleanupCancelToken(userMessageId);
     cleanupRun(userMessageId);
+    clearLocationApprovalTimersForMessage(userMessageId);
+    clearLocationTokensForRun(userMessageId);
+    clearLocationTokensForRun(run.threadId);
+    run.locationToken = undefined;
+    run.locationApprovalId = undefined;
+    run.locationRetention = undefined;
+    // Provider facades are not needed for replay and must not outlive the run.
+    run.mappingService = null;
+    run.mappingConfig = null;
     // Clear chat markers and record terminal state.
     // Use COALESCE for lastRunViewed so a concurrent markSeen(=1) write is
     // not overwritten; only defaults to 0 when the column is still NULL.
@@ -1257,6 +2107,9 @@ export async function attachRunHost(params: {
         ...(Object.keys(visibleChartMetadata()).length > 0 && {
           chartSpecs: visibleChartMetadata(),
         }),
+        ...(Object.keys(visibleMapMetadata()).length > 0 && {
+          mapSpecs: visibleMapMetadata(),
+        }),
       });
     };
 
@@ -1269,20 +2122,34 @@ export async function attachRunHost(params: {
   // agent_error). tool_llm_usage is the agent's own signal and is ignored here.
   onStreamEvent(emitter, async (event) => {
     if (terminated) return;
+    if (run.locationToken || run.locationRetention) {
+      effectiveUsedLocation = true;
+    }
+    if (event.type !== 'response') {
+      flushPendingResponseFence(
+        event.type !== 'agent_end' && event.type !== 'agent_error',
+      );
+    }
 
     if (event.type === 'response') {
-      // Neutralize before either the wire push or persistence: a model can
-      // never forge a widget, and both the live stream and persisted content
-      // must agree (the client reducer's own neutralization is defense in
-      // depth, not the sole guard).
-      const data = neutralizeSpoofedFences(event.data);
-      pushEvent(run, {
-        type: 'response',
-        data,
-        messageId: aiMessageId,
-      });
-      recievedMessage = stripStreamedChartTags(recievedMessage + data);
-      scheduleFlush(false);
+      // Hold a possible partial reserved-fence prefix until the next model
+      // chunk. This keeps split `yaawc:` openings out of both the wire and the
+      // persisted assistant content.
+      const consumed = consumeSpoofedFenceChunk(
+        pendingResponseFence,
+        event.data,
+      );
+      pendingResponseFence = consumed.pending;
+      const data = consumed.text;
+      if (data) {
+        pushEvent(run, {
+          type: 'response',
+          data,
+          messageId: aiMessageId,
+        });
+        recievedMessage = stripStreamedChartTags(recievedMessage + data);
+        scheduleFlush(false);
+      }
     } else if (event.type === 'sources' || event.type === 'sources_added') {
       if (event.searchQuery) searchQuery = event.searchQuery;
       if (event.searchUrl) searchUrl = event.searchUrl;
@@ -1323,12 +2190,20 @@ export async function attachRunHost(params: {
       );
       scheduleFlush(true);
     } else if (event.type === 'tool_call_error') {
-      pushEvent(run, { ...event, messageId: aiMessageId });
+      const safeError =
+        run.locationToken || run.locationRetention
+          ? 'The approved location could not be used; ask for a named origin instead.'
+          : event.data.error;
+      pushEvent(run, {
+        type: 'tool_call_error',
+        data: { ...event.data, error: safeError },
+        messageId: aiMessageId,
+      });
       recievedMessage = updateWidget<ToolCallPayload>(
         recievedMessage,
         'tool_call',
         event.data.toolCallId,
-        { status: event.data.status, error: event.data.error },
+        { status: event.data.status, error: safeError },
       );
       scheduleFlush(true);
     } else if (event.type === 'artifact_saved') {
@@ -1526,6 +2401,169 @@ export async function attachRunHost(params: {
         messageId: aiMessageId,
       });
       scheduleFlush(true);
+    } else if (event.type === 'map_spec') {
+      const { mapId, spec } = event.data;
+      const full = MapSpecSchema.safeParse(spec);
+      const persistable = PersistableMapSpecSchema.safeParse(spec);
+      const parsed = full.success
+        ? full.data
+        : persistable.success
+          ? persistable.data
+          : null;
+      const requestedHandle = event.data.handle ?? event.data.turnHandle;
+      if (
+        typeof mapId !== 'string' ||
+        !mapId ||
+        (requestedHandle !== undefined &&
+          (typeof requestedHandle !== 'string' ||
+            !/^map_[1-9]\d*$/.test(requestedHandle))) ||
+        (event.data.handle !== undefined &&
+          event.data.turnHandle !== undefined &&
+          event.data.handle !== event.data.turnHandle) ||
+        !parsed ||
+        mapSpecs[mapId]
+      )
+        return;
+      let registration =
+        typeof requestedHandle === 'string'
+          ? run.mapRegistry.resolve(requestedHandle)
+          : run.mapRegistry.resolveById(mapId);
+      // A provider normally registers before emitting its milestone. Admit a
+      // valid event-backed registration as well so an event that crosses an
+      // async boundary cannot be lost before the writer sees it.
+      if (!registration && typeof requestedHandle === 'string') {
+        try {
+          registration = run.mapRegistry.registerKnown({
+            handle: requestedHandle,
+            mapId,
+            spec: parsed,
+          });
+        } catch {
+          return;
+        }
+      }
+      if (!registration || registration.mapId !== mapId) return;
+      const handle = registration.handle;
+      // The registry is the trusted registration boundary. Do not let an
+      // event carrying a known handle replace its canonical provider snapshot.
+      const safeSpec = persistableSpecForRun(registration.spec);
+      mapSpecs[mapId] = safeSpec;
+      const source =
+        typeof event.data.source === 'string' &&
+        event.data.source.length > 0 &&
+        event.data.source.length <= 240 &&
+        !/[\u0000-\u001f\u007f<>]/.test(event.data.source)
+          ? event.data.source
+          : undefined;
+      pushEvent(run, {
+        type: 'map_spec',
+        data: {
+          mapId,
+          handle,
+          spec: safeSpec,
+          ...(source ? { source } : {}),
+        },
+        messageId: aiMessageId,
+      });
+      scheduleFlush(true);
+    } else if (event.type === 'map_placement') {
+      const placementId = event.data.placementId;
+      if (
+        typeof placementId !== 'string' ||
+        handledMapPlacementIds.has(placementId) ||
+        !mapSpecs[event.data.mapId]
+      )
+        return;
+      const placement = resolveTurnMapPlacement(run.mapRegistry, event.data);
+      if (!placement) return;
+      const spec = mapSpecs[placement.mapId];
+      const safeSpec = PersistableMapSpecSchema.safeParse(spec);
+      if (!safeSpec.success) return;
+      const payload = mapSpecToPayload(
+        placement.mapId,
+        placement.placementId,
+        safeSpec.data,
+      );
+      const nextMessage = appendMapWidget(recievedMessage, payload);
+      if (nextMessage === recievedMessage) return;
+      handledMapPlacementIds.add(placement.placementId);
+      shownMapIds.add(placement.mapId);
+      recievedMessage = nextMessage;
+      pushEvent(run, {
+        type: 'map_placement',
+        data: {
+          placementId: placement.placementId,
+          mapId: placement.mapId,
+          handle: placement.handle,
+          placementNumber: placement.placementNumber,
+        },
+        messageId: aiMessageId,
+      });
+      scheduleFlush(true);
+    } else if (event.type === 'map_session_overlay') {
+      const overlay = MapSessionOverlaySchema.safeParse(event.data);
+      const purpose =
+        overlay.success && overlay.data.route ? 'routing' : 'nearby';
+      const locationSession = locationSessionForRun(run, purpose);
+      const registration = overlay.success
+        ? run.mapRegistry.resolveById(overlay.data.mapId)
+        : undefined;
+      if (
+        !overlay.success ||
+        !locationSession ||
+        locationSession.retention !== 'once' ||
+        overlay.data.clientSessionId !== run.clientSessionId ||
+        !registration
+      )
+        return;
+      const matchesOrigin = (coordinate: { lat: number; lon: number }) =>
+        coordinate.lat === locationSession.coordinate.lat &&
+        coordinate.lon === locationSession.coordinate.lon;
+      if (
+        (overlay.data.origin && !matchesOrigin(overlay.data.origin)) ||
+        (overlay.data.route && !matchesOrigin(overlay.data.route.origin))
+      )
+        return;
+      if (overlay.data.route) {
+        const registeredRoute = registration.spec.route;
+        if (
+          !registeredRoute ||
+          registeredRoute.mode !== overlay.data.route.mode ||
+          registeredRoute.destination.lat !==
+            overlay.data.route.destination.lat ||
+          registeredRoute.destination.lon !==
+            overlay.data.route.destination.lon ||
+          registeredRoute.distanceMeters !==
+            overlay.data.route.distanceMeters ||
+          registeredRoute.durationSeconds !==
+            overlay.data.route.durationSeconds ||
+          registeredRoute.provider !== overlay.data.route.provider ||
+          registeredRoute.attribution !== overlay.data.route.attribution
+        ) {
+          return;
+        }
+      }
+      const overlayExpiresAt = overlay.data.expiresAt
+        ? Date.parse(overlay.data.expiresAt)
+        : locationSession.expiresAt;
+      if (
+        !Number.isFinite(overlayExpiresAt) ||
+        overlayExpiresAt <= Date.now() ||
+        overlayExpiresAt > locationSession.expiresAt
+      )
+        return;
+      // Deliberately do not mutate content or metadata. runHub broadcasts this
+      // event live-only and excludes it from the durable event log.
+      pushEvent(run, {
+        type: 'map_session_overlay',
+        data: {
+          ...overlay.data,
+          ...(overlay.data.expiresAt
+            ? {}
+            : { expiresAt: new Date(locationSession.expiresAt).toISOString() }),
+        },
+        messageId: aiMessageId,
+      });
     } else if (event.type === 'todo_update') {
       pushEvent(run, {
         type: 'todo_update',
@@ -1580,7 +2618,7 @@ export async function attachRunHost(params: {
       // terminate persists the true total — but don't push another wire `stats`.
       modelStats = {
         ...event.data,
-        usedLocation,
+        usedLocation: effectiveUsedLocation,
         usedPersonalization,
       };
       if (!messageEnded) {
@@ -1593,15 +2631,24 @@ export async function attachRunHost(params: {
     } else if (event.type === 'interrupt') {
       try {
         await handleInterrupts(run, event.interrupts);
-      } catch (err) {
-        console.error('[runHost] handleInterrupts failed:', err);
+      } catch {
+        // Approval payloads are an internal boundary. Never log their contents
+        // (a malformed location payload could contain a raw coordinate).
+        console.error('[runHost] handleInterrupts failed');
+        emitStreamEvent(emitter, {
+          type: 'agent_error',
+          data: 'The approval request could not be created.',
+        });
       }
     } else if (event.type === 'agent_end') {
       const endTime = Date.now();
+      effectiveUsedLocation =
+        effectiveUsedLocation ||
+        Boolean(run.locationToken || run.locationRetention);
       modelStats = {
         ...modelStats,
         responseTime: endTime - startTime,
-        usedLocation,
+        usedLocation: effectiveUsedLocation,
         usedPersonalization,
       };
 
@@ -1640,7 +2687,7 @@ export async function attachRunHost(params: {
         modelStats,
         searchQuery,
         searchUrl,
-        usedLocation,
+        usedLocation: effectiveUsedLocation,
         usedPersonalization,
         memoriesUsed: memoriesUsed.length > 0 ? memoriesUsed : undefined,
         projectedNextInputTokens,
@@ -1681,7 +2728,7 @@ export async function attachRunHost(params: {
         modelStats = {
           ...modelStats,
           responseTime: endTime - startTime,
-          usedLocation,
+          usedLocation: effectiveUsedLocation,
           usedPersonalization,
         };
       }
@@ -1697,16 +2744,23 @@ export async function attachRunHost(params: {
         ...(searchQuery && { searchQuery }),
         modelStats,
         ...(searchUrl && { searchUrl }),
-        usedLocation,
+        usedLocation: effectiveUsedLocation,
         usedPersonalization,
         ...(memoriesUsed.length > 0 && { memoriesUsed }),
         ...(Object.keys(visibleChartMetadata()).length > 0 && {
           chartSpecs: visibleChartMetadata(),
         }),
+        ...(Object.keys(visibleMapMetadata()).length > 0 && {
+          mapSpecs: visibleMapMetadata(),
+        }),
         // no runStatus field = success
       });
     } else if (event.type === 'agent_error') {
-      pushEvent(run, { type: 'error', data: event.data });
+      const safeError =
+        run.locationToken || run.locationRetention
+          ? 'The approved location could not be used; ask for a named origin instead.'
+          : event.data;
+      pushEvent(run, { type: 'error', data: safeError });
 
       deleteCheckpoint(run.threadId).catch(console.warn);
       terminate('errored', {
@@ -1717,6 +2771,9 @@ export async function attachRunHost(params: {
         ...(searchUrl && { searchUrl }),
         ...(Object.keys(visibleChartMetadata()).length > 0 && {
           chartSpecs: visibleChartMetadata(),
+        }),
+        ...(Object.keys(visibleMapMetadata()).length > 0 && {
+          mapSpecs: visibleMapMetadata(),
         }),
       }).catch(console.warn);
     }

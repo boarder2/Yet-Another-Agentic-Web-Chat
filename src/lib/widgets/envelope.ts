@@ -17,7 +17,7 @@
  */
 
 export type WidgetKind =
-  'tool_call' | 'subagent' | 'panel' | 'artifact' | 'chart';
+  'tool_call' | 'subagent' | 'panel' | 'artifact' | 'chart' | 'map';
 
 const WIDGET_KINDS: ReadonlySet<string> = new Set([
   'tool_call',
@@ -25,6 +25,7 @@ const WIDGET_KINDS: ReadonlySet<string> = new Set([
   'panel',
   'artifact',
   'chart',
+  'map',
 ]);
 
 /** Former `<ToolCall>` attributes as plain JSON fields (base64 dropped). */
@@ -101,19 +102,39 @@ export interface ChartPayload {
   chartId: string;
 }
 
+/** Writer-owned map placement. `mapId` is a private canonical context key. */
+export interface MapLinkPayload {
+  label: string;
+  url: string;
+}
+
+export interface MapPayload {
+  /** Unique placement ID, used for idempotent append/update operations. */
+  id: string;
+  /** Private canonical map ID; never a model-facing handle. */
+  mapId: string;
+  title?: string;
+  /** Safe semantic summary used before/without a map renderer. */
+  fallback: string;
+  links?: MapLinkPayload[];
+  attribution: string;
+}
+
 export type WidgetPayload =
   | ToolCallPayload
   | SubagentPayload
   | PanelPayload
   | ArtifactPayload
-  | ChartPayload;
+  | ChartPayload
+  | MapPayload;
 
 export type ParsedWidget =
   | { kind: 'tool_call'; payload: ToolCallPayload }
   | { kind: 'subagent'; payload: SubagentPayload }
   | { kind: 'panel'; payload: PanelPayload }
   | { kind: 'artifact'; payload: ArtifactPayload }
-  | { kind: 'chart'; payload: ChartPayload };
+  | { kind: 'chart'; payload: ChartPayload }
+  | { kind: 'map'; payload: MapPayload };
 
 type WithId = { id: string };
 
@@ -251,8 +272,123 @@ export function parseWidgetFence(
   ) {
     return null;
   }
+  if (kind === 'map' && !isMapPayload(payload)) return null;
   return { kind, payload } as ParsedWidget;
 }
+
+function isSafeMapText(value: unknown, maxLength: number): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= maxLength &&
+    !/[\u0000-\u001f\u007f<>]/.test(value)
+  );
+}
+
+function isSafeMapFallback(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= 4_000 &&
+    !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f<>]/.test(value) &&
+    !value.includes('```')
+  );
+}
+
+function isSafeMapUrl(value: unknown): value is string {
+  if (!isSafeMapText(value, 2_048)) return false;
+  try {
+    const url = new URL(value);
+    return (
+      (url.protocol === 'http:' || url.protocol === 'https:') &&
+      !url.username &&
+      !url.password
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isMapPayload(value: unknown): value is MapPayload {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const payload = value as Partial<MapPayload>;
+  if (
+    !isSafeMapText(payload.id, 160) ||
+    !isSafeMapText(payload.mapId, 160) ||
+    !isSafeMapFallback(payload.fallback) ||
+    !isSafeMapText(payload.attribution, 500)
+  ) {
+    return false;
+  }
+  if (payload.title !== undefined && !isSafeMapText(payload.title, 240)) {
+    return false;
+  }
+  if (payload.links !== undefined) {
+    if (!Array.isArray(payload.links) || payload.links.length > 40)
+      return false;
+    if (
+      payload.links.some(
+        (link) =>
+          !link ||
+          typeof link !== 'object' ||
+          !isSafeMapText((link as MapLinkPayload).label, 240) ||
+          !isSafeMapUrl((link as MapLinkPayload).url),
+      )
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** Append a validated writer-owned map placement. */
+export function appendMapWidget(content: string, payload: MapPayload): string {
+  if (!isMapPayload(payload)) return content;
+  return appendWidget<MapPayload>(content, 'map', payload);
+}
+
+function escapeMapLabel(value: string): string {
+  return value.replace(/[\\[\]()`*_]/g, '\\$&');
+}
+
+/** Convert a map envelope into safe text/links for copy and document export. */
+export function formatMapPayloadForOutput(payload: MapPayload): string {
+  if (!isMapPayload(payload)) return '';
+  // Keep a provider value from recreating a fenced widget when the transformed
+  // text is written to Markdown or pasted into another document.
+  const fallback = payload.fallback.replace(/```/g, '\\`\\`\\`').trim();
+  const lines = [fallback];
+  const links = (payload.links ?? []).filter(
+    (link) => isSafeMapText(link.label, 240) && isSafeMapUrl(link.url),
+  );
+  if (links.length > 0) {
+    lines.push(
+      '',
+      'Map links:',
+      ...links.map((link) => `- [${escapeMapLabel(link.label)}](${link.url})`),
+    );
+  }
+  lines.push('', `Map attribution: ${payload.attribution.trim()}`);
+  return lines.join('\n');
+}
+
+/** Replace map widgets while leaving other widget stripping semantics alone. */
+export function replaceMapWidgetsForOutput(content: string): string {
+  return content.replace(
+    /```yaawc:map\n([^\n]*)\n```/g,
+    (_full, body: string) => {
+      try {
+        const payload = JSON.parse(body) as unknown;
+        return isMapPayload(payload) ? formatMapPayloadForOutput(payload) : '';
+      } catch {
+        return '';
+      }
+    },
+  );
+}
+
+export const transformMapWidgetsForOutput = replaceMapWidgetsForOutput;
+export const mapWidgetsToText = replaceMapWidgetsForOutput;
 
 /**
  * Decode a markdown-to-jsx code block into its widget payload. `className`
@@ -518,8 +654,51 @@ export function mapOutsideWidgets(
 /**
  * Downgrade any `yaawc:`-prefixed fence info string in model-streamed text to
  * a bare fence, so a model can never spoof a widget — all legitimate
- * envelopes are writer-appended, never model tokens.
+ * envelopes are writer-appended, never model tokens. Callers that accumulate
+ * chunks run this over the accumulated text outside existing writer envelopes,
+ * which also closes the split-opening-fence gap.
  */
 export function neutralizeSpoofedFences(text: string): string {
-  return text.replace(/```yaawc:[a-zA-Z0-9_]*/g, '```');
+  return text.replace(/```[ \t]*yaawc(?::[a-zA-Z0-9_]*)?/g, '```');
+}
+
+// Hold every suffix that could become the reserved `yaawc:` fence prefix. In
+// particular, `yaawc` has one `w`; keeping this partial prefix out of the
+// accumulated response closes the split-token spoofing gap.
+const POSSIBLE_SPOOF_PREFIX =
+  /(`{1,3}[ \t]*(?:y(?:a(?:a(?:w(?:c)?)?)?)?(?::[a-zA-Z0-9_]*)?)?)$/;
+
+function trailingSpoofPrefix(text: string): string {
+  return text.match(POSSIBLE_SPOOF_PREFIX)?.[1] ?? '';
+}
+
+/**
+ * Consume one model-text chunk while holding a possible partial reserved-fence
+ * prefix. Keeping the prefix out of accumulated content makes neutralization
+ * correct even when a provider splits ` ```yaawc:map ` across token events.
+ */
+export function consumeSpoofedFenceChunk(
+  pending: string,
+  chunk: string,
+): { text: string; pending: string } {
+  const combined = pending + chunk;
+  const suffix = trailingSpoofPrefix(combined);
+  const stable = suffix ? combined.slice(0, -suffix.length) : combined;
+  return {
+    text: neutralizeSpoofedFences(stable),
+    pending: suffix,
+  };
+}
+
+/**
+ * Flush a held partial prefix at a stream boundary; it is not a complete
+ * widget. A separator is used when more model text may follow after a
+ * non-response event, preventing that later text from completing the prefix.
+ */
+export function flushSpoofedFenceChunk(
+  pending: string,
+  moreTextMayFollow = false,
+): string {
+  const text = neutralizeSpoofedFences(pending);
+  return moreTextMayFollow && text ? `${text}\u200b` : text;
 }

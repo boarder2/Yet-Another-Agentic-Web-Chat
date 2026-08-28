@@ -13,7 +13,11 @@ import { SubagentExecution } from '@/lib/state/chatAgentState';
 import { SimplifiedAgent } from '@/lib/search/simplifiedAgent';
 import { SubagentDefinition } from './definitions';
 import { CachedEmbeddings } from '@/lib/utils/cachedEmbeddings';
-import { allAgentTools, CHART_TOOL_NAMES } from '@/lib/tools/agents';
+import {
+  allAgentTools,
+  CHART_TOOL_NAMES,
+  MAPPING_TOOL_NAMES,
+} from '@/lib/tools/agents';
 import { ARTIFACT_TOOL_NAMES } from '@/lib/tools/agents/artifactTools';
 import { removeThinkingBlocks } from '@/lib/utils/contentUtils';
 import {
@@ -37,7 +41,11 @@ import { createAgentRunConfig } from '@/lib/search/agentRunConfig';
 export function filterSubagentTools(
   allowedTools: readonly string[],
 ): typeof allAgentTools {
-  const withheld = [...ARTIFACT_TOOL_NAMES, ...CHART_TOOL_NAMES];
+  const withheld = [
+    ...ARTIFACT_TOOL_NAMES,
+    ...CHART_TOOL_NAMES,
+    ...MAPPING_TOOL_NAMES,
+  ];
   const available = allAgentTools.filter(
     (tool) => !withheld.includes(tool.name),
   );
@@ -187,6 +195,8 @@ export class SubagentExecutor {
         workspaceSuffix: '',
         memoryEnabled: false,
         panel: null,
+        mappingAvailable: false,
+        mappingSavedLocationEnabled: false,
       });
       const subagent = new SimplifiedAgent({
         dependencies: {

@@ -22,7 +22,7 @@ Phase 1 runs only on a **new** message; **resume never re-runs Phase 1** (it reu
    - Resolves each executor with `resolveModelRef(ref, { isolate: true })` (own instance so concurrent runs can't clobber a shared catalog-cached singleton). Needs ≥2 resolvable models or it throws.
    - Runs each executor as a full `SimplifiedAgent` on an **isolated `EventEmitter`**, forwarding its stream to the parent as `panel_executor_*` events. This mirrors the `deep_research` subagent isolated-emitter pattern.
    - Executors get chat history + retrieved memory **and** the active persona/methodology (so each researches in the user's voice), but memory tools are off.
-   - Toolset is the focus-mode toolset minus the prompting/mutating/recursive set (`filterExecutorTools`, see below).
+   - Toolset is the focus-mode toolset minus the prompting/mutating/recursive set (`filterExecutorTools`, see below). Mapping tools are never added to the panel executor or synthesis path.
    - After all settle (`Promise.allSettled`; `runOne` never throws), sources are merged + deduped into one ordered citation set with 1-based `sourceId`s. Dedup key: real `url`, else a meaningful `source` (NOT the `file_search` sentinel), else `title::pageContent`. If zero executors succeed, it throws.
    - Token usage: the coordinator receives the turn's shared `TokenTracker` and, per executor N, registers a chat-role recorder (executor's own model) and a system-role recorder (shared system model) under `scope: 'panel_executor:N'`; those recorders feed the child `SimplifiedAgent`. `panel_executor_completed.usage` is `tracker.scopeUsage('panel_executor:N')` (the frozen `PanelUsage` shape). See `src/lib/tokens/tracker.ts`.
 
@@ -30,7 +30,7 @@ Phase 1 runs only on a **new** message; **resume never re-runs Phase 1** (it reu
 
 ## Executor tool restrictions
 
-`src/lib/tools/panel/restrictedToolset.ts` — `filterExecutorTools()` removes `PANEL_EXECUTOR_EXCLUDED_TOOLS`: `code_execution`, `workspace_edit`, `workspace_create_file`, `ask_user`, `edit_skill`, `deep_research`, and the three artifact tools (`create_artifact`, `edit_artifact`, `read_artifact` — chat-scoped rows an executor has no chat to own; authoring belongs to the synthesizing model). The invariant `search_yaawc_docs` system tool is not excluded, so both executors and the ordinary synthesis pass can ground YAAWC claims. Exclusion list (not a whitelist), so executors inherit the full focus-mode set minus the prompting/approval-gated/mutating/recursive tools. Read-only workspace tools (ls/grep/read) intentionally stay — they never interrupt.
+`src/lib/tools/panel/restrictedToolset.ts` — `filterExecutorTools()` removes mapping tools as well as `PANEL_EXECUTOR_EXCLUDED_TOOLS`: mapping requires an ordinary interactive Web Search turn and panel executors/synthesis are excluded. The remaining exclusion list removes: `code_execution`, `workspace_edit`, `workspace_create_file`, `ask_user`, `edit_skill`, `deep_research`, and the three artifact tools (`create_artifact`, `edit_artifact`, `read_artifact` — chat-scoped rows an executor has no chat to own; authoring belongs to the synthesizing model). The invariant `search_yaawc_docs` system tool is not excluded, so both executors and the ordinary synthesis pass can ground YAAWC claims. Exclusion list (not a whitelist), so executors inherit the full focus-mode set minus the prompting/approval-gated/mutating/recursive tools. Read-only workspace tools (ls/grep/read) intentionally stay — they never interrupt.
 
 ## Streaming events
 
@@ -40,7 +40,7 @@ Phase 1 runs only on a **new** message; **resume never re-runs Phase 1** (it reu
 
 - Composer entry: `src/components/MessageInputActions/PanelSelector.tsx` + device-local `panelSelection`. Split control: the icon half toggles the panel in one click, the chevron half opens configuration. Below `sm` the split collapses to the chevron alone (single Layers button) and the popover header carries an on/off switch — one trigger on every viewport, which headlessui requires (the panel anchors to the last-mounted `PopoverButton`). `enabled` can only be set while the selection holds 2–4 executors (`hasValidExecutors`), so the engaged state always matches what the turn sends — clicking the toggle on an under-configured panel opens the popover instead. Removing executors below the minimum clears `enabled`. Applying a preset is the one action that enables implicitly.
 - Presets: `src/lib/panel/panelPresets.ts` (stored like model presets) with a Settings section (`src/app/settings/sections/PanelPresetsSection.tsx`).
-- `panelPresets` and `panelSelection` are in `MIGRATED_SETTING_KEYS` (DB-synced) — see the `yaawc-settings-persistence` skill.
+- `panelPresets` and `panelSelection` are in `MIGRATED_SETTING_KEYS` (DB-synced) — see the `yaawc-settings-persistence` skill. Mapping settings do not change this exclusion: panel runs never receive mapping tools.
 
 ## Gotchas
 

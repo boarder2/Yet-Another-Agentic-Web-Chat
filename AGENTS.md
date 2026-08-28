@@ -27,10 +27,11 @@ Subsystem detail lives in the `.agents/skills/yaawc-*` skills — read the relev
 - **Artifacts** (`src/lib/artifacts/`; tools in `src/lib/tools/agents/artifactTools.ts`): agent-authored self-contained HTML pages beside the chat; every write is an immutable versioned snapshot anchored to its message. Workspace-owned when the chat is in a workspace (shared across its chats), chat-owned otherwise. Served as HTML only via `/api/artifacts/[id]/raw` with a no-network, opaque-origin CSP on the response.
 - **Workflows & schedules** (`src/lib/workflows/`, `src/lib/scheduledTasks/`): parameterized prompts (`{{name}}` templating) plus cron schedules that run them headlessly; UI in `src/app/automations/`.
 - **MCP servers** (`src/lib/mcp/`): remote servers whose tools are injected into every tool-running focus mode; API under `/api/mcp/*`.
+- **Mapping** (`src/lib/maps/`): opt-in provider adapters, privacy-aware cache, turn-local place/route registry, writer-owned map events/widgets, and explicit browser-location approvals; available only to eligible interactive Web Search turns.
 - **Dashboard widgets** (`src/lib/types/widget.ts`): two kinds — LLM-transformed and user-JS in a Docker sandbox; rendered on `/dashboard` and the home page.
 - **TTS** (`src/lib/tts/`): local Kokoro speech synthesis for messages — plain read or LLM-rewritten narration (cached per message); served via `/api/tts(/stream)`.
 - **Theming** (`src/lib/theme/`): a theme is seven seed colors written onto `:root`; every other token derives in `globals.css` via `color-mix`. Device-local, restored before first paint.
-- **Settings** (`src/lib/settings/`): non-secret settings sync localStorage ⇄ DB (DB is source of truth); credentials live in a dedicated table, encrypted at rest (`src/lib/credentials.ts`).
+- **Settings** (`src/lib/settings/`): non-secret settings sync localStorage ⇄ DB (DB is source of truth); credentials live in a dedicated table, encrypted at rest (`src/lib/credentials.ts`). Mapping endpoint, acknowledgement, saved-location opt-in, and cache controls are DB-backed; mapping remains disabled until explicitly enabled.
 
 ## Conventions
 
@@ -40,7 +41,7 @@ Subsystem detail lives in the `.agents/skills/yaawc-*` skills — read the relev
 - UI: reuse the primitives in `src/components/ui/` (`Button`, `Modal`, `Select`, `Input`/`Field`, …) — never hand-roll a dialog or scrim. See the `yaawc-design-system` skill
 - Data fetching: TanStack Query hooks in `src/lib/hooks/api/` via `apiFetch` (`src/lib/api/client.ts`) and keys from `qk` (`src/lib/api/keys.ts`) — no raw `fetch` in components; mutations invalidate their keys
 - DB changes: edit `src/lib/db/schema.ts` only, then `npm run db:generate`
-- Tests use the lowest practical level: prefer fast Vitest unit tests for pure or isolated behavior; use Playwright for UI workflows and full application boundaries. Avoid duplicating unit coverage in e2e unless the e2e test verifies an additional integration boundary. E2e tests never call a real LLM (env-gated test provider — see `e2e/CLAUDE.md`)
+- Tests use the lowest practical level: prefer fast Vitest unit tests for pure or isolated behavior; use Playwright for UI workflows and full application boundaries. Avoid duplicating unit coverage in e2e unless the e2e test verifies an additional integration boundary. E2e tests never call a real LLM or mapping/tile provider; mapping flows use the env-gated deterministic provider and restore global settings (see `e2e/CLAUDE.md`)
 - Ask before adding dependencies
 - Terse, factual responses; clarify via `AskUserQuestion`, never inline in prose; evaluate the user's proposals critically — say so with reasoning when one is weak
 - Keep this file and the `yaawc-*` skills accurate when a change touches what they document — big-picture only, no implementation minutiae. Docs/README additions equally terse

@@ -18,8 +18,9 @@ Depending on the selected feature and provider, YAAWC can send:
 - Image data to a vision-capable model for analysis, or image prompts to the configured image-generation provider.
 - Dashboard source URLs to the server-side fetcher and resulting source content to the selected AI widget model or local code widget sandbox.
 - MCP tool arguments and credentials to the configured MCP server when its tools are used.
+- Named place, nearby-business, place-detail, and route requests to the configured mapping services when an operator has enabled Mapping. A browser-origin route can send the precise location to the disclosed provider hosts only after explicit page approval; no IP geolocation is used.
 
-Personalization context is instructed to remain out of retrieval tool calls, web requests, and citations, but it can be included in the selected model's internal context when its send controls are enabled. Review provider policies and endpoint ownership before enabling a feature.
+Personalization context is instructed to remain out of retrieval tool calls, web requests, and citations, but it can be included in the selected model's internal context when its send controls are enabled. Saved personalization reaches mapping services only through the separate Mapping opt-in and is resolved as an approximate central-area locality. Review provider policies and endpoint ownership before enabling a feature.
 
 ## Private sessions
 
@@ -29,9 +30,10 @@ Start a private session from the empty-chat private toggle or with `?private=1`.
 - Exclude private chats from agent chat-history search and message lookup.
 - Withhold durable artifact tools.
 - Can use a separate primary search provider selected in Settings.
+- Can use transient browser location for an approved Mapping turn, but never offer **Use and save** and never send saved personalization to mapping providers.
 - Are deleted automatically after the configured duration. The default is 24 hours; presets range from 5 minutes to 7 days, and a custom duration is allowed.
 
-Private data is still stored locally while the session exists so the active conversation can run. Retention cleanup skips an active private run and removes the chat and its chat-scoped generated data after expiry.
+Private data is still stored locally while the session exists so the active conversation can run. A **Use once** mapping route keeps its exact origin and route only in the approving page session while the turn is active; the persisted answer keeps destination data and `Route not retained`. **Use and save** is unavailable in private sessions. Retention cleanup skips an active private run and removes the chat and its chat-scoped generated data after expiry.
 
 ## Retention and deletion
 
@@ -39,7 +41,7 @@ Private data is still stored locally while the session exists so the active conv
 
 Deleting a chat removes its messages and chat-scoped artifacts and generated images. Workspace-owned artifacts and generated images survive deletion of their originating chat because the workspace owns them. Deleting a workspace removes its files and workspace-owned artifacts/images, but detaches its chats and memories into the unscoped area instead of deleting those records.
 
-Retention cleanup also removes expired private sessions and eligible scheduled or regular chats. Keep backups of the deployment data directory if you need recovery; YAAWC does not provide a separate cloud backup.
+Retention cleanup also removes expired private sessions and eligible scheduled or regular chats. The map cache stores only unassociated coarse localities and public business records for up to 30 days; exact addresses, nearby coordinates, routes, and browser coordinates are memory-only and can be cleared from Settings. Keep backups of the deployment data directory if you need recovery; YAAWC does not provide a separate cloud backup.
 
 ## Sandboxed output
 
@@ -49,6 +51,6 @@ Dashboard and widget source URLs are authored by the operator and fetched by the
 
 ## Availability and failure states
 
-A missing encryption passphrase blocks credential-backed use. If the passphrase changes, existing encrypted credentials cannot be decrypted and must be entered again. A provider or source outage can prevent a feature from completing while leaving local chats and settings available. Memory, embeddings, code execution, image generation, MCP, and search each have independent prerequisites; a failure in one does not imply that all YAAWC data or features are unavailable.
+A missing encryption passphrase blocks credential-backed use. If the passphrase changes, existing encrypted credentials cannot be decrypted and must be entered again. A provider or source outage can prevent a feature from completing while leaving local chats and settings available. Mapping is disabled by default; mapping configuration, provider, tile, routing, and browser-permission failures preserve validated prose and do not invent coordinates. Memory, embeddings, code execution, image generation, MCP, search, and mapping each have independent prerequisites; a failure in one does not imply that all YAAWC data or features are unavailable.
 
 For configuration controls, see [Administration and settings](./administration-and-settings.md). For provider-specific requirements, see [Models and providers](./models-and-providers.md).

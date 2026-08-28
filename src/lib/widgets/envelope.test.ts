@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import {
   appendWidget,
   appendChartWidget,
+  appendMapWidget,
   appendPanelColumnChart,
   updateWidget,
   findWidget,
@@ -12,6 +13,10 @@ import {
   maskWidgets,
   unmaskWidgets,
   neutralizeSpoofedFences,
+  consumeSpoofedFenceChunk,
+  flushSpoofedFenceChunk,
+  formatMapPayloadForOutput,
+  replaceMapWidgetsForOutput,
   balanceDanglingFence,
   upsertNestedToolCall,
   patchNestedToolCall,
@@ -22,6 +27,7 @@ import {
   upsertArtifactWidget,
   type ArtifactPayload,
   type ChartPayload,
+  type MapPayload,
   type ToolCallPayload,
   type SubagentPayload,
   type PanelPayload,
@@ -336,6 +342,90 @@ describe('chart envelopes', () => {
 
     expect(safe).not.toContain('yaawc:chart');
     expect(findWidget<ChartPayload>(safe, 'chart', 'evil')).toBeUndefined();
+  });
+});
+
+describe('map envelopes', () => {
+  const mapPayload = (over: Partial<MapPayload> = {}): MapPayload => ({
+    id: 'map_placement_1',
+    mapId: 'private-map-1',
+    title: 'Nearby places',
+    fallback: 'Nearby places\n1. Central Cafe — 1 Main Street',
+    links: [
+      { label: '1. Central Cafe [details]', url: 'https://example.test/place' },
+      { label: 'Route', url: 'https://example.test/route' },
+    ],
+    attribution: '© OpenStreetMap contributors',
+    ...over,
+  });
+
+  it('appends, parses, and deduplicates a writer-owned map placement', () => {
+    let content = appendMapWidget('Answer\n\n', mapPayload());
+    content = appendMapWidget(content, mapPayload({ fallback: 'different' }));
+
+    expect(content.match(/```yaawc:map/g)).toHaveLength(1);
+    expect(findWidget<MapPayload>(content, 'map', 'map_placement_1')).toEqual(
+      mapPayload(),
+    );
+    expect(parseWidgetFence('yaawc:map', JSON.stringify(mapPayload()))).toEqual(
+      { kind: 'map', payload: mapPayload() },
+    );
+  });
+
+  it('rejects unsafe or incomplete map payloads at the render boundary', () => {
+    expect(
+      parseWidgetFence(
+        'yaawc:map',
+        JSON.stringify(mapPayload({ fallback: 'contains <markup>' })),
+      ),
+    ).toBeNull();
+    expect(
+      parseWidgetFence(
+        'yaawc:map',
+        JSON.stringify(
+          mapPayload({ links: [{ label: 'x', url: 'javascript:x' }] }),
+        ),
+      ),
+    ).toBeNull();
+    expect(appendMapWidget('', mapPayload({ attribution: '<unsafe>' }))).toBe(
+      '',
+    );
+  });
+
+  it('replaces maps with useful text, external links, and attribution for output', () => {
+    const content = `Before\n\n${appendMapWidget('', mapPayload())}After`;
+    const output = replaceMapWidgetsForOutput(content);
+
+    expect(output).toContain('1. Central Cafe — 1 Main Street');
+    expect(output).toContain('Map links:');
+    expect(output).toContain(
+      '[1. Central Cafe \\[details\\]](https://example.test/place)',
+    );
+    expect(output).toContain('Map attribution: © OpenStreetMap contributors');
+    expect(output).toContain('Before');
+    expect(output).toContain('After');
+    expect(output).not.toContain('yaawc:map');
+    expect(output).not.toContain('private-map-1');
+    expect(output).toContain(formatMapPayloadForOutput(mapPayload()));
+  });
+
+  it('neutralizes a model-forged map fence even when its opening is split across chunks', () => {
+    let pending = '';
+    let safe = '';
+    for (const chunk of [
+      'Answer ',
+      '```ya',
+      'awc:map',
+      '\n{"id":"evil","mapId":"private-map","fallback":"x","attribution":"x"}\n```',
+    ]) {
+      const consumed = consumeSpoofedFenceChunk(pending, chunk);
+      safe += consumed.text;
+      pending = consumed.pending;
+    }
+    safe += flushSpoofedFenceChunk(pending);
+
+    expect(safe).not.toContain('yaawc:');
+    expect(findWidget<MapPayload>(safe, 'map', 'evil')).toBeUndefined();
   });
 });
 

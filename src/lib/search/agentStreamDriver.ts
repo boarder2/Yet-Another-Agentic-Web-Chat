@@ -22,6 +22,9 @@ import {
 import type { Skill } from '@/lib/skills/types';
 import { toolContextSchema, type ToolContext } from '@/lib/tools/toolContext';
 import { TurnChartRegistry } from '@/lib/chart/turnChartRegistry';
+import { TurnMapRegistry } from '@/lib/maps/turnMapRegistry';
+import type { MappingConfiguration } from '@/lib/maps/config';
+import type { MappingService } from '@/lib/maps/service';
 import type { Recorder, TokenTracker } from '@/lib/tokens/tracker';
 import { normalizeUsageMetadata } from '@/lib/tokens/tracker';
 
@@ -32,6 +35,8 @@ const SPECIALIZED_TOOL_NAMES = new Set([
   'todo_list',
   'create_chart',
   'show_chart',
+  'show_map',
+  'request_location',
 ]);
 
 export type AgentStreamEvent = {
@@ -67,6 +72,8 @@ export interface AgentStreamToolContextOptions {
   userLocation?: string;
   userProfile?: string;
   chatId?: string;
+  /** LangGraph checkpoint thread binding for transient location tokens. */
+  threadId?: string;
   workspaceId?: string | null;
   interactiveSession: boolean;
   isPrivate: boolean;
@@ -74,6 +81,17 @@ export interface AgentStreamToolContextOptions {
   chatRecorder: Recorder;
   systemRecorder: Recorder;
   chartRegistry: TurnChartRegistry;
+  /** Current turn's provider-grounded map registry. */
+  mapRegistry?: TurnMapRegistry;
+  mappingConfig?: MappingConfiguration | null;
+  mappingService?: MappingService | null;
+  mappingServiceResolver?: () => MappingService | null;
+  mappingSavedLocationEnabled?: boolean;
+  /** Opaque current-location token; exact coordinates stay server-side. */
+  locationToken?: string;
+  /** Approval that minted the token; prevents cross-approval token reuse. */
+  locationApprovalId?: string;
+  clientSessionId?: string;
   capabilityFacts?: () => CapabilityRuntimeFacts;
 }
 
@@ -94,6 +112,7 @@ export function buildAgentToolContext(
     userLocation: options.userLocation,
     userProfile: options.userProfile,
     chatId: options.chatId,
+    threadId: options.threadId,
     workspaceId: options.workspaceId,
     interactiveSession: options.interactiveSession,
     isPrivate: options.isPrivate,
@@ -101,6 +120,14 @@ export function buildAgentToolContext(
     chatRecorder: options.chatRecorder,
     systemRecorder: options.systemRecorder,
     chartRegistry: options.chartRegistry,
+    mapRegistry: options.mapRegistry ?? new TurnMapRegistry(),
+    mappingConfig: options.mappingConfig,
+    mappingService: options.mappingService,
+    mappingServiceResolver: options.mappingServiceResolver,
+    mappingSavedLocationEnabled: options.mappingSavedLocationEnabled,
+    locationToken: options.locationToken,
+    locationApprovalId: options.locationApprovalId,
+    clientSessionId: options.clientSessionId,
     capabilityFacts: options.capabilityFacts,
   };
   return toolContextSchema.parse(context);
@@ -108,7 +135,6 @@ export function buildAgentToolContext(
 
 export interface AgentStreamDriverOptions extends AgentStreamToolContextOptions {
   signal: AbortSignal;
-  threadId?: string;
   resolvedSkills?: readonly Skill[];
   onResponse: (text: string) => void;
 }
@@ -326,6 +352,15 @@ function documentKey(
   nextKey: { value: number },
 ): string {
   const metadata = (document.metadata ?? {}) as Record<string, unknown>;
+  // A details lookup intentionally reuses the provider's canonical place URL
+  // but carries richer facts than the initial search result. Keep that
+  // enrichment as a distinct source instead of silently discarding it by URL.
+  if (
+    metadata.processingType === 'mapping-place-details' &&
+    typeof metadata.placeHandle === 'string'
+  ) {
+    return `mapping-place-details:${metadata.placeHandle}`;
+  }
   const url = metadata.url;
   if (typeof url === 'string' && url.length > 0 && url !== 'File') {
     return `url:${url}`;
@@ -491,7 +526,10 @@ function groupDocuments(
 
 function documentsFromToolOutput(output: unknown): Document[] {
   const documents: Document[] = [];
-  const direct = asRecord(output)?.relevantDocuments;
+  const outputRecord = asRecord(output);
+  const direct =
+    outputRecord?.relevantDocuments ??
+    asRecord(outputRecord?.update)?.relevantDocuments;
   if (Array.isArray(direct)) documents.push(...(direct as Document[]));
 
   if (!Array.isArray(output)) return documents;
@@ -565,6 +603,7 @@ export class AgentStreamDriver {
       userLocation: this.options.userLocation,
       userProfile: this.options.userProfile,
       chatId: this.options.chatId,
+      threadId: this.options.threadId,
       workspaceId: this.options.workspaceId,
       interactiveSession: this.options.interactiveSession,
       isPrivate: this.options.isPrivate,
@@ -572,6 +611,14 @@ export class AgentStreamDriver {
       chatRecorder: this.options.chatRecorder,
       systemRecorder: this.options.systemRecorder,
       chartRegistry: this.options.chartRegistry,
+      mapRegistry: this.options.mapRegistry,
+      mappingConfig: this.options.mappingConfig,
+      mappingService: this.options.mappingService,
+      mappingServiceResolver: this.options.mappingServiceResolver,
+      mappingSavedLocationEnabled: this.options.mappingSavedLocationEnabled,
+      locationToken: this.options.locationToken,
+      locationApprovalId: this.options.locationApprovalId,
+      clientSessionId: this.options.clientSessionId,
       capabilityFacts: this.options.capabilityFacts,
     });
 
@@ -898,21 +945,22 @@ export class AgentStreamDriver {
         : [];
       this.emitSourcesAdded(sources.add(documents));
     } else {
-      const directDocuments = asRecord(output)?.relevantDocuments;
+      const outputRecord = asRecord(output);
+      const directDocuments =
+        outputRecord?.relevantDocuments ??
+        asRecord(outputRecord?.update)?.relevantDocuments;
       if (Array.isArray(directDocuments)) {
         this.emitSourcesAdded(sources.add(directDocuments as Document[]));
       }
     }
 
-    if (
-      !event.name.includes('search') &&
-      !event.name.includes('Search') &&
-      !event.name.includes('tool') &&
-      !event.name.includes('Tool')
-    ) {
-      return;
+    // Tool names are not required to contain "search" or "tool" (for
+    // example, get_place_details and get_route), so recognize a tool output
+    // by its structured document payload rather than by its callback name.
+    const toolDocuments = documentsFromToolOutput(output);
+    if (toolDocuments.length > 0) {
+      this.emitSourcesAdded(sources.add(toolDocuments));
     }
-    this.emitSourcesAdded(sources.add(documentsFromToolOutput(output)));
   }
 
   private foldUsage(
@@ -1019,6 +1067,31 @@ export class AgentStreamDriver {
         .filter((keyword): keyword is string => typeof keyword === 'string')
         .join(', ')
         .slice(0, TOOL_ARG_MAX_LENGTH);
+    }
+    if (toolName === 'search_places') {
+      if (typeof input.near === 'string') {
+        attrs.query = input.near.slice(0, TOOL_ARG_MAX_LENGTH);
+      } else if (typeof input.location === 'string') {
+        attrs.query = input.location.slice(0, TOOL_ARG_MAX_LENGTH);
+      }
+      if (typeof input.category === 'string') {
+        attrs.category = input.category.slice(0, 80);
+      }
+    }
+    if (toolName === 'get_place_details') {
+      const handle = input.placeHandle ?? input.handle;
+      if (typeof handle === 'string') attrs.query = handle.slice(0, 80);
+    }
+    if (toolName === 'get_route') {
+      if (typeof input.origin === 'string')
+        attrs.origin = input.origin.slice(0, TOOL_ARG_MAX_LENGTH);
+      if (typeof input.destination === 'string')
+        attrs.destination = input.destination.slice(0, TOOL_ARG_MAX_LENGTH);
+      if (typeof input.mode === 'string') attrs.mode = input.mode;
+    }
+    if (toolName === 'show_map') {
+      const handle = input.handle ?? input.mapHandle;
+      if (typeof handle === 'string') attrs.query = handle.slice(0, 80);
     }
     if (toolName === 'workspace_read' && typeof input.file === 'string') {
       attrs.query = input.file.slice(0, TOOL_ARG_MAX_LENGTH);

@@ -85,6 +85,29 @@ export const credentials = sqliteTable('credentials', {
     .$defaultFn(() => new Date()),
 });
 
+// Only coarse locality and public business records are durable here. Exact,
+// nearby-coordinate, current-location, and route results stay in the bounded
+// process-local cache owned by src/lib/maps/cache.ts; there is intentionally no
+// user/chat/workspace association column.
+export const mapCache = sqliteTable(
+  'map_cache',
+  {
+    key: text('key').primaryKey(),
+    kind: text('kind', {
+      enum: ['coarse_locality', 'public_business'],
+    }).notNull(),
+    value: text('value', { mode: 'json' }).$type<unknown>().notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
+  },
+  (t) => ({
+    byExpiry: index('map_cache_expiry_idx').on(t.expiresAt),
+    byKind: index('map_cache_kind_idx').on(t.kind),
+  }),
+);
+
 export const systemPrompts = sqliteTable('system_prompts', {
   id: text('id')
     .primaryKey()
@@ -494,6 +517,7 @@ export const approvalRequests = sqliteTable(
         'workspace_create',
         'skill_edit',
         'mcp_tool',
+        'location',
       ],
     }).notNull(),
     workspaceId: text('workspace_id'),

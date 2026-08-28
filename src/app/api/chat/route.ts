@@ -57,7 +57,13 @@ import { buildOrchestratorSynthesisContext } from '@/lib/prompts/panel/orchestra
 import { validatePanelConfig, type PanelConfig } from '@/lib/types/panel';
 import { buildMcpLangchainTools } from '@/lib/mcp/toolFactory';
 import { TurnChartRegistry } from '@/lib/chart/turnChartRegistry';
+import { TurnMapRegistry } from '@/lib/maps/turnMapRegistry';
+import {
+  createMappingRunRuntime,
+  resolveFreshMappingService,
+} from '@/lib/maps/runtime';
 import { createAgentRunConfig } from '@/lib/search/agentRunConfig';
+import { normalizeClientSessionId } from '@/lib/maps/locationSessions';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -102,6 +108,8 @@ type Body = {
   imageCapable?: boolean;
   invokedSkills?: string[];
   panel?: PanelConfig;
+  /** Per-page opaque binding for transient precise-location overlays. */
+  clientSessionId?: string;
 };
 
 const handleHistorySave = async (
@@ -186,6 +194,9 @@ export const POST = async (req: Request) => {
     const startTime = Date.now();
     const body = (await req.json()) as Body;
     const { message, selectedSystemPromptIds } = body;
+    const clientSessionId =
+      normalizeClientSessionId(body.clientSessionId) ??
+      crypto.randomBytes(16).toString('hex');
 
     if (
       message.content === '' &&
@@ -222,7 +233,12 @@ export const POST = async (req: Request) => {
       (existingRun.status === 'running' ||
         existingRun.status === 'awaiting_user')
     ) {
-      const subStream = subscribe(existingRun, 0, req.signal);
+      const subStream = subscribe(
+        existingRun,
+        0,
+        req.signal,
+        normalizeClientSessionId(body.clientSessionId) ?? undefined,
+      );
       return new Response(subStream.pipeThrough(new TextEncoderStream()), {
         headers: SSE_HEADERS,
       });
@@ -239,6 +255,13 @@ export const POST = async (req: Request) => {
       const existingChat = await db.query.chats.findFirst({
         where: eq(chats.id, message.chatId),
       });
+      // A persisted private chat cannot be made public by an omitted or false
+      // request flag. Preserve an explicit private request for compatibility
+      // with callers that use a private turn against an existing chat.
+      if (existingChat) {
+        body.isPrivate =
+          existingChat.isPrivate === 1 || body.isPrivate === true;
+      }
       resolvedWorkspaceId =
         existingChat?.workspaceId ?? body.workspaceId ?? null;
       if (resolvedWorkspaceId) {
@@ -382,6 +405,19 @@ export const POST = async (req: Request) => {
           ? getStringSetting(settings, 'personalization.about', '')
           : undefined;
     }
+
+    // Mapping is an ordinary interactive Web Search capability only. The
+    // provider facade is constructed without contacting a remote endpoint;
+    // calls re-resolve settings immediately before each operation.
+    const mappingRuntime = createMappingRunRuntime(
+      body.focusMode === 'webSearch' && !panelConfig,
+    );
+    const mappingAvailable = mappingRuntime.service !== null;
+    const mappingSavedLocationEnabled =
+      mappingAvailable &&
+      !body.isPrivate &&
+      mappingRuntime.config?.savedLocationEnabled === true;
+    const mapRegistry = new TurnMapRegistry();
 
     // --- Memory retrieval ---
     let memorySection = '';
@@ -575,6 +611,11 @@ export const POST = async (req: Request) => {
       workspaceSuffix,
       memoryEnabled: body.memoryEnabled ?? false,
       panel: panelConfig ?? null,
+      mappingAvailable,
+      mappingSavedLocationEnabled,
+      ...(mappingAvailable && mappingRuntime.fingerprint
+        ? { mappingConfigHash: mappingRuntime.fingerprint }
+        : {}),
     });
 
     const handler = new SimplifiedAgent({
@@ -593,6 +634,16 @@ export const POST = async (req: Request) => {
         memorySection,
         invokedSkillNames,
         chartRegistry,
+        mapRegistry,
+        mappingConfig: mappingRuntime.config,
+        mappingService: mappingRuntime.service,
+        mappingServiceResolver: () =>
+          resolveFreshMappingService(
+            mappingAvailable,
+            mappingRuntime.fingerprint,
+          ),
+        mappingSavedLocationEnabled,
+        clientSessionId,
       },
     });
 
@@ -606,6 +657,10 @@ export const POST = async (req: Request) => {
       abortController,
       retrievalController,
       chartRegistry,
+      mapRegistry,
+      mappingConfig: mappingRuntime.config,
+      mappingService: mappingRuntime.service,
+      clientSessionId,
     });
 
     if (isNew) {
@@ -786,7 +841,7 @@ export const POST = async (req: Request) => {
     }
 
     // Subscribe to the run's event stream and pipe to the HTTP response
-    const subStream = subscribe(run, 0, req.signal);
+    const subStream = subscribe(run, 0, req.signal, clientSessionId);
     return new Response(subStream.pipeThrough(new TextEncoderStream()), {
       headers: SSE_HEADERS,
     });

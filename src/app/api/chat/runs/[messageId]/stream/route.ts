@@ -2,6 +2,7 @@ import { getRun, subscribe } from '@/lib/runs/runHub';
 import db from '@/lib/db';
 import { chats } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
+import { normalizeClientSessionId } from '@/lib/maps/locationSessions';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -21,6 +22,9 @@ export const GET = async (
   const { messageId } = await params;
   const url = new URL(req.url);
   const from = parseInt(url.searchParams.get('from') ?? '0', 10) || 0;
+  const clientSessionId =
+    normalizeClientSessionId(url.searchParams.get('clientSessionId')) ??
+    undefined;
 
   // Look up the run
   const run = getRun(messageId);
@@ -50,7 +54,7 @@ export const GET = async (
     });
   }
 
-  const subStream = subscribe(run, from, req.signal);
+  const subStream = subscribe(run, from, req.signal, clientSessionId);
   return new Response(subStream.pipeThrough(new TextEncoderStream()), {
     headers: SSE_HEADERS,
   });

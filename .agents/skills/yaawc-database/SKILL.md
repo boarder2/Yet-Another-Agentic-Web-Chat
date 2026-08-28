@@ -20,7 +20,7 @@ SQLite + Drizzle ORM. Always set one explicit `DATA_DIR` for Drizzle, build, dev
 
 ## Where things live
 
-- `src/lib/db/schema.ts` — tables (chats, messages, `app_settings`, workspaces, scheduled tasks, etc.).
+- `src/lib/db/schema.ts` — tables (chats, messages, `app_settings`, `map_cache`, workspaces, scheduled tasks, etc.).
 - `src/lib/db/index.ts` — the `db` client (default export).
 - `src/lib/db/queries.ts`, `chatSearch.ts`, `messageLookup.ts` — query helpers; add new queries here rather than inlining raw Drizzle in routes/components.
 - `drizzle/` — generated migrations (`NNNN_name.sql`); do not touch by hand.
@@ -33,7 +33,7 @@ The trap that motivated it: SQLite refuses `DROP COLUMN` while an index referenc
 
 ## Notes
 
-- New settings usually do **not** need a schema change — they go in the `app_settings` key/value table via the allowlist (see the `yaawc-settings-persistence` skill).
+- New settings usually do **not** need a schema change — they go in the `app_settings` key/value table via the allowlist (see the `yaawc-settings-persistence` skill). Mapping's durable `map_cache` is deliberately limited to unassociated coarse localities and public business records with a 30-day TTL; exact addresses, routes, and browser coordinates stay out of SQLite.
 - Client-side server-state reads go through TanStack Query hooks in `src/lib/hooks/api/`, not direct DB access.
 
 Related: `yaawc-settings-persistence`, `yaawc-api-endpoints`.

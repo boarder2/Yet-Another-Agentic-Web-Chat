@@ -5,7 +5,7 @@ description: 'Workflows and schedules: templates, manual/headless runs, cron lif
 
 # Workflows and Schedules
 
-Automations are reusable parameterized workflows plus DB-backed cron schedules. Every run uses the workflow's saved focus mode, Chat/System models, personas, and methodology. It does not inherit a launching chat's workspace, MCP tools, memory, panel, or personalization.
+Automations are reusable parameterized workflows plus DB-backed cron schedules. Every run uses the workflow's saved focus mode, Chat/System models, personas, and methodology. It does not inherit a launching chat's workspace, MCP tools, memory, panel, personalization, or Mapping provider/runtime.
 
 ## Template contract
 
@@ -31,7 +31,7 @@ Automations are reusable parameterized workflows plus DB-backed cron schedules. 
 
 Scheduled runs must preserve final sources, writer-owned tool widgets, model stats, and chart specs/placements. Mark the chat and schedule successful only after `agent_end`. On any model/provider/prompt/agent failure, best-effort persist a failure answer, clear active markers, mark the chat errored, and record `lastRunStatus=error` and the error text.
 
-Scheduled execution is headless: it cannot wait for ask-user, code execution, workspace edits, or other approval-gated interactions, and it does not perform automatic memory extraction. Charts are supported. Deep-research nested activity is not fully represented in persisted scheduled output; do not claim otherwise.
+Scheduled execution is headless: it cannot wait for ask-user, browser-location approval, code execution, workspace edits, or other approval-gated interactions, and it does not perform automatic memory extraction. Mapping tools are absent from scheduled and workflow runs. Charts are supported. Deep-research nested activity is not fully represented in persisted scheduled output; do not claim otherwise.
 
 ## Cron lifecycle
 

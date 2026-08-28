@@ -51,6 +51,12 @@ const agentRunConfigBaseSchema = z
     workspaceSuffix: z.string(),
     memoryEnabled: z.boolean(),
     panel: agentPanelConfigSchema.nullable(),
+    /** Effective mapping availability captured when the run was created. */
+    mappingAvailable: z.boolean().optional(),
+    /** Saved-location provider consent captured for this run. */
+    mappingSavedLocationEnabled: z.boolean().optional(),
+    /** Non-secret provider-configuration identity used to fail stale resumes safely. */
+    mappingConfigHash: z.string().min(1).max(2_000).optional(),
   })
   .strict();
 
@@ -127,7 +133,30 @@ export function decodeAgentRunConfig(snapshot: unknown): AgentRunConfig {
       parsed.error.issues,
     );
   }
-  return parsed.data;
+  const config = parsed.data;
+  // Keep old version-1 snapshots behaviorally explicit without changing their
+  // serialized shape. New mapping-enabled runs provide enumerable fields;
+  // missing legacy fields are non-enumerable false defaults.
+  const defaults: PropertyDescriptorMap = {};
+  if (!Object.prototype.hasOwnProperty.call(config, 'mappingAvailable')) {
+    defaults.mappingAvailable = {
+      value: false,
+      writable: true,
+      configurable: true,
+    };
+  }
+  if (
+    !Object.prototype.hasOwnProperty.call(config, 'mappingSavedLocationEnabled')
+  ) {
+    defaults.mappingSavedLocationEnabled = {
+      value: false,
+      writable: true,
+      configurable: true,
+    };
+  }
+  if (Object.keys(defaults).length > 0)
+    Object.defineProperties(config, defaults);
+  return config;
 }
 
 /**
@@ -147,6 +176,17 @@ export function createAgentRunConfig(
 /** Encode a config for the JSON database column after strict validation. */
 export function encodeAgentRunConfig(config: AgentRunConfig): AgentRunConfig {
   return decodeAgentRunConfig(config);
+}
+
+/** Missing fields in legacy version-1 snapshots mean mapping is disabled. */
+export function isMappingAvailableInRun(config: AgentRunConfig): boolean {
+  return config.mappingAvailable === true;
+}
+
+export function isSavedMappingLocationEnabledInRun(
+  config: AgentRunConfig,
+): boolean {
+  return config.mappingSavedLocationEnabled === true;
 }
 
 export const agentRunConfigCodec = {

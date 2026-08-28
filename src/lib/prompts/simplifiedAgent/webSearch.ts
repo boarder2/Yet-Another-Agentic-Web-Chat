@@ -3,6 +3,7 @@ import { formattingAndCitationsWeb } from '@/lib/prompts/templates';
 import { buildChartingGuidance } from './chartingGuidance';
 import { artifactGuidance } from './artifactGuidance';
 import { mathGuidance } from './mathGuidance';
+import { buildMappingGuidance } from './mappingGuidance';
 
 /**
  * Build the Web Search mode system prompt for SimplifiedAgent
@@ -17,6 +18,7 @@ export function buildWebSearchPrompt(
   methodologyInstructions?: string,
   codeExecutionEnabled: boolean = false,
   artifactsEnabled: boolean = false,
+  mappingEnabled: boolean = false,
 ): string {
   // Detect explicit URLs in the user query
   const urlRegex = /https?:\/\/[^\s)>'"`]+/gi;
@@ -87,6 +89,8 @@ ${researchStrategy}
 ${buildChartingGuidance(codeExecutionEnabled)}
 
 ${artifactsEnabled ? artifactGuidance : ''}
+
+${buildMappingGuidance(mappingEnabled)}
 
 **Context**: Today's Date - use for time sensitive queries: ${formatDateForLLM(date)}
 `;

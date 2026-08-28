@@ -225,6 +225,13 @@
       "when": 1786209908718,
       "tag": "0031_awesome_stephen_strange",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1787812858047,
+      "tag": "0032_shallow_triathlon",
+      "breakpoints": true
     }
   ]
 }

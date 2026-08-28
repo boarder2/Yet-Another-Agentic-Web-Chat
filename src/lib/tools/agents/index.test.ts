@@ -7,6 +7,7 @@ import {
   getCoreTools,
   getLocalResearchTools,
   getWebSearchTools,
+  MAPPING_TOOL_NAMES,
   webSearchTools,
 } from './index';
 import { yaawcDocsTool } from './yaawcDocsTool';
@@ -25,6 +26,23 @@ describe('YAAWC capability tool registration', () => {
       allTools,
     ]) {
       expect(names(tools)).not.toContain(yaawcDocsTool.name);
+    }
+  });
+
+  it('keeps mapping tools outside static and invariant top-level getters', () => {
+    for (const tools of [
+      allAgentTools,
+      webSearchTools,
+      fileSearchTools,
+      coreTools,
+      getAllAgentTools(),
+      getWebSearchTools(),
+      getCoreTools(),
+      getLocalResearchTools(),
+    ]) {
+      for (const mappingTool of MAPPING_TOOL_NAMES) {
+        expect(names(tools)).not.toContain(mappingTool);
+      }
     }
   });
 

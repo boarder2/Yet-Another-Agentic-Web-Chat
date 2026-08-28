@@ -21,9 +21,9 @@ app/layout.tsx
             └── Chat (message list, scroll, approval widgets)
                 ├── MessageBox[] (user + assistant + compaction rows)
                 │   └── MarkdownRenderer → ToolCall / SubagentExecution / PanelColumns /
-                │       ArtifactCard / ChartEnvelope / ThinkBox / ChartWidget / CodeBlock
+                │       ArtifactCard / ChartEnvelope / MapEnvelope / ThinkBox / ChartWidget / CodeBlock
                 ├── TodoWidget · CodeExecution · UserQuestionPrompt · WorkspaceEditApproval ·
-                │   SkillEditApproval · McpToolApproval (transient, above input)
+                │   SkillEditApproval · McpToolApproval · LocationApproval (transient, above input)
                 └── MessageInput (composer: focus mode, attach, ModelConfigurator,
                     SystemPromptSelector, MethodologySelector, PersonalizationPicker)
 ```
@@ -47,10 +47,11 @@ Non-secret settings are DB-backed with a localStorage cache — the sync layer, 
 
 `MarkdownRenderer.tsx` uses the shared `FormulaMarkdown` wrapper around `markdown-to-jsx` with overrides. The formula layer resolves safe KaTeX only from visible Markdown text, while the renderer's widget, citation, legacy-tag, chart, think-block, and dangerous-tag overrides remain caller-owned. `CapabilityMarkdown` intentionally bypasses this shared formula layer and does not render formulas.
 
-- **Widget fences** — the `code` override dispatches known `yaawc:<kind>` fences (parsed by `src/lib/widgets/envelope.ts`) to typed components: `ToolCall`, `SubagentExecution`, `PanelColumns`, `ArtifactCard`, and writer-owned `ChartEnvelope`. Unknown/invalid `yaawc:*` fences fall back to `CodeBlock`.
+- **Widget fences** — the `code` override dispatches known `yaawc:<kind>` fences (parsed by `src/lib/widgets/envelope.ts`) to typed components: `ToolCall`, `SubagentExecution`, `PanelColumns`, `ArtifactCard`, writer-owned `ChartEnvelope`, and exact-ID `MapEnvelope`. Unknown/invalid `yaawc:*` fences fall back to `CodeBlock`. Map envelopes always keep a semantic numbered fallback and attribution outside the Leaflet canvas.
 - **Legacy path (frozen, read-only)** — pre-migration `<ToolCall>`/`<SubagentExecution>`/`<PanelColumns>` tag markup still renders (base64-decoded attrs); historical chat and dashboard `<Chart>` placeholders still resolve through `ChartElement`. New chat model tags are stripped in streaming and nothing new writes legacy chat tags; agents use `show_chart`.
 - **`ArtifactMention`** — a user's `@[Title](artifact:<id>)` is ordinary markdown; the `a` override renders it as a chip (dimmed, inert if deleted). The workspace sidebar reaches the panel/composer via `ArtifactBridgeContext`.
 - **`ChartEnvelope`** — exact private canonical chart-id lookup from a writer-authored `yaawc:chart` placement; an unregistered or guessed id renders nothing. `ChartElement` is only the legacy historical-chat/dashboard `<Chart>` resolver.
+- **`MapEnvelope` / `MapSpecContext`** — exact private map-id lookup from a writer-authored `yaawc:map` placement. `MapWidget` initializes Leaflet only on the client with current tile configuration; its persistable snapshot can be replayed without provider refresh, while precise browser-origin overlays remain page-session-local.
 - **`<a>`** — citation links (`[N]`) styled via `CitationLink`.
 - **Think blocks** — `<think>…</think>` extracted before parsing, rendered as collapsible `ThinkBox` above content.
 - **Security** — `iframe`, `script`, `object`, `style` render as `null`.
@@ -79,6 +80,7 @@ Sub-components: `ModelField` (grouped-by-provider popover per role), `VisionTogg
 | `src/components/Artifacts/ArtifactViewer.tsx`  | Artifact iframe, version switcher, Preview/Source, download; shared by `ArtifactPanel` (docked) and `ArtifactPage` (standalone) |
 | `src/components/Artifacts/useArtifactPanel.ts` | Panel state + drag-resize width, published as `--artifact-inset`/`--chat-ml` `:root` vars                                       |
 | `src/lib/widgets/envelope.ts`                  | Widget envelope codec (see `yaawc-streaming-events`)                                                                            |
+| `src/components/maps/MapWidget.tsx`            | Client-only Leaflet map with semantic fallback, current tile configuration, and route/marker presentation                       |
 | `src/lib/hooks/useLocalStorage.ts`             | `useLocalStorage*` hooks, `writeLocalStorage`/`writeLocalStorageBatch`, `subscribeLocalStorage`                                 |
 | `src/lib/models/presets.ts`                    | Preset types + pure helpers + `SELECTION_KEYS`                                                                                  |
 | `src/lib/chart/ChartSpecContext.tsx`           | chartId → ChartSpec context                                                                                                     |

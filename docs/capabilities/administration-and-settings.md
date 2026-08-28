@@ -8,6 +8,7 @@ Settings are opened from the desktop sidebar or the mobile chat settings control
 - **Automation:** enable automatic related suggestions and automatic first-turn chat titles.
 - **MCP Servers:** add and manage remote Model Context Protocol servers.
 - **Memory:** enable retrieval and automatic detection, choose the memory-processing model, and manage stored memories. See [Personalization and memory](./personalization-and-memory.md).
+- **Mapping:** enable the provider-gated mapping capability, acknowledge shipped public services when used, replace geocoder/places/routing/tile endpoints, choose driving/walking/cycling profiles, review capabilities and disclosed hosts, separately allow saved personalization for mapping, and clear the map cache. Mapping is disabled by default.
 - **Persona Prompts:** create, edit, and delete reusable instructions for tone, formatting, and citation style. Built-in Web, Local, Chat, and Scholarly templates can be copied as a starting point.
 - **Personalization:** save location and About Me context and control whether each is sent for a message.
 - **Research Methodologies:** create one-at-a-time research playbooks for Web Search and Local Research. Built-in Comparative Analysis, Deep Dive/Literature Review, and Fact-Check/Verification templates can be copied.
@@ -54,10 +55,10 @@ The audio route accepts bounded message content. If neural synthesis or playback
 
 ## Approvals, runs, and recovery
 
-Interactive runs can pause for user questions, code, workspace edits, skill edits, or MCP calls. History and the sidebar show running, awaiting-input, unread, errored, cancelled, and interrupted states. Reopening a chat restores pending approvals when the run is still resumable. A server restart can leave a run marked interrupted; submit a new turn after reviewing the message.
+Interactive runs can pause for user questions, browser-location approval, code execution, workspace edits, skill edits, or MCP calls. History and the sidebar show running, awaiting-input, unread, errored, cancelled, and interrupted states. Reopening a chat restores pending approvals when the run is still resumable. A server restart can leave a run marked interrupted; submit a new turn after reviewing the message.
 
 A workspace file or skill may change while an approval is open. YAAWC rejects the stale proposal and asks the agent or user to read the current content again. This protects newer edits but can require a second attempt.
 
 ## If a setting does not take effect
 
-Refresh provider models after changing credentials or endpoints. Check whether a workspace model pin, hidden model, private-session rule, focus mode, or non-interactive run is overriding the expected option. A setting that is device-local, such as the active theme or chat width, does not propagate through the database settings sync. An unavailable optional service should show an explicit empty, disabled, or error state rather than making unrelated chats fail.
+Refresh provider models after changing credentials or endpoints. Check whether a workspace model pin, hidden model, private-session rule, focus mode, or non-interactive run is overriding the expected option. A setting that is device-local, such as the active theme or chat width, does not propagate through the database settings sync. An unavailable optional service should show an explicit empty, disabled, or error state rather than making unrelated chats fail. Mapping configuration, provider, tile, and cache failures are isolated from ordinary chat/search; existing validated map prose remains available when an interactive map cannot load. Historical map snapshots do not refresh provider data when reopened.

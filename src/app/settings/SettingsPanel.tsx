@@ -31,6 +31,7 @@ import {
   DesktopSettingsNav,
 } from './components/SettingsNav';
 import AutomationSection from './sections/AutomationSection';
+import MappingSection from './sections/MappingSection';
 import PersonalizationSection from './sections/PersonalizationSection';
 import AppearanceSection from './sections/AppearanceSection';
 import VoiceSection from './sections/VoiceSection';
@@ -754,6 +755,8 @@ export default function SettingsPanel({
                 )}
 
                 {activeSection === 'appearance' && <AppearanceSection />}
+
+                {activeSection === 'mapping' && <MappingSection />}
 
                 {activeSection === 'personalization' && (
                   <PersonalizationSection

@@ -8,10 +8,13 @@ type ChatsSearchFilter = Omit<ChatsFilter, 'pinned' | 'scheduled'>;
 const SKILLS_NS = ['skills'] as const;
 const MEMORIES_NS = ['memories'] as const;
 const ARTIFACTS_NS = ['artifacts'] as const;
+const MAPS_NS = ['maps'] as const;
 
 export const qk = {
   config: ['config'] as const,
   settings: ['settings'] as const,
+  mappingConfig: [...MAPS_NS, 'config'] as const,
+  mappingCache: [...MAPS_NS, 'cache'] as const,
   models: ['models'] as const,
   tools: ['tools'] as const,
   voices: ['tts', 'voices'] as const,

@@ -21,7 +21,7 @@ The durable boundary is the strict versioned `AgentRunConfig`. Never persist liv
 
 Dynamic top-level getters in `src/lib/tools/agents/index.ts` add interactive/system tools; do not build runtime lists from static subagent arrays. Preserve the invariant that capability docs appear exactly once in top-level getters.
 
-Focus gating lives in `SimplifiedAgent`: Chat uses core tools; Web Search selects web/all plus file search when applicable; Local Research uses local/file tools; unknown focus falls back to Web Search. Append enabled memory/extra tools at the documented boundary. Focus-selected private runs remove artifact tools, but custom/extra tool assembly occurs separately; apply private exclusions to the final list when changing this path. Firefox page-selection and explicit custom tool lists are special restricted paths.
+Focus gating lives in `SimplifiedAgent`: Chat uses core tools; Web Search selects web/all plus file search when applicable; Local Research uses local/file tools; unknown focus falls back to Web Search. Mapping tools are added only when Mapping is available, the run is interactive, the focus is ordinary Web Search, and the run is not a panel or restricted/custom execution. Append enabled memory/extra tools at the documented boundary. Focus-selected private runs remove artifact tools, but custom/extra tool assembly occurs separately; apply private exclusions to the final list when changing this path. Firefox page-selection and explicit custom tool lists are special restricted paths.
 
 `AgentStreamDriver.buildConfig()` creates one Zod-validated `ToolContext` carrying models, IDs, signals, tracker/recorders, emitter, chart registry, and capability facts. LangGraph-specific values remain under `configurable`.
 
@@ -41,7 +41,7 @@ Resume must:
 - use keyed resume maps when several approvals remain;
 - suppress replayed tool chrome with stable interrupted tool-call IDs.
 
-After process restart/eviction, reconstruct controllers, assistant content, milestone log/sequence, chart registry, and paused hub state before resuming.
+After process restart/eviction, reconstruct controllers, assistant content, milestone log/sequence, chart registry, the redacted turn-local map registry, and paused hub state before resuming. Persist map milestones only after provider validation; session overlays for precise browser location are never milestones and are scoped to the approving page session.
 
 ## Hub, host, and persistence
 
@@ -55,7 +55,7 @@ After process restart/eviction, reconstruct controllers, assistant content, mile
 
 One `TokenTracker` spans the root turn, tools, Panel executors, and deep-research children. It aggregates by `(provider, model)` across scopes/roles, emits cumulative `model_stats`, preserves root input tokens, and supports resume seeding. Keep callback attribution/deduplication so child usage is not counted as parent usage.
 
-Hard cancellation and retrieval soft-stop are separate signals. Hard abort stops stream consumption and triggers checkpoint/approval/run cleanup. Retrieval abort may permit early synthesis from partial documents. Reconstructed runs must register both controllers so Stop still works.
+Hard cancellation and retrieval soft-stop are separate signals. Hard abort stops stream consumption and triggers checkpoint/approval/run cleanup. Retrieval abort may permit early synthesis from partial documents. Reconstructed runs must register both controllers so Stop still works. Mapping provider calls revalidate the current configuration before use; terminal cleanup clears provider facades, exact-location tokens, and session overlays while retaining only safe map snapshots.
 
 Ordinary stream execution errors are currently wrapped by the driver but can still be emitted as `agent_end` and finalized completed; preserve the integrity-error distinction, and do not extend this failure-as-success path. Interrupt decoding/handling must terminate fail-closed rather than leave a returned agent marked running.
 

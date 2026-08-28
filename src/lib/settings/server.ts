@@ -6,6 +6,13 @@ import type {
   SearchProviderIdType,
   ImageGenerationConfig,
 } from '@/lib/config';
+import {
+  MAPPING_SETTING_KEYS,
+  resolveMappingConfiguration,
+  toClientSafeMappingConfig,
+  type MappingClientConfig,
+  type MappingConfiguration,
+} from '@/lib/maps/config';
 
 /**
  * Server-side reads of the database-backed settings (`app_settings`). These are
@@ -238,3 +245,16 @@ export function getCustomOpenaiUrlAndModel(): {
     modelName: s['customOpenaiModelName'] ?? '',
   };
 }
+
+/** Authoritative, typed mapping settings used by server-side provider calls. */
+export function getMappingConfiguration(): MappingConfiguration {
+  return resolveMappingConfiguration(getSettings([...MAPPING_SETTING_KEYS]));
+}
+
+/** Client-safe projection: tile data and host/capability metadata, never provider URLs or the User-Agent. */
+export function getMappingClientConfiguration(): MappingClientConfig {
+  return toClientSafeMappingConfig(getMappingConfiguration());
+}
+
+export const getMappingConfig = getMappingConfiguration;
+export const getMappingClientConfig = getMappingClientConfiguration;

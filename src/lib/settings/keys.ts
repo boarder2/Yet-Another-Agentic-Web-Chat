@@ -19,6 +19,10 @@
  * - Legacy `perplexica_dashboard_*` keys (handled by a separate one-shot
  *   localStorage migration).
  */
+import { MAPPING_SETTING_KEYS } from '@/lib/maps/settingKeys';
+
+export { MAPPING_SETTING_KEYS } from '@/lib/maps/settingKeys';
+
 export const MIGRATED_SETTING_KEYS = [
   // Model selection
   'chatModelProvider',
@@ -105,6 +109,9 @@ export const MIGRATED_SETTING_KEYS = [
   'yaawc_dashboard_settings',
   'yaawc_dashboard_layouts',
   'yaawc_dashboard_cache',
+  // Mapping is opt-in. Public endpoint defaults are stored as effective
+  // settings but remain unusable until mapping is enabled and acknowledged.
+  ...MAPPING_SETTING_KEYS,
 ] as const;
 
 export type MigratedSettingKey = (typeof MIGRATED_SETTING_KEYS)[number];

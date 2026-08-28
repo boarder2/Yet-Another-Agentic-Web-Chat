@@ -28,6 +28,7 @@ import type {
   PendingEditApproval,
   PendingSkillEditApproval,
   PendingMcpApproval,
+  PendingLocationApproval,
 } from '@/lib/streaming/chatState';
 // The chat message vocabulary is defined once in the streaming module; re-export
 // the app-facing types so existing `@/components/ChatWindow` importers resolve.
@@ -45,6 +46,17 @@ import {
   type PanelSelection,
 } from '@/lib/panel/panelSelection';
 import { ChartSpecContext } from '@/lib/chart/ChartSpecContext';
+import { MapSpecContext } from '@/lib/maps/MapSpecContext';
+import {
+  PersistableMapSpecSchema,
+  type MapCoordinate,
+  type MapSessionOverlay,
+  type PersistableMapSpec,
+} from '@/lib/maps/types';
+import type {
+  LocationDeclineReason,
+  LocationRetention,
+} from '@/lib/maps/locationSchemas';
 import { ArtifactViewerContext } from '@/lib/artifacts/ArtifactViewerContext';
 import { useArtifactBridge } from '@/lib/artifacts/ArtifactBridgeContext';
 import ArtifactPanel from './Artifacts/ArtifactPanel';
@@ -290,10 +302,7 @@ const loadMessages = async (
   // render snapshot and can lag while a tool is the latest persisted event.
   // Normalize the trailing assistant row from that marker so attachToRun and
   // the composer continue to show the run as live after a remount.
-  if (
-    data.chat.activeRunMessageId &&
-    data.chat.activeRunStatus !== 'awaiting_user'
-  ) {
+  if (data.chat.activeRunMessageId) {
     for (let i = finalMessages.length - 1; i >= 0; i--) {
       if (finalMessages[i].role === 'assistant') {
         finalMessages[i] = { ...finalMessages[i], runStatus: 'running' };
@@ -303,9 +312,9 @@ const loadMessages = async (
   }
   setMessages(finalMessages);
 
-  // If a run is still active (e.g. we just remounted onto /c/[chatId] right
-  // after firing off the first message), flip loading on in the same batch as
-  // setMessages. attachToRun does this too, but it runs a microtask later — by
+  // If a run is still active (including one paused for approval), flip loading
+  // on in the same batch as setMessages. attachToRun does this too, but it runs
+  // a microtask later — by
   // then the partial assistant row has already rendered its "completed" footer
   // (rewrite/images/videos/related), causing a visible flicker before loading
   // hides it again.
@@ -379,7 +388,10 @@ const RENDER_KEYS = [
   'pendingEditApprovals',
   'pendingSkillEditApprovals',
   'pendingMcpApprovals',
+  'pendingLocationApprovals',
   'chartSpecsByMessage',
+  'mapSpecsByMessage',
+  'mapSessionOverlaysByMessage',
 ] as const satisfies readonly (keyof ChatStreamState)[];
 
 const ChatWindow = ({
@@ -422,6 +434,11 @@ const ChatWindow = ({
   );
 
   const [chatId, setChatId] = useState<string | undefined>(id);
+  // Deliberately page-local: precise location overlays can never follow a
+  // reload or be shared with another ChatWindow/tab.
+  const [clientSessionId] = useState(() =>
+    crypto.randomBytes(16).toString('hex'),
+  );
   const [newChatCreated, setNewChatCreated] = useState(false);
   // Single source of truth for the chat title (DB `chats.title`). Drives the tab
   // title, the in-chat header, and export filenames; updated live by the
@@ -515,7 +532,10 @@ const ChatWindow = ({
     pendingEditApprovals,
     pendingSkillEditApprovals,
     pendingMcpApprovals,
+    pendingLocationApprovals,
     chartSpecsByMessage,
+    mapSpecsByMessage,
+    mapSessionOverlaysByMessage,
   } = streamState;
 
   // Non-stream message writes (initial load, rewrite/delete, suggestions) fold
@@ -550,6 +570,11 @@ const ChatWindow = ({
   const setPendingMcpApprovals = (
     v: SetStateAction<Record<string, PendingMcpApproval[]>>,
   ) => setField('pendingMcpApprovals', v);
+  const setPendingLocationApprovals = useCallback(
+    (v: SetStateAction<Record<string, PendingLocationApproval[]>>) =>
+      setField('pendingLocationApprovals', v),
+    [setField],
+  );
   const setChartSpecsByMessage = (
     v: SetStateAction<Record<string, Record<string, ChartSpec>>>,
   ) => setField('chartSpecsByMessage', v);
@@ -839,7 +864,7 @@ const ChatWindow = ({
     let res: Response;
     try {
       res = await fetch(
-        `/api/chat/runs/${userMessageId}/stream?from=0&chatId=${chatId}`,
+        `/api/chat/runs/${userMessageId}/stream?from=0&chatId=${encodeURIComponent(chatId ?? '')}&clientSessionId=${encodeURIComponent(clientSessionId)}`,
         { signal: abortController.signal },
       );
     } catch {
@@ -866,12 +891,17 @@ const ChatWindow = ({
     }
   };
 
+  const attachToRunRef = useRef(attachToRun);
+  useEffect(() => {
+    attachToRunRef.current = attachToRun;
+  });
+
   // Re-subscribe to the active run after answering an approval. Needed when the
   // run was reconstructed (server restart / hub eviction): no live SSE
   // subscription exists, so without this the resumed response never streams to
   // the client and the Stop button never appears. Re-marks the run's assistant
   // row as running (a prior `gone` cleared it) and re-opens the stream.
-  const reattachToActiveRun = () => {
+  const reattachToActiveRun = useCallback(() => {
     const runMsgId = activeRunMessageIdRef.current;
     if (!runMsgId) return;
     let lastAssistantIdx = -1;
@@ -886,8 +916,8 @@ const ChatWindow = ({
       i === lastAssistantIdx ? { ...m, runStatus: 'running' as const } : m,
     );
     setMessages(msgs);
-    attachToRun(runMsgId, msgs);
-  };
+    attachToRunRef.current(runMsgId, msgs);
+  }, [setMessages]);
 
   // Background-unread: while a run is streaming, a backgrounded tab keeps its
   // fetch open, so the server still counts this client as "watching" and marks
@@ -1012,7 +1042,9 @@ const ChatWindow = ({
           // For awaiting_user runs: directly fetch pending approvals from DB so the
           // input prompts are restored even if the SSE stream is gone (server restart).
           if (activeRunStatus === 'awaiting_user' && chatId) {
-            fetch(`/api/approvals/pending?chatId=${chatId}`)
+            fetch(
+              `/api/approvals/pending?chatId=${encodeURIComponent(chatId)}&clientSessionId=${encodeURIComponent(clientSessionId)}`,
+            )
               .then((r) => r.json())
               .then(
                 (data: {
@@ -1044,6 +1076,7 @@ const ChatWindow = ({
                       editApprovals: PendingEditApproval[];
                       skillEditApprovals: PendingSkillEditApproval[];
                       mcpApprovals: PendingMcpApproval[];
+                      locationApprovals: PendingLocationApproval[];
                     }
                   >();
                   const bucket = (msgId: string) => {
@@ -1053,6 +1086,7 @@ const ChatWindow = ({
                       editApprovals: [],
                       skillEditApprovals: [],
                       mcpApprovals: [],
+                      locationApprovals: [],
                     };
                     seeds.set(msgId, b);
                     return b;
@@ -1141,6 +1175,23 @@ const ChatWindow = ({
                         createdAt: p.createdAt as number | undefined,
                         status: 'pending',
                       });
+                    } else if (approval.toolKind === 'location') {
+                      bucket(key).locationApprovals.push({
+                        approvalId: approval.approvalId,
+                        toolCallId: p.toolCallId as string | undefined,
+                        reason: p.reason as string | undefined,
+                        authorizedPurposes: (p.authorizedPurposes ??
+                          []) as string[],
+                        authorizedHosts: (p.authorizedHosts ?? []) as string[],
+                        providerHosts: (p.providerHosts ?? []) as string[],
+                        tileHosts: (p.tileHosts ?? []) as string[],
+                        clientSessionId: p.clientSessionId as
+                          string | undefined,
+                        allowSave: p.allowSave === true,
+                        createdAt: p.createdAt as number | undefined,
+                        expiresAt: p.expiresAt as number | undefined,
+                        status: 'pending',
+                      });
                     }
                   }
                   for (const [messageId, b] of seeds) {
@@ -1159,6 +1210,9 @@ const ChatWindow = ({
                         : {}),
                       ...(b.mcpApprovals.length
                         ? { mcpApprovals: b.mcpApprovals }
+                        : {}),
+                      ...(b.locationApprovals.length
+                        ? { locationApprovals: b.locationApprovals }
                         : {}),
                     });
                   }
@@ -1209,6 +1263,31 @@ const ChatWindow = ({
     if (Object.keys(hydrated).length > 0) {
       // Merge persisted specs from loaded messages with any already set live.
       setChartSpecsByMessage((prev) => ({ ...hydrated, ...prev }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMessagesLoaded]);
+
+  // Hydrate only the redacted map snapshots written by runHost. Exact-ID
+  // lookup is intentionally separate from chart compatibility lookup: a map
+  // envelope can render only when its private canonical ID has a validated
+  // snapshot in this chat.
+  useEffect(() => {
+    if (!isMessagesLoaded) return;
+    const hydrated: Record<string, Record<string, PersistableMapSpec>> = {};
+    for (const msg of messages) {
+      const rawSpecs = msg.mapSpecs;
+      if (!rawSpecs || typeof rawSpecs !== 'object') continue;
+      const validSpecs: Record<string, PersistableMapSpec> = {};
+      for (const [id, spec] of Object.entries(rawSpecs)) {
+        const result = PersistableMapSpecSchema.safeParse(spec);
+        if (result.success) validSpecs[id] = result.data;
+      }
+      if (Object.keys(validSpecs).length > 0) {
+        hydrated[msg.messageId] = validSpecs;
+      }
+    }
+    if (Object.keys(hydrated).length > 0) {
+      setField('mapSpecsByMessage', (prev) => ({ ...hydrated, ...prev }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMessagesLoaded]);
@@ -1284,6 +1363,7 @@ const ChatWindow = ({
 
     const messageId =
       options?.messageId ?? crypto.randomBytes(7).toString('hex');
+    activeRunMessageIdRef.current = messageId;
 
     // In edit mode, use explicitly-provided images; otherwise use pendingImages
     const messageImages =
@@ -1421,6 +1501,7 @@ const ChatWindow = ({
       },
       selectedSystemPromptIds: systemPromptIds || [],
       selectedMethodologyId: selectedMethodologyId || undefined,
+      clientSessionId,
     };
 
     if (messageImageIds?.length) {
@@ -1597,7 +1678,177 @@ const ChatWindow = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isConfigReady, isReady]);
 
-  // Build a flat chartId → spec map for ChartSpecContext (must be before any early returns)
+  const updateLocationApproval = useCallback(
+    (approvalId: string, update: Partial<PendingLocationApproval>): void => {
+      setPendingLocationApprovals((previous) => {
+        const next: Record<string, PendingLocationApproval[]> = {};
+        for (const [messageId, approvals] of Object.entries(previous)) {
+          next[messageId] = approvals.map((approval) =>
+            approval.approvalId === approvalId
+              ? { ...approval, ...update }
+              : approval,
+          );
+        }
+        return next;
+      });
+    },
+    [setPendingLocationApprovals],
+  );
+
+  const handleLocationUse = useCallback(
+    async (
+      approvalId: string,
+      coordinates: MapCoordinate,
+      retention: LocationRetention,
+    ) => {
+      updateLocationApproval(approvalId, { status: 'approved', retention });
+      try {
+        const response = await fetch('/api/maps/location', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            approvalId,
+            clientSessionId,
+            coordinates,
+            retention,
+          }),
+        });
+        if (!response.ok) {
+          if (response.status === 409 || response.status === 410) {
+            // The server closes expired/stale approvals without returning an
+            // opaque token. Do not resurrect the prompt after that boundary.
+            updateLocationApproval(approvalId, {
+              status: 'expired',
+              declineReason: 'expired',
+            });
+            // A page may be seeing a pending row restored after a server
+            // restart, with no original stream left to receive the stale
+            // response. Reattach so the safe textual fallback is still shown.
+            reattachToActiveRun();
+            return;
+          }
+          throw new Error(`HTTP ${response.status}`);
+        }
+        reattachToActiveRun();
+      } catch (error) {
+        updateLocationApproval(approvalId, { status: 'pending' });
+        throw error;
+      }
+    },
+    [clientSessionId, reattachToActiveRun, updateLocationApproval],
+  );
+
+  const handleLocationUnavailable = useCallback(
+    async (approvalId: string, reason: LocationDeclineReason) => {
+      updateLocationApproval(approvalId, {
+        status: 'denied',
+        declineReason: reason,
+        retention: 'once',
+      });
+      try {
+        const response = await fetch('/api/chat/runs/resume', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            approvalId,
+            response: {
+              approved: false,
+              retention: 'once',
+              reason,
+              clientSessionId,
+            },
+          }),
+        });
+        if (!response.ok) {
+          if (response.status === 409 || response.status === 410) {
+            updateLocationApproval(approvalId, {
+              status: 'expired',
+              declineReason: 'expired',
+            });
+            reattachToActiveRun();
+            return;
+          }
+          throw new Error(`HTTP ${response.status}`);
+        }
+        reattachToActiveRun();
+      } catch (error) {
+        updateLocationApproval(approvalId, { status: 'pending' });
+        throw error;
+      }
+    },
+    [clientSessionId, reattachToActiveRun, updateLocationApproval],
+  );
+
+  const handleLocationCancel = useCallback(
+    async (approvalId: string) => {
+      updateLocationApproval(approvalId, {
+        status: 'cancelled',
+        declineReason: 'cancelled',
+        retention: 'once',
+      });
+      try {
+        const response = await fetch('/api/chat/runs/resume', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            approvalId,
+            response: {
+              approved: false,
+              retention: 'once',
+              reason: 'cancelled',
+              clientSessionId,
+            },
+          }),
+        });
+        if (!response.ok) {
+          if (response.status === 409 || response.status === 410) {
+            updateLocationApproval(approvalId, {
+              status: 'expired',
+              declineReason: 'expired',
+            });
+            reattachToActiveRun();
+            return;
+          }
+          throw new Error(`HTTP ${response.status}`);
+        }
+        reattachToActiveRun();
+      } catch (error) {
+        updateLocationApproval(approvalId, { status: 'pending' });
+        throw error;
+      }
+    },
+    [clientSessionId, reattachToActiveRun, updateLocationApproval],
+  );
+
+  useEffect(() => {
+    const expiries = Object.values(mapSessionOverlaysByMessage)
+      .flat()
+      .map((overlay) =>
+        overlay.expiresAt ? Date.parse(overlay.expiresAt) : Number.NaN,
+      )
+      .filter((value) => Number.isFinite(value));
+    if (expiries.length === 0) return;
+    const delay = Math.max(0, Math.min(...expiries) - Date.now());
+    const timer = setTimeout(() => {
+      const now = Date.now();
+      setField('mapSessionOverlaysByMessage', (previous) => {
+        const next: Record<string, MapSessionOverlay[]> = {};
+        for (const [messageId, overlays] of Object.entries(previous)) {
+          const kept = overlays.filter(
+            (overlay) =>
+              !overlay.expiresAt || Date.parse(overlay.expiresAt) > now,
+          );
+          if (kept.length > 0) next[messageId] = kept;
+        }
+        return next;
+      });
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [mapSessionOverlaysByMessage, setField]);
+
+  // Build flat exact-ID maps for the rendering contexts (must be before any
+  // early returns). Loaded metadata is included immediately; reducer state then
+  // supplies live/replayed registrations and wins on the same private ID.
   const flatChartSpecs = useMemo(() => {
     const flat: Record<string, ChartSpec> = {};
     for (const specs of Object.values(chartSpecsByMessage)) {
@@ -1605,6 +1856,46 @@ const ChatWindow = ({
     }
     return flat;
   }, [chartSpecsByMessage]);
+
+  const flatMapSpecs = useMemo(() => {
+    const flat: Record<string, PersistableMapSpec> = Object.create(null);
+    const add = (id: string, value: unknown) => {
+      if (
+        !id ||
+        id.length > 160 ||
+        /[\u0000-\u001f\u007f<>]/.test(id) ||
+        id === '__proto__' ||
+        id === 'constructor' ||
+        id === 'prototype'
+      ) {
+        return;
+      }
+      const parsed = PersistableMapSpecSchema.safeParse(value);
+      if (parsed.success) flat[id] = parsed.data;
+    };
+    for (const message of messages) {
+      if (!message.mapSpecs) continue;
+      for (const [id, spec] of Object.entries(message.mapSpecs)) add(id, spec);
+    }
+    for (const specs of Object.values(mapSpecsByMessage)) {
+      for (const [id, spec] of Object.entries(specs)) add(id, spec);
+    }
+    return flat;
+  }, [messages, mapSpecsByMessage]);
+
+  const flatMapSessionOverlays = useMemo(() => {
+    const flat: Record<string, MapSessionOverlay> = {};
+    for (const overlays of Object.values(mapSessionOverlaysByMessage)) {
+      for (const overlay of overlays) {
+        // Keep the defense at the render boundary as well as in runHub: a
+        // stale/replayed event from another page session must never reveal an
+        // exact origin in this window.
+        if (overlay.clientSessionId !== clientSessionId) continue;
+        flat[overlay.mapId] = overlay;
+      }
+    }
+    return flat;
+  }, [clientSessionId, mapSessionOverlaysByMessage]);
 
   const chartSpecContextValue = useMemo(
     () => ({
@@ -1619,6 +1910,21 @@ const ChatWindow = ({
       },
     }),
     [flatChartSpecs],
+  );
+
+  const mapSpecContextValue = useMemo(
+    () => ({
+      getMapSpecById: (mapId: string) => flatMapSpecs[mapId],
+      getMapSessionOverlayById: (mapId: string) =>
+        flatMapSessionOverlays[mapId],
+    }),
+    [flatMapSpecs, flatMapSessionOverlays],
+  );
+
+  const withMapSpecContext = (children: React.ReactNode) => (
+    <MapSpecContext.Provider value={mapSpecContextValue}>
+      {children}
+    </MapSpecContext.Provider>
   );
 
   const artifactViewerContextValue = useMemo(
@@ -1790,282 +2096,304 @@ const ChatWindow = ({
                     setPinned={setPinned}
                     workspaceId={selectedWorkspaceId ?? workspaceId}
                   />
-                  <Chat
-                    workspaceId={selectedWorkspaceId ?? workspaceId}
-                    loading={loading}
-                    messages={messages}
-                    skillNames={enabledUserSkillNames}
-                    sendMessage={sendMessage}
-                    scrollTrigger={scrollTrigger}
-                    rewrite={rewrite}
-                    fileIds={fileIds}
-                    setFileIds={setFileIds}
-                    files={files}
-                    setFiles={setFiles}
-                    focusMode={focusMode}
-                    setFocusMode={setFocusMode}
-                    handleEditMessage={handleEditMessage}
-                    systemPromptIds={systemPromptIds}
-                    setSystemPromptIds={setSystemPromptIds}
-                    selectedMethodologyId={selectedMethodologyId}
-                    setSelectedMethodologyId={setSelectedMethodologyId}
-                    onThinkBoxToggle={handleThinkBoxToggle}
-                    gatheringSources={gatheringSources}
-                    sendLocation={sendLocation}
-                    setSendLocation={setSendLocation}
-                    sendPersonalization={sendPersonalization}
-                    setSendPersonalization={setSendPersonalization}
-                    personalizationLocation={personalizationLocation}
-                    personalizationAbout={personalizationAbout}
-                    todoItems={todoItems}
-                    pendingExecutions={pendingExecutions}
-                    onExecutionAction={(
-                      executionId: string,
-                      approved: boolean,
-                    ) => {
-                      setPendingExecutions((prev) => {
-                        const updated: Record<string, PendingExecution[]> = {};
-                        for (const [msgId, executions] of Object.entries(
-                          prev,
-                        )) {
-                          updated[msgId] = executions.map((e) =>
-                            e.executionId === executionId
-                              ? {
-                                  ...e,
-                                  status: approved
-                                    ? ('approved' as const)
-                                    : ('denied' as const),
-                                }
-                              : e,
-                          );
-                        }
-                        return updated;
-                      });
-                    }}
-                    pendingQuestions={pendingQuestions}
-                    onQuestionAnswer={async (
-                      questionId: string,
-                      response: {
-                        selectedOptions?: string[];
-                        freeformText?: string;
-                      },
-                    ) => {
-                      setPendingQuestions((prev) => {
-                        const updated: Record<string, PendingQuestion[]> = {};
-                        for (const [msgId, questions] of Object.entries(prev)) {
-                          updated[msgId] = questions.map((q) =>
-                            q.questionId === questionId
-                              ? {
-                                  ...q,
-                                  status: 'answered' as const,
-                                  response,
-                                }
-                              : q,
-                          );
-                        }
-                        return updated;
-                      });
-                      try {
-                        const res = await fetch('/api/chat/runs/resume', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            approvalId: questionId,
-                            response,
-                          }),
+                  {withMapSpecContext(
+                    <Chat
+                      workspaceId={selectedWorkspaceId ?? workspaceId}
+                      loading={loading}
+                      messages={messages}
+                      skillNames={enabledUserSkillNames}
+                      sendMessage={sendMessage}
+                      scrollTrigger={scrollTrigger}
+                      rewrite={rewrite}
+                      fileIds={fileIds}
+                      setFileIds={setFileIds}
+                      files={files}
+                      setFiles={setFiles}
+                      focusMode={focusMode}
+                      setFocusMode={setFocusMode}
+                      handleEditMessage={handleEditMessage}
+                      systemPromptIds={systemPromptIds}
+                      setSystemPromptIds={setSystemPromptIds}
+                      selectedMethodologyId={selectedMethodologyId}
+                      setSelectedMethodologyId={setSelectedMethodologyId}
+                      onThinkBoxToggle={handleThinkBoxToggle}
+                      gatheringSources={gatheringSources}
+                      sendLocation={sendLocation}
+                      setSendLocation={setSendLocation}
+                      sendPersonalization={sendPersonalization}
+                      setSendPersonalization={setSendPersonalization}
+                      personalizationLocation={personalizationLocation}
+                      personalizationAbout={personalizationAbout}
+                      todoItems={todoItems}
+                      pendingExecutions={pendingExecutions}
+                      onExecutionAction={(
+                        executionId: string,
+                        approved: boolean,
+                      ) => {
+                        setPendingExecutions((prev) => {
+                          const updated: Record<string, PendingExecution[]> =
+                            {};
+                          for (const [msgId, executions] of Object.entries(
+                            prev,
+                          )) {
+                            updated[msgId] = executions.map((e) =>
+                              e.executionId === executionId
+                                ? {
+                                    ...e,
+                                    status: approved
+                                      ? ('approved' as const)
+                                      : ('denied' as const),
+                                  }
+                                : e,
+                            );
+                          }
+                          return updated;
                         });
-                        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                        reattachToActiveRun();
-                      } catch {
-                        toast.error(
-                          'Failed to send answer. The agent will continue on its own.',
-                        );
-                      }
-                    }}
-                    onQuestionSkip={async (questionId: string) => {
-                      setPendingQuestions((prev) => {
-                        const updated: Record<string, PendingQuestion[]> = {};
-                        for (const [msgId, questions] of Object.entries(prev)) {
-                          updated[msgId] = questions.map((q) =>
-                            q.questionId === questionId
-                              ? { ...q, status: 'skipped' as const }
-                              : q,
+                      }}
+                      pendingQuestions={pendingQuestions}
+                      onQuestionAnswer={async (
+                        questionId: string,
+                        response: {
+                          selectedOptions?: string[];
+                          freeformText?: string;
+                        },
+                      ) => {
+                        setPendingQuestions((prev) => {
+                          const updated: Record<string, PendingQuestion[]> = {};
+                          for (const [msgId, questions] of Object.entries(
+                            prev,
+                          )) {
+                            updated[msgId] = questions.map((q) =>
+                              q.questionId === questionId
+                                ? {
+                                    ...q,
+                                    status: 'answered' as const,
+                                    response,
+                                  }
+                                : q,
+                            );
+                          }
+                          return updated;
+                        });
+                        try {
+                          const res = await fetch('/api/chat/runs/resume', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              approvalId: questionId,
+                              response,
+                            }),
+                          });
+                          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                          reattachToActiveRun();
+                        } catch {
+                          toast.error(
+                            'Failed to send answer. The agent will continue on its own.',
                           );
                         }
-                        return updated;
-                      });
-                      try {
-                        const res = await fetch('/api/chat/runs/resume', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            approvalId: questionId,
-                            response: { skipped: true },
-                          }),
+                      }}
+                      onQuestionSkip={async (questionId: string) => {
+                        setPendingQuestions((prev) => {
+                          const updated: Record<string, PendingQuestion[]> = {};
+                          for (const [msgId, questions] of Object.entries(
+                            prev,
+                          )) {
+                            updated[msgId] = questions.map((q) =>
+                              q.questionId === questionId
+                                ? { ...q, status: 'skipped' as const }
+                                : q,
+                            );
+                          }
+                          return updated;
                         });
-                        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                        reattachToActiveRun();
-                      } catch {
-                        toast.error(
-                          'Failed to skip question. The agent will continue on its own.',
-                        );
-                      }
-                    }}
-                    pendingEditApprovals={pendingEditApprovals}
-                    onEditDecide={async (
-                      approvalId: string,
-                      decision:
-                        'accept' | 'accept_always' | 'reject' | 'always_prompt',
-                      freeformText?: string,
-                    ) => {
-                      setPendingEditApprovals((prev) => {
-                        const updated: Record<string, PendingEditApproval[]> =
-                          {};
-                        for (const [msgId, approvals] of Object.entries(prev)) {
-                          updated[msgId] = approvals.map((a) =>
-                            a.approvalId === approvalId
-                              ? {
-                                  ...a,
-                                  status: (decision === 'reject' ||
-                                  decision === 'always_prompt'
-                                    ? 'rejected'
-                                    : 'accepted') as 'accepted' | 'rejected',
-                                }
-                              : a,
+                        try {
+                          const res = await fetch('/api/chat/runs/resume', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              approvalId: questionId,
+                              response: { skipped: true },
+                            }),
+                          });
+                          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                          reattachToActiveRun();
+                        } catch {
+                          toast.error(
+                            'Failed to skip question. The agent will continue on its own.',
                           );
                         }
-                        return updated;
-                      });
-                      try {
-                        const res = await fetch('/api/chat/runs/resume', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            approvalId,
-                            response: { decision, freeformText },
-                          }),
+                      }}
+                      pendingEditApprovals={pendingEditApprovals}
+                      onEditDecide={async (
+                        approvalId: string,
+                        decision:
+                          | 'accept'
+                          | 'accept_always'
+                          | 'reject'
+                          | 'always_prompt',
+                        freeformText?: string,
+                      ) => {
+                        setPendingEditApprovals((prev) => {
+                          const updated: Record<string, PendingEditApproval[]> =
+                            {};
+                          for (const [msgId, approvals] of Object.entries(
+                            prev,
+                          )) {
+                            updated[msgId] = approvals.map((a) =>
+                              a.approvalId === approvalId
+                                ? {
+                                    ...a,
+                                    status: (decision === 'reject' ||
+                                    decision === 'always_prompt'
+                                      ? 'rejected'
+                                      : 'accepted') as 'accepted' | 'rejected',
+                                  }
+                                : a,
+                            );
+                          }
+                          return updated;
                         });
-                        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                        reattachToActiveRun();
-                      } catch {
-                        toast.error(
-                          'Failed to send edit decision. The agent will continue on its own.',
-                        );
-                      }
-                    }}
-                    pendingSkillEditApprovals={pendingSkillEditApprovals}
-                    onSkillEditDecide={async (
-                      approvalId: string,
-                      decision: 'accept' | 'reject',
-                      freeformText?: string,
-                    ) => {
-                      setPendingSkillEditApprovals((prev) => {
-                        const updated: Record<
-                          string,
-                          PendingSkillEditApproval[]
-                        > = {};
-                        for (const [msgId, approvals] of Object.entries(prev)) {
-                          updated[msgId] = approvals.map((a) =>
-                            a.approvalId === approvalId
-                              ? {
-                                  ...a,
-                                  status: (decision === 'reject'
-                                    ? 'rejected'
-                                    : 'accepted') as 'accepted' | 'rejected',
-                                }
-                              : a,
+                        try {
+                          const res = await fetch('/api/chat/runs/resume', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              approvalId,
+                              response: { decision, freeformText },
+                            }),
+                          });
+                          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                          reattachToActiveRun();
+                        } catch {
+                          toast.error(
+                            'Failed to send edit decision. The agent will continue on its own.',
                           );
                         }
-                        return updated;
-                      });
-                      try {
-                        const res = await fetch('/api/chat/runs/resume', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            approvalId,
-                            response: { decision, freeformText },
-                          }),
+                      }}
+                      pendingSkillEditApprovals={pendingSkillEditApprovals}
+                      onSkillEditDecide={async (
+                        approvalId: string,
+                        decision: 'accept' | 'reject',
+                        freeformText?: string,
+                      ) => {
+                        setPendingSkillEditApprovals((prev) => {
+                          const updated: Record<
+                            string,
+                            PendingSkillEditApproval[]
+                          > = {};
+                          for (const [msgId, approvals] of Object.entries(
+                            prev,
+                          )) {
+                            updated[msgId] = approvals.map((a) =>
+                              a.approvalId === approvalId
+                                ? {
+                                    ...a,
+                                    status: (decision === 'reject'
+                                      ? 'rejected'
+                                      : 'accepted') as 'accepted' | 'rejected',
+                                  }
+                                : a,
+                            );
+                          }
+                          return updated;
                         });
-                        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                        reattachToActiveRun();
-                      } catch {
-                        toast.error(
-                          'Failed to send skill edit decision. The agent will continue on its own.',
-                        );
-                      }
-                    }}
-                    pendingMcpApprovals={pendingMcpApprovals}
-                    onMcpToolDecide={async (
-                      approvalId: string,
-                      approved: boolean,
-                      opts?: { alwaysAllow?: boolean },
-                    ) => {
-                      // Capture the target tool before we mutate state, so the
-                      // "Always allow" write-through knows which server/tool to flip.
-                      const target = Object.values(pendingMcpApprovals)
-                        .flat()
-                        .find((a) => a.approvalId === approvalId);
-                      setPendingMcpApprovals((prev) => {
-                        const updated: Record<string, PendingMcpApproval[]> =
-                          {};
-                        for (const [msgId, approvals] of Object.entries(prev)) {
-                          updated[msgId] = approvals.map((a) =>
-                            a.approvalId === approvalId
-                              ? {
-                                  ...a,
-                                  status: (approved ? 'approved' : 'denied') as
-                                    'approved' | 'denied',
-                                }
-                              : a,
+                        try {
+                          const res = await fetch('/api/chat/runs/resume', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              approvalId,
+                              response: { decision, freeformText },
+                            }),
+                          });
+                          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                          reattachToActiveRun();
+                        } catch {
+                          toast.error(
+                            'Failed to send skill edit decision. The agent will continue on its own.',
                           );
                         }
-                        return updated;
-                      });
-                      // Persist auto-run for this tool (best-effort, non-blocking).
-                      if (
-                        opts?.alwaysAllow &&
-                        approved &&
-                        target?.serverId &&
-                        target.toolName
-                      ) {
-                        void persistMcpAlwaysAllow(
-                          target.serverId,
-                          target.toolName,
-                        );
-                      }
-                      try {
-                        const res = await fetch('/api/chat/runs/resume', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            approvalId,
-                            response: { approved },
-                          }),
+                      }}
+                      pendingMcpApprovals={pendingMcpApprovals}
+                      pendingLocationApprovals={pendingLocationApprovals}
+                      onLocationUse={handleLocationUse}
+                      onLocationUnavailable={handleLocationUnavailable}
+                      onLocationCancel={handleLocationCancel}
+                      onMcpToolDecide={async (
+                        approvalId: string,
+                        approved: boolean,
+                        opts?: { alwaysAllow?: boolean },
+                      ) => {
+                        // Capture the target tool before we mutate state, so the
+                        // "Always allow" write-through knows which server/tool to flip.
+                        const target = Object.values(pendingMcpApprovals)
+                          .flat()
+                          .find((a) => a.approvalId === approvalId);
+                        setPendingMcpApprovals((prev) => {
+                          const updated: Record<string, PendingMcpApproval[]> =
+                            {};
+                          for (const [msgId, approvals] of Object.entries(
+                            prev,
+                          )) {
+                            updated[msgId] = approvals.map((a) =>
+                              a.approvalId === approvalId
+                                ? {
+                                    ...a,
+                                    status: (approved
+                                      ? 'approved'
+                                      : 'denied') as 'approved' | 'denied',
+                                  }
+                                : a,
+                            );
+                          }
+                          return updated;
                         });
-                        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                        reattachToActiveRun();
-                      } catch {
-                        toast.error(
-                          'Failed to send MCP tool decision. The agent will continue on its own.',
-                        );
+                        // Persist auto-run for this tool (best-effort, non-blocking).
+                        if (
+                          opts?.alwaysAllow &&
+                          approved &&
+                          target?.serverId &&
+                          target.toolName
+                        ) {
+                          void persistMcpAlwaysAllow(
+                            target.serverId,
+                            target.toolName,
+                          );
+                        }
+                        try {
+                          const res = await fetch('/api/chat/runs/resume', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              approvalId,
+                              response: { approved },
+                            }),
+                          });
+                          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                          reattachToActiveRun();
+                        } catch {
+                          toast.error(
+                            'Failed to send MCP tool decision. The agent will continue on its own.',
+                          );
+                        }
+                      }}
+                      pendingImages={pendingImages}
+                      setPendingImages={setPendingImages}
+                      imageCapable={imageCapable}
+                      isPrivateSession={isPrivateSession}
+                      clientSessionId={clientSessionId}
+                      searchCapabilities={
+                        isPrivateSession
+                          ? searchCapabilitiesPrivate
+                          : searchCapabilitiesRegular
                       }
-                    }}
-                    pendingImages={pendingImages}
-                    setPendingImages={setPendingImages}
-                    imageCapable={imageCapable}
-                    isPrivateSession={isPrivateSession}
-                    searchCapabilities={
-                      isPrivateSession
-                        ? searchCapabilitiesPrivate
-                        : searchCapabilitiesRegular
-                    }
-                    estimatedUsage={contextUsage}
-                    messageCount={messages.length}
-                    onCompact={handleCompact}
-                    compacting={compacting}
-                    enabledSkills={enabledSkills}
-                  />
+                      estimatedUsage={contextUsage}
+                      messageCount={messages.length}
+                      onCompact={handleCompact}
+                      compacting={compacting}
+                      enabledSkills={enabledSkills}
+                    />,
+                  )}
                 </>
               ) : (
                 <EmptyChat

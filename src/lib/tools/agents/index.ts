@@ -29,6 +29,11 @@ import { readSkillTool } from './readSkillTool';
 import { editSkillTool } from './editSkillTool';
 import { artifactTools } from './artifactTools';
 import { yaawcDocsTool } from './yaawcDocsTool';
+import { searchPlacesTool } from './searchPlacesTool';
+import { getPlaceDetailsTool } from './getPlaceDetailsTool';
+import { getRouteTool } from './getRouteTool';
+import { showMapTool } from './showMapTool';
+import { requestLocationTool } from './requestLocationTool';
 
 export { simpleWebSearchTool };
 export { urlFetchTool };
@@ -52,6 +57,22 @@ export { readSkillTool };
 export { editSkillTool };
 export { artifactTools };
 export { yaawcDocsTool };
+export { searchPlacesTool };
+export { getPlaceDetailsTool };
+export { getRouteTool };
+export { showMapTool };
+export { requestLocationTool };
+
+/** Mapping tools are injected only by an eligible top-level Web Search turn. */
+export const mappingTools = [
+  searchPlacesTool,
+  getPlaceDetailsTool,
+  getRouteTool,
+  requestLocationTool,
+  showMapTool,
+];
+export const getMappingTools = () => [...mappingTools];
+export const MAPPING_TOOL_NAMES = mappingTools.map((tool) => tool.name);
 
 // Base tool arrays (non-interactive, used by subagents)
 export const allAgentTools = [

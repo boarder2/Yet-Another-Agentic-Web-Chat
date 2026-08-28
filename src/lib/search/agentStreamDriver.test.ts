@@ -6,12 +6,16 @@ import type { Document } from '@langchain/core/documents';
 import type { CachedEmbeddings } from '@/lib/utils/cachedEmbeddings';
 import { onStreamEvent, type AgentEmitEvent } from '@/lib/streaming/events';
 import { TurnChartRegistry } from '@/lib/chart/turnChartRegistry';
+import { TurnMapRegistry } from '@/lib/maps/turnMapRegistry';
+import type { MappingConfiguration } from '@/lib/maps/config';
+import type { MappingService } from '@/lib/maps/service';
 import { TokenTracker } from '@/lib/tokens/tracker';
 import type { Skill } from '@/lib/skills/types';
 import {
   AgentStreamDriver,
   AgentStreamExecutionError,
   AgentStreamIntegrityError,
+  buildAgentToolContext,
   type AgentStreamEvent,
   type AgentStreamPolicy,
 } from './agentStreamDriver';
@@ -89,6 +93,11 @@ function makeHarness(
     signal?: AbortSignal;
     threadId?: string;
     resolvedSkills?: readonly Skill[];
+    mapRegistry?: TurnMapRegistry;
+    mappingConfig?: MappingConfiguration | null;
+    mappingService?: MappingService | null;
+    mappingServiceResolver?: () => MappingService | null;
+    mappingSavedLocationEnabled?: boolean;
   } = {},
 ) {
   const emitter = new EventEmitter();
@@ -124,6 +133,11 @@ function makeHarness(
     chatRecorder,
     systemRecorder,
     chartRegistry: new TurnChartRegistry(),
+    mapRegistry: options.mapRegistry,
+    mappingConfig: options.mappingConfig,
+    mappingService: options.mappingService,
+    mappingServiceResolver: options.mappingServiceResolver,
+    mappingSavedLocationEnabled: options.mappingSavedLocationEnabled,
     signal: options.signal ?? new AbortController().signal,
     threadId: options.threadId ?? 'thread-1',
     resolvedSkills: options.resolvedSkills,
@@ -153,6 +167,53 @@ describe('AgentStreamDriver', () => {
         isPrivate: false,
       },
     });
+  });
+
+  it('threads the map registry, mapping snapshot, service resolver, and consent through the validated context', () => {
+    const mapRegistry = new TurnMapRegistry();
+    const mappingConfig = {} as MappingConfiguration;
+    const mappingService = {} as MappingService;
+    const mappingServiceResolver = vi.fn(() => mappingService);
+    const { driver } = makeHarness({
+      mapRegistry,
+      mappingConfig,
+      mappingService,
+      mappingServiceResolver,
+      mappingSavedLocationEnabled: true,
+    });
+
+    const config = driver.buildConfig();
+
+    expect(config.context).toMatchObject({
+      mapRegistry,
+      mappingConfig,
+      mappingService,
+      mappingServiceResolver,
+      mappingSavedLocationEnabled: true,
+    });
+    expect(
+      buildAgentToolContext({
+        ...{
+          llm: {} as BaseChatModel,
+          systemLlm: {} as BaseChatModel,
+          embeddings: {} as CachedEmbeddings,
+          fileIds: [],
+          emitter: new EventEmitter(),
+          runId: 'context-run',
+          interactiveSession: true,
+          isPrivate: false,
+          tracker: new TokenTracker(new EventEmitter()),
+          chatRecorder: {} as never,
+          systemRecorder: {} as never,
+          chartRegistry: new TurnChartRegistry(),
+          mapRegistry,
+          mappingConfig,
+          mappingService,
+          mappingServiceResolver,
+          mappingSavedLocationEnabled: true,
+        },
+      }).mapRegistry,
+    ).toBe(mapRegistry);
   });
 
   it('folds parent response text, usage, final results, and deduplicated sources', async () => {
@@ -440,6 +501,43 @@ describe('AgentStreamDriver', () => {
     ]);
   });
 
+  it('emits source documents from a mapping Command update even when the tool name is not search-like', async () => {
+    const mappingDocument = documentWithUrl(
+      'https://www.openstreetmap.org/node/910001',
+      'https://www.openstreetmap.org/node/910001',
+      'Central Cafe\nOpening hours: Mo-Su 08:00-18:00',
+      'central cafe',
+    );
+    const { driver, events } = makeHarness();
+    const graph = { getState: vi.fn(async () => ({ tasks: [] })) };
+
+    const result = await driver.consume(
+      streamOf([
+        streamEvent('on_chain_end', 'get_place_details', 'details-1', {
+          data: {
+            output: { update: { relevantDocuments: [mappingDocument] } },
+          },
+        }),
+      ]),
+      { kind: 'resume', replayedToolCallIds: new Set() },
+      graph,
+    );
+
+    expect(result.collectedDocuments).toEqual([mappingDocument]);
+    expect(events).toContainEqual({
+      type: 'sources_added',
+      data: [mappingDocument],
+      searchQuery: 'central cafe',
+      searchUrl: '',
+    });
+    expect(events).toContainEqual({
+      type: 'sources',
+      data: [mappingDocument],
+      searchQuery: '',
+      searchUrl: '',
+    });
+  });
+
   it('uses the same response and usage fold for respond-now synthesis', async () => {
     const existing = document('https://example.test/existing');
     const { driver, events, responses, tracker } = makeHarness();
@@ -672,6 +770,7 @@ describe('AgentStreamDriver', () => {
       'todo_list',
       'create_chart',
       'show_chart',
+      'show_map',
     ].entries()) {
       const runId = `specialized-run-${index}`;
       callbacks.handleToolStart({ name }, { query: 'nested work' }, runId);

@@ -28,6 +28,9 @@ import {
   ChevronRight,
   BookOpen,
   Plug,
+  Map as MapIcon,
+  MapPin,
+  Route,
 } from 'lucide-react';
 import { CodeBlock } from '../CodeBlock';
 import { Card } from '@/components/ui/Card';
@@ -117,6 +120,15 @@ export const ToolCall = ({
   query,
   urls: _urls,
   url,
+  near,
+  location,
+  category,
+  placeHandle,
+  origin,
+  destination,
+  mode,
+  handle,
+  mapHandle,
   videoId,
   count,
   status,
@@ -141,6 +153,15 @@ export const ToolCall = ({
   query?: string;
   urls?: string;
   url?: string;
+  near?: string;
+  location?: string;
+  category?: string;
+  placeHandle?: string;
+  origin?: string;
+  destination?: string;
+  mode?: string;
+  handle?: string;
+  mapHandle?: string;
   videoId?: string;
   count?: string | number;
   status?: string; // running | success | error
@@ -256,6 +277,13 @@ export const ToolCall = ({
         return <MessageSquare size={16} className="text-accent" />;
       case 'search_yaawc_docs':
         return <BookOpen size={16} className="text-accent" />;
+      case 'search_places':
+      case 'get_place_details':
+        return <MapPin size={16} className="text-accent" />;
+      case 'get_route':
+        return <Route size={16} className="text-accent" />;
+      case 'show_map':
+        return <MapIcon size={16} className="text-accent" />;
       case 'create_artifact':
         return <FilePlus size={16} className="text-accent" />;
       case 'edit_artifact':
@@ -284,6 +312,71 @@ export const ToolCall = ({
           <span className="mr-2">{getIcon(type)}</span>
           <span>File search:</span>
           <ArgChip>{decodeHtmlEntities(query || (children as string))}</ArgChip>
+        </>
+      );
+    }
+
+    if (type === 'search_places') {
+      const locationLabel = near || location || query;
+      return (
+        <>
+          <span className="mr-2">{getIcon(type)}</span>
+          <span>Finding places{locationLabel ? ':' : ''}</span>
+          {locationLabel && (
+            <ArgChip wide mono={false}>
+              {decodeHtmlEntities(locationLabel)}
+            </ArgChip>
+          )}
+          {category && (
+            <ArgChip bordered>{decodeHtmlEntities(category)}</ArgChip>
+          )}
+        </>
+      );
+    }
+
+    if (type === 'get_place_details') {
+      return (
+        <>
+          <span className="mr-2">{getIcon(type)}</span>
+          <span>Retrieving place details</span>
+          {(placeHandle || query) && (
+            <ArgChip bordered>
+              {decodeHtmlEntities(placeHandle || query || '')}
+            </ArgChip>
+          )}
+        </>
+      );
+    }
+
+    if (type === 'get_route') {
+      const routeLabel =
+        origin && destination ? `${origin} → ${destination}` : '';
+      return (
+        <>
+          <span className="mr-2">{getIcon(type)}</span>
+          <span>
+            Finding {mode || 'route'}
+            {routeLabel ? ':' : ''}
+          </span>
+          {routeLabel && (
+            <ArgChip wide mono={false}>
+              {decodeHtmlEntities(routeLabel)}
+            </ArgChip>
+          )}
+        </>
+      );
+    }
+
+    if (type === 'show_map') {
+      return (
+        <>
+          <span className="mr-2">{getIcon(type)}</span>
+          <span>Showing map</span>
+          {(handle || mapHandle || query) && (
+            <ArgChip bordered>
+              {decodeHtmlEntities(handle || mapHandle || query || '')}
+            </ArgChip>
+          )}
         </>
       );
     }

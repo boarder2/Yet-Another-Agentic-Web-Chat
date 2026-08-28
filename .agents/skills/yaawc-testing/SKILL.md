@@ -32,13 +32,13 @@ E2e uses `.next/standalone/server.js`, not the dev server. The package scripts b
 
 E2e must never call a real LLM or require provider credentials. `YAAWC_TEST_MODE=true` registers deterministic model variants in `src/lib/providers/test.ts`; choose the variant matching the scenario or add a deterministic one there. `test-embed` supplies deterministic embeddings.
 
-Capability-doc test variants must exercise the real non-toggleable `search_yaawc_docs` tool path rather than mocking the route/service. Keep `e2e/config.test.toml` free of provider URLs and keys; `seed-settings.mjs` establishes baseline test models/settings.
+Capability-doc test variants must exercise the real non-toggleable `search_yaawc_docs` tool path rather than mocking the route/service. Mapping integration variants use the env-gated deterministic mapping provider selected by a reusable fixture; tile hosts are intercepted in the browser, and no real geocoder, places, routing, tile, or LLM service may be contacted. Keep `e2e/config.test.toml` free of provider URLs and keys; `seed-settings.mjs` establishes baseline test models/settings.
 
 ## Data isolation
 
 Playwright recreates `e2e/.test-data`, pushes the schema, seeds settings/data, and starts the app with one explicit `DATA_DIR`, test config, and passphrase. The encryption-gate project uses a separate data directory and port with no passphrase.
 
-Isolation is per run, not per spec: specs share one test DB. Prefer fresh chat/workspace-scoped resources. Clean up or restore global settings, MCP servers, workflows/schedules, and other unscoped state. Put tests that necessarily mutate instance-wide state in the serial project.
+Isolation is per run, not per spec: specs share one test DB. Prefer fresh chat/workspace-scoped resources. Clean up or restore global settings, MCP servers, workflows/schedules, Mapping settings, and other unscoped state. Put tests that necessarily mutate instance-wide state in the serial project.
 
 Never point e2e at a developer server or developer DB.
 

@@ -22,6 +22,11 @@ import type { EventEmitter } from 'events';
 import type { Document } from '@langchain/core/documents';
 import type { SubagentExecution } from '@/lib/state/chatAgentState';
 import type { ChartSpec } from '@/lib/chart/chartSpec';
+import type {
+  MapSessionOverlay,
+  MapSpec,
+  PersistableMapSpec,
+} from '@/lib/maps/types';
 
 // ── Shared payload types (single source of truth) ────────────────────────────
 
@@ -70,7 +75,8 @@ export type ToolKind =
   | 'workspace_edit'
   | 'workspace_create'
   | 'skill_edit'
-  | 'mcp_tool';
+  | 'mcp_tool'
+  | 'location';
 
 export interface InterruptValue {
   kind: ToolKind;
@@ -145,6 +151,36 @@ export type ChartPlacementData = {
   placementNumber?: number;
 };
 
+/** Registration of one provider-grounded map in the current turn. */
+export type MapSpecData = {
+  /** Private canonical map ID; never a model-facing handle. */
+  mapId: string;
+  /** Producers may carry the full route until the run host redacts it. */
+  spec: MapSpec | PersistableMapSpec;
+  /** Short current-turn handle shown to trusted tools, not the model output. */
+  handle?: string;
+  turnHandle?: string;
+  source?: string;
+};
+
+/** The wire/persisted form never carries a producer-only full-spec union. */
+export type PersistableMapSpecData = Omit<MapSpecData, 'spec'> & {
+  spec: PersistableMapSpec;
+};
+
+/** Writer-owned placement of a registered map. */
+export type MapPlacementData = {
+  /** Unique placement ID, not a model-supplied map identifier. */
+  placementId: string;
+  /** Private canonical map ID referenced by the writer envelope. */
+  mapId: string;
+  handle?: string;
+  placementNumber?: number;
+};
+
+/** Exact browser-origin data; this event is live-only and never a milestone. */
+export type MapSessionOverlayData = MapSessionOverlay;
+
 export type PanelExecutorChartData = ChartPlacementData;
 export type CodeExecutionResultData = {
   stdout?: string;
@@ -193,6 +229,9 @@ export type AgentEmitEvent =
   | { type: 'todo_update'; data: TodoUpdateData }
   | { type: 'chart_spec'; data: ChartSpecData }
   | { type: 'chart_placement'; data: ChartPlacementData }
+  | { type: 'map_spec'; data: MapSpecData }
+  | { type: 'map_placement'; data: MapPlacementData }
+  | { type: 'map_session_overlay'; data: MapSessionOverlayData }
   | {
       type: 'panel_executor_chart';
       executorIdx: number;
@@ -287,6 +326,12 @@ export type StreamEvent =
   | ({ type: 'todo_update'; data: TodoUpdateData } & WithMessageId)
   | ({ type: 'chart_spec'; data: ChartSpecData } & WithMessageId)
   | ({ type: 'chart_placement'; data: ChartPlacementData } & WithMessageId)
+  | ({ type: 'map_spec'; data: PersistableMapSpecData } & WithMessageId)
+  | ({ type: 'map_placement'; data: MapPlacementData } & WithMessageId)
+  | ({
+      type: 'map_session_overlay';
+      data: MapSessionOverlayData;
+    } & WithMessageId)
   | ({
       type: 'panel_executor_chart';
       executorIdx: number;

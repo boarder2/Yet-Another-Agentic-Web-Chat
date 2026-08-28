@@ -20,6 +20,13 @@ import {
   SkillEditApproval,
 } from './SkillEditApproval';
 import { PendingMcpApproval, McpToolApproval } from './McpToolApproval';
+import type { PendingLocationApproval } from '@/lib/streaming/chatState';
+import type { MapCoordinate } from '@/lib/maps/types';
+import type {
+  LocationDeclineReason,
+  LocationRetention,
+} from '@/lib/maps/locationSchemas';
+import LocationApproval from './LocationApproval';
 
 const PROSE_BLOCKS = 'p,h1,h2,h3,h4,h5,h6,ul,ol,table,blockquote,pre';
 
@@ -94,10 +101,15 @@ const Chat = ({
   onSkillEditDecide,
   pendingMcpApprovals = {},
   onMcpToolDecide,
+  pendingLocationApprovals = {},
+  onLocationUse,
+  onLocationUnavailable,
+  onLocationCancel,
   pendingImages,
   setPendingImages,
   imageCapable = false,
   isPrivateSession = false,
+  clientSessionId,
   workspaceId,
   searchCapabilities,
   topPadding,
@@ -178,10 +190,23 @@ const Chat = ({
     approved: boolean,
     opts?: { alwaysAllow?: boolean },
   ) => void;
+  pendingLocationApprovals?: Record<string, PendingLocationApproval[]>;
+  onLocationUse?: (
+    approvalId: string,
+    coordinates: MapCoordinate,
+    retention: LocationRetention,
+  ) => Promise<void> | void;
+  onLocationUnavailable?: (
+    approvalId: string,
+    reason: LocationDeclineReason,
+  ) => Promise<void> | void;
+  onLocationCancel?: (approvalId: string) => Promise<void> | void;
   pendingImages: ImageAttachment[];
   setPendingImages: (images: ImageAttachment[]) => void;
   imageCapable?: boolean;
   isPrivateSession?: boolean;
+  /** Page-session binding for precise location approval responses. */
+  clientSessionId?: string;
   workspaceId?: string | null;
   searchCapabilities?: {
     web: boolean;
@@ -610,6 +635,45 @@ const Chat = ({
                   document.getElementById('message-input')?.focus();
                 }, 0);
               }}
+            />
+          );
+        })()}
+        {/* Explicit browser-location approval queue */}
+        {(() => {
+          const allPending = Object.values(pendingLocationApprovals)
+            .flat()
+            .filter((approval) => approval.status === 'pending');
+          if (
+            allPending.length === 0 ||
+            !onLocationUse ||
+            !onLocationUnavailable ||
+            !onLocationCancel
+          )
+            return null;
+          const current = allPending[0];
+          return (
+            <LocationApproval
+              key={current.approvalId}
+              approvalId={current.approvalId}
+              approvalSessionId={current.clientSessionId}
+              pageSessionId={clientSessionId}
+              reason={current.reason}
+              authorizedPurposes={current.authorizedPurposes}
+              authorizedHosts={current.authorizedHosts}
+              providerHosts={current.providerHosts}
+              tileHosts={current.tileHosts}
+              allowSave={current.allowSave && !isPrivateSession}
+              expiresAt={current.expiresAt}
+              onUse={onLocationUse}
+              onUnavailable={onLocationUnavailable}
+              onCancel={onLocationCancel}
+              onDismiss={() => {
+                setTimeout(() => {
+                  document.getElementById('message-input')?.focus();
+                }, 0);
+              }}
+              queuePosition={1}
+              queueTotal={allPending.length}
             />
           );
         })()}

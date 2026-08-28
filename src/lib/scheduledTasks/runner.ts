@@ -160,6 +160,8 @@ export async function runSchedule(
       workspaceSuffix: '',
       memoryEnabled: false,
       panel: null,
+      mappingAvailable: false,
+      mappingSavedLocationEnabled: false,
     });
     const agent = new SimplifiedAgent({
       dependencies: {

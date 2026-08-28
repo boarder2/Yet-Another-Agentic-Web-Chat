@@ -23,9 +23,9 @@ One seam between agent and UI. Milestone events persist to `run_events` (`runEve
 
 Events carry structured payloads — never markup. The two writers (`reducer.ts` client-side, `runHost.ts` server-side) serialize them into the assistant message with one isomorphic codec:
 
-- A widget is a code fence with a reserved `yaawc:<kind>` info string + compact single-line JSON. Kinds: `tool_call`, `subagent`, `panel`, `artifact`, and writer-owned `chart` placements.
+- A widget is a code fence with a reserved `yaawc:<kind>` info string + compact single-line JSON. Kinds: `tool_call`, `subagent`, `panel`, `artifact`, writer-owned `chart` placements, and writer-owned `map` placements. A map envelope contains only a private canonical map ID plus safe fallback text, links, and attribution.
 - `appendWidget`/`updateWidget`/`findWidget` (idempotent on payload `id`); `appendChartWidget` (unique placement id plus private canonical chart id); `upsertArtifactWidget` (one card per artifact per message); `parseWidgetFence` (render-side decode); `stripWidgets` (LLM context/clipboard); `neutralizeSpoofedFences` downgrades any model-streamed `yaawc:` fence — all legitimate envelopes are writer-appended, so forging is structurally impossible. A chart envelope never exposes the model handle or accepts a raw chart tag.
-- `MarkdownRenderer`'s `code` override dispatches known kinds to `ToolCall`/`SubagentExecution`/`PanelColumns`/`ArtifactCard`/`ChartEnvelope`; unknown/invalid falls back to a plain code block. Pre-migration `<ToolCall>`-style tag markup renders via a frozen, read-only legacy path. Historical chat `<Chart>` tags and dashboard-generated placeholders remain on that legacy path; new streamed chat tags are stripped and new placement is `show_chart`.
+- `MarkdownRenderer`'s `code` override dispatches known kinds to `ToolCall`/`SubagentExecution`/`PanelColumns`/`ArtifactCard`/`ChartEnvelope`/`MapEnvelope`; unknown/invalid falls back to a plain code block. Pre-migration `<ToolCall>`-style tag markup renders via a frozen, read-only legacy path. Historical chat `<Chart>` tags and dashboard-generated placeholders remain on that legacy path; new streamed chat tags are stripped and new placement is `show_chart`.
 - Codec unit-tested (`envelope.test.ts`), including markdown-to-jsx parse-shape tests (regression net for the nested-widget-spillage bug this format fixed).
 
 ## Tool-call lifecycle
@@ -54,6 +54,8 @@ Events carry structured payloads — never markup. The two writers (`reducer.ts`
 | `sources` / `sources_added`                      | Final set (replace) / streaming batches (append)                                                                                                                                                        |
 | `chart_spec`                                     | Normalized canonical ChartSpec keyed by private `chartId`, with the current-turn handle for reconstruction                                                                                              |
 | `chart_placement`                                | Writer-owned `yaawc:chart` placement keyed by unique placement id; only a registered current-turn chart can be shown, and repeats are allowed                                                           |
+| `map_spec` / `map_placement`                     | Provider-validated, persistable map registration and one writer-owned `yaawc:map` placement; one map per answer, at most 12 pins and one route                                                          |
+| `map_session_overlay`                            | Live-only precise browser-origin/route overlay, delivered only to the approving page session; never sequenced, persisted, or replayed                                                                   |
 | `panel_executor_chart`                           | Structured chart placement bridged into the originating executor column; executor registries and private ids remain namespaced                                                                          |
 | `workspace_file_changed`                         | Invalidates the workspace's TanStack Query                                                                                                                                                              |
 | `replay_complete`                                | Flips `inReplay` off so live tokens append (replay pre-seeds content from DB — tokens must be gated to avoid duplication)                                                                               |
@@ -64,7 +66,7 @@ A model that narrates a placement (`{chart_1}` or a bare `show_chart` line) inst
 
 ## Approval / interrupt events
 
-`runHost` emits `${kind}_pending` on first observation; each has an `*_answered` companion. Wire uses canonical kinds (`ask_user`, `workspace_edit`, `workspace_create`, `skill_edit`, `code_execution`, `mcp_tool`); `normalizeStreamEvent` maps legacy aliases from persisted buffers. The reducer dedupes against the mount-time `/api/approvals/pending` fetch (`seed_approvals`) by `approvalId`. UI: approval cards (`CodeExecution`, `UserQuestionPrompt`, `WorkspaceEditApproval`, `SkillEditApproval`, `McpToolApproval`).
+`runHost` emits `${kind}_pending` on first observation; each has an `*_answered` companion. Wire uses canonical kinds (`ask_user`, `workspace_edit`, `workspace_create`, `skill_edit`, `code_execution`, `mcp_tool`, `location`); `normalizeStreamEvent` maps legacy aliases from persisted buffers. The reducer dedupes against the mount-time `/api/approvals/pending` fetch (`seed_approvals`) by `approvalId`. UI: approval cards (`CodeExecution`, `UserQuestionPrompt`, `WorkspaceEditApproval`, `SkillEditApproval`, `McpToolApproval`, `LocationApproval`). Location approval payloads disclose hosts and retention choices but never coordinates; the dedicated browser-location route resumes with an opaque token.
 
 ## Widget-builder stream
 

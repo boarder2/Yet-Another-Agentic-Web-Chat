@@ -21,6 +21,13 @@ export const PANEL_EXECUTOR_EXCLUDED_TOOLS: string[] = [
   'ask_user',
   'edit_skill',
   'deep_research',
+  // Mapping is a top-level interactive capability and has no place in an
+  // executor's isolated, non-interactive run.
+  'search_places',
+  'get_place_details',
+  'get_route',
+  'request_location',
+  'show_map',
   // Artifacts are chat-scoped rows written by the turn's own agent; an
   // executor has no chatId to own them, and authoring belongs to the
   // synthesizing model, not the fan-out.

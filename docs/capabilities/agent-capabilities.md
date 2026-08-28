@@ -16,6 +16,12 @@ The top-level agent chooses tools from the active focus mode and the current run
 | Chat history and message lookup | Finds matching non-private prior conversations and retrieves a selected message by its numeric ID                              | Top-level chats; workspace scope is enforced and private chats are excluded |
 | Deep research                   | Runs a focused web-research subagent and merges its findings into the parent answer                                            | Web Search only; see [Deep research](#deep-research)                        |
 
+## Mapping tools
+
+When Mapping is enabled by the operator, an ordinary interactive top-level Web Search turn can use `search_places`, `get_place_details`, `get_route`, `request_location`, and `show_map`. Place and route results are provider-validated and expose short current-turn handles; the model never supplies coordinates or map markup. `show_map` places at most one writer-owned map with at most 12 pins and one route, while the answer retains equivalent numbered prose, normal citations for factual business claims, attribution, and external links.
+
+Mapping tools are absent from Chat, Local Research, Agent Panel executors/synthesis, deep-research children, workflows, schedules, dashboards, Firefox-restricted turns, and other non-interactive paths. Public endpoints require both explicit Mapping enablement and public-service acknowledgement; self-hosted endpoints still require explicit enablement. Provider, route, tile, and permission failures leave validated prose available without guessing.
+
 ## Answers, charts, and media
 
 - `todo_list` maintains a visible plan of up to 10 tasks. It is state management and does not call an external model.
@@ -52,6 +58,7 @@ Skill edits require user approval in an interactive chat. A workspace skill can 
 The agent may pause a top-level interactive run for:
 
 - A clarifying question with selectable options or free-form input.
+- Browser-location approval for a Mapping turn. The panel lists authorized provider/tile hosts and offers **Use once**, **Use and save** where the chat permits it, or **Cancel**; browser permission is requested only after a choice.
 - Code execution approval, including an optional denial reason.
 - A workspace file create or edit approval.
 - A skill create, update, or delete approval.

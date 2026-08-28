@@ -52,10 +52,14 @@ The loader supplies the defaults above when fields are omitted. It validates the
 The database is the runtime source of truth for settings that used to live in `config.toml`:
 
 - Model and search provider API keys are encrypted rows in the `credentials` table.
-- Provider and search endpoint URLs, provider selection, locale, model visibility, retention, image generation, embedding selection, memory-model selection, and other Settings values are rows in `app_settings`.
+- Provider and search endpoint URLs, provider selection, locale, model visibility, retention, image generation, embedding selection, memory-model selection, mapping settings, and other Settings values are rows in `app_settings`.
 - The active Chat and System model choices are selected by the composer or saved workflow, schedule, workspace, and preset settings.
 
 Manage these values in Settings rather than adding new TOML fields. Legacy provider, search, and migrated setting fields may still be read once during boot migration for existing installations, but they are not the runtime source of those values. Device-local appearance preferences remain local to the browser.
+
+## Mapping services
+
+Mapping is disabled by default and is configured under **Settings → Mapping**, not in `config.toml`. The shipped OpenStreetMap-compatible geocoder, places, routing, and tile defaults are visible there but cannot be contacted until mapping is enabled and the public-service acknowledgement is accepted. Operators may replace the endpoints with self-hosted services; explicit mapping enablement is still required. Routing profiles and tile attribution are validated before a provider call. The Mapping section also controls the separate saved-location provider opt-in and clears the durable coarse-locality/public-business cache.
 
 ## Data directory
 

@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
 import { Message } from '@/components/ChatWindow';
+import { replaceMapWidgetsForOutput } from '@/lib/widgets/envelope';
 
 export const downloadFile = (
   filename: string,
@@ -28,7 +29,8 @@ export const exportAsMarkdown = (messages: Message[], title: string) => {
     md += `**${msg.role === 'user' ? '🧑 User' : '🤖 Assistant'}**
 `;
     md += `*${new Date(msg.createdAt).toLocaleString()}*\n\n`;
-    md += `> ${msg.content.replace(/\n/g, '\n> ')}\n`;
+    const content = replaceMapWidgetsForOutput(msg.content);
+    md += `> ${content.replace(/\n/g, '\n> ')}\n`;
     if (msg.sources && msg.sources.length > 0) {
       md += `\n**Citations:**\n`;
       msg.sources.forEach((src: { metadata: { url?: string } }, i: number) => {
@@ -71,7 +73,8 @@ export const exportAsPDF = (messages: Message[], title: string) => {
     y += 6;
     doc.setTextColor(30);
     doc.setFontSize(12);
-    const lines = doc.splitTextToSize(msg.content, 180);
+    const content = replaceMapWidgetsForOutput(msg.content);
+    const lines = doc.splitTextToSize(content, 180);
     for (let i = 0; i < lines.length; i++) {
       if (y > pageHeight - 20) {
         doc.addPage();

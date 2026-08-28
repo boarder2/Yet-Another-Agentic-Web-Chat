@@ -31,6 +31,7 @@ describe('drizzle migrations', () => {
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
       .all() as { name: string }[];
     expect(tables.map((t) => t.name)).toContain('chats');
+    expect(tables.map((t) => t.name)).toContain('map_cache');
   });
 
   it('creates the generated image indexes', () => {
@@ -45,6 +46,13 @@ describe('drizzle migrations', () => {
         'generated_images_workspace_idx',
         'generated_images_message_idx',
       ]),
+    );
+
+    const mapCacheIndexes = sqlite
+      .prepare("PRAGMA index_list('map_cache')")
+      .all() as { name: string }[];
+    expect(mapCacheIndexes.map((index) => index.name)).toEqual(
+      expect.arrayContaining(['map_cache_expiry_idx', 'map_cache_kind_idx']),
     );
   });
 

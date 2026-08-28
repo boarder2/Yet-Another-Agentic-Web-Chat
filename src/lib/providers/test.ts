@@ -22,6 +22,20 @@ const STRUCTURED_TOOL_ARGS: Record<string, Record<string, unknown>> = {
 /** Leading text of the chart model's answer; e2e asserts on it. */
 export const CHART_ANSWER_PREFIX = 'Charted the deterministic findings';
 
+/** Fixed answers used by the deterministic mapping e2e model variants. */
+export const MAPPING_NEARBY_ANSWER =
+  'Validated nearby places:\n\n1. Deterministic Central Cafe — 1 Test Way, Testville [1].\n\nThe inline map shows the provider-validated result.';
+export const MAPPING_BUSINESS_ANSWER =
+  'Deterministic Central Cafe is a provider-validated business. Hours: Mo-Su 08:00-18:00 [1].\n\nThe inline map shows the business.';
+export const MAPPING_ROUTE_ANSWER =
+  'Validated named route:\n\n1. Deterministic Central Cafe to Deterministic North Market — driving route [1].\n\nThe inline map shows the route and a navigation link.';
+export const MAPPING_LOCATION_ANSWER =
+  'Using the approved browser location, the validated driving route to Deterministic North Market is shown below [1].';
+export const MAPPING_PROVIDER_FAILURE_ANSWER =
+  'The mapping provider was unavailable, so no map was shown. I did not infer a location.';
+export const MAPPING_DISABLED_ANSWER =
+  'Mapping is unavailable for this turn; the existing chat path remains available.';
+
 /** Fixed answers used by the capability-document e2e model variants. */
 export const CAPABILITY_DOCS_GROUNDED_ANSWER =
   'YAAWC capability claims are grounded in the bundled documentation [1].';
@@ -330,6 +344,142 @@ class FakeChatModel extends BaseChatModel {
       return;
     }
 
+    // Mapping variants exercise the real provider-backed tool lifecycle without
+    // contacting a geocoder, places, routing, or tile service. Tool results
+    // hand the next call a short handle, just as the production prompt does.
+    const isMappingVariant =
+      this.modelName.includes('map-nearby') ||
+      this.modelName.includes('map-business') ||
+      this.modelName.includes('map-route') ||
+      this.modelName.includes('map-location') ||
+      this.modelName.includes('map-provider-failure');
+    const mappingGuidanceEnabled = systemText(messages).includes(
+      '## Mapping and location-grounded answers',
+    );
+    if (
+      isMappingVariant &&
+      mappingGuidanceEnabled &&
+      !lastHumanText(messages).includes('short, concise title')
+    ) {
+      if (this.modelName.includes('map-provider-failure')) {
+        if (!hasToolResult) {
+          yield lifecycleToolChunk(
+            'search_places',
+            { query: 'provider-failure' },
+            'test-map-provider-failure-search-1',
+          );
+          return;
+        }
+      } else if (this.modelName.includes('map-nearby')) {
+        if (!hasToolResult) {
+          yield lifecycleToolChunk(
+            'search_places',
+            {
+              near: 'Testville',
+              category: 'cafe',
+              radiusMeters: 5_000,
+              limit: 12,
+            },
+            'test-map-nearby-search-1',
+          );
+          return;
+        }
+        if (toolResultCount === 1) {
+          yield lifecycleToolChunk(
+            'show_map',
+            {
+              handle: lastToolResultField(messages, 'mapHandle') || 'map_1',
+            },
+            'test-map-nearby-show-1',
+          );
+          return;
+        }
+      } else if (this.modelName.includes('map-business')) {
+        if (!hasToolResult) {
+          yield lifecycleToolChunk(
+            'search_places',
+            { query: 'central', category: 'cafe', limit: 12 },
+            'test-map-business-search-1',
+          );
+          return;
+        }
+        if (toolResultCount === 1) {
+          yield lifecycleToolChunk(
+            'get_place_details',
+            {
+              placeHandle:
+                lastToolResultPath(messages, ['places', 0, 'placeHandle']) ||
+                'place_1',
+            },
+            'test-map-business-details-1',
+          );
+          return;
+        }
+        if (toolResultCount === 2) {
+          yield lifecycleToolChunk(
+            'show_map',
+            {
+              handle: lastToolResultField(messages, 'mapHandle') || 'map_1',
+            },
+            'test-map-business-show-1',
+          );
+          return;
+        }
+      } else if (this.modelName.includes('map-route')) {
+        if (!hasToolResult) {
+          yield lifecycleToolChunk(
+            'get_route',
+            { origin: 'central', destination: 'north', mode: 'driving' },
+            'test-map-route-route-1',
+          );
+          return;
+        }
+        if (toolResultCount === 1) {
+          yield lifecycleToolChunk(
+            'show_map',
+            {
+              handle:
+                lastToolResultPath(messages, ['route', 'mapHandle']) || 'map_1',
+            },
+            'test-map-route-show-1',
+          );
+          return;
+        }
+      } else if (this.modelName.includes('map-location')) {
+        if (!hasToolResult) {
+          yield lifecycleToolChunk(
+            'request_location',
+            { reason: 'Find a route from your current location.' },
+            'test-map-location-request-1',
+          );
+          return;
+        }
+        if (toolResultCount === 1) {
+          yield lifecycleToolChunk(
+            'get_route',
+            {
+              origin: 'current location',
+              destination: 'north',
+              mode: 'driving',
+            },
+            'test-map-location-route-1',
+          );
+          return;
+        }
+        if (toolResultCount === 2) {
+          yield lifecycleToolChunk(
+            'show_map',
+            {
+              handle:
+                lastToolResultPath(messages, ['route', 'mapHandle']) || 'map_1',
+            },
+            'test-map-location-show-1',
+          );
+          return;
+        }
+      }
+    }
+
     if (this.modelName.includes('tool-multi') && toolResultCount < 2) {
       const step = toolResultCount + 1;
       yield new ChatGenerationChunk({
@@ -474,6 +624,18 @@ class FakeChatModel extends BaseChatModel {
       // Echo the system prompt so specs can assert which sections were
       // injected. Checked after the title branch so auto-titling still works.
       answer = systemText(messages);
+    } else if (isMappingVariant && !mappingGuidanceEnabled) {
+      answer = MAPPING_DISABLED_ANSWER;
+    } else if (this.modelName.includes('map-nearby')) {
+      answer = MAPPING_NEARBY_ANSWER;
+    } else if (this.modelName.includes('map-business')) {
+      answer = MAPPING_BUSINESS_ANSWER;
+    } else if (this.modelName.includes('map-route')) {
+      answer = MAPPING_ROUTE_ANSWER;
+    } else if (this.modelName.includes('map-location')) {
+      answer = MAPPING_LOCATION_ANSWER;
+    } else if (this.modelName.includes('map-provider-failure')) {
+      answer = MAPPING_PROVIDER_FAILURE_ANSWER;
     } else if (isMentionChartVariant) {
       answer = `${CHART_ANSWER_PREFIX} [1].\n\nshow_chart\n\n{chart_1}\n\nDone.`;
     } else if (isRawChartVariant) {
@@ -693,22 +855,37 @@ function artifactToolChunk(
 }
 
 /**
- * Read a field back out of the most recent JSON tool result that carries it —
+ * Read a value back out of the most recent JSON tool result that carries it —
  * how a scripted model picks up a value a tool just handed it (`create_chart`'s
- * `handle`, `create_artifact`'s `artifactId`).
+ * `handle`, `create_artifact`'s `artifactId`, or a mapping result's nested
+ * handle).
  */
-function lastToolResultField(messages: BaseMessage[], field: string): string {
+function lastToolResultPath(
+  messages: BaseMessage[],
+  path: readonly (string | number)[],
+): string {
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
     if (m.getType() !== 'tool' || typeof m.content !== 'string') continue;
     try {
-      const value = JSON.parse(m.content)?.[field];
+      let value: unknown = JSON.parse(m.content);
+      for (const key of path) {
+        if (value === null || typeof value !== 'object') {
+          value = undefined;
+          break;
+        }
+        value = (value as Record<string | number, unknown>)[key];
+      }
       if (typeof value === 'string') return value;
     } catch {
       // not a JSON tool result
     }
   }
   return '';
+}
+
+function lastToolResultField(messages: BaseMessage[], field: string): string {
+  return lastToolResultPath(messages, [field]);
 }
 
 /** Raw text of the last tool result — JSON payload or plain error string. */
@@ -767,6 +944,36 @@ export async function loadTestChatModels(): Promise<Record<string, ChatModel>> {
       displayName: 'Test (chart answer)',
       model: new FakeChatModel({
         modelName: 'test-chart',
+      }) as unknown as BaseChatModel,
+    },
+    'test-map-nearby': {
+      displayName: 'Test (mapping nearby)',
+      model: new FakeChatModel({
+        modelName: 'test-map-nearby',
+      }) as unknown as BaseChatModel,
+    },
+    'test-map-business': {
+      displayName: 'Test (mapping business)',
+      model: new FakeChatModel({
+        modelName: 'test-map-business',
+      }) as unknown as BaseChatModel,
+    },
+    'test-map-route': {
+      displayName: 'Test (mapping route)',
+      model: new FakeChatModel({
+        modelName: 'test-map-route',
+      }) as unknown as BaseChatModel,
+    },
+    'test-map-location': {
+      displayName: 'Test (mapping location)',
+      model: new FakeChatModel({
+        modelName: 'test-map-location',
+      }) as unknown as BaseChatModel,
+    },
+    'test-map-provider-failure': {
+      displayName: 'Test (mapping provider failure)',
+      model: new FakeChatModel({
+        modelName: 'test-map-provider-failure',
       }) as unknown as BaseChatModel,
     },
     'test-chart-create-show': {

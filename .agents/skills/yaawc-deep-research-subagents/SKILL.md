@@ -15,9 +15,9 @@ SimplifiedAgent → deep_research tool (deepResearchTool.ts)
     → child SimplifiedAgent on an isolated EventEmitter
       · tools filtered to the definition's allowedTools whitelist
         (web_search, url_fetch, image_search, image_analysis, pdf_loader —
-        no deep_research, so no recursion; artifact and chart tools dropped from
-        the pool by filterSubagentTools — they anchor to a parent chat/message
-        or writer stream the child doesn't have)
+        no deep_research or mapping tools, so no recursion; artifact and chart
+        tools dropped from the pool by filterSubagentTools — they anchor to a
+        parent chat/message or writer stream the child doesn't have)
       · last 5 messages of context; Chat Model; maxTurns cap
       · empty personaInstructions — behavior comes only from the definition's
         systemPrompt; userLocation/userProfile forwarded for search context
@@ -26,7 +26,7 @@ SimplifiedAgent → deep_research tool (deepResearchTool.ts)
     runtime.persist (kind: deep_research)
 ```
 
-Definitions (system prompt, allowedTools, model, maxTurns) are hardcoded in `src/lib/search/subagents/definitions.ts` — currently only `deep_research`, registered in `webSearchTools`/`allAgentTools` (web search mode only). The tool description instructs the agent to `read_skill("deep-research")` before first use. Executions are ephemeral (not stored in the DB beyond the message widget).
+Definitions (system prompt, allowedTools, model, maxTurns) are hardcoded in `src/lib/search/subagents/definitions.ts` — currently only `deep_research`, registered in `webSearchTools`/`allAgentTools` (web search mode only). Mapping is a separate top-level interactive Web Search capability and is never passed into a child executor. The tool description instructs the agent to `read_skill("deep-research")` before first use. Executions are ephemeral (not stored in the DB beyond the message widget).
 
 ## Token tracking
 

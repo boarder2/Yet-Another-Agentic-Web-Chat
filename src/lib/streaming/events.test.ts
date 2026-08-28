@@ -84,9 +84,90 @@ describe('isAgentControlEvent', () => {
       'chart_spec',
       'chart_placement',
       'panel_executor_chart',
+      'map_spec',
+      'map_placement',
+      'map_session_overlay',
     ]) {
       expect(isAgentControlEvent({ type })).toBe(false);
     }
+  });
+});
+
+describe('structured map events', () => {
+  const spec = {
+    places: [
+      {
+        id: 'node/1',
+        name: 'Central Cafe',
+        coordinate: { lat: 40, lon: -75 },
+        sourceUrl: 'https://www.openstreetmap.org/node/1',
+        provider: 'openstreetmap',
+        attribution: '© OpenStreetMap contributors',
+      },
+    ],
+    attribution: '© OpenStreetMap contributors',
+    retrievedAt: '2026-08-27T12:00:00.000Z',
+    title: 'Nearby places',
+  };
+
+  it('round-trips map registration, placement, and live-only overlay events', () => {
+    const events: StreamEvent[] = [
+      {
+        type: 'map_spec',
+        messageId: 'm1',
+        data: {
+          mapId: 'private-map-1',
+          handle: 'map_1',
+          spec,
+          source: 'mapping-tool',
+        },
+      },
+      {
+        type: 'map_placement',
+        messageId: 'm1',
+        data: {
+          placementId: 'map_placement_1',
+          mapId: 'private-map-1',
+          handle: 'map_1',
+          placementNumber: 1,
+        },
+      },
+      {
+        type: 'map_session_overlay',
+        messageId: 'm1',
+        data: {
+          mapId: 'private-map-1',
+          origin: { lat: 40.1, lon: -75.1 },
+          clientSessionId: 'page-session-1',
+          expiresAt: '2026-08-27T12:10:00.000Z',
+        },
+      },
+    ];
+
+    for (const event of events) {
+      expect(parseStreamEvent(JSON.stringify(event))).toEqual(event);
+    }
+  });
+
+  it('keeps map event payloads structured instead of accepting markup', () => {
+    const event = normalizeStreamEvent({
+      type: 'map_placement',
+      data: {
+        placementId: 'map_placement_1',
+        mapId: 'private-map-1',
+        handle: 'map_1',
+      },
+    });
+
+    expect(event).toEqual({
+      type: 'map_placement',
+      data: {
+        placementId: 'map_placement_1',
+        mapId: 'private-map-1',
+        handle: 'map_1',
+      },
+    });
+    expect(JSON.stringify(event)).not.toContain('```yaawc:');
   });
 });
 

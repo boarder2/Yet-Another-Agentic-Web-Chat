@@ -6,6 +6,8 @@ import {
   createAgentRunConfig,
   decodeAgentRunConfig,
   encodeAgentRunConfig,
+  isMappingAvailableInRun,
+  isSavedMappingLocationEnabledInRun,
   type AgentRunConfig,
   type AgentRunConfigInput,
 } from './agentRunConfig';
@@ -42,6 +44,9 @@ const validInput = (): AgentRunConfigInput => ({
     ],
     options: {},
   },
+  mappingAvailable: true,
+  mappingSavedLocationEnabled: true,
+  mappingConfigHash: 'mapping-config-hash',
 });
 
 const validConfig = (): AgentRunConfig => createAgentRunConfig(validInput());
@@ -59,6 +64,8 @@ describe('agent run config codec', () => {
 
     expect(encoded).toEqual({ ...config, version: AGENT_RUN_CONFIG_VERSION });
     expect(agentRunConfigCodec.decode(persisted)).toEqual(config);
+    expect(isMappingAvailableInRun(config)).toBe(true);
+    expect(isSavedMappingLocationEnabledInRun(config)).toBe(true);
   });
 
   it('preserves nullable system model and non-continuable identity fields', () => {
@@ -91,6 +98,9 @@ describe('agent run config codec', () => {
         'focusMode',
         'interactiveSession',
         'isPrivate',
+        'mappingAvailable',
+        'mappingConfigHash',
+        'mappingSavedLocationEnabled',
         'memoryEnabled',
         'messageId',
         'methodologyInstructions',
@@ -121,6 +131,24 @@ describe('agent run config codec', () => {
     ]) {
       expect(serialized).not.toContain(excluded);
     }
+  });
+
+  it('decodes legacy version-1 snapshots as mapping-disabled without rewriting their shape', () => {
+    const legacy = { ...validConfig() } as Record<string, unknown>;
+    delete legacy.mappingAvailable;
+    delete legacy.mappingSavedLocationEnabled;
+    delete legacy.mappingConfigHash;
+
+    const decoded = decodeAgentRunConfig(legacy);
+
+    expect(decoded.mappingAvailable).toBe(false);
+    expect(decoded.mappingSavedLocationEnabled).toBe(false);
+    expect(isMappingAvailableInRun(decoded)).toBe(false);
+    expect(isSavedMappingLocationEnabledInRun(decoded)).toBe(false);
+    expect(decoded.mappingConfigHash).toBeUndefined();
+    expect(Object.keys(decoded)).not.toContain('mappingAvailable');
+    expect(Object.keys(decoded)).not.toContain('mappingSavedLocationEnabled');
+    expect(JSON.stringify(decoded)).not.toContain('mappingAvailable');
   });
 
   it('rejects unknown root fields instead of silently dropping them', () => {

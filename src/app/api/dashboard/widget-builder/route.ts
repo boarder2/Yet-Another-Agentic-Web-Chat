@@ -123,6 +123,8 @@ export async function POST(req: NextRequest) {
     workspaceSuffix: '',
     memoryEnabled: false,
     panel: null,
+    mappingAvailable: false,
+    mappingSavedLocationEnabled: false,
   });
   const agent = new SimplifiedAgent({
     dependencies: {

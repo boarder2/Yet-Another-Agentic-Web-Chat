@@ -7,6 +7,11 @@
  */
 import type { Document } from '@langchain/core/documents';
 import type { ModelStats } from './events';
+import type { PersistableMapSpec } from '@/lib/maps/types';
+import type {
+  LocationDeclineReason,
+  LocationRetention,
+} from '@/lib/maps/locationSchemas';
 
 export type { ModelStats, TokenUsage } from './events';
 
@@ -50,6 +55,8 @@ export type Message = {
   /** Set when this row was written by an in-flight run. 'interrupted' means the
    *  server was restarted before the run completed. */
   runStatus?: 'running' | 'interrupted' | 'cancelled' | 'errored';
+  /** Persistable map specs hydrated from assistant metadata. */
+  mapSpecs?: Record<string, PersistableMapSpec>;
 };
 
 export type PendingExecution = {
@@ -132,4 +139,22 @@ export type PendingMcpApproval = {
   arguments: Record<string, unknown>;
   createdAt?: number;
   status: 'pending' | 'approved' | 'denied' | 'cancelled';
+};
+
+/** Location approval data is intentionally coordinate-free. */
+export type PendingLocationApproval = {
+  approvalId: string;
+  toolCallId?: string;
+  reason?: string;
+  authorizedPurposes: string[];
+  authorizedHosts: string[];
+  providerHosts: string[];
+  tileHosts: string[];
+  clientSessionId?: string;
+  allowSave: boolean;
+  createdAt?: number;
+  expiresAt?: number;
+  status: 'pending' | 'approved' | 'denied' | 'cancelled' | 'expired';
+  retention?: LocationRetention;
+  declineReason?: LocationDeclineReason;
 };

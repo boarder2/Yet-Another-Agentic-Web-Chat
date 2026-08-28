@@ -120,6 +120,8 @@ export async function startWorkflowRun(
     workspaceSuffix: '',
     memoryEnabled: false,
     panel: null,
+    mappingAvailable: false,
+    mappingSavedLocationEnabled: false,
   });
 
   const agent = new SimplifiedAgent({

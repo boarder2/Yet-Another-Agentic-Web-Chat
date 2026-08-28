@@ -28,6 +28,7 @@ description: Generic HTTP route conventions and /api/chat run flow; defer subsys
   imageCapable?: boolean;
   invokedSkills?: string[];
   panel?: PanelConfig;   // see yaawc-agent-panel
+  clientSessionId?: string; // page-session binding for live map overlays
 }
 ```
 
@@ -83,6 +84,9 @@ If `systemModel` is omitted it falls back to `chatModel`. Backgrounded runs pers
 | `/api/images`, `/api/videos` | POST             | Image / video search                                                                                          |
 | `/api/respond-now`           | POST             | Soft-stop / early synthesis. `{ messageId }`                                                                  |
 | `/api/opensearch`            | GET              | OpenSearch description XML                                                                                    |
+| `/api/maps/config`           | GET              | Client-safe Mapping availability, tile template/attribution, capabilities, and disclosed host metadata        |
+| `/api/maps/cache`            | DELETE           | Clears durable coarse-locality/public-business and process-local sensitive map caches                         |
+| `/api/maps/location`         | POST             | Validated browser coordinates after a pending location approval; mints an opaque token and resumes the run    |
 
 ## Subsystem Routes
 
@@ -96,12 +100,13 @@ Domain skills own their route contracts and failure semantics:
 - `/api/mcp/*` — `yaawc-mcp-integration`
 - `/api/uploads/images/*` — `yaawc-image-attachments`
 - `/api/settings` — `yaawc-settings-persistence`
+- `/api/maps/*` — mapping configuration, cache, and browser-location privacy boundary; keep provider calls in `src/lib/maps/`
 
 Memory routes remain generic CRUD under `/api/memories/*`; preserve scoped filtering, paging, wipe-all semantics, and `/reindex` behavior.
 
 ## Adding a route
 
-Use Next.js App Router named `GET`/`POST`/`PATCH`/`PUT`/`DELETE` exports. Parse and validate at the boundary, return structured JSON errors with the established status code, and keep domain logic in `src/lib/` rather than the route. Streaming responses use `TransformStream` and the existing typed NDJSON/SSE vocabulary.
+Use Next.js App Router named `GET`/`POST`/`PATCH`/`PUT`/`DELETE` exports. Parse and validate at the boundary, return structured JSON errors with the established status code, and keep domain logic in `src/lib/` rather than the route. Streaming responses use `TransformStream` and the existing typed NDJSON/SSE vocabulary. Browser coordinates and location tokens must never enter generic chat/resume payloads; use `/api/maps/location` and the session-scoped map overlay path.
 
 For UI callers, add a TanStack Query hook under `src/lib/hooks/api/` using `apiFetch` and keys from `qk`; mutations invalidate their owned keys. Add the lowest-level test that proves the route boundary.
 
@@ -110,3 +115,4 @@ For UI callers, add a TanStack Query hook under `src/lib/hooks/api/` using `apiF
 - Export named HTTP method functions; catch expected failures and return structured `NextResponse.json()` errors.
 - Never expose secrets or unscoped rows in response payloads.
 - Streaming endpoints use `TransformStream` plus typed JSON lines; the chat vocabulary belongs to `yaawc-streaming-events`.
+- Mapping routes return client-safe configuration or sanitized errors and never expose provider user-agent values, credentials, exact browser coordinates, or opaque location tokens.

@@ -17,11 +17,26 @@
 import type { Document } from '@langchain/core/documents';
 import type { ChartSpec } from '@/lib/chart/chartSpec';
 import {
+  MapSessionOverlaySchema,
+  PersistableMapSpecSchema,
+  type MapSessionOverlay,
+  type PersistableMapSpec,
+} from '@/lib/maps/types';
+import {
+  LocationApprovalPayloadSchema,
+  LocationApprovalResponseSchema,
+} from '@/lib/maps/locationSchemas';
+import { mapSpecToPayload } from '@/lib/maps/presentation';
+import {
   appendWidget,
   appendChartWidget,
+  appendMapWidget,
+  findWidget,
   appendPanelColumnChart,
   updateWidget,
   neutralizeSpoofedFences,
+  consumeSpoofedFenceChunk,
+  flushSpoofedFenceChunk,
   upsertNestedToolCall,
   patchNestedToolCall,
   startPanelColumn,
@@ -30,6 +45,7 @@ import {
   upsertArtifactWidget,
   type ToolCallPayload,
   type SubagentPayload,
+  type MapPayload,
 } from '@/lib/widgets/envelope';
 import type {
   Message,
@@ -39,6 +55,7 @@ import type {
   PendingEditApproval,
   PendingSkillEditApproval,
   PendingMcpApproval,
+  PendingLocationApproval,
 } from './chatState';
 import { panelExecutorTokens, type StreamEvent } from './events';
 import type { StreamEffect } from './effects';
@@ -82,6 +99,8 @@ export interface ChatStreamState {
   rowAdded: boolean;
   tokenCount: number;
   pendingWidgetTokens: Record<string, PendingWidgetTokens>;
+  /** A possible split model widget-fence prefix held until the next chunk. */
+  pendingResponseFence: string;
   sources: Document[];
   codeExecutionRunIds: Record<string, string>;
   userQuestionRunIds: Record<string, string>;
@@ -97,7 +116,12 @@ export interface ChatStreamState {
   pendingEditApprovals: Record<string, PendingEditApproval[]>;
   pendingSkillEditApprovals: Record<string, PendingSkillEditApproval[]>;
   pendingMcpApprovals: Record<string, PendingMcpApproval[]>;
+  pendingLocationApprovals: Record<string, PendingLocationApproval[]>;
   chartSpecsByMessage: Record<string, Record<string, ChartSpec>>;
+  mapSpecsByMessage: Record<string, Record<string, PersistableMapSpec>>;
+  mapHandlesByMessage: Record<string, Record<string, string>>;
+  mapSessionOverlaysByMessage: Record<string, MapSessionOverlay[]>;
+  mapPlacementIdsByMessage: Record<string, string[]>;
 }
 
 export type LocalAction =
@@ -116,6 +140,7 @@ export type LocalAction =
       editApprovals?: PendingEditApproval[];
       skillEditApprovals?: PendingSkillEditApproval[];
       mcpApprovals?: PendingMcpApproval[];
+      locationApprovals?: PendingLocationApproval[];
     }
   | { type: 'set_messages'; updater: (messages: Message[]) => Message[] };
 
@@ -138,6 +163,7 @@ export function initialChatStreamState(
     rowAdded: false,
     tokenCount: 0,
     pendingWidgetTokens: {},
+    pendingResponseFence: '',
     sources: [],
     codeExecutionRunIds: {},
     userQuestionRunIds: {},
@@ -151,7 +177,12 @@ export function initialChatStreamState(
     pendingEditApprovals: {},
     pendingSkillEditApprovals: {},
     pendingMcpApprovals: {},
+    pendingLocationApprovals: {},
     chartSpecsByMessage: {},
+    mapSpecsByMessage: {},
+    mapHandlesByMessage: {},
+    mapSessionOverlaysByMessage: {},
+    mapPlacementIdsByMessage: {},
   };
 }
 
@@ -268,6 +299,41 @@ function sweepStatus<T>(
 const msgIdFor = (state: ChatStreamState, event: { messageId?: string }) =>
   event.messageId ?? state.activeAiMessageId ?? '';
 
+function flushPendingResponseFence(
+  state: ChatStreamState,
+  moreTextMayFollow: boolean,
+): ChatStreamState {
+  if (!state.pendingResponseFence) return state;
+  const suffix = flushSpoofedFenceChunk(
+    state.pendingResponseFence,
+    moreTextMayFollow,
+  );
+  const receivedMessage = stripStreamedChartTags(
+    state.receivedMessage + suffix,
+  );
+  const msgId = state.activeAiMessageId ?? '';
+  const messages = msgId
+    ? upsertAssistant(state, msgId, receivedMessage)
+    : state.messages;
+  return {
+    ...state,
+    receivedMessage,
+    messages,
+    rowAdded: msgId ? true : state.rowAdded,
+    tokenCount: 0,
+    pendingResponseFence: '',
+  };
+}
+
+const isSafeMapIdentity = (value: unknown): value is string =>
+  typeof value === 'string' &&
+  value.length > 0 &&
+  value.length <= 160 &&
+  !/[\u0000-\u001f\u007f<>]/.test(value) &&
+  value !== '__proto__' &&
+  value !== 'constructor' &&
+  value !== 'prototype';
+
 // ── reducer ──────────────────────────────────────────────────────────────────
 
 export function reduceStreamEvent(
@@ -301,6 +367,14 @@ function reduceStreamAction(
   const buffersToken =
     action.type === 'panel_executor_data' ||
     (action.type === 'subagent_data' && action.data.type === 'response');
+  if (action.type !== 'response' && action.type !== 'stream_started') {
+    state = flushPendingResponseFence(
+      state,
+      action.type !== 'messageEnd' &&
+        action.type !== 'error' &&
+        action.type !== 'gone',
+    );
+  }
   if (!buffersToken) state = flushWidgetTokens(state);
 
   const effects: StreamEffect[] = [];
@@ -319,11 +393,13 @@ function reduceStreamAction(
           receivedMessage: action.seedContent ?? '',
           rowAdded: action.mode === 'attach',
           tokenCount: 0,
+          pendingResponseFence: '',
           sources: [],
           codeExecutionRunIds: {},
           userQuestionRunIds: {},
           gatheringSources: [],
           liveModelStats: null,
+          mapSessionOverlaysByMessage: {},
         },
         effects,
       };
@@ -361,6 +437,11 @@ function reduceStreamAction(
           ...state.pendingMcpApprovals,
           [action.messageId]: action.mcpApprovals,
         };
+      if (action.locationApprovals)
+        next.pendingLocationApprovals = {
+          ...state.pendingLocationApprovals,
+          [action.messageId]: action.locationApprovals,
+        };
       return { state: next, effects };
     }
 
@@ -375,6 +456,10 @@ function reduceStreamAction(
               ? { ...m, runStatus: undefined }
               : m,
           ),
+          // A gone stream cannot replay the process-local exact overlay. Drop
+          // any copy retained by this page rather than displaying it after a
+          // restart or an attach to a different run.
+          mapSessionOverlaysByMessage: {},
         },
         effects,
       };
@@ -391,6 +476,8 @@ function reduceStreamAction(
           pendingEditApprovals: {},
           pendingSkillEditApprovals: {},
           pendingMcpApprovals: {},
+          pendingLocationApprovals: {},
+          mapSessionOverlaysByMessage: {},
         },
         effects,
       };
@@ -484,7 +571,11 @@ function reduceStreamAction(
 
     case 'response': {
       if (state.inReplay) return { state, effects };
-      const token = neutralizeSpoofedFences(action.data ?? '');
+      const consumed = consumeSpoofedFenceChunk(
+        state.pendingResponseFence,
+        action.data ?? '',
+      );
+      const token = consumed.text;
       const rawReceivedMessage = state.receivedMessage + token;
       const receivedMessage = stripStreamedChartTags(rawReceivedMessage);
       const tokenCount = state.tokenCount + 1;
@@ -498,7 +589,15 @@ function reduceStreamAction(
         state.rowAdded &&
         !contentWasSanitized
       ) {
-        return { state: { ...state, receivedMessage, tokenCount }, effects };
+        return {
+          state: {
+            ...state,
+            receivedMessage,
+            tokenCount,
+            pendingResponseFence: consumed.pending,
+          },
+          effects,
+        };
       }
       const msgId = msgIdFor(state, action);
       const messages = upsertAssistant(state, msgId, receivedMessage);
@@ -508,6 +607,7 @@ function reduceStreamAction(
           ...state,
           receivedMessage,
           tokenCount: 0,
+          pendingResponseFence: consumed.pending,
           rowAdded: true,
           messages,
         },
@@ -722,6 +822,143 @@ function reduceStreamAction(
       };
     }
 
+    case 'map_spec': {
+      const msgId = msgIdFor(state, action);
+      const { mapId } = action.data;
+      const handle = action.data.handle ?? action.data.turnHandle;
+      const parsed = PersistableMapSpecSchema.safeParse(action.data.spec);
+      if (
+        !isSafeMapIdentity(mapId) ||
+        !parsed.success ||
+        (action.data.handle !== undefined &&
+          action.data.turnHandle !== undefined &&
+          action.data.handle !== action.data.turnHandle) ||
+        (handle !== undefined &&
+          (typeof handle !== 'string' || !/^map_[1-9]\d*$/.test(handle)))
+      ) {
+        return { state, effects };
+      }
+      const current = state.mapSpecsByMessage[msgId] ?? {};
+      // One answer can expose one canonical map. Replayed registration events
+      // for that same map are idempotent; a second map is ignored.
+      if (current[mapId] || Object.keys(current).length >= 1) {
+        return { state, effects };
+      }
+      return {
+        state: {
+          ...state,
+          mapSpecsByMessage: {
+            ...state.mapSpecsByMessage,
+            [msgId]: { ...current, [mapId]: parsed.data },
+          },
+          ...(handle !== undefined
+            ? {
+                mapHandlesByMessage: {
+                  ...state.mapHandlesByMessage,
+                  [msgId]: {
+                    ...(state.mapHandlesByMessage[msgId] ?? {}),
+                    [mapId]: handle,
+                  },
+                },
+              }
+            : {}),
+        },
+        effects,
+      };
+    }
+
+    case 'map_placement': {
+      const msgId = msgIdFor(state, action);
+      const { placementId, mapId, handle } = action.data;
+      const spec = state.mapSpecsByMessage[msgId]?.[mapId];
+      const registeredHandle = state.mapHandlesByMessage[msgId]?.[mapId];
+      if (
+        !isSafeMapIdentity(placementId) ||
+        !isSafeMapIdentity(mapId) ||
+        !spec ||
+        (action.data.placementNumber !== undefined &&
+          (!Number.isInteger(action.data.placementNumber) ||
+            action.data.placementNumber < 1 ||
+            action.data.placementNumber > 1)) ||
+        (handle !== undefined &&
+          (typeof handle !== 'string' || !/^map_[1-9]\d*$/.test(handle))) ||
+        (handle !== undefined && registeredHandle === undefined) ||
+        (registeredHandle !== undefined &&
+          handle !== undefined &&
+          handle !== registeredHandle)
+      ) {
+        return { state, effects };
+      }
+      const placements = state.mapPlacementIdsByMessage[msgId] ?? [];
+      if (placements.includes(placementId)) return { state, effects };
+      if (placements.length >= 1) return { state, effects };
+      const payload = mapSpecToPayload(mapId, placementId, spec);
+      const receivedMessage = appendMapWidget(state.receivedMessage, payload);
+      if (receivedMessage === state.receivedMessage) {
+        // Attach starts from persisted content, which may already contain the
+        // writer envelope before its placement milestone is replayed. Record
+        // that ID so the one-placement cap remains effective without a second
+        // render.
+        if (
+          !findWidget<MapPayload>(state.receivedMessage, 'map', placementId)
+        ) {
+          return { state, effects };
+        }
+        return {
+          state: {
+            ...state,
+            mapPlacementIdsByMessage: {
+              ...state.mapPlacementIdsByMessage,
+              [msgId]: [...placements, placementId],
+            },
+          },
+          effects,
+        };
+      }
+      const messages = upsertAssistant(state, msgId, receivedMessage);
+      scroll();
+      return {
+        state: {
+          ...state,
+          receivedMessage,
+          rowAdded: true,
+          messages,
+          mapPlacementIdsByMessage: {
+            ...state.mapPlacementIdsByMessage,
+            [msgId]: [...placements, placementId],
+          },
+        },
+        effects,
+      };
+    }
+
+    case 'map_session_overlay': {
+      const msgId = msgIdFor(state, action);
+      const parsed = MapSessionOverlaySchema.safeParse(action.data);
+      if (!parsed.success || !parsed.data.clientSessionId) {
+        return { state, effects };
+      }
+      if (!state.mapSpecsByMessage[msgId]?.[parsed.data.mapId]) {
+        return { state, effects };
+      }
+      const previous = state.mapSessionOverlaysByMessage[msgId] ?? [];
+      const next = [
+        ...previous.filter((overlay) => overlay.mapId !== parsed.data.mapId),
+        parsed.data,
+      ];
+      scroll();
+      return {
+        state: {
+          ...state,
+          mapSessionOverlaysByMessage: {
+            ...state.mapSessionOverlaysByMessage,
+            [msgId]: next,
+          },
+        },
+        effects,
+      };
+    }
+
     case 'chart_placement': {
       const msgId = msgIdFor(state, action);
       const payload = resolveChartPlacement(
@@ -834,6 +1071,12 @@ function reduceStreamAction(
 
     case 'mcp_tool_answered':
       return reduceMcpAnswered(state, action, effects);
+
+    case 'location_pending':
+      return reduceLocationPending(state, action, effects);
+
+    case 'location_answered':
+      return reduceLocationAnswered(state, action, effects);
 
     // ── finalization ───────────────────────────────────────────────────────────
     case 'messageEnd':
@@ -1233,6 +1476,97 @@ function reduceMcpAnswered(
   };
 }
 
+function reduceLocationPending(
+  state: ChatStreamState,
+  action: WithData<Record<string, unknown>>,
+  effects: StreamEffect[],
+): ReduceResult {
+  const msgId = msgIdFor(state, action);
+  const d = action.data;
+  if (typeof d.approvalId !== 'string' || d.approvalId.length === 0) {
+    return { state, effects };
+  }
+  const existing = state.pendingLocationApprovals[msgId] ?? [];
+  if (existing.some((approval) => approval.approvalId === d.approvalId)) {
+    return { state, effects };
+  }
+  const payload = LocationApprovalPayloadSchema.safeParse({
+    ...(typeof d.reason === 'string' ? { reason: d.reason } : {}),
+    authorizedPurposes: d.authorizedPurposes,
+    authorizedHosts: d.authorizedHosts,
+    providerHosts: d.providerHosts,
+    tileHosts: d.tileHosts,
+    configHash: d.configHash,
+    clientSessionId: d.clientSessionId,
+    aiMessageId: d.aiMessageId,
+    allowSave: d.allowSave,
+    createdAt: d.createdAt,
+    expiresAt: d.expiresAt,
+  });
+  if (!payload.success) return { state, effects };
+
+  effects.push({ kind: 'bumpScroll' });
+  const approval: PendingLocationApproval = {
+    approvalId: d.approvalId,
+    toolCallId: typeof d.toolCallId === 'string' ? d.toolCallId : undefined,
+    reason: payload.data.reason,
+    authorizedPurposes: [...payload.data.authorizedPurposes],
+    authorizedHosts: [...payload.data.authorizedHosts],
+    providerHosts: [...payload.data.providerHosts],
+    tileHosts: [...payload.data.tileHosts],
+    clientSessionId: payload.data.clientSessionId,
+    allowSave: payload.data.allowSave,
+    createdAt: payload.data.createdAt,
+    expiresAt: payload.data.expiresAt,
+    status: 'pending',
+  };
+  return {
+    state: {
+      ...state,
+      pendingLocationApprovals: {
+        ...state.pendingLocationApprovals,
+        [msgId]: [...existing, approval],
+      },
+    },
+    effects,
+  };
+}
+
+function reduceLocationAnswered(
+  state: ChatStreamState,
+  action: WithData<Record<string, unknown>>,
+  effects: StreamEffect[],
+): ReduceResult {
+  const msgId = msgIdFor(state, action);
+  const d = action.data;
+  if (typeof d.approvalId !== 'string') return { state, effects };
+  const parsedResponse = LocationApprovalResponseSchema.safeParse(d.response);
+  if (!parsedResponse.success) return { state, effects };
+  const response = parsedResponse.data;
+  const approved = response.approved;
+  const safeRetention: PendingLocationApproval['retention'] =
+    response.retention;
+  const declineReason: PendingLocationApproval['declineReason'] =
+    response.approved ? undefined : response.reason;
+  const pendingLocationApprovals = {
+    ...state.pendingLocationApprovals,
+    [msgId]: (state.pendingLocationApprovals[msgId] ?? []).map((approval) =>
+      approval.approvalId === d.approvalId
+        ? {
+            ...approval,
+            status: (approved
+              ? 'approved'
+              : 'denied') as PendingLocationApproval['status'],
+            ...(safeRetention ? { retention: safeRetention } : {}),
+            ...(declineReason ? { declineReason } : {}),
+          }
+        : approval,
+    ),
+  };
+  effects.push({ kind: 'bumpScroll' });
+  return { state: { ...state, pendingLocationApprovals }, effects };
+}
+
 function reduceStale(
   state: ChatStreamState,
   action: { data?: { approvalId?: string; reason?: string } },
@@ -1270,6 +1604,11 @@ function reduceStale(
         state.pendingQuestions,
         (q) => match(q.questionId),
         'cancelled',
+      ),
+      pendingLocationApprovals: sweepStatus(
+        state.pendingLocationApprovals,
+        (approval) => match(approval.approvalId),
+        'expired',
       ),
     },
     effects,
@@ -1310,6 +1649,11 @@ function reduceCancelled(
       pendingMcpApprovals: sweepStatus(
         state.pendingMcpApprovals,
         (a) => match(a.approvalId),
+        'cancelled',
+      ),
+      pendingLocationApprovals: sweepStatus(
+        state.pendingLocationApprovals,
+        (approval) => match(approval.approvalId),
         'cancelled',
       ),
     },

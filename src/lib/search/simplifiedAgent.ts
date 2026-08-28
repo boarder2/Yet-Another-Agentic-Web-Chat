@@ -14,6 +14,8 @@ import {
   getWebSearchTools,
   getCoreTools,
   getLocalResearchTools,
+  getMappingTools,
+  MAPPING_TOOL_NAMES,
   isCodeExecutionEnabled,
   yaawcDocsTool,
 } from '@/lib/tools/agents';
@@ -50,6 +52,13 @@ import { getImageGenerationConfig } from '@/lib/settings/server';
 import { getResolvedSearchCapabilities } from '@/lib/search/providers';
 import type { CapabilityRuntimeFacts } from '@/lib/capabilities/availability';
 import { TurnChartRegistry } from '@/lib/chart/turnChartRegistry';
+import { TurnMapRegistry } from '@/lib/maps/turnMapRegistry';
+import type { MappingConfiguration } from '@/lib/maps/config';
+import type { MappingService } from '@/lib/maps/service';
+import {
+  mappingConfigurationFingerprint,
+  resolveFreshMappingService,
+} from '@/lib/maps/runtime';
 import { toolContextSchema } from '@/lib/tools/toolContext';
 import type { AgentRunConfig } from '@/lib/search/agentRunConfig';
 import { ChartMentionTracker } from '@/lib/chart/handleMentions';
@@ -84,6 +93,16 @@ export interface AgentRuntimeContext {
   memorySection?: string;
   invokedSkillNames?: Iterable<string>;
   chartRegistry?: TurnChartRegistry;
+  mapRegistry?: TurnMapRegistry;
+  mappingConfig?: MappingConfiguration | null;
+  mappingService?: MappingService | null;
+  mappingServiceResolver?: () => MappingService | null;
+  mappingSavedLocationEnabled?: boolean;
+  /** Opaque current-location token; exact coordinates stay in the token store. */
+  locationToken?: string;
+  /** Approval that minted the token; prevents cross-approval token reuse. */
+  locationApprovalId?: string;
+  clientSessionId?: string;
 }
 
 export interface SearchAndAnswerCommand {
@@ -130,6 +149,14 @@ export class SimplifiedAgent {
   private workspaceSuffix: string;
   private aiMessageId?: string;
   private readonly chartRegistry: TurnChartRegistry;
+  private readonly mapRegistry: TurnMapRegistry;
+  private readonly mappingConfig: MappingConfiguration | null;
+  private readonly mappingService: MappingService | null;
+  private readonly mappingServiceResolver: () => MappingService | null;
+  private readonly mappingSavedLocationEnabled: boolean;
+  private readonly locationToken?: string;
+  private readonly locationApprovalId?: string;
+  private readonly clientSessionId?: string;
   /** Scans the streamed answer for placements the model narrated. */
   private readonly chartMentions = new ChartMentionTracker();
   private threadId?: string;
@@ -167,6 +194,37 @@ export class SimplifiedAgent {
     this.threadId = context.threadId;
     this.invokedSkillNames = new Set(context.invokedSkillNames ?? []);
     this.chartRegistry = context.chartRegistry ?? new TurnChartRegistry();
+    this.mapRegistry = context.mapRegistry ?? new TurnMapRegistry();
+    this.mappingConfig = context.mappingConfig ?? null;
+    this.mappingService = context.mappingService ?? null;
+    this.mappingSavedLocationEnabled =
+      context.mappingSavedLocationEnabled ??
+      run.mappingSavedLocationEnabled === true;
+    this.locationToken = context.locationToken;
+    this.locationApprovalId = context.locationApprovalId;
+    this.clientSessionId = context.clientSessionId;
+    this.mappingServiceResolver =
+      context.mappingServiceResolver ??
+      (context.mappingService
+        ? () => context.mappingService ?? null
+        : () =>
+            resolveFreshMappingService(
+              this.runConfig.mappingAvailable === true,
+              this.runConfig.mappingConfigHash ??
+                (this.mappingConfig
+                  ? mappingConfigurationFingerprint(this.mappingConfig)
+                  : undefined),
+            ));
+  }
+
+  /** Whether this instance may expose the top-level mapping tool set. */
+  private mappingToolsEnabled(focusMode: string): boolean {
+    return (
+      focusMode === 'webSearch' &&
+      this.interactiveSession &&
+      this.runConfig.panel === null &&
+      this.runConfig.mappingAvailable === true
+    );
   }
 
   /** Build only the local, non-sensitive facts the capability tool may report. */
@@ -282,6 +340,14 @@ export class SimplifiedAgent {
       chatRecorder: this.chatRecorder,
       systemRecorder: this.systemRecorder,
       chartRegistry: this.chartRegistry,
+      mapRegistry: this.mapRegistry,
+      mappingConfig: this.mappingConfig,
+      mappingService: this.mappingService,
+      mappingServiceResolver: this.mappingServiceResolver,
+      mappingSavedLocationEnabled: this.mappingSavedLocationEnabled,
+      locationToken: this.locationToken,
+      locationApprovalId: this.locationApprovalId,
+      clientSessionId: this.clientSessionId,
       capabilityFacts: () => this.getCapabilityFacts(focusMode, fileIds),
       signal: this.signal,
       threadId: this.threadId,
@@ -327,6 +393,14 @@ export class SimplifiedAgent {
 
     const allTools =
       firefoxDocsOnly || !extraTools ? tools : [...tools, ...extraTools];
+    const mappingAllowed =
+      !customTools &&
+      !customSystemPrompt &&
+      this.mappingToolsEnabled(focusMode) &&
+      !firefoxAIDetected;
+    const gatedTools = mappingAllowed
+      ? allTools
+      : allTools.filter((tool) => !MAPPING_TOOL_NAMES.includes(tool.name));
 
     const enhancedSystemPrompt = customSystemPrompt
       ? customSystemPrompt
@@ -336,6 +410,7 @@ export class SimplifiedAgent {
           messagesCount,
           query,
           firefoxAIDetected,
+          mappingAllowed,
         );
 
     try {
@@ -345,7 +420,7 @@ export class SimplifiedAgent {
       // only writes checkpoints that are never resumed nor cleaned up.
       const agent = createAgent({
         model: this.chatLlm,
-        tools: allTools,
+        tools: gatedTools,
         stateSchema: SimplifiedAgentState,
         contextSchema: toolContextSchema,
         systemPrompt: enhancedSystemPrompt,
@@ -356,7 +431,7 @@ export class SimplifiedAgent {
       });
 
       console.log(
-        `SimplifiedAgent: Initialized with ${allTools.length} tools for focus mode: ${focusMode}`,
+        `SimplifiedAgent: Initialized with ${gatedTools.length} tools for focus mode: ${focusMode}`,
       );
       if (firefoxAIDetected) {
         console.log(
@@ -364,7 +439,7 @@ export class SimplifiedAgent {
         );
       }
       console.log(
-        `SimplifiedAgent: Tools available: ${allTools.map((t) => t.name).join(', ')}`,
+        `SimplifiedAgent: Tools available: ${gatedTools.map((t) => t.name).join(', ')}`,
       );
       if (fileIds.length > 0) {
         console.log(
@@ -415,6 +490,12 @@ export class SimplifiedAgent {
         break;
     }
 
+    // Mapping tools are deliberately outside every static tool array. They are
+    // available only to an ordinary interactive Web Search turn.
+    if (this.mappingToolsEnabled(focusMode)) {
+      tools = [...tools, ...getMappingTools()];
+    }
+
     // Add memory tools when memory is enabled
     if (this.memoryEnabled) {
       tools = [...tools, ...memoryTools];
@@ -435,6 +516,7 @@ export class SimplifiedAgent {
     messagesCount?: number,
     query?: string,
     firefoxAIDetected?: boolean,
+    mappingEnabled: boolean = this.mappingToolsEnabled(focusMode),
   ): string {
     const personaInstructions = this.personaInstructions || '';
     const personalizationSection = buildPersonalizationSection({
@@ -477,6 +559,7 @@ export class SimplifiedAgent {
             this.methodologyInstructions,
             codeExecutionEnabled,
             artifactsEnabled,
+            mappingEnabled,
           );
           break;
         case 'localResearch':
@@ -505,6 +588,7 @@ export class SimplifiedAgent {
             this.methodologyInstructions,
             codeExecutionEnabled,
             artifactsEnabled,
+            mappingEnabled,
           );
           break;
       }
@@ -906,13 +990,24 @@ ${url ? `<url>${url}</url>` : ''}
       emitStreamEvent(this.emitter, { type: 'agent_end' });
     } catch (error: unknown) {
       if (skillRunId) cleanupSkillsForRun(skillRunId);
-      console.error('[SimplifiedAgent] doResume error:', error);
+      // A location resume carries a bearer token in process-local state. Do
+      // not stringify that engine error into logs or the wire if it includes
+      // the resume payload.
+      const safeError = this.locationToken
+        ? 'The approved location could not be used; ask for a named origin instead.'
+        : error instanceof AgentStreamIntegrityError
+          ? error.message
+          : String(error);
+      if (this.locationToken) {
+        console.error(
+          '[SimplifiedAgent] doResume failed for location approval',
+        );
+      } else {
+        console.error('[SimplifiedAgent] doResume error:', error);
+      }
       emitStreamEvent(this.emitter, {
         type: 'agent_error',
-        data:
-          error instanceof AgentStreamIntegrityError
-            ? error.message
-            : String(error),
+        data: safeError,
       });
     }
   }

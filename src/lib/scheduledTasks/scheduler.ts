@@ -9,7 +9,10 @@ import {
   initLanggraphCheckpointer,
   deleteCheckpoint,
 } from '@/lib/runs/checkpointer';
-import { markOpenApprovalsInterrupted } from '@/lib/runs/runHost';
+import {
+  markOpenApprovalsInterrupted,
+  schedulePendingLocationApprovalExpiries,
+} from '@/lib/runs/runHost';
 
 type Registry = {
   jobs: Map<string, CronJob>;
@@ -82,7 +85,12 @@ async function bootSweep(): Promise<void> {
       .from(chats)
       .where(isNotNull(chats.activeRunMessageId));
 
-    if (allActive.length === 0) return;
+    if (allActive.length === 0) {
+      await schedulePendingLocationApprovalExpiries().catch((err: unknown) =>
+        console.warn('[bootSweep] location approval expiry setup failed:', err),
+      );
+      return;
+    }
 
     const toInterrupt = allActive.filter(
       (c) => c.activeRunStatus !== 'awaiting_user',
@@ -141,6 +149,10 @@ async function bootSweep(): Promise<void> {
         }
       }
     }
+
+    await schedulePendingLocationApprovalExpiries().catch((err: unknown) =>
+      console.warn('[bootSweep] location approval expiry setup failed:', err),
+    );
 
     console.log(
       `[bootSweep] cleared ${toInterrupt.length} stale run(s), preserved ${awaitingCount} awaiting_user run(s)`,

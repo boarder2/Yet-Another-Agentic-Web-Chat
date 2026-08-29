@@ -48,6 +48,7 @@
     "@langchain/langgraph-checkpoint": "^1.0.3",
     "@langchain/langgraph-checkpoint-sqlite": "^1.0.1",
     "@langchain/openai": "^1.2.7",
+    "@langchain/openrouter": "^0.4.10",
     "@langchain/textsplitters": "^1.0.1",
     "@lezer/highlight": "^1.2.3",
     "@modelcontextprotocol/sdk": "^1.29.0",

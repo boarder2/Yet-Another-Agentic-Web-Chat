@@ -17,6 +17,14 @@ A named Model Preset can save the Chat model, System model, vision flag, and con
 
 Chat models can come from OpenAI, Groq, Anthropic, Google Gemini, DeepSeek AI, AI/ML API, LM Studio, OpenRouter, or a Custom OpenAI-compatible endpoint. Model lists are discovered from the configured provider; the available model names depend on the provider account or local server.
 
+### OpenRouter endpoint quantization
+
+When the OpenRouter provider is available, **Settings → Model Settings → OpenRouter** provides one instance-wide endpoint quantization allow-list for its chat models. The section is hidden when OpenRouter is unavailable. The checklist saves selections automatically. The supported values are `int4`, `int8`, `fp4`, `mxfp4`, `nvfp4`, `fp6`, `fp8`, `mxfp8`, `fp16`, `bf16`, and `fp32`.
+
+Selecting one or more values sends them as OpenRouter `provider.quantizations`; multiple values use OR semantics, so any selected quantization is allowed. Leaving every value unchecked removes the preference and restores OpenRouter's default routing. The model catalog is not pre-filtered. If no matching endpoint is available for a selected model, OpenRouter's runtime error is surfaced and YAAWC does not retry without the restriction.
+
+Quantized endpoints can have different quality characteristics, and restricting the list can reduce endpoint availability. A malformed persisted value makes OpenRouter unavailable until the setting is reset or replaced with supported values. Changes apply to newly started LangChain-backed OpenRouter operations; in-flight operations are unchanged. The separate OpenRouter image-generation integration is unaffected.
+
 Embedding models can come from OpenAI, Google Gemini, Hugging Face Transformers, AI/ML API, or LM Studio. The Transformers option runs a local `Xenova/all-MiniLM-L6-v2` embedding model. Embeddings are used for chat-document indexing and search, memory retrieval, and memory re-indexing.
 
 Custom OpenAI requires a model name, base URL, and API key. LM Studio requires its local API URL and a model served by that installation. Refresh models after changing a key, endpoint, or model name.

@@ -2,10 +2,11 @@ export const PROVIDER_INFO = {
   key: 'openrouter',
   displayName: 'OpenRouter',
 };
-import { ChatOpenAI } from '@langchain/openai';
-import { getOpenrouterApiKey } from '../config';
-import { ChatModel } from '.';
+import { ChatOpenRouter } from '@langchain/openrouter';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import { getOpenrouterApiKey } from '../config';
+import { getOpenrouterQuantizations } from '../settings/server';
+import { ChatModel } from '.';
 
 let openrouterChatModels: Record<string, string>[] = [];
 
@@ -34,6 +35,14 @@ async function fetchModelList(): Promise<void> {
 }
 
 export const loadOpenrouterChatModels = async () => {
+  const quantizationConfig = getOpenrouterQuantizations();
+  if (!quantizationConfig.valid) {
+    console.error(
+      `Invalid OpenRouter quantization configuration: ${quantizationConfig.error}`,
+    );
+    return {};
+  }
+
   await fetchModelList();
 
   const openrouterApikey = getOpenrouterApiKey();
@@ -42,17 +51,19 @@ export const loadOpenrouterChatModels = async () => {
 
   try {
     const chatModels: Record<string, ChatModel> = {};
+    const providerPreferences =
+      quantizationConfig.quantizations.length > 0
+        ? { quantizations: quantizationConfig.quantizations }
+        : undefined;
 
     openrouterChatModels.forEach((model) => {
       chatModels[model.key] = {
         displayName: model.displayName,
-        model: new ChatOpenAI({
+        model: new ChatOpenRouter({
           apiKey: openrouterApikey,
-          modelName: model.key,
+          model: model.key,
           maxRetries: 10,
-          configuration: {
-            baseURL: 'https://openrouter.ai/api/v1',
-          },
+          ...(providerPreferences ? { provider: providerPreferences } : {}),
         }) as unknown as BaseChatModel,
       };
     });

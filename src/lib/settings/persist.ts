@@ -93,7 +93,7 @@ let flushTimer: ReturnType<typeof setTimeout> | null = null;
 // The single in-flight flush, if any. Guards against overlapping PATCHes (an
 // older, slower request must never land after a newer one and resurrect a stale
 // value) and lets callers await the drain — a concurrent flush() coalesces onto
-// it, and it doesn't resolve until `pending` is empty.
+// it, and it settles only after the current pending batch succeeds or fails.
 let currentFlush: Promise<void> | null = null;
 const FLUSH_DELAY_MS = 400;
 // If the hydration fetch hangs (neither resolves nor rejects), open the gate
@@ -142,14 +142,18 @@ function scheduleFlush() {
   if (flushTimer) clearTimeout(flushTimer);
   flushTimer = setTimeout(() => {
     flushTimer = null;
-    void flush();
+    // Background persistence must never create an unhandled rejection. The
+    // failed keys stay pending so a later write or pagehide can retry them.
+    void flush().catch(() => {});
   }, FLUSH_DELAY_MS);
 }
 
 function flush(): Promise<void> {
   // Coalesce: if a flush is already running, return it — its loop drains
   // `pending` (including keys added after it started), so a concurrent caller
-  // both avoids a racing PATCH and can await the same completion.
+  // both avoids a racing PATCH and can await the same completion. Errors are
+  // deliberately propagated so explicit callers can report persistence
+  // failures; background callers attach a rejection handler above.
   if (currentFlush) return currentFlush;
   if (pending.size === 0) return Promise.resolve();
   currentFlush = (async () => {
@@ -160,10 +164,10 @@ function flush(): Promise<void> {
         for (const key of keys) inFlight.add(key);
         try {
           await patchSettings(buildPatch(keys));
-        } catch {
+        } catch (error) {
           // Re-queue on failure and stop; a later write (or pagehide) retries.
           for (const key of keys) pending.add(key);
-          break;
+          throw error;
         } finally {
           for (const key of keys) inFlight.delete(key);
         }
@@ -251,15 +255,18 @@ function flushOnExit() {
   const keys = [...new Set([...pending, ...inFlight])];
   if (keys.length === 0) return;
   pending.clear();
+  const requeue = () => {
+    for (const key of keys) pending.add(key);
+  };
   try {
     void fetch('/api/settings', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(buildPatch(keys)),
       keepalive: true,
-    });
+    }).catch(requeue);
   } catch {
-    for (const key of keys) pending.add(key);
+    requeue();
   }
 }
 

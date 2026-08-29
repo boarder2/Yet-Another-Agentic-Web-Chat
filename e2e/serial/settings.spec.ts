@@ -64,6 +64,84 @@ test.describe('PATCH /api/settings', () => {
     expect(restoredBody[key]).toBe(original);
   });
 
+  test('canonicalizes quantization values and deletes the default', async ({
+    request,
+  }) => {
+    const key = 'openrouterQuantizations';
+    const before = await (await request.get('/api/settings')).json();
+    const original = before[key];
+
+    try {
+      const updateRes = await request.patch('/api/settings', {
+        data: { [key]: '["fp8","int4","bf16"]' },
+      });
+      expect(updateRes.status()).toBe(204);
+
+      const updated = await (await request.get('/api/settings')).json();
+      expect(updated[key]).toBe('["int4","fp8","bf16"]');
+
+      const emptyRes = await request.patch('/api/settings', {
+        data: { [key]: '[]' },
+      });
+      expect(emptyRes.status()).toBe(204);
+
+      const defaulted = await (await request.get('/api/settings')).json();
+      expect(defaulted[key]).toBeUndefined();
+    } finally {
+      const restoreRes = await request.patch('/api/settings', {
+        data: { [key]: original ?? null },
+      });
+      expect(restoreRes.status()).toBe(204);
+    }
+  });
+
+  test('rejects invalid quantization values without a partial batch write', async ({
+    request,
+  }) => {
+    const key = 'openrouterQuantizations';
+    const unrelatedKey = 'ttsSpeed';
+    const before = await (await request.get('/api/settings')).json();
+    const original = before[key];
+    const originalUnrelated = before[unrelatedKey];
+
+    try {
+      const baselineRes = await request.patch('/api/settings', {
+        data: { [key]: '["fp8"]' },
+      });
+      expect(baselineRes.status()).toBe(204);
+
+      const invalidValues: Array<[string, unknown]> = [
+        ['malformed JSON', '["fp8"'],
+        ['non-array JSON', '"fp8"'],
+        ['duplicate value', '["fp8","fp8"]'],
+        ['unsupported value', '["int3"]'],
+        ['wrongly typed value', ['fp8']],
+      ];
+
+      for (const [label, value] of invalidValues) {
+        const res = await request.patch('/api/settings', {
+          data: {
+            [key]: value,
+            [unrelatedKey]: 'must-not-be-written',
+          },
+        });
+        expect(res.status(), label).toBe(400);
+
+        const afterRejected = await (await request.get('/api/settings')).json();
+        expect(afterRejected[key], label).toBe('["fp8"]');
+        expect(afterRejected[unrelatedKey], label).toBe(originalUnrelated);
+      }
+    } finally {
+      const restoreRes = await request.patch('/api/settings', {
+        data: {
+          [key]: original ?? null,
+          [unrelatedKey]: originalUnrelated ?? null,
+        },
+      });
+      expect(restoreRes.status()).toBe(204);
+    }
+  });
+
   test('rejects non-object body with 400', async ({ request }) => {
     const res = await request.patch('/api/settings', {
       data: ['not', 'an', 'object'],

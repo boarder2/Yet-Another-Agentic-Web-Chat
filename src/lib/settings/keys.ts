@@ -30,6 +30,8 @@ export const MIGRATED_SETTING_KEYS = [
   'embeddingModelProvider',
   'embeddingModel',
   'modelPresets',
+  // OpenRouter routing preferences are instance-wide and sync across devices.
+  'openrouterQuantizations',
   // Agent panel: saved presets sync cross-device like model presets; the active
   // composer selection rides along so an enabled panel survives device switches.
   'panelPresets',

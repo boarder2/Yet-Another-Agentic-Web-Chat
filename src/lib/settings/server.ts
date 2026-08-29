@@ -6,6 +6,11 @@ import type {
   SearchProviderIdType,
   ImageGenerationConfig,
 } from '@/lib/config';
+import {
+  OPENROUTER_QUANTIZATIONS_SETTING_KEY,
+  parseOpenRouterQuantizations,
+  type OpenRouterQuantizationParseResult,
+} from '@/lib/settings/openrouterQuantizations';
 
 /**
  * Server-side reads of the database-backed settings (`app_settings`). These are
@@ -48,6 +53,18 @@ export function getStringSetting(
 ): string {
   const raw = settings[key];
   return raw ?? fallback;
+}
+
+/**
+ * OpenRouter quantization routing preferences. Missing state is the valid default
+ * routing, but a malformed persisted value remains invalid so callers can fail
+ * closed instead of silently dropping the restriction.
+ */
+export function getOpenrouterQuantizations(): OpenRouterQuantizationParseResult {
+  const raw = getSettings([OPENROUTER_QUANTIZATIONS_SETTING_KEY])[
+    OPENROUTER_QUANTIZATIONS_SETTING_KEY
+  ];
+  return parseOpenRouterQuantizations(raw);
 }
 
 /**

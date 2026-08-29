@@ -4,6 +4,11 @@ import { NextResponse } from 'next/server';
 import { inArray } from 'drizzle-orm';
 import { isMigratedSettingKey } from '@/lib/settings/keys';
 import { getAllSettings } from '@/lib/settings/server';
+import { invalidateModelCache } from '@/lib/providers/modelCache';
+import {
+  OPENROUTER_QUANTIZATIONS_SETTING_KEY,
+  parseOpenRouterQuantizations,
+} from '@/lib/settings/openrouterQuantizations';
 
 // Uses better-sqlite3 and Buffer — Node runtime only (not edge).
 export const runtime = 'nodejs';
@@ -43,25 +48,49 @@ export async function PATCH(req: Request) {
     const now = new Date();
     const toDelete: string[] = [];
     const toUpsert: { key: string; value: string; updatedAt: Date }[] = [];
+    let openrouterQuantizationsChanged = false;
 
     for (const [key, value] of Object.entries(body)) {
       if (!isMigratedSettingKey(key)) continue;
+
+      const isOpenrouterQuantizations =
+        key === OPENROUTER_QUANTIZATIONS_SETTING_KEY;
+      if (isOpenrouterQuantizations) openrouterQuantizationsChanged = true;
+
       if (value === null) {
         toDelete.push(key);
-      } else if (typeof value === 'string') {
-        if (Buffer.byteLength(value, 'utf8') > MAX_SETTING_VALUE_BYTES) {
-          return NextResponse.json(
-            { error: `Value for "${key}" exceeds the maximum size` },
-            { status: 413 },
-          );
-        }
-        toUpsert.push({ key, value, updatedAt: now });
-      } else {
+        continue;
+      }
+      if (typeof value !== 'string') {
         return NextResponse.json(
           { error: `Value for "${key}" must be a string or null` },
           { status: 400 },
         );
       }
+      if (Buffer.byteLength(value, 'utf8') > MAX_SETTING_VALUE_BYTES) {
+        return NextResponse.json(
+          { error: `Value for "${key}" exceeds the maximum size` },
+          { status: 413 },
+        );
+      }
+
+      if (isOpenrouterQuantizations) {
+        const parsed = parseOpenRouterQuantizations(value);
+        if (!parsed.valid) {
+          return NextResponse.json(
+            { error: `Invalid value for "${key}": ${parsed.error}` },
+            { status: 400 },
+          );
+        }
+        if (parsed.quantizations.length === 0) {
+          toDelete.push(key);
+          continue;
+        }
+        toUpsert.push({ key, value: parsed.canonical, updatedAt: now });
+        continue;
+      }
+
+      toUpsert.push({ key, value, updatedAt: now });
     }
 
     db.transaction((tx) => {
@@ -78,6 +107,10 @@ export async function PATCH(req: Request) {
           .run();
       }
     });
+
+    if (openrouterQuantizationsChanged) {
+      invalidateModelCache('openrouter');
+    }
 
     return new NextResponse(null, { status: 204 });
   } catch (error) {

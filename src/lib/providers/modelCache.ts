@@ -11,6 +11,7 @@ import {
   getOpenaiApiKey,
   getOpenrouterApiKey,
 } from '../config';
+import { getOpenrouterQuantizations } from '../settings/server';
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const NEGATIVE_CACHE_TTL_MS = 60 * 1000; // 1 minute for empty/failed results
@@ -47,7 +48,10 @@ const providerSignature = (provider: string): string => {
     case 'lmstudio':
       return getLMStudioApiEndpoint() || '';
     case 'openrouter':
-      return getOpenrouterApiKey() || '';
+      return JSON.stringify({
+        apiKey: getOpenrouterApiKey() || '',
+        quantizations: getOpenrouterQuantizations(),
+      });
     case 'transformers':
       return 'local';
     case 'custom_openai':

@@ -2,6 +2,8 @@
 
 YAAWC separates the model that writes the answer from the model used for internal work. Settings discovers configured models and lets you choose them per chat, workspace, workflow, schedule, widget, or feature-specific task.
 
+Reasoning effort is invocation configuration, not part of a model ID. The normalized levels are `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`; **Provider default** is represented by leaving the field unset.
+
 ## Chat and System models
 
 The composer model picker selects:
@@ -11,7 +13,19 @@ The composer model picker selects:
 - **Vision capability:** allows image attachments and multimodal input for the selected Chat model when enabled.
 - **Context window:** controls the conversation context budget and the compaction indicator.
 
-A named Model Preset can save the Chat model, System model, vision flag, and context window together. A workspace can pin its own Chat and System models and override the global composer selection. Workflows and schedules store their own model selection.
+A named Model Preset can save the Chat model, System model, vision flag, context window, and each role's optional reasoning effort together. A workspace can pin its own Chat and System models and override the global composer selection. Workflows and schedules store their own model selection, including optional role-specific effort. Agent-run dashboard chat widgets and Agent Panel executor definitions use the same model-reference contract.
+
+## Native reasoning effort
+
+Named effort is supported only for models that advertise a documented native control from one of these six providers: **OpenRouter, OpenAI, Anthropic, Google Gemini, Groq, and DeepSeek AI**. Model discovery exposes the supported levels for each exact model; OpenRouter combines its `supported_parameters` metadata with documented model exceptions, while direct providers use maintained model profiles. Unknown, unprofiled, and budget-token-only models expose no effort selector and receive no effort parameter.
+
+When a level is selected, YAAWC maps it to the provider's native request shape: OpenRouter and OpenAI reasoning effort, Anthropic adaptive/output effort or disabled thinking, Gemini thinking level, Groq reasoning effort, or DeepSeek effort/toggle controls. `off` uses the provider's documented disabled form where one exists. YAAWC does not approximate named effort with token budgets, and Provider default sends no effort control. Provider rejection is surfaced as the provider error; YAAWC does not silently retry without the selected effort.
+
+Chat and System effort are independent. If System is omitted, its complete Chat model reference—including effective effort—is used. A saved level that becomes stale is clamped to the nearest level currently supported at runtime and is shown as configured versus effective; the saved preset, workspace, workflow, widget, or panel definition is not rewritten. Unsupported models use Provider default.
+
+Effort settings for the composer sync through the database alongside other model selections; selecting Provider default removes the optional setting. Presets, workspace/workflow/schedule/widget/panel definitions retain configured values. A continuable run stores the effective Chat/System/executor references in its versioned snapshot, so resume uses the paused run's effort rather than current settings. Completed assistant metadata retains effective model configuration, and historical Model Info displays it after the active snapshot is cleared.
+
+Reasoning effort applies only to agent Chat/System work and Agent Panel/subagent role routing. It does not apply to embeddings, memory-processing models, image generation, TTS narration, AI/ML API, LM Studio, Custom OpenAI, or other non-agent model tasks.
 
 ## Supported model providers
 

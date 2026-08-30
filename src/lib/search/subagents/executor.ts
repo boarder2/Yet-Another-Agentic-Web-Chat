@@ -22,7 +22,14 @@ import {
   isAgentControlEvent,
 } from '@/lib/streaming/events';
 import type { TokenTracker } from '@/lib/tokens/tracker';
+import type { ReasoningEffort } from '@/lib/providers/reasoningEffort';
 import { createAgentRunConfig } from '@/lib/search/agentRunConfig';
+
+type SubagentModelRef = {
+  provider: string;
+  model: string;
+  reasoningEffort?: ReasoningEffort;
+};
 
 /**
  * The tools a subagent may use: the global set minus the ones that dead-end in
@@ -61,8 +68,8 @@ export class SubagentExecutor {
   private userLocation?: string;
   private userProfile?: string;
   private tracker: TokenTracker;
-  private chatModelRef: { provider: string; model: string };
-  private systemModelRef: { provider: string; model: string };
+  private chatModelRef: SubagentModelRef;
+  private systemModelRef: SubagentModelRef;
 
   constructor(
     definition: SubagentDefinition,
@@ -76,8 +83,8 @@ export class SubagentExecutor {
     userLocation: string | undefined,
     userProfile: string | undefined,
     tracker: TokenTracker,
-    chatModelRef: { provider: string; model: string },
-    systemModelRef: { provider: string; model: string },
+    chatModelRef: SubagentModelRef,
+    systemModelRef: SubagentModelRef,
   ) {
     this.definition = definition;
     this.chatLlm = chatLlm;
@@ -167,10 +174,16 @@ export class SubagentExecutor {
         chatModelRef: {
           provider: selectedModelRef.provider,
           name: selectedModelRef.model,
+          ...(selectedModelRef.reasoningEffort
+            ? { reasoningEffort: selectedModelRef.reasoningEffort }
+            : {}),
         },
         systemModelRef: {
           provider: this.systemModelRef.provider,
           name: this.systemModelRef.model,
+          ...(this.systemModelRef.reasoningEffort
+            ? { reasoningEffort: this.systemModelRef.reasoningEffort }
+            : {}),
         },
         focusMode: 'webSearch',
         fileIds,

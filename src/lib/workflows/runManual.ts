@@ -45,10 +45,13 @@ export async function startWorkflowRun(
 ): Promise<{ chatId: string }> {
   const run = resolveWorkflowRun(workflow, values, new Date());
 
-  const { chatLlm, systemLlm, embedding } = await resolveChatAndEmbedding({
+  const resolved = await resolveChatAndEmbedding({
     chatModel: run.chatModel,
     systemModel: run.systemModel,
   });
+  const { chatLlm, systemLlm, embedding } = resolved;
+  const chatModelRef = resolved.chatModelRef;
+  const systemModelRef = resolved.systemModelRef;
 
   const personaInstructions = await getPersonaInstructionsOnly(
     run.selectedSystemPromptIds,
@@ -93,8 +96,8 @@ export async function startWorkflowRun(
   const emitter = new EventEmitter();
   const { tracker, chatRecorder, systemRecorder } = createTurnTracker(
     emitter,
-    run.chatModel,
-    run.systemModel,
+    chatModelRef,
+    systemModelRef,
   );
   const chartRegistry = new TurnChartRegistry();
 
@@ -103,8 +106,8 @@ export async function startWorkflowRun(
 
   const threadId = `${userMessageId}:${startTime}`;
   const runConfig = createAgentRunConfig({
-    chatModelRef: run.chatModel,
-    systemModelRef: run.systemModel ?? run.chatModel,
+    chatModelRef,
+    systemModelRef,
     focusMode: run.focusMode,
     fileIds: [],
     personaInstructions,
@@ -150,6 +153,7 @@ export async function startWorkflowRun(
     abortController,
     retrievalController,
     chartRegistry,
+    configSnapshot: runConfig,
   });
 
   if (isNew) {

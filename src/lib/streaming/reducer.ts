@@ -1353,6 +1353,7 @@ function reduceMessageEnd(
           ...m,
           content: state.receivedMessage,
           modelStats: mergedStats ?? undefined,
+          ...(action.modelConfig ? { modelConfig: action.modelConfig } : {}),
           searchQuery: m.searchQuery || action.searchQuery,
           searchUrl: m.searchUrl || action.searchUrl,
           runStatus: undefined,

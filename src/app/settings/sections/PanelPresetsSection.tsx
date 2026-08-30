@@ -17,6 +17,7 @@ import { useModels } from '@/lib/hooks/api/useModels';
 import { useLocalStorageJSON } from '@/lib/hooks/useLocalStorage';
 import { DEFAULT_CONTEXT_WINDOW } from '@/lib/models/presets';
 import ModelField from '@/components/models/ModelField';
+import ReasoningEffortField from '@/components/models/ReasoningEffortField';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import SettingsSection from '../components/SettingsSection';
@@ -35,6 +36,7 @@ import {
   type PanelSelection,
   type PanelModelEntry,
 } from '@/lib/panel/panelSelection';
+import type { ReasoningEffort } from '@/lib/providers/reasoningEffort';
 import {
   PANEL_PRESETS_KEY,
   PANEL_PRESET_MAX,
@@ -64,10 +66,17 @@ export default function PanelPresetsSection() {
     PANEL_SELECTION_KEY,
     EMPTY_PANEL_SELECTION,
   );
-  const { data: modelsData } = useModels();
+  const { data: modelsData, isFetched } = useModels();
+  const capabilitiesLoaded = isFetched || modelsData !== undefined;
   const providers = (modelsData?.chatModelProviders ?? {}) as Record<
     string,
-    Record<string, { displayName: string }>
+    Record<
+      string,
+      {
+        displayName: string;
+        supportedReasoningEfforts?: ReasoningEffort[];
+      }
+    >
   >;
   const displayName = (m: PanelModelEntry): string =>
     providers[m.provider]?.[m.name]?.displayName ?? m.name;
@@ -177,6 +186,24 @@ export default function PanelPresetsSection() {
       d ? { ...d, executors: d.executors.filter((x) => !sameModel(x, e)) } : d,
     );
 
+  const updateDraftExecutorEffort = (
+    entry: PanelModelEntry,
+    reasoningEffort: ReasoningEffort | undefined,
+  ) =>
+    setDraft((d) =>
+      d
+        ? {
+            ...d,
+            executors: d.executors.map((executor) => {
+              if (!sameModel(executor, entry)) return executor;
+              if (reasoningEffort) return { ...executor, reasoningEffort };
+              const { reasoningEffort: _removed, ...withoutEffort } = executor;
+              return withoutEffort;
+            }),
+          }
+        : d,
+    );
+
   const draftForm = (
     <div className="border border-surface-2 rounded-surface p-3 flex flex-col gap-3 bg-bg">
       <p className="text-xs font-medium text-fg-muted">
@@ -199,22 +226,40 @@ export default function PanelPresetsSection() {
         <span className="text-xs font-semibold text-fg-muted uppercase tracking-wide">
           Executors ({draft?.executors.length ?? 0}/{PANEL_MAX})
         </span>
-        <div className="flex flex-wrap gap-1.5">
-          {draft?.executors.map((e) => (
-            <span
-              key={`${e.provider}/${e.name}`}
-              className="inline-flex items-center gap-1 pl-2.5 pr-1 py-1 rounded-control bg-surface-2 text-xs"
-            >
-              <span className="truncate max-w-[140px]">{displayName(e)}</span>
-              <IconButton
-                icon={X}
-                label="Remove executor"
-                tone="danger"
-                onClick={() => removeDraftExecutor(e)}
-                className="p-0.5"
-              />
-            </span>
-          ))}
+        <div className="flex flex-col gap-1.5">
+          {draft?.executors.map((e) => {
+            const modelInfo = providers[e.provider]?.[e.name];
+            return (
+              <div
+                key={`${e.provider}/${e.name}`}
+                className="rounded-control bg-surface-2 px-2.5 py-1.5 text-xs"
+              >
+                <div className="flex items-center gap-1">
+                  <span className="min-w-0 flex-1 truncate">
+                    {displayName(e)}
+                  </span>
+                  <IconButton
+                    icon={X}
+                    label={`Remove ${displayName(e)}`}
+                    tone="danger"
+                    onClick={() => removeDraftExecutor(e)}
+                    className="p-0.5"
+                  />
+                </div>
+                <ReasoningEffortField
+                  label="Reasoning effort"
+                  ariaLabel={`${displayName(e)} reasoning effort`}
+                  value={e.reasoningEffort}
+                  supported={modelInfo?.supportedReasoningEfforts}
+                  capabilityKnown={capabilitiesLoaded}
+                  showStoredState
+                  onChange={(reasoningEffort) =>
+                    updateDraftExecutorEffort(e, reasoningEffort)
+                  }
+                />
+              </div>
+            );
+          })}
         </div>
         {(draft?.executors.length ?? 0) < PANEL_MAX && (
           <div className="flex items-center gap-1 text-fg-muted">

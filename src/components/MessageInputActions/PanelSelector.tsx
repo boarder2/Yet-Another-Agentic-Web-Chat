@@ -20,7 +20,12 @@ import { useModels } from '@/lib/hooks/api/useModels';
 import ModelField from '@/components/models/ModelField';
 import PresetOption from '@/components/models/PresetOption';
 import PresetPopover from '@/components/models/PresetPopover';
+import ReasoningEffortField from '@/components/models/ReasoningEffortField';
 import { DEFAULT_CONTEXT_WINDOW } from '@/lib/models/presets';
+import {
+  REASONING_EFFORT_LABELS,
+  type ReasoningEffort,
+} from '@/lib/providers/reasoningEffort';
 import {
   PANEL_SELECTION_KEY,
   EMPTY_PANEL_SELECTION,
@@ -83,10 +88,17 @@ const PanelSelector = ({ focusMode }: { focusMode: string }) => {
   const [savingName, setSavingName] = useState(false);
   const [nameInput, setNameInput] = useState('');
   const { openSettings } = useSettingsModal();
-  const { data: modelsData } = useModels();
+  const { data: modelsData, isFetched } = useModels();
+  const capabilitiesLoaded = isFetched || modelsData !== undefined;
   const providers = (modelsData?.chatModelProviders ?? {}) as Record<
     string,
-    Record<string, { displayName: string }>
+    Record<
+      string,
+      {
+        displayName: string;
+        supportedReasoningEfforts?: ReasoningEffort[];
+      }
+    >
   >;
 
   const supported = focusMode === 'webSearch' || focusMode === 'localResearch';
@@ -100,7 +112,16 @@ const PanelSelector = ({ focusMode }: { focusMode: string }) => {
     setSelection({ ...selection, ...patch });
 
   const label = active
-    ? `Agent Panel: on · ${selection.executors.map(displayName).join(', ')}`
+    ? `Agent Panel: on · ${selection.executors
+        .map(
+          (executor) =>
+            `${displayName(executor)}${
+              executor.reasoningEffort
+                ? ` (${REASONING_EFFORT_LABELS[executor.reasoningEffort]})`
+                : ''
+            }`,
+        )
+        .join(', ')}`
     : configured
       ? 'Agent Panel: off'
       : `Agent Panel: add ${PANEL_MIN}–${PANEL_MAX} models`;
@@ -121,6 +142,25 @@ const PanelSelector = ({ focusMode }: { focusMode: string }) => {
     update({
       executors,
       enabled: executors.length >= PANEL_MIN ? selection.enabled : false,
+    });
+  };
+
+  const updateExecutorEffort = (
+    entry: PanelModelEntry,
+    reasoningEffort: PanelModelEntry['reasoningEffort'],
+  ) => {
+    update({
+      executors: selection.executors.map((executor) =>
+        sameModel(executor, entry)
+          ? reasoningEffort
+            ? { ...executor, reasoningEffort }
+            : (() => {
+                const { reasoningEffort: _removed, ...withoutEffort } =
+                  executor;
+                return withoutEffort;
+              })()
+          : executor,
+      ),
     });
   };
 
@@ -382,24 +422,40 @@ const PanelSelector = ({ focusMode }: { focusMode: string }) => {
                           Add at least {PANEL_MIN} models to enable the panel.
                         </p>
                       )}
-                      <div className="flex flex-wrap gap-1.5">
-                        {selection.executors.map((e) => (
-                          <span
-                            key={`${e.provider}/${e.name}`}
-                            className="inline-flex items-center gap-1 pl-2.5 pr-1 py-1 rounded-control bg-surface-2 text-xs"
-                          >
-                            <span className="truncate max-w-[140px]">
-                              {displayName(e)}
-                            </span>
-                            <IconButton
-                              icon={X}
-                              label={`Remove ${displayName(e)}`}
-                              tone="danger"
-                              onClick={() => removeExecutor(e)}
-                              className="p-0.5"
-                            />
-                          </span>
-                        ))}
+                      <div className="flex flex-col gap-1.5">
+                        {selection.executors.map((e) => {
+                          const modelInfo = providers[e.provider]?.[e.name];
+                          return (
+                            <div
+                              key={`${e.provider}/${e.name}`}
+                              className="rounded-control bg-surface-2 px-2.5 py-1.5 text-xs"
+                            >
+                              <div className="flex items-center gap-1">
+                                <span className="min-w-0 flex-1 truncate">
+                                  {displayName(e)}
+                                </span>
+                                <IconButton
+                                  icon={X}
+                                  label={`Remove ${displayName(e)}`}
+                                  tone="danger"
+                                  onClick={() => removeExecutor(e)}
+                                  className="p-0.5"
+                                />
+                              </div>
+                              <ReasoningEffortField
+                                label="Reasoning effort"
+                                ariaLabel={`${displayName(e)} reasoning effort`}
+                                value={e.reasoningEffort}
+                                supported={modelInfo?.supportedReasoningEfforts}
+                                capabilityKnown={capabilitiesLoaded}
+                                showStoredState
+                                onChange={(reasoningEffort) =>
+                                  updateExecutorEffort(e, reasoningEffort)
+                                }
+                              />
+                            </div>
+                          );
+                        })}
                       </div>
                       {selection.executors.length < PANEL_MAX && (
                         <div className="flex items-center gap-1 text-fg-muted">

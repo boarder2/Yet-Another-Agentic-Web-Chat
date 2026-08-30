@@ -8,6 +8,7 @@ export const PROVIDER_INFO = {
 };
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { Embeddings } from '@langchain/core/embeddings';
+import { getReasoningEffortMetadata } from './reasoningEffort';
 
 // Dynamically discover models from OpenAI instead of hardcoding
 const OPENAI_MODELS_ENDPOINT = 'https://api.openai.com/v1/models';
@@ -74,6 +75,7 @@ export const loadOpenAIChatModels = async () => {
           maxRetries: 10,
           //temperature: model.includes('gpt-5') ? 1 : 0.7,
         }) as unknown as BaseChatModel,
+        ...getReasoningEffortMetadata('openai', model),
       };
     });
 

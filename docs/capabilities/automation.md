@@ -4,7 +4,7 @@ Automations turn a reusable prompt into a manual workflow or a cron-based schedu
 
 ## Build a workflow
 
-A workflow stores a name, description, icon, prompt, focus mode, Chat model, optional System model, persona prompts, and one optional research methodology. Its prompt can declare inputs in a frontmatter block and reference them in the body.
+A workflow stores a name, description, icon, prompt, focus mode, Chat model, optional System model, each role's optional native reasoning effort, persona prompts, and one optional research methodology. Its prompt can declare inputs in a frontmatter block and reference them in the body.
 
 Example:
 
@@ -25,7 +25,7 @@ A workflow's stored models and instructions are the configuration for its runs. 
 
 Choose **Run** on a workflow, fill its required fields, and submit. YAAWC creates a normal chat containing the substituted prompt, starts the run, and routes you to that chat. The run can continue in the background and can be continued like another conversation after it finishes.
 
-Manual workflow runs use the workflow's selected focus mode, models, persona prompts, and methodology. They do not attach workspace files or workspace tools, use MCP tools, retrieve or extract memory, or run Agent Panel fan-out.
+Manual workflow runs use the workflow's selected focus mode, model references (including configured Chat/System effort), persona prompts, and methodology. They do not attach workspace files or workspace tools, use MCP tools, retrieve or extract memory, or run Agent Panel fan-out.
 
 ## Schedule a workflow
 
@@ -39,7 +39,9 @@ If a workflow edit makes a saved schedule fill set invalid, the schedule is disa
 
 Scheduled runs are headless. They persist a chat and answer without waiting for a person, so code execution, ask-user questions, workspace edits, and other approval-gated actions cannot complete as they do in an interactive chat. Scheduled runs do not perform automatic memory extraction. Charts are an exception to the headless limits: a scheduled run can register and show charts, and they are stored in the persisted answer. Deep research can be requested through a saved focus configuration, but its nested live activity is not represented in the scheduled result in the same way as an interactive stream.
 
-A manual workflow run is continuable, but it still uses the workflow's stored non-workspace configuration rather than the page from which it was launched.
+A manual workflow run is continuable, but it still uses the workflow's stored non-workspace configuration rather than the page from which it was launched. New manual and scheduled runs resolve a saved effort against the current model capability; a stale valid level uses the nearest supported level without rewriting the workflow or schedule. A paused run keeps its effective model references for resume, and completed run metadata retains the effective Chat/System effort for historical Model Info.
+
+Provider default means the effort field is omitted and no effort control is sent. Unsupported or budget-only models use Provider default. Provider failures remain run errors; the runner does not retry without the saved effort.
 
 ## Retention and availability
 

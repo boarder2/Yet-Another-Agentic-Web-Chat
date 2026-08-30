@@ -4,6 +4,7 @@ import { workflows } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { startWorkflowRun } from '@/lib/workflows/runManual';
 import { RequiredInputsError } from '@/lib/workflows/resolveWorkflowRun';
+import { ModelReferenceValidationError } from '@/lib/providers/resolveModels';
 
 export const runtime = 'nodejs';
 
@@ -32,6 +33,9 @@ export async function POST(
         { error: 'Missing required inputs', missing: err.missing },
         { status: 400 },
       );
+    }
+    if (err instanceof ModelReferenceValidationError) {
+      return Response.json({ error: err.message }, { status: 400 });
     }
     const message =
       err instanceof Error ? err.message : 'Failed to run workflow';

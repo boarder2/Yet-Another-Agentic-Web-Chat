@@ -286,6 +286,40 @@ describe('TokenTracker', () => {
     expect(tracker.rootIdentity('image_gen')).toBeUndefined();
   });
 
+  it('keeps role effort in root identity without changing token usage rows', () => {
+    const tracker = new TokenTracker(new EventEmitter());
+    const chat = tracker.register({
+      provider: 'openai',
+      model: 'gpt-5',
+      reasoningEffort: 'high',
+      role: 'chat',
+    });
+    const system = tracker.register({
+      provider: 'anthropic',
+      model: 'claude',
+      reasoningEffort: 'low',
+      role: 'system',
+    });
+
+    chat.record(usage(4, 2));
+    system.record(usage(3, 1));
+
+    expect(tracker.rootIdentity('chat')).toEqual({
+      provider: 'openai',
+      model: 'gpt-5',
+      reasoningEffort: 'high',
+    });
+    expect(tracker.rootIdentity('system')).toEqual({
+      provider: 'anthropic',
+      model: 'claude',
+      reasoningEffort: 'low',
+    });
+    expect(tracker.perModel()).toEqual([
+      { provider: 'openai', model: 'gpt-5', usage: usage(4, 2) },
+      { provider: 'anthropic', model: 'claude', usage: usage(3, 1) },
+    ]);
+  });
+
   it('emits a model_stats snapshot on every record() call', () => {
     const emitter = new EventEmitter();
     const seen: unknown[] = [];
@@ -325,14 +359,19 @@ describe('createTurnTracker', () => {
     ]);
   });
 
-  it('falls back the system recorder to the chat model when systemModel is absent', () => {
+  it('falls back the complete chat identity to the system recorder when absent', () => {
     const { tracker, chatRecorder, systemRecorder } = createTurnTracker(
       new EventEmitter(),
-      { provider: 'openai', name: 'gpt-5' },
+      { provider: 'openai', name: 'gpt-5', reasoningEffort: 'xhigh' },
       null,
     );
     chatRecorder.record(usage(1, 1));
     systemRecorder.record(usage(2, 2));
+    expect(tracker.rootIdentity('system')).toEqual({
+      provider: 'openai',
+      model: 'gpt-5',
+      reasoningEffort: 'xhigh',
+    });
     expect(tracker.perModel()).toEqual([
       { provider: 'openai', model: 'gpt-5', usage: usage(3, 3) },
     ]);

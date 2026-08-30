@@ -7,6 +7,7 @@ export const PROVIDER_INFO = {
   displayName: 'Anthropic',
 };
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import { getReasoningEffortMetadata } from './reasoningEffort';
 const ANTHROPIC_MODELS_ENDPOINT = 'https://api.anthropic.com/v1/models';
 
 async function fetchAnthropicModels(
@@ -66,6 +67,7 @@ export const loadAnthropicChatModels = async () => {
           maxRetries: 10,
           //temperature: 0.7,
         }) as unknown as BaseChatModel,
+        ...getReasoningEffortMetadata('anthropic', model.id),
       };
     });
 

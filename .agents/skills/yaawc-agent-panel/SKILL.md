@@ -11,7 +11,7 @@ Panel is an optional **composer mode** (orthogonal to focus mode; research modes
 
 `body.panel: PanelConfig` (`src/lib/types/panel.ts`):
 
-- `executors: PanelExecutorConfig[]` — each is a `ModelRef` (`provider` + `name` + optional `contextWindow`) plus optional `imageCapable`. **2–4 required**; enforce via `validatePanelConfig()` (returns a discriminated `{ ok }` result — guard on it both client- and server-side).
+- `executors: PanelExecutorConfig[]` — each is a `ModelRef` (`provider` + `name` + optional `contextWindow` + native `reasoningEffort`) plus optional `imageCapable`. **2–4 required**; enforce via `validatePanelConfig()` (returns a discriminated `{ ok }` result — guard on it both client- and server-side).
 - An **absent** `panel` leaves the single-model path byte-for-byte unchanged.
 
 ## Two phases (wired in `src/app/api/chat/route.ts`, inside the `isNew` block)
@@ -19,7 +19,7 @@ Panel is an optional **composer mode** (orthogonal to focus mode; research modes
 Phase 1 runs only on a **new** message; **resume never re-runs Phase 1** (it reuses the ordinary agent runHost path).
 
 1. **Phase 1 — `PanelCoordinator`** (`src/lib/search/panel/coordinator.ts`):
-   - Resolves each executor with `resolveModelRef(ref, { isolate: true })` (own instance so concurrent runs can't clobber a shared catalog-cached singleton). Needs ≥2 resolvable models or it throws.
+   - Resolves each executor with `resolveModelRef(ref, { isolate: true })` (own instance so concurrent runs can't clobber a shared catalog-cached singleton); the effective native effort is retained in the run config and audit metadata. Needs ≥2 resolvable models or it throws.
    - Runs each executor as a full `SimplifiedAgent` on an **isolated `EventEmitter`**, forwarding its stream to the parent as `panel_executor_*` events. This mirrors the `deep_research` subagent isolated-emitter pattern.
    - Executors get chat history + retrieved memory **and** the active persona/methodology (so each researches in the user's voice), but memory tools are off.
    - Toolset is the focus-mode toolset minus the prompting/mutating/recursive set (`filterExecutorTools`, see below).
@@ -40,7 +40,7 @@ Phase 1 runs only on a **new** message; **resume never re-runs Phase 1** (it reu
 
 - Composer entry: `src/components/MessageInputActions/PanelSelector.tsx` + device-local `panelSelection`. Split control: the icon half toggles the panel in one click, the chevron half opens configuration. Below `sm` the split collapses to the chevron alone (single Layers button) and the popover header carries an on/off switch — one trigger on every viewport, which headlessui requires (the panel anchors to the last-mounted `PopoverButton`). `enabled` can only be set while the selection holds 2–4 executors (`hasValidExecutors`), so the engaged state always matches what the turn sends — clicking the toggle on an under-configured panel opens the popover instead. Removing executors below the minimum clears `enabled`. Applying a preset is the one action that enables implicitly.
 - Presets: `src/lib/panel/panelPresets.ts` (stored like model presets) with a Settings section (`src/app/settings/sections/PanelPresetsSection.tsx`).
-- `panelPresets` and `panelSelection` are in `MIGRATED_SETTING_KEYS` (DB-synced) — see the `yaawc-settings-persistence` skill.
+- `panelPresets` and `panelSelection` are in `MIGRATED_SETTING_KEYS` (DB-synced), including executor effort where configured — see the `yaawc-settings-persistence` skill.
 
 ## Gotchas
 

@@ -109,4 +109,18 @@ describe('settings persistence flush failures', () => {
       openrouterQuantizations: '["int4"]',
     });
   });
+
+  it('syncs both composer effort keys through the migrated settings allowlist', async () => {
+    const { persist, storage } = await createPersistenceHarness();
+    mocks.patchSettings.mockResolvedValue(undefined);
+
+    storage.setItem('chatReasoningEffort', 'high');
+    storage.setItem('systemReasoningEffort', 'low');
+    await expect(persist.flushSettings()).resolves.toBeUndefined();
+
+    expect(mocks.patchSettings).toHaveBeenCalledWith({
+      chatReasoningEffort: 'high',
+      systemReasoningEffort: 'low',
+    });
+  });
 });

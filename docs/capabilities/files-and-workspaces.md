@@ -23,7 +23,7 @@ Open `/workspaces` and choose **New Workspace**. A workspace can have:
 - Uploaded files and empty text or Markdown notes.
 - Free-text instructions and linked persona or system prompts applied to every workspace chat.
 - Workspace-scoped memories, separate from global memories.
-- A workspace-specific Chat and System model override, including context window and vision settings.
+- A workspace-specific Chat and System model override, including context window, vision settings, and optional native reasoning effort per role.
 - Auto-memory and auto-accept file-edit controls.
 - Workspace-owned artifacts and generated images.
 
@@ -40,7 +40,7 @@ Every file replacement uses the version the editor read. If another write wins f
 ## Workspace availability and boundaries
 
 - Workspace memory retrieval includes global memories and memories belonging to that workspace. An unscoped chat retrieves global memories only.
-- A workspace-pinned model is enforced by the server. If either pinned model is unavailable, the composer reports that the workspace model is unavailable until the pin is changed or the provider is restored.
+- A workspace-pinned model is enforced by the server. If either pinned model is unavailable, the composer reports that the workspace model is unavailable until the pin is changed or the provider is restored. A saved effort is resolved against current capabilities when the chat starts; stale values show their effective runtime level without rewriting the workspace definition.
 - Workspace tools are scoped to the active workspace. A workspace file or memory is not exposed to another workspace through normal agent lookup.
 - Workflows and scheduled tasks use their saved configuration rather than the current workspace. See [Automation](./automation.md).
 

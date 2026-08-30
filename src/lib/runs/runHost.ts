@@ -77,6 +77,8 @@ import { generateChatTitle } from '@/lib/utils/chatTitle';
 import { popCallbackRunId } from '@/lib/sandbox/codeExecutionCorrelation';
 import { popCallbackRunId as popQuestionCallbackRunId } from '@/lib/userQuestion/questionCorrelation';
 import {
+  buildAgentModelConfigAudit,
+  createAgentRunConfig,
   decodeAgentRunConfig,
   encodeAgentRunConfig,
   type AgentRunConfig,
@@ -667,6 +669,9 @@ async function performResume(items: ResumeItem[]): Promise<void> {
     const resolved = await resolveChatAndEmbedding({
       chatModel: runConfig.chatModelRef,
       systemModel: runConfig.systemModelRef,
+      // A resume is bound to the effective values captured in its snapshot;
+      // current catalog metadata must not change the paused run's request.
+      preserveEffort: true,
     });
 
     // Count unresolved interrupts BEFORE marking resolved. With more than one
@@ -748,11 +753,20 @@ async function performResume(items: ResumeItem[]): Promise<void> {
     const { createTurnTracker } = await import('@/lib/tokens/tracker');
     const { tracker, chatRecorder, systemRecorder } = createTurnTracker(
       run.emitter,
-      runConfig.chatModelRef,
-      runConfig.systemModelRef,
+      resolved.chatModelRef,
+      runConfig.systemModelRef ? resolved.systemModelRef : null,
     );
     const prePauseStats = latestModelStatsV2(run.eventLog);
     if (prePauseStats) tracker.seed(prePauseStats);
+
+    const resumedRunConfig = createAgentRunConfig({
+      ...runConfig,
+      chatModelRef: resolved.chatModelRef,
+      systemModelRef: runConfig.systemModelRef ? resolved.systemModelRef : null,
+    });
+    // The audit describes the model actually rebound for this resumed turn,
+    // while the database snapshot remains the immutable resume input.
+    run.configSnapshot = resumedRunConfig;
 
     const handler = new SimplifiedAgent({
       dependencies: {
@@ -762,7 +776,7 @@ async function performResume(items: ResumeItem[]): Promise<void> {
         emitter: run.emitter,
         tokenTracking: { tracker, chatRecorder, systemRecorder },
       },
-      run: runConfig,
+      run: resumedRunConfig,
       context: {
         signal: run.abortController.signal,
         retrievalSignal: run.retrievalController.signal,
@@ -946,6 +960,7 @@ async function reconstructAwaitingRun(
     startedAt: chat.activeRunStartedAt ?? Date.now(),
     recievedMessage: persistedContent,
     chartRegistry,
+    configSnapshot: runConfig,
   };
 
   registerReconstructedRun(run);
@@ -992,6 +1007,8 @@ export async function attachRunHost(params: {
     titleGen,
   } = params;
   const { emitter, aiMessageId, chatId } = run;
+  const snapshotToPersist = run.configSnapshot ?? configSnapshot;
+  const auditConfig = snapshotToPersist;
 
   if (!isResume) {
     // Insert empty assistant row immediately so a refresh can see partial state
@@ -1013,8 +1030,8 @@ export async function attachRunHost(params: {
         activeRunStartedAt: run.startedAt,
         activeRunStatus: 'running',
         activeRunThreadId: run.threadId,
-        activeRunConfigSnapshot: configSnapshot
-          ? encodeAgentRunConfig(configSnapshot)
+        activeRunConfigSnapshot: snapshotToPersist
+          ? encodeAgentRunConfig(snapshotToPersist)
           : null,
         lastRunViewed: 0,
       })
@@ -1131,6 +1148,9 @@ export async function attachRunHost(params: {
   let messageEnded = false;
 
   let flushTimer: ReturnType<typeof setTimeout> | null = null;
+  // Serialize partial writes so a terminal metadata update cannot be overtaken
+  // by a debounced flush that was started earlier in the turn.
+  let flushChain: Promise<void> = Promise.resolve();
 
   const scheduleFlush = (immediate: boolean) => {
     // Mirror onto the in-memory run immediately, ahead of the (possibly
@@ -1153,21 +1173,24 @@ export async function attachRunHost(params: {
   };
 
   const doFlush = () => {
-    updateAssistantRow(aiMessageId, {
-      content: recievedMessage,
-      metadata: {
-        createdAt: new Date(),
-        runStatus: 'running',
-        ...(sources.length > 0 && { sources }),
-        ...(searchQuery && { searchQuery }),
-        ...(searchUrl && { searchUrl }),
-        ...(Object.keys(visibleChartMetadata()).length > 0 && {
-          chartSpecs: visibleChartMetadata(),
-        }),
-      },
-    }).catch((err: unknown) =>
-      console.warn('[runHost] incremental flush failed:', err),
-    );
+    if (terminated) return;
+    const content = recievedMessage;
+    const chartMetadata = visibleChartMetadata();
+    const metadata = {
+      createdAt: new Date(),
+      runStatus: 'running',
+      ...(sources.length > 0 && { sources }),
+      ...(searchQuery && { searchQuery }),
+      ...(searchUrl && { searchUrl }),
+      ...(Object.keys(chartMetadata).length > 0 && {
+        chartSpecs: chartMetadata,
+      }),
+    };
+    flushChain = flushChain
+      .then(() => updateAssistantRow(aiMessageId, { content, metadata }))
+      .catch((err: unknown) =>
+        console.warn('[runHost] incremental flush failed:', err),
+      );
   };
 
   const terminate = async (
@@ -1181,6 +1204,7 @@ export async function attachRunHost(params: {
       flushTimer = null;
     }
     try {
+      await flushChain;
       await updateAssistantRow(aiMessageId, {
         content: recievedMessage,
         metadata: finalMetadata,
@@ -1643,6 +1667,9 @@ export async function attachRunHost(params: {
         usedLocation,
         usedPersonalization,
         memoriesUsed: memoriesUsed.length > 0 ? memoriesUsed : undefined,
+        ...(auditConfig && {
+          modelConfig: buildAgentModelConfigAudit(auditConfig),
+        }),
         projectedNextInputTokens,
       });
       // The composer has now unblocked (client reducer flips loading off at
@@ -1700,6 +1727,9 @@ export async function attachRunHost(params: {
         usedLocation,
         usedPersonalization,
         ...(memoriesUsed.length > 0 && { memoriesUsed }),
+        ...(auditConfig && {
+          modelConfig: buildAgentModelConfigAudit(auditConfig),
+        }),
         ...(Object.keys(visibleChartMetadata()).length > 0 && {
           chartSpecs: visibleChartMetadata(),
         }),
@@ -1737,7 +1767,7 @@ export async function attachResumedRunHost(run: Run): Promise<void> {
     usedLocation: priorStats?.usedLocation ?? false,
     usedPersonalization: priorStats?.usedPersonalization ?? false,
     memoriesUsed: [],
-    configSnapshot: null,
+    configSnapshot: run.configSnapshot ?? null,
     isResume: true,
   });
 }

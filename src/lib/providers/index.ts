@@ -27,12 +27,18 @@ import {
   NEGATIVE_CACHE_TTL_MS,
 } from './modelCache';
 import { PROVIDER_METADATA } from './metadata';
+import type { ReasoningEffort } from './reasoningEffort';
 
 export { PROVIDER_METADATA };
+export type { ReasoningEffort } from './reasoningEffort';
 
 export interface ChatModel {
   displayName: string;
   model: BaseChatModel;
+  /** Native named effort levels advertised by this model, if any. */
+  supportedReasoningEfforts?: ReasoningEffort[];
+  /** Provider discovery metadata retained for capability-aware refreshes. */
+  supportedParameters?: string[];
 }
 
 export interface EmbeddingModel {

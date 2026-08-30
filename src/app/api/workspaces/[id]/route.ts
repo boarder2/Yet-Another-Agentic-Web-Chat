@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getWorkspace, updateWorkspace } from '@/lib/workspaces/service';
 import { deleteWorkspace } from '@/lib/workspaces/delete';
+import { WorkspaceInputValidationError } from '@/lib/workspaces/types';
 
 export async function GET(
   _req: NextRequest,
@@ -20,9 +21,16 @@ export async function PATCH(
   const body = await req.json();
   delete body.id;
   delete body.createdAt;
-  const row = await updateWorkspace(id, body);
-  if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  return NextResponse.json({ workspace: row });
+  try {
+    const row = await updateWorkspace(id, body);
+    if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    return NextResponse.json({ workspace: row });
+  } catch (error) {
+    if (error instanceof WorkspaceInputValidationError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    throw error;
+  }
 }
 
 export async function DELETE(

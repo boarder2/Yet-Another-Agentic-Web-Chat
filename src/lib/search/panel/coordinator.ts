@@ -38,6 +38,7 @@ import {
   type PanelUsage,
 } from '@/lib/streaming/events';
 import type { TokenTracker } from '@/lib/tokens/tracker';
+import type { ReasoningEffort } from '@/lib/providers/reasoningEffort';
 import { TurnChartRegistry } from '@/lib/chart/turnChartRegistry';
 import { stripStreamedChartTags } from '@/lib/utils/contentStripping';
 import { neutralizeSpoofedFences } from '@/lib/widgets/envelope';
@@ -101,7 +102,11 @@ export class PanelCoordinator {
   private personaInstructions: string;
   private methodologyInstructions: string;
   private tracker: TokenTracker;
-  private systemModelRef: { provider: string; model: string };
+  private systemModelRef: {
+    provider: string;
+    model: string;
+    reasoningEffort?: ReasoningEffort;
+  };
 
   constructor(params: {
     executors: ResolvedExecutor[];
@@ -118,7 +123,11 @@ export class PanelCoordinator {
     methodologyInstructions?: string;
     tracker: TokenTracker;
     /** Identity of the system model shared by every executor's internal calls. */
-    systemModelRef: { provider: string; name: string };
+    systemModelRef: {
+      provider: string;
+      name: string;
+      reasoningEffort?: ReasoningEffort;
+    };
   }) {
     this.executors = params.executors;
     this.systemLlm = params.systemLlm;
@@ -136,6 +145,9 @@ export class PanelCoordinator {
     this.systemModelRef = {
       provider: params.systemModelRef.provider,
       model: params.systemModelRef.name,
+      ...(params.systemModelRef.reasoningEffort
+        ? { reasoningEffort: params.systemModelRef.reasoningEffort }
+        : {}),
     };
   }
 
@@ -200,6 +212,7 @@ export class PanelCoordinator {
     const chatRecorder = this.tracker.register({
       provider: executor.ref.provider,
       model: executor.ref.name,
+      reasoningEffort: executor.ref.reasoningEffort,
       role: 'chat',
       scope,
     });
@@ -271,10 +284,16 @@ export class PanelCoordinator {
           ...(executor.ref.contextWindowSize !== undefined && {
             contextWindowSize: executor.ref.contextWindowSize,
           }),
+          ...(executor.ref.reasoningEffort
+            ? { reasoningEffort: executor.ref.reasoningEffort }
+            : {}),
         },
         systemModelRef: {
           provider: this.systemModelRef.provider,
           name: this.systemModelRef.model,
+          ...(this.systemModelRef.reasoningEffort
+            ? { reasoningEffort: this.systemModelRef.reasoningEffort }
+            : {}),
         },
         focusMode,
         fileIds,

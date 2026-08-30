@@ -2,7 +2,6 @@ import { registerCancelToken } from '@/lib/cancel-tokens';
 import db from '@/lib/db';
 import { chats, messages as messagesSchema, workspaces } from '@/lib/db/schema';
 import { getChatMessages, getCompactionRows } from '@/lib/db/queries';
-import { resolveChatAndEmbedding } from '@/lib/providers/resolveModels';
 import { getFileDetails } from '@/lib/utils/files';
 import {
   getPersonaInstructionsOnly,
@@ -29,7 +28,11 @@ import { SimplifiedAgent } from '@/lib/search/simplifiedAgent';
 import { createTurnTracker } from '@/lib/tokens/tracker';
 import { emitStreamEvent, onStreamEvent } from '@/lib/streaming/events';
 import { buildWorkspaceSystemPromptSuffix } from '@/lib/workspaces/composeSystemPrompt';
-import { WORKSPACE_MODEL_UNAVAILABLE_MESSAGE } from '@/lib/workspaces/types';
+import {
+  WORKSPACE_MODEL_UNAVAILABLE_MESSAGE,
+  parseWorkspaceModelOverride,
+  workspaceModelOverrideRefs,
+} from '@/lib/workspaces/types';
 import { workspaceLsTool } from '@/lib/tools/workspace/ls';
 import { workspaceGrepTool } from '@/lib/tools/workspace/grep';
 import { workspaceReadTool } from '@/lib/tools/workspace/read';
@@ -48,7 +51,13 @@ import {
   evictByChatId,
 } from '@/lib/runs/runHub';
 import { attachRunHost } from '@/lib/runs/runHost';
-import { resolveModelRef } from '@/lib/providers/resolveModels';
+import {
+  parseModelReference,
+  resolveChatAndEmbedding,
+  resolveModelRef,
+  resolveModelRefWithReference,
+  type ModelRef,
+} from '@/lib/providers/resolveModels';
 import {
   PanelCoordinator,
   type ResolvedExecutor,
@@ -68,16 +77,8 @@ type Message = {
   content: string;
 };
 
-type ChatModel = {
-  provider: string;
-  name: string;
-  contextWindowSize?: number;
-};
-type SystemModel = {
-  provider: string;
-  name: string;
-  contextWindowSize?: number;
-};
+type ChatModel = ModelRef;
+type SystemModel = ModelRef;
 
 type Body = {
   message: Message;
@@ -201,8 +202,8 @@ export const POST = async (req: Request) => {
 
     // Validate panel config up front (when present). An invalid panel is a 400;
     // an absent panel leaves the single-model path byte-for-byte unchanged.
-    const panelConfig = body.panel;
-    if (panelConfig) {
+    let panelConfig = body.panel;
+    if (panelConfig !== undefined && panelConfig !== null) {
       const check = validatePanelConfig(panelConfig);
       if (!check.ok) {
         return Response.json({ error: check.error }, { status: 400 });
@@ -251,19 +252,44 @@ export const POST = async (req: Request) => {
 
     // A workspace with a pinned model set overrides whatever the client sent —
     // enforced server-side so a stale client or direct API call can't bypass it.
-    if (resolvedWorkspace?.modelOverride) {
-      const ov = resolvedWorkspace.modelOverride;
-      body.chatModel = {
-        provider: ov.chatProvider,
-        name: ov.chatModel,
-        contextWindowSize: ov.contextWindowSize,
-      };
-      body.systemModel = {
-        provider: ov.systemProvider,
-        name: ov.systemModel,
-        contextWindowSize: ov.contextWindowSize,
-      };
-      body.imageCapable = ov.imageCapable ?? false;
+    if (
+      resolvedWorkspace &&
+      resolvedWorkspace.modelOverride !== null &&
+      resolvedWorkspace.modelOverride !== undefined
+    ) {
+      let override;
+      try {
+        override = parseWorkspaceModelOverride(resolvedWorkspace.modelOverride);
+      } catch (error) {
+        return Response.json(
+          {
+            error:
+              error instanceof Error
+                ? error.message
+                : 'Invalid workspace model override',
+          },
+          { status: 400 },
+        );
+      }
+      const refs = workspaceModelOverrideRefs(override);
+      body.chatModel = refs.chatModel;
+      body.systemModel = refs.systemModel;
+      body.imageCapable = override.imageCapable ?? false;
+    }
+
+    try {
+      body.chatModel = parseModelReference(body.chatModel);
+      if (body.systemModel !== undefined && body.systemModel !== null) {
+        body.systemModel = parseModelReference(body.systemModel);
+      }
+    } catch (error) {
+      return Response.json(
+        {
+          error:
+            error instanceof Error ? error.message : 'Invalid model reference',
+        },
+        { status: 400 },
+      );
     }
 
     let chatLlm: BaseChatModel | undefined;
@@ -278,6 +304,10 @@ export const POST = async (req: Request) => {
       chatLlm = resolved.chatLlm;
       systemLlm = resolved.systemLlm;
       embedding = resolved.embedding;
+      // Keep request-local effective references in the durable snapshot; the
+      // source workspace/preset/workflow definition is never rewritten.
+      body.chatModel = resolved.chatModelRef;
+      body.systemModel = resolved.systemModelRef;
     } catch (e: unknown) {
       // A pin only sets the chat/system model (never embedding, and system
       // falls back to chat), so the pin is at fault iff the chat model failed —
@@ -292,6 +322,31 @@ export const POST = async (req: Request) => {
           ? e.message
           : 'Invalid model';
       return Response.json({ error: msg }, { status: 400 });
+    }
+
+    if (panelConfig) {
+      const resolvedExecutors = await Promise.all(
+        panelConfig.executors.map(({ imageCapable: _imageCapable, ...ref }) =>
+          resolveModelRefWithReference(ref, { isolate: true }),
+        ),
+      );
+      panelConfig = {
+        ...panelConfig,
+        // Unknown models remain in the config so the existing panel error path
+        // can report them; available models retain their live effective effort.
+        executors: panelConfig.executors.map((ref, index) => {
+          const effective = resolvedExecutors[index]?.ref;
+          return effective
+            ? {
+                ...effective,
+                ...(ref.imageCapable !== undefined
+                  ? { imageCapable: ref.imageCapable }
+                  : {}),
+              }
+            : ref;
+        }),
+      };
+      body.panel = panelConfig;
     }
 
     const aiMessageId = crypto.randomBytes(7).toString('hex');
@@ -606,6 +661,7 @@ export const POST = async (req: Request) => {
       abortController,
       retrievalController,
       chartRegistry,
+      configSnapshot: runConfig,
     });
 
     if (isNew) {
@@ -663,10 +719,13 @@ export const POST = async (req: Request) => {
             // model) can't clobber each other's context window on a shared,
             // catalog-cached singleton.
             const resolved = await Promise.all(
-              panelConfig.executors.map(async (ref) => ({
-                ref,
-                llm: await resolveModelRef(ref, { isolate: true }),
-              })),
+              panelConfig.executors.map(async (executor) => {
+                const { imageCapable: _imageCapable, ...ref } = executor;
+                return {
+                  ref: executor,
+                  llm: await resolveModelRef(ref, { isolate: true }),
+                };
+              }),
             );
             const executors: ResolvedExecutor[] = resolved.filter(
               (e): e is ResolvedExecutor => e.llm !== null,

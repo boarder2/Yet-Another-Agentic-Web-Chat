@@ -3,6 +3,11 @@ import {
   readLocalStorage,
 } from '@/lib/hooks/useLocalStorage';
 import { generateId } from '@/lib/utils/id';
+import {
+  isReasoningEffort,
+  REASONING_EFFORT_LABELS,
+  type ReasoningEffort,
+} from '@/lib/providers/reasoningEffort';
 
 export const PRESETS_KEY = 'modelPresets';
 
@@ -11,6 +16,8 @@ export const SELECTION_KEYS = {
   chatModel: 'chatModel',
   systemProvider: 'systemModelProvider',
   systemModel: 'systemModel',
+  chatReasoningEffort: 'chatReasoningEffort',
+  systemReasoningEffort: 'systemReasoningEffort',
   imageCapable: 'imageCapable',
   contextWindowSize: 'contextWindowSize',
 } as const;
@@ -24,6 +31,9 @@ export interface ModelPreset {
   systemModel: string;
   imageCapable: boolean;
   contextWindowSize: number;
+  /** Omitted means Provider default for the respective role. */
+  chatReasoningEffort?: ReasoningEffort;
+  systemReasoningEffort?: ReasoningEffort;
   createdAt: number;
 }
 
@@ -36,6 +46,9 @@ export interface ActiveSelection {
   systemModel: string;
   imageCapable: boolean;
   contextWindowSize: number;
+  /** Omitted means Provider default for the respective role. */
+  chatReasoningEffort?: ReasoningEffort;
+  systemReasoningEffort?: ReasoningEffort;
 }
 
 export const PRESET_MAX = 50;
@@ -63,6 +76,10 @@ function isValidPreset(p: unknown): p is ModelPreset {
     typeof r.imageCapable === 'boolean' &&
     typeof r.contextWindowSize === 'number' &&
     !isNaN(r.contextWindowSize) &&
+    (r.chatReasoningEffort === undefined ||
+      isReasoningEffort(r.chatReasoningEffort)) &&
+    (r.systemReasoningEffort === undefined ||
+      isReasoningEffort(r.systemReasoningEffort)) &&
     typeof r.createdAt === 'number' &&
     !isNaN(r.createdAt)
   );
@@ -133,10 +150,19 @@ export function presetSummary(p: ModelPreset): string {
       : `${p.contextWindowSize} ctx`;
   const sameModel =
     p.chatModel === p.systemModel && p.chatProvider === p.systemProvider;
+  const effortSummary = [
+    p.chatReasoningEffort
+      ? `chat: ${REASONING_EFFORT_LABELS[p.chatReasoningEffort]}`
+      : '',
+    p.systemReasoningEffort
+      ? `sys: ${REASONING_EFFORT_LABELS[p.systemReasoningEffort]}`
+      : '',
+  ].filter(Boolean);
+  const suffix = effortSummary.length ? ` · ${effortSummary.join(' · ')}` : '';
   if (sameModel) {
-    return `${p.chatModel} · ${ctx}`;
+    return `${p.chatModel} · ${ctx}${suffix}`;
   }
-  return `${p.chatModel} · sys: ${p.systemModel} · ${ctx}`;
+  return `${p.chatModel} · sys: ${p.systemModel} · ${ctx}${suffix}`;
 }
 
 export function findMatchingPreset(
@@ -150,6 +176,10 @@ export function findMatchingPreset(
         p.chatModel === sel.chatModel &&
         p.systemProvider === sel.systemProvider &&
         p.systemModel === sel.systemModel &&
+        (p.chatReasoningEffort ?? undefined) ===
+          (sel.chatReasoningEffort ?? undefined) &&
+        (p.systemReasoningEffort ?? undefined) ===
+          (sel.systemReasoningEffort ?? undefined) &&
         p.imageCapable === sel.imageCapable &&
         p.contextWindowSize === sel.contextWindowSize,
     ) ?? null
@@ -169,6 +199,22 @@ export function captureCurrentSelection(): ActiveSelection {
     systemModel: readLocalStorage(SELECTION_KEYS.systemModel) ?? '',
     imageCapable: readLocalStorage(SELECTION_KEYS.imageCapable) === 'true',
     contextWindowSize: isNaN(cwRaw) ? DEFAULT_CONTEXT_WINDOW : cwRaw,
+    ...(isReasoningEffort(readLocalStorage(SELECTION_KEYS.chatReasoningEffort))
+      ? {
+          chatReasoningEffort: readLocalStorage(
+            SELECTION_KEYS.chatReasoningEffort,
+          ) as ReasoningEffort,
+        }
+      : {}),
+    ...(isReasoningEffort(
+      readLocalStorage(SELECTION_KEYS.systemReasoningEffort),
+    )
+      ? {
+          systemReasoningEffort: readLocalStorage(
+            SELECTION_KEYS.systemReasoningEffort,
+          ) as ReasoningEffort,
+        }
+      : {}),
   };
 }
 
@@ -186,6 +232,8 @@ export interface ModelSelection {
   systemModel: string;
   imageCapable?: boolean;
   contextWindowSize?: number;
+  chatReasoningEffort?: ReasoningEffort;
+  systemReasoningEffort?: ReasoningEffort;
 }
 
 export const DEFAULT_CONTEXT_WINDOW = 32768;
@@ -199,6 +247,12 @@ export function presetToSelection(p: ModelPreset): ModelSelection {
     systemModel: p.systemModel,
     imageCapable: p.imageCapable,
     contextWindowSize: Math.max(512, p.contextWindowSize),
+    ...(p.chatReasoningEffort
+      ? { chatReasoningEffort: p.chatReasoningEffort }
+      : {}),
+    ...(p.systemReasoningEffort
+      ? { systemReasoningEffort: p.systemReasoningEffort }
+      : {}),
   };
 }
 
@@ -219,6 +273,12 @@ export function selectionToPresetInput(
     systemModel: sel.systemModel,
     imageCapable: sel.imageCapable ?? false,
     contextWindowSize: sel.contextWindowSize ?? DEFAULT_CONTEXT_WINDOW,
+    ...(sel.chatReasoningEffort
+      ? { chatReasoningEffort: sel.chatReasoningEffort }
+      : {}),
+    ...(sel.systemReasoningEffort
+      ? { systemReasoningEffort: sel.systemReasoningEffort }
+      : {}),
   };
 }
 
@@ -233,6 +293,12 @@ export function selectionToActiveSelection(
     systemModel: sel.systemModel,
     imageCapable: sel.imageCapable ?? false,
     contextWindowSize: sel.contextWindowSize ?? DEFAULT_CONTEXT_WINDOW,
+    ...(sel.chatReasoningEffort
+      ? { chatReasoningEffort: sel.chatReasoningEffort }
+      : {}),
+    ...(sel.systemReasoningEffort
+      ? { systemReasoningEffort: sel.systemReasoningEffort }
+      : {}),
   };
 }
 
@@ -246,8 +312,10 @@ export function writeSelectionToStorage(sel: ModelSelection): void {
   writeLocalStorageBatch([
     [SELECTION_KEYS.systemProvider, sel.systemProvider],
     [SELECTION_KEYS.systemModel, sel.systemModel],
+    [SELECTION_KEYS.systemReasoningEffort, sel.systemReasoningEffort ?? null],
     [SELECTION_KEYS.chatProvider, sel.chatProvider],
     [SELECTION_KEYS.chatModel, sel.chatModel],
+    [SELECTION_KEYS.chatReasoningEffort, sel.chatReasoningEffort ?? null],
     [SELECTION_KEYS.imageCapable, sel.imageCapable ? 'true' : 'false'],
     [
       SELECTION_KEYS.contextWindowSize,

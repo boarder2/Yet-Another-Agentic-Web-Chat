@@ -9,8 +9,16 @@ import {
   readLocalStorage,
 } from '@/lib/hooks/useLocalStorage';
 import { generateId } from '@/lib/utils/id';
-import type { PanelModelEntry } from '@/lib/panel/panelSelection';
-import { PANEL_MIN, PANEL_MAX, sameModel } from '@/lib/panel/panelSelection';
+import {
+  PANEL_MIN,
+  PANEL_MAX,
+  sameModelConfiguration,
+  type PanelModelEntry,
+} from '@/lib/panel/panelSelection';
+import {
+  modelRefSchema,
+  REASONING_EFFORT_LABELS,
+} from '@/lib/providers/reasoningEffort';
 
 export const PANEL_PRESETS_KEY = 'panelPresets';
 
@@ -27,9 +35,13 @@ export const PANEL_PRESET_MAX = 50;
 export const PANEL_PRESET_NAME_MAX = 60;
 
 function isModelEntry(v: unknown): v is PanelModelEntry {
-  if (typeof v !== 'object' || v === null) return false;
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) return false;
   const r = v as Record<string, unknown>;
-  return typeof r.provider === 'string' && typeof r.name === 'string';
+  const { imageCapable, ...modelRef } = r;
+  return (
+    (imageCapable === undefined || typeof imageCapable === 'boolean') &&
+    modelRefSchema.safeParse(modelRef).success
+  );
 }
 
 export function isValidPanelPreset(p: unknown): p is PanelPreset {
@@ -71,7 +83,12 @@ export function createPanelPreset(
 
 /** Compact one-line summary of a preset for list rows. */
 export function panelPresetSummary(p: PanelPreset): string {
-  const execs = p.executors.map((e) => e.name).join(', ');
+  const execs = p.executors
+    .map(
+      (e) =>
+        `${e.name}${e.reasoningEffort ? ` · ${REASONING_EFFORT_LABELS[e.reasoningEffort]}` : ''}`,
+    )
+    .join(', ');
   return `${p.executors.length} executors (${execs})`;
 }
 
@@ -83,7 +100,9 @@ export function findMatchingPanelPreset(
     list.find(
       (p) =>
         p.executors.length === executors.length &&
-        p.executors.every((pe) => executors.some((e) => sameModel(pe, e))),
+        p.executors.every((pe) =>
+          executors.some((e) => sameModelConfiguration(pe, e)),
+        ),
     ) ?? null
   );
 }

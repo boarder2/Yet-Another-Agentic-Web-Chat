@@ -24,6 +24,10 @@ import {
   PREDEFINED_CONTEXT_SIZES,
 } from '@/lib/models/presets';
 import { cn } from '@/lib/utils';
+import {
+  isReasoningEffort,
+  type ReasoningEffort,
+} from '@/lib/providers/reasoningEffort';
 
 import { SettingsType, SectionKey } from './types';
 import {
@@ -91,6 +95,10 @@ export default function SettingsPanel({
   const [selectedSystemModel, setSelectedSystemModel] = useState<string | null>(
     null,
   );
+  const [selectedChatReasoningEffort, setSelectedChatReasoningEffort] =
+    useState<ReasoningEffort | undefined>(undefined);
+  const [selectedSystemReasoningEffort, setSelectedSystemReasoningEffort] =
+    useState<ReasoningEffort | undefined>(undefined);
   const [selectedEmbeddingModelProvider, setSelectedEmbeddingModelProvider] =
     useState<string | null>(null);
   const [selectedEmbeddingModel, setSelectedEmbeddingModel] = useState<
@@ -229,6 +237,22 @@ export default function SettingsPanel({
       setSelectedChatModel(chatModel);
       setSelectedSystemModelProvider(systemModelProvider);
       setSelectedSystemModel(systemModel);
+      const storedChatReasoningEffort = localStorage.getItem(
+        'chatReasoningEffort',
+      );
+      const storedSystemReasoningEffort = localStorage.getItem(
+        'systemReasoningEffort',
+      );
+      setSelectedChatReasoningEffort(
+        isReasoningEffort(storedChatReasoningEffort)
+          ? storedChatReasoningEffort
+          : undefined,
+      );
+      setSelectedSystemReasoningEffort(
+        isReasoningEffort(storedSystemReasoningEffort)
+          ? storedSystemReasoningEffort
+          : undefined,
+      );
       setSelectedEmbeddingModelProvider(embeddingModelProvider);
       setSelectedEmbeddingModel(embeddingModel);
 
@@ -866,6 +890,10 @@ export default function SettingsPanel({
                     selectedChatModel={selectedChatModel}
                     selectedSystemModelProvider={selectedSystemModelProvider}
                     selectedSystemModel={selectedSystemModel}
+                    selectedChatReasoningEffort={selectedChatReasoningEffort}
+                    selectedSystemReasoningEffort={
+                      selectedSystemReasoningEffort
+                    }
                     contextWindowSize={contextWindowSize}
                     setSelectedChatModelProvider={setSelectedChatModelProvider}
                     setSelectedChatModel={setSelectedChatModel}
@@ -873,6 +901,12 @@ export default function SettingsPanel({
                       setSelectedSystemModelProvider
                     }
                     setSelectedSystemModel={setSelectedSystemModel}
+                    setSelectedChatReasoningEffort={
+                      setSelectedChatReasoningEffort
+                    }
+                    setSelectedSystemReasoningEffort={
+                      setSelectedSystemReasoningEffort
+                    }
                     setContextWindowSize={setContextWindowSize}
                     setIsCustomContextWindow={setIsCustomContextWindow}
                   />

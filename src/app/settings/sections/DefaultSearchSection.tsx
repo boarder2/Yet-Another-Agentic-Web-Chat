@@ -35,6 +35,7 @@ export default function DefaultSearchSection({
         <div className="flex items-center gap-2">
           <div className="flex-1">
             <ModelPicker
+              fields={{ reasoningEffort: false }}
               value={value}
               onChange={(next) =>
                 onModelChange(next.chatProvider, next.chatModel)

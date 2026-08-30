@@ -2,6 +2,7 @@ import {
   getAvailableChatModelProviders,
   getAvailableEmbeddingModelProviders,
 } from '@/lib/providers';
+import type { ChatModel } from '@/lib/providers';
 import { getAvailableImageGenerationModels } from '@/lib/providers/imageGenerationModels';
 
 export const GET = async (req: Request) => {
@@ -20,13 +21,25 @@ export const GET = async (req: Request) => {
     // Build serializable copies without mutating the cached model objects
     const chatResult: Record<
       string,
-      Record<string, { displayName: string }>
+      Record<
+        string,
+        {
+          displayName: string;
+          supportedReasoningEfforts?: ChatModel['supportedReasoningEfforts'];
+        }
+      >
     > = {};
     Object.keys(chatModelProviders).forEach((provider) => {
       chatResult[provider] = {};
       Object.keys(chatModelProviders[provider]).forEach((model) => {
+        const entry = chatModelProviders[provider][model];
         chatResult[provider][model] = {
-          displayName: chatModelProviders[provider][model].displayName,
+          displayName: entry.displayName,
+          ...(entry.supportedReasoningEfforts?.length
+            ? {
+                supportedReasoningEfforts: [...entry.supportedReasoningEfforts],
+              }
+            : {}),
         };
       });
     });

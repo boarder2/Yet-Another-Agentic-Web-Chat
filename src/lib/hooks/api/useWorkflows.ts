@@ -3,12 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api/client';
 import { qk } from '@/lib/api/keys';
-
-interface ModelRef {
-  provider: string;
-  name: string;
-  contextWindowSize?: number;
-}
+import type { ModelRef } from '@/lib/providers/resolveModels';
 
 export interface Workflow {
   id: string;

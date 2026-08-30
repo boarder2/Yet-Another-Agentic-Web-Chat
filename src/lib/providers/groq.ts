@@ -2,6 +2,7 @@ import { ChatGroq } from '@langchain/groq';
 import { getGroqApiKey } from '../config';
 import { ChatModel } from '.';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import { getReasoningEffortMetadata } from './reasoningEffort';
 
 export const PROVIDER_INFO = {
   key: 'groq',
@@ -109,6 +110,7 @@ export const loadGroqChatModels = async () => {
           model: model.id,
           maxRetries: 10,
         }) as unknown as BaseChatModel,
+        ...getReasoningEffortMetadata('groq', model.id),
       };
     });
 

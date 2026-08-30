@@ -75,6 +75,7 @@ import {
   useLocalStorageString,
 } from '@/lib/hooks/useLocalStorage';
 import { DEFAULT_CONTEXT_WINDOW } from '@/lib/models/presets';
+import { isReasoningEffort } from '@/lib/providers/reasoningEffort';
 
 interface ChatModelProvider {
   name: string;
@@ -1394,10 +1395,15 @@ const ChatWindow = ({
       currentChatModelProvider || chatModelProvider.provider;
     const modelName = currentChatModel || chatModelProvider.name;
 
-    // Read System Model selection from localStorage; fallback to chat model
-    const systemModelProvider =
-      localStorage.getItem('systemModelProvider') || modelProvider;
-    const systemModelName = localStorage.getItem('systemModel') || modelName;
+    // An absent System selection means the server should use the complete Chat
+    // reference, including its reasoning effort.
+    const systemModelProvider = localStorage.getItem('systemModelProvider');
+    const systemModelName = localStorage.getItem('systemModel');
+    const hasExplicitSystemModel = Boolean(
+      systemModelProvider && systemModelName,
+    );
+    const chatReasoningEffort = localStorage.getItem('chatReasoningEffort');
+    const systemReasoningEffort = localStorage.getItem('systemReasoningEffort');
 
     const payload: Record<string, unknown> = {
       content: message,
@@ -1413,12 +1419,22 @@ const ChatWindow = ({
         name: modelName,
         provider: modelProvider,
         contextWindowSize,
+        ...(isReasoningEffort(chatReasoningEffort)
+          ? { reasoningEffort: chatReasoningEffort }
+          : {}),
       },
-      systemModel: {
-        name: systemModelName,
-        provider: systemModelProvider,
-        contextWindowSize,
-      },
+      ...(hasExplicitSystemModel
+        ? {
+            systemModel: {
+              name: systemModelName,
+              provider: systemModelProvider,
+              contextWindowSize,
+              ...(isReasoningEffort(systemReasoningEffort)
+                ? { reasoningEffort: systemReasoningEffort }
+                : {}),
+            },
+          }
+        : {}),
       selectedSystemPromptIds: systemPromptIds || [],
       selectedMethodologyId: selectedMethodologyId || undefined,
     };
@@ -1716,9 +1732,15 @@ const ChatWindow = ({
       const chatModelProvider =
         localStorage.getItem('chatModelProvider') || undefined;
       const chatModel = localStorage.getItem('chatModel') || undefined;
-      const systemModelProvider =
-        localStorage.getItem('systemModelProvider') || chatModelProvider;
-      const systemModel = localStorage.getItem('systemModel') || chatModel;
+      const systemModelProvider = localStorage.getItem('systemModelProvider');
+      const systemModel = localStorage.getItem('systemModel');
+      const hasExplicitSystemModel = Boolean(
+        systemModelProvider && systemModel,
+      );
+      const chatReasoningEffort = localStorage.getItem('chatReasoningEffort');
+      const systemReasoningEffort = localStorage.getItem(
+        'systemReasoningEffort',
+      );
 
       const res = await fetch('/api/chat/compact', {
         method: 'POST',
@@ -1732,16 +1754,21 @@ const ChatWindow = ({
                   provider: chatModelProvider,
                   name: chatModel,
                   contextWindowSize,
+                  ...(isReasoningEffort(chatReasoningEffort)
+                    ? { reasoningEffort: chatReasoningEffort }
+                    : {}),
                 }
               : undefined,
-          systemModel:
-            systemModelProvider && systemModel
-              ? {
-                  provider: systemModelProvider,
-                  name: systemModel,
-                  contextWindowSize,
-                }
-              : undefined,
+          systemModel: hasExplicitSystemModel
+            ? {
+                provider: systemModelProvider,
+                name: systemModel,
+                contextWindowSize,
+                ...(isReasoningEffort(systemReasoningEffort)
+                  ? { reasoningEffort: systemReasoningEffort }
+                  : {}),
+              }
+            : undefined,
         }),
       });
       if (res.ok) {

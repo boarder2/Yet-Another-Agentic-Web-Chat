@@ -260,6 +260,7 @@ const WidgetConfigModal = ({
           {/* Provider and Model Selection */}
           <Field grouped label="Model & Provider">
             <ModelPicker
+              fields={{ reasoningEffort: false }}
               value={
                 {
                   chatProvider: selectedModel?.provider ?? '',

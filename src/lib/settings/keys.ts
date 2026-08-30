@@ -25,6 +25,8 @@ export const MIGRATED_SETTING_KEYS = [
   'chatModel',
   'systemModelProvider',
   'systemModel',
+  'chatReasoningEffort',
+  'systemReasoningEffort',
   'imageCapable',
   'contextWindowSize',
   'embeddingModelProvider',

@@ -2,6 +2,7 @@ import { ChatOpenAI } from '@langchain/openai';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { getDeepseekApiKey } from '../config';
 import { ChatModel } from '.';
+import { getReasoningEffortMetadata } from './reasoningEffort';
 
 export const PROVIDER_INFO = {
   key: 'deepseek',
@@ -84,6 +85,7 @@ export const loadDeepseekChatModels = async () => {
             baseURL: 'https://api.deepseek.com',
           },
         }) as unknown as BaseChatModel,
+        ...getReasoningEffortMetadata('deepseek', model.id),
       };
     });
 

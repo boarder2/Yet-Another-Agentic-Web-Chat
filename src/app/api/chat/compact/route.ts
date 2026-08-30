@@ -2,7 +2,11 @@ import db from '@/lib/db';
 import { chats, messages as messagesSchema } from '@/lib/db/schema';
 import { getChatMessages, getCompactionRows } from '@/lib/db/queries';
 import { computeSanitizedContent } from '@/lib/db/sanitizedContent';
-import { resolveChatAndEmbedding } from '@/lib/providers/resolveModels';
+import {
+  parseModelReference,
+  resolveChatAndEmbedding,
+  type ModelRef,
+} from '@/lib/providers/resolveModels';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { eq } from 'drizzle-orm';
 import crypto from 'crypto';
@@ -13,8 +17,8 @@ export const dynamic = 'force-dynamic';
 type CompactBody = {
   chatId: string;
   instructions?: string;
-  chatModel?: { provider: string; name: string; contextWindowSize?: number };
-  systemModel?: { provider: string; name: string; contextWindowSize?: number };
+  chatModel?: ModelRef;
+  systemModel?: ModelRef;
 };
 
 /** Matches the context-usage estimate shown in the UI (ChatWindow contextUsage). */
@@ -61,6 +65,23 @@ export const POST = async (req: Request) => {
 
     if (!chatId) {
       return Response.json({ error: 'chatId is required' }, { status: 400 });
+    }
+
+    try {
+      if (body.chatModel !== undefined) {
+        body.chatModel = parseModelReference(body.chatModel);
+      }
+      if (body.systemModel !== undefined && body.systemModel !== null) {
+        body.systemModel = parseModelReference(body.systemModel);
+      }
+    } catch (error) {
+      return Response.json(
+        {
+          error:
+            error instanceof Error ? error.message : 'Invalid model reference',
+        },
+        { status: 400 },
+      );
     }
 
     // Refuse compaction while a run is active so we don't compact a partial row

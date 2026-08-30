@@ -23,6 +23,8 @@ import AppSwitch from '@/components/ui/AppSwitch';
 import Select from '@/components/ui/Select';
 import { cn } from '@/lib/utils';
 import { IconButton } from '@/components/ui/IconButton';
+import { useModels } from '@/lib/hooks/api/useModels';
+import { ReasoningEffortSummary } from '@/components/models/ReasoningEffortField';
 
 type Values = Record<string, string | string[]>;
 
@@ -36,6 +38,8 @@ export default function ScheduleEditor({
   const router = useRouter();
   const create = useCreateSchedule(workflow.id);
   const patch = usePatchSchedule();
+  const { data: modelsData, isFetched } = useModels();
+  const capabilitiesLoaded = isFetched || modelsData !== undefined;
 
   const [label, setLabel] = useState(schedule?.label ?? '');
   const [cron, setCron] = useState(schedule?.cronExpression ?? '0 8 * * *');
@@ -55,6 +59,13 @@ export default function ScheduleEditor({
   const fields = parseWorkflowTemplate(workflow.prompt).fields;
   const missing = missingRequired(fields, values);
   const saving = create.isPending || patch.isPending;
+  const systemModel = workflow.systemModel ?? workflow.chatModel;
+  const chatModelInfo =
+    modelsData?.chatModelProviders[workflow.chatModel.provider]?.[
+      workflow.chatModel.name
+    ];
+  const systemModelInfo =
+    modelsData?.chatModelProviders[systemModel.provider]?.[systemModel.name];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -148,6 +159,50 @@ export default function ScheduleEditor({
             </div>
           </Field>
         )}
+
+        <Field grouped label="Models">
+          <div className="space-y-2 rounded-surface border border-surface-2 p-3">
+            <div className="flex items-center justify-between gap-3 text-xs">
+              <span className="text-fg-subtle">Chat</span>
+              <span
+                className="truncate text-right text-fg/90"
+                title={`${workflow.chatModel.provider}/${workflow.chatModel.name}`}
+              >
+                {chatModelInfo?.displayName ?? workflow.chatModel.name} ·{' '}
+                {workflow.chatModel.provider}
+              </span>
+            </div>
+            <ReasoningEffortSummary
+              label="Chat effort"
+              value={workflow.chatModel.reasoningEffort}
+              supported={chatModelInfo?.supportedReasoningEfforts}
+              capabilityKnown={capabilitiesLoaded}
+            />
+            <div className="flex items-center justify-between gap-3 text-xs">
+              <span className="text-fg-subtle">
+                {workflow.systemModel ? 'System' : 'System (Chat fallback)'}
+              </span>
+              <span
+                className="truncate text-right text-fg/90"
+                title={`${systemModel.provider}/${systemModel.name}`}
+              >
+                {systemModelInfo?.displayName ?? systemModel.name} ·{' '}
+                {systemModel.provider}
+              </span>
+            </div>
+            <ReasoningEffortSummary
+              label="System effort"
+              value={systemModel.reasoningEffort}
+              supported={systemModelInfo?.supportedReasoningEfforts}
+              capabilityKnown={capabilitiesLoaded}
+            />
+            <p className="text-xs text-fg-muted">
+              This schedule uses the workflow&apos;s saved model settings. Edit
+              the workflow to change them; any stale named effort is clamped at
+              run time without rewriting the saved definition.
+            </p>
+          </div>
+        </Field>
 
         <Field grouped label="Retention (optional)">
           <Select

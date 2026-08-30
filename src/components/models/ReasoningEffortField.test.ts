@@ -30,7 +30,7 @@ function selectElement(
 }
 
 describe('ReasoningEffortField', () => {
-  it('renders an accessible native selector with Provider default and only supported levels', () => {
+  it('renders an accessible native selector with default and only supported levels', () => {
     const markup = renderToStaticMarkup(
       createElement(ReasoningEffortField, {
         label: 'Chat reasoning effort',
@@ -44,8 +44,16 @@ describe('ReasoningEffortField', () => {
     expect(markup).toContain('aria-label="Chat reasoning effort"');
     expect(markup).toContain('Chat reasoning effort');
     expect(markup).toContain('Provider default lets the model choose');
-    expect(markup).toContain('<option value="">Provider default</option>');
+    expect(markup).toContain('<option value="">default</option>');
     expect(markup).toContain('<option value="low"');
+
+    const labelPosition = markup.indexOf('Chat reasoning effort');
+    const hintPosition = markup.indexOf(
+      'Provider default lets the model choose',
+    );
+    const selectPosition = markup.indexOf('<select');
+    expect(labelPosition).toBeLessThan(hintPosition);
+    expect(hintPosition).toBeLessThan(selectPosition);
     expect(markup).toContain('>Low</option>');
     expect(markup).toContain('<option value="high"');
     expect(markup).toContain('>High</option>');
@@ -81,7 +89,7 @@ describe('ReasoningEffortField', () => {
 
     expect(select.props.value).toBe('max');
     expect(select.props.options).toEqual([
-      { value: '', label: 'Provider default' },
+      { value: '', label: 'default' },
       { value: 'low', label: 'Low' },
       { value: 'medium', label: 'Medium' },
       { value: 'max', label: 'Max (saved; uses Medium)' },

@@ -134,7 +134,7 @@ export default function ReasoningEffortField({
   const effective = clampReasoningEffort(value, supported);
   const stale = value !== undefined && effective !== value;
   const options = [
-    { value: '', label: 'Provider default' },
+    { value: '', label: 'default' },
     ...REASONING_EFFORT_OPTIONS.filter((option) =>
       supported?.includes(option.value),
     ),
@@ -152,11 +152,7 @@ export default function ReasoningEffortField({
     : 'Provider default lets the model choose its native reasoning behavior.';
 
   return (
-    <Field
-      label={label}
-      hint={hint}
-      className="flex-row items-center justify-between gap-2"
-    >
+    <Field label={label} hint={hint} layout="horizontal">
       <Select
         aria-label={ariaLabel}
         value={value ?? ''}
@@ -165,7 +161,7 @@ export default function ReasoningEffortField({
           onChange?.(next && isReasoningEffort(next) ? next : undefined);
         }}
         options={options}
-        className="max-w-[60%] text-xs px-2 py-1.5"
+        className="w-full text-xs px-2 py-1.5 sm:w-auto sm:max-w-[60%]"
       />
     </Field>
   );

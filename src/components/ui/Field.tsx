@@ -23,36 +23,56 @@ interface FieldProps {
   error?: ReactNode;
   /** Use a fieldset when the children contain more than one control. */
   grouped?: boolean;
+  /** Place a single control beside its label and hint on wider surfaces. */
+  layout?: 'stacked' | 'horizontal';
   className?: string;
   children: ReactNode;
 }
 
 /**
- * Single-control fields use an implicit label. Composite fields use a
- * fieldset/legend instead, so several controls are never nested in one label.
- * Captions stay outside the label and are exposed through FieldContext.
+ * Stacked single-control fields use an implicit label. Horizontal fields expose
+ * the label through FieldContext so the control can sit beside its label and
+ * hint. Composite fields use a fieldset/legend instead. Captions are exposed
+ * through FieldContext for every layout.
  */
 const Field = ({
   label,
   hint,
   error,
   grouped = false,
+  layout = 'stacked',
   className,
   children,
 }: FieldProps) => {
   const fieldId = useId();
+  const horizontal = !grouped && layout === 'horizontal';
   const labelId = `${fieldId}-label`;
   const captionId = `${fieldId}-caption`;
   const caption = error ?? hint;
   const contextValue = {
     describedBy: caption ? captionId : undefined,
     invalid: !!error,
-    labelId: grouped ? labelId : undefined,
+    labelId: grouped || horizontal ? labelId : undefined,
     grouped,
   };
+  const captionElement = caption ? (
+    <p
+      id={captionId}
+      className={cn('text-xs', error ? 'text-danger' : 'text-fg-muted')}
+    >
+      {caption}
+    </p>
+  ) : null;
 
   return (
-    <div className={cn('flex flex-col gap-1.5', !grouped && className)}>
+    <div
+      className={cn(
+        horizontal
+          ? 'flex flex-col gap-1.5 sm:flex-row sm:items-start sm:justify-between sm:gap-2'
+          : 'flex flex-col gap-1.5',
+        !grouped && className,
+      )}
+    >
       {grouped ? (
         <fieldset
           className={cn(
@@ -69,6 +89,18 @@ const Field = ({
             {children}
           </FieldContext.Provider>
         </fieldset>
+      ) : horizontal ? (
+        <>
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <span id={labelId} className="text-sm font-medium text-fg">
+              {label}
+            </span>
+            {captionElement}
+          </div>
+          <FieldContext.Provider value={contextValue}>
+            {children}
+          </FieldContext.Provider>
+        </>
       ) : (
         <label className="flex flex-col gap-1.5">
           <span id={labelId} className="text-sm font-medium text-fg">
@@ -79,14 +111,7 @@ const Field = ({
           </FieldContext.Provider>
         </label>
       )}
-      {caption && (
-        <p
-          id={captionId}
-          className={cn('text-xs', error ? 'text-danger' : 'text-fg-muted')}
-        >
-          {caption}
-        </p>
-      )}
+      {!horizontal && captionElement}
     </div>
   );
 };

@@ -7,12 +7,10 @@ import {
   getCustomOpenaiModelName,
 } from '../config';
 import { ChatOpenAI } from '@langchain/openai';
-import { loadGroqChatModels } from './groq';
 import { loadAnthropicChatModels } from './anthropic';
 import { loadGeminiChatModels, loadGeminiEmbeddingModels } from './gemini';
 import { loadTransformersEmbeddingsModels } from './transformers';
 import { loadDeepseekChatModels } from './deepseek';
-import { loadAimlApiChatModels, loadAimlApiEmbeddingModels } from './aimlapi';
 import {
   loadLMStudioChatModels,
   loadLMStudioEmbeddingsModels,
@@ -51,11 +49,9 @@ export const chatModelProviders: Record<
   () => Promise<Record<string, ChatModel>>
 > = {
   openai: loadOpenAIChatModels,
-  groq: loadGroqChatModels,
   anthropic: loadAnthropicChatModels,
   gemini: loadGeminiChatModels,
   deepseek: loadDeepseekChatModels,
-  aimlapi: loadAimlApiChatModels,
   lmstudio: loadLMStudioChatModels,
   openrouter: loadOpenrouterChatModels,
 };
@@ -67,7 +63,6 @@ export const embeddingModelProviders: Record<
   openai: loadOpenAIEmbeddingModels,
   gemini: loadGeminiEmbeddingModels,
   transformers: loadTransformersEmbeddingsModels,
-  aimlapi: loadAimlApiEmbeddingModels,
   lmstudio: loadLMStudioEmbeddingsModels,
 };
 

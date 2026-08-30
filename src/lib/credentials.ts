@@ -11,14 +11,12 @@ import {
 } from '@/lib/encryption';
 import { readLegacyCredentialsConfig } from '@/lib/config';
 
-/** The 11 provider/search API keys stored encrypted in the `credentials` table. */
+/** The 9 active provider/search API keys stored encrypted in the `credentials` table. */
 export const CREDENTIAL_KEYS = [
   'model.openai',
-  'model.groq',
   'model.anthropic',
   'model.gemini',
   'model.deepseek',
-  'model.aimlapi',
   'model.openrouter',
   'model.customOpenai',
   'search.braveSearch',
@@ -27,6 +25,9 @@ export const CREDENTIAL_KEYS = [
 ] as const;
 
 export type CredentialKey = (typeof CREDENTIAL_KEYS)[number];
+
+/** Credential rows retired with their providers; removed directly at startup. */
+export const RETIRED_CREDENTIAL_KEYS = ['model.groq', 'model.aimlapi'] as const;
 
 /**
  * Read + decrypt a credential. Returns `''` if no row exists, if no
@@ -71,6 +72,13 @@ export function setCredential(key: CredentialKey, plaintext: string | null) {
       set: { value, updatedAt: new Date() },
     })
     .run();
+}
+
+/** Remove credential rows for providers no longer supported by the application. */
+export function purgeRetiredCredentials(): void {
+  for (const key of RETIRED_CREDENTIAL_KEYS) {
+    db.delete(credentials).where(eq(credentials.key, key)).run();
+  }
 }
 
 /**

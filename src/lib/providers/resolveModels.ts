@@ -239,9 +239,6 @@ export function applyReasoningEffort(
       }
       break;
     }
-    case 'groq':
-      cloned.reasoningEffort = request.reasoning_effort;
-      break;
     case 'deepseek': {
       const current = asObject(cloned.modelKwargs);
       const { reasoning_effort: _ignored, ...withoutEffort } = current;

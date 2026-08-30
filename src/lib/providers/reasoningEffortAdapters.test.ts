@@ -4,7 +4,6 @@ const mocks = vi.hoisted(() => ({
   getOpenaiApiKey: vi.fn(() => 'openai-key'),
   getAnthropicApiKey: vi.fn(() => 'anthropic-key'),
   getGeminiApiKey: vi.fn(() => 'gemini-key'),
-  getGroqApiKey: vi.fn(() => 'groq-key'),
   getDeepseekApiKey: vi.fn(() => 'deepseek-key'),
 }));
 
@@ -13,7 +12,6 @@ vi.mock('../config', () => mocks);
 import { loadAnthropicChatModels } from './anthropic';
 import { loadDeepseekChatModels } from './deepseek';
 import { loadGeminiChatModels } from './gemini';
-import { loadGroqChatModels } from './groq';
 import { loadOpenAIChatModels } from './openai';
 
 const jsonResponse = (body: unknown) =>
@@ -30,7 +28,6 @@ describe('direct provider capability discovery', () => {
     mocks.getOpenaiApiKey.mockReturnValue('openai-key');
     mocks.getAnthropicApiKey.mockReturnValue('anthropic-key');
     mocks.getGeminiApiKey.mockReturnValue('gemini-key');
-    mocks.getGroqApiKey.mockReturnValue('groq-key');
     mocks.getDeepseekApiKey.mockReturnValue('deepseek-key');
     vi.stubGlobal('fetch', fetchMock);
   });
@@ -138,50 +135,6 @@ describe('direct provider capability discovery', () => {
     expect(models['gemini-2.5-flash']).not.toHaveProperty(
       'supportedReasoningEfforts',
     );
-  });
-
-  it('annotates only Groq models with documented named effort support', async () => {
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse({
-        object: 'list',
-        data: [
-          {
-            id: 'openai/gpt-oss-20b',
-            owned_by: 'openai',
-            active: true,
-          },
-          {
-            id: 'qwen/qwen3.8-27b',
-            owned_by: 'qwen',
-            active: true,
-          },
-          {
-            id: 'llama-3.3-70b-versatile',
-            owned_by: 'meta',
-            active: true,
-          },
-          { id: 'openai/gpt-oss-120b', owned_by: 'openai', active: false },
-        ],
-      }),
-    );
-
-    const models = await loadGroqChatModels();
-
-    expect(models['openai/gpt-oss-20b'].supportedReasoningEfforts).toEqual([
-      'low',
-      'medium',
-      'high',
-    ]);
-    expect(models['qwen/qwen3.8-27b'].supportedReasoningEfforts).toEqual([
-      'off',
-      'low',
-      'medium',
-      'high',
-    ]);
-    expect(models['llama-3.3-70b-versatile']).not.toHaveProperty(
-      'supportedReasoningEfforts',
-    );
-    expect(models).not.toHaveProperty('openai/gpt-oss-120b');
   });
 
   it('annotates DeepSeek V4 profiles and leaves legacy models at Provider default', async () => {

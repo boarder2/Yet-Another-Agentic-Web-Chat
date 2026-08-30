@@ -34,7 +34,11 @@ const snapshot = (): AgentRunConfig =>
     panel: {
       executors: [
         { provider: 'openai', name: 'gpt-5-mini', reasoningEffort: 'medium' },
-        { provider: 'groq', name: 'qwen/qwen3.8-27b', reasoningEffort: 'off' },
+        {
+          provider: 'deepseek',
+          name: 'deepseek-v4-flash',
+          reasoningEffort: 'off',
+        },
       ],
     },
   }) as AgentRunConfig;

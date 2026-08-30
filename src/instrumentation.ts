@@ -41,6 +41,19 @@ export async function register() {
       );
     }
 
+    // Retired provider credentials are removed without decrypting them. This
+    // must run even when encryption is not configured so legacy rows cannot
+    // remain available for a later migration or be reseeded from config.toml.
+    try {
+      const { purgeRetiredCredentials } = await import('./lib/credentials');
+      purgeRetiredCredentials();
+    } catch (err) {
+      console.error(
+        '[credentials] Failed to purge retired provider credentials:',
+        err,
+      );
+    }
+
     // Encryption-at-rest boot sequence. The passphrase is required and never
     // auto-generated — if it's unset, skip the migrations (nothing to encrypt
     // into) and log a single actionable warning; the app itself blocks usage

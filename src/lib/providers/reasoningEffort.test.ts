@@ -7,7 +7,6 @@ import {
   clampReasoningEffort,
   getNativeReasoningEffortConfig,
   getNativeReasoningEffortProfile,
-  getReasoningEffortMetadata,
   getSupportedReasoningEfforts,
   isReasoningEffort,
   normalizeReasoningEfforts,
@@ -91,11 +90,6 @@ describe('reasoning effort contract', () => {
       'medium',
       'high',
     ]);
-    expect(getSupportedReasoningEfforts('groq', 'openai/gpt-oss-20b')).toEqual([
-      'low',
-      'medium',
-      'high',
-    ]);
     expect(
       getSupportedReasoningEfforts('deepseek', 'deepseek-v4-flash'),
     ).toEqual(['off', 'low', 'high', 'max']);
@@ -108,7 +102,16 @@ describe('reasoning effort contract', () => {
     expect(
       getSupportedReasoningEfforts('gemini', 'gemini-3-flash-image-preview'),
     ).toBeUndefined();
-    expect(getReasoningEffortMetadata('aimlapi', 'gpt-5.4')).toEqual({});
+  });
+
+  it('does not advertise native effort controls for retired providers', () => {
+    expect(getSupportedReasoningEfforts('groq', 'openai/gpt-oss-20b')).toBe(
+      undefined,
+    );
+    expect(getSupportedReasoningEfforts('aimlapi', 'gpt-5.4')).toBeUndefined();
+    expect(
+      getNativeReasoningEffortConfig('groq', 'openai/gpt-oss-20b', 'high'),
+    ).toBeUndefined();
   });
 
   it('uses OpenRouter discovery metadata and model exceptions without opting in budget controls', () => {
@@ -209,20 +212,6 @@ describe('native reasoning effort request fragments', () => {
       model: 'gemini-3-flash',
       effort: 'off' as const,
       request: {},
-    },
-    {
-      provider: 'groq',
-      model: 'openai/gpt-oss-20b',
-      effort: 'high' as const,
-      nativeEffort: 'high',
-      request: { reasoning_effort: 'high' },
-    },
-    {
-      provider: 'groq',
-      model: 'openai/gpt-oss-20b',
-      effort: 'off' as const,
-      nativeEffort: 'none',
-      request: { reasoning_effort: 'none' },
     },
     {
       provider: 'deepseek',

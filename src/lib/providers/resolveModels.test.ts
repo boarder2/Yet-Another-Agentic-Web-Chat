@@ -1,7 +1,6 @@
 import { ChatAnthropic } from '@langchain/anthropic';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
-import { ChatGroq } from '@langchain/groq';
 import { ChatOpenAI } from '@langchain/openai';
 import { ChatOpenRouter } from '@langchain/openrouter';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -85,14 +84,6 @@ const freshModels = () => [
     }) as unknown as BaseChatModel,
   },
   {
-    provider: 'groq',
-    name: 'qwen/qwen3.8-27b',
-    model: new ChatGroq({
-      apiKey: 'groq-key',
-      model: 'qwen/qwen3.8-27b',
-    }) as unknown as BaseChatModel,
-  },
-  {
     provider: 'deepseek',
     name: 'deepseek-v4-flash',
     model: new ChatOpenAI({
@@ -130,9 +121,6 @@ describe('request-local reasoning effort binding', () => {
             thinkingLevel: 'HIGH',
           });
           break;
-        case 'groq':
-          expect(params.reasoning_effort).toBe('high');
-          break;
         case 'deepseek':
           expect(params.reasoning_effort).toBe('high');
           expect(params.thinking).toEqual({ type: 'enabled' });
@@ -164,9 +152,6 @@ describe('request-local reasoning effort binding', () => {
           expect(asRecord(params.generationConfig).thinkingConfig).toEqual({
             thinkingLevel: 'MINIMAL',
           });
-          break;
-        case 'groq':
-          expect(params.reasoning_effort).toBe('none');
           break;
         case 'deepseek':
           expect(params.thinking).toEqual({ type: 'disabled' });

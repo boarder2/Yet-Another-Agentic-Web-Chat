@@ -199,7 +199,7 @@ export function withoutReasoningEffort<T extends object>(
 }
 
 export type ReasoningEffortProvider =
-  'openrouter' | 'openai' | 'anthropic' | 'gemini' | 'groq' | 'deepseek';
+  'openrouter' | 'openai' | 'anthropic' | 'gemini' | 'deepseek';
 
 export interface NativeReasoningEffortProfile {
   readonly provider: ReasoningEffortProvider;
@@ -306,15 +306,10 @@ const GEMINI_LOW_HIGH_LEVELS = [
   'high',
 ] as const satisfies readonly ReasoningEffort[];
 
-const GROQ_OFF_LEVELS = ['off'] as const satisfies readonly ReasoningEffort[];
-const GROQ_LOW_TO_HIGH_LEVELS = [
+const GPT_OSS_LOW_TO_HIGH_LEVELS = [
   'low',
   'medium',
   'high',
-] as const satisfies readonly ReasoningEffort[];
-const GROQ_OFF_TO_HIGH_LEVELS = [
-  'off',
-  ...GROQ_LOW_TO_HIGH_LEVELS,
 ] as const satisfies readonly ReasoningEffort[];
 
 const DEEPSEEK_LEVELS = [
@@ -485,11 +480,6 @@ const DIRECT_REASONING_EFFORT_PROFILES: readonly NativeReasoningEffortProfile[] 
       GEMINI_LOW_HIGH_LEVELS,
     ),
 
-    profile('groq', /^openai\/gpt-oss-(?:20b|120b)$/i, GROQ_LOW_TO_HIGH_LEVELS),
-    profile('groq', /^qwen\/qwen3\.6-27b$/i, GROQ_OFF_LEVELS),
-    profile('groq', /^qwen\/qwen3\.8-27b$/i, GROQ_OFF_TO_HIGH_LEVELS),
-    profile('groq', /^qwen\/qwen3-32b$/i, GROQ_OFF_TO_HIGH_LEVELS),
-
     profile(
       'deepseek',
       /^deepseek-v4-(?:flash|pro)(?:-(?:latest|0731|0813))?(?:-vision-exp)?$/i,
@@ -555,7 +545,7 @@ const OPENROUTER_REASONING_EFFORT_PROFILES: readonly NativeReasoningEffortProfil
     profile(
       'openrouter',
       /^openai\/gpt-oss-(?:20b|120b)$/i,
-      GROQ_LOW_TO_HIGH_LEVELS,
+      GPT_OSS_LOW_TO_HIGH_LEVELS,
     ),
 
     profile(
@@ -873,7 +863,6 @@ const NATIVE_PROVIDERS: ReadonlySet<string> = new Set([
   'openai',
   'anthropic',
   'gemini',
-  'groq',
   'deepseek',
 ]);
 
@@ -943,16 +932,6 @@ export function getNativeReasoningEffortConfig(
                 thinkingConfig: { thinkingLevel: effort.toUpperCase() },
               },
             },
-    };
-  }
-
-  if (normalizedProvider === 'groq') {
-    const nativeEffort = effort === 'off' ? 'none' : effort;
-    return {
-      provider: nativeProvider,
-      effort,
-      nativeEffort,
-      request: { reasoning_effort: nativeEffort },
     };
   }
 

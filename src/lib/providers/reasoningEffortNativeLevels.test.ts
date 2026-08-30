@@ -10,7 +10,6 @@ const scenarios = [
   { provider: 'openai', model: 'gpt-5.4' },
   { provider: 'anthropic', model: 'claude-opus-4-6' },
   { provider: 'gemini', model: 'gemini-3-flash' },
-  { provider: 'groq', model: 'qwen/qwen3.8-27b' },
   { provider: 'deepseek', model: 'deepseek-v4-flash' },
 ] as const;
 
@@ -36,8 +35,6 @@ function expectedRequest(
           thinkingConfig: { thinkingLevel: effort.toUpperCase() },
         },
       };
-    case 'groq':
-      return { reasoning_effort: effort === 'off' ? 'none' : effort };
     case 'deepseek':
       return effort === 'off'
         ? { thinking: { type: 'disabled' } }

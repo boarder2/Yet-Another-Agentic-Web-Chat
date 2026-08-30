@@ -21,13 +21,10 @@ const mocks = vi.hoisted(() => {
     }),
     loadOpenAIChatModels: vi.fn(async () => ({})),
     loadOpenAIEmbeddingModels: vi.fn(async () => ({})),
-    loadGroqChatModels: vi.fn(async () => ({})),
     loadAnthropicChatModels: vi.fn(async () => ({})),
     loadGeminiChatModels: vi.fn(async () => ({})),
     loadGeminiEmbeddingModels: vi.fn(async () => ({})),
     loadDeepseekChatModels: vi.fn(async () => ({})),
-    loadAimlApiChatModels: vi.fn(async () => ({})),
-    loadAimlApiEmbeddingModels: vi.fn(async () => ({})),
     loadLMStudioChatModels: vi.fn(async () => ({})),
     loadLMStudioEmbeddingsModels: vi.fn(async () => ({})),
     loadTransformersEmbeddingsModels: vi.fn(async () => ({})),
@@ -46,7 +43,6 @@ vi.mock('./openai', () => ({
   loadOpenAIChatModels: mocks.loadOpenAIChatModels,
   loadOpenAIEmbeddingModels: mocks.loadOpenAIEmbeddingModels,
 }));
-vi.mock('./groq', () => ({ loadGroqChatModels: mocks.loadGroqChatModels }));
 vi.mock('./anthropic', () => ({
   loadAnthropicChatModels: mocks.loadAnthropicChatModels,
 }));
@@ -56,10 +52,6 @@ vi.mock('./gemini', () => ({
 }));
 vi.mock('./deepseek', () => ({
   loadDeepseekChatModels: mocks.loadDeepseekChatModels,
-}));
-vi.mock('./aimlapi', () => ({
-  loadAimlApiChatModels: mocks.loadAimlApiChatModels,
-  loadAimlApiEmbeddingModels: mocks.loadAimlApiEmbeddingModels,
 }));
 vi.mock('./lmstudio', () => ({
   loadLMStudioChatModels: mocks.loadLMStudioChatModels,
@@ -92,9 +84,22 @@ vi.mock('@/lib/settings/server', () => ({
   getHiddenModels: mocks.getHiddenModels,
 }));
 
-import { getAvailableChatModelProviders } from './index';
+import {
+  chatModelProviders,
+  embeddingModelProviders,
+  getAvailableChatModelProviders,
+  PROVIDER_METADATA,
+} from './index';
 
 describe('chat model capability cache and refresh', () => {
+  it('does not register retired providers in discovery or metadata', () => {
+    expect(chatModelProviders).not.toHaveProperty('groq');
+    expect(chatModelProviders).not.toHaveProperty('aimlapi');
+    expect(embeddingModelProviders).not.toHaveProperty('aimlapi');
+    expect(PROVIDER_METADATA).not.toHaveProperty('groq');
+    expect(PROVIDER_METADATA).not.toHaveProperty('aimlapi');
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.chatCache.clear();

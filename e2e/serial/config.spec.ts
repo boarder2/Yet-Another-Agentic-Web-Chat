@@ -49,6 +49,20 @@ test.describe('GET /api/config', () => {
     expect(typeof body.embeddingModelProviders).toBe('object');
   });
 
+  test('omits retired provider credentials and model providers', async ({
+    request,
+  }) => {
+    const res = await request.get('/api/config');
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+
+    expect(body).not.toHaveProperty('groqApiKey');
+    expect(body).not.toHaveProperty('aimlApiKey');
+    expect(body.chatModelProviders).not.toHaveProperty('groq');
+    expect(body.chatModelProviders).not.toHaveProperty('aimlapi');
+    expect(body.embeddingModelProviders).not.toHaveProperty('aimlapi');
+  });
+
   test('masks a configured api key with the sentinel', async ({ request }) => {
     const fakeKey = 'sk-test-fake-key-masking-check';
     await request.post('/api/config', { data: { openaiApiKey: fakeKey } });
@@ -65,8 +79,8 @@ test.describe('GET /api/config', () => {
 
   test('clearing an api key makes it falsy in GET', async ({ request }) => {
     // Create BOTH branches deterministically: set → sentinel, clear → falsy.
-    const key = 'aimlApiKey';
-    const knownValue = 'sk-test-aiml-branch-check';
+    const key = 'deepseekApiKey';
+    const knownValue = 'sk-test-deepseek-branch-check';
 
     // Set the key
     await request.post('/api/config', { data: { [key]: knownValue } });
@@ -151,26 +165,43 @@ test.describe('POST /api/config', () => {
     expect(body.message).toBe('Config updated');
   });
 
+  test('ignores retired provider credential fields', async ({ request }) => {
+    const res = await request.post('/api/config', {
+      data: {
+        groqApiKey: 'sk-retired-groq-should-not-save',
+        aimlApiKey: 'sk-retired-aiml-should-not-save',
+      },
+    });
+    expect(res.status()).toBe(200);
+    expect((await res.json()).message).toBe('Config updated');
+
+    const configRes = await request.get('/api/config');
+    expect(configRes.status()).toBe(200);
+    const body = await configRes.json();
+    expect(body).not.toHaveProperty('groqApiKey');
+    expect(body).not.toHaveProperty('aimlApiKey');
+  });
+
   test('masked sentinel in POST preserves the existing key', async ({
     request,
   }) => {
     const fakeKey = 'sk-test-preserve-check';
     // Set a key
-    await request.post('/api/config', { data: { groqApiKey: fakeKey } });
+    await request.post('/api/config', { data: { deepseekApiKey: fakeKey } });
 
     try {
       // POST the sentinel — must NOT clear the key
       await request.post('/api/config', {
-        data: { groqApiKey: MASKED_SECRET },
+        data: { deepseekApiKey: MASKED_SECRET },
       });
 
       const res = await request.get('/api/config');
       expect(res.status()).toBe(200);
       const body = await res.json();
       // Key still set → must still be masked
-      expect(body.groqApiKey).toBe(MASKED_SECRET);
+      expect(body.deepseekApiKey).toBe(MASKED_SECRET);
     } finally {
-      await request.post('/api/config', { data: { groqApiKey: '' } });
+      await request.post('/api/config', { data: { deepseekApiKey: '' } });
     }
   });
 

@@ -93,7 +93,11 @@ const makeConfig = (): AgentRunConfig =>
     panel: {
       executors: [
         { provider: 'openai', name: 'gpt-5-mini', reasoningEffort: 'medium' },
-        { provider: 'groq', name: 'qwen/qwen3.8-27b', reasoningEffort: 'off' },
+        {
+          provider: 'deepseek',
+          name: 'deepseek-v4-flash',
+          reasoningEffort: 'off',
+        },
       ],
     },
   });
@@ -196,8 +200,8 @@ describe('run host model configuration audit', () => {
                 reasoningEffort: 'medium',
               },
               {
-                provider: 'groq',
-                name: 'qwen/qwen3.8-27b',
+                provider: 'deepseek',
+                name: 'deepseek-v4-flash',
                 reasoningEffort: 'off',
               },
             ],

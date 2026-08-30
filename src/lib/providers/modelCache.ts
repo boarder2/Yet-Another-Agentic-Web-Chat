@@ -1,12 +1,10 @@
 import {
-  getAimlApiKey,
   getAnthropicApiKey,
   getCustomOpenaiApiKey,
   getCustomOpenaiApiUrl,
   getCustomOpenaiModelName,
   getDeepseekApiKey,
   getGeminiApiKey,
-  getGroqApiKey,
   getLMStudioApiEndpoint,
   getOpenaiApiKey,
   getOpenrouterApiKey,
@@ -35,16 +33,12 @@ const providerSignature = (provider: string): string => {
   switch (provider) {
     case 'openai':
       return getOpenaiApiKey() || '';
-    case 'groq':
-      return getGroqApiKey() || '';
     case 'anthropic':
       return getAnthropicApiKey() || '';
     case 'gemini':
       return getGeminiApiKey() || '';
     case 'deepseek':
       return getDeepseekApiKey() || '';
-    case 'aimlapi':
-      return getAimlApiKey() || '';
     case 'lmstudio':
       return getLMStudioApiEndpoint() || '';
     case 'openrouter':

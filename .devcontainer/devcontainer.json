@@ -1,6 +1,8 @@
 {
   "name": "YAAWC",
-  "build": { "dockerfile": "Dockerfile" },
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
   // Ignored when cloning into a named volume; VS Code mounts the clone volume at /workspaces itself.
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/YAAWC,type=bind,consistency=cached",
   "workspaceFolder": "/workspaces/YAAWC",
@@ -42,8 +44,7 @@
       "extensions": [
         "dbaeumer.vscode-eslint",
         "esbenp.prettier-vscode",
-        "bradlc.vscode-tailwindcss",
-        "anthropic.claude-code"
+        "bradlc.vscode-tailwindcss"
       ]
     }
   },

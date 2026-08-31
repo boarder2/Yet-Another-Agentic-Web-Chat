@@ -243,6 +243,11 @@ const ModelConfigRows: React.FC<{
     effort ? REASONING_EFFORT_LABELS[effort] : 'Provider default';
   const modelLabel = (ref: { provider: string; name: string }) =>
     `${ref.name} · ${ref.provider}`;
+  const modelEffortLabel = (ref: {
+    provider: string;
+    name: string;
+    reasoningEffort?: keyof typeof REASONING_EFFORT_LABELS;
+  }) => `${modelLabel(ref)} · ${effortLabel(ref.reasoningEffort)}`;
 
   return (
     <>
@@ -252,24 +257,25 @@ const ModelConfigRows: React.FC<{
       <div className="text-fg-subtle">Chat effort</div>
       <div
         className="font-medium truncate"
-        title={modelLabel(modelConfig.chat)}
+        title={modelEffortLabel(modelConfig.chat)}
       >
-        {modelLabel(modelConfig.chat)} ·{' '}
-        {effortLabel(modelConfig.chat.reasoningEffort)}
+        {modelEffortLabel(modelConfig.chat)}
       </div>
       <div className="text-fg-subtle">System effort</div>
       <div
         className="font-medium truncate"
-        title={modelLabel(modelConfig.system)}
+        title={modelEffortLabel(modelConfig.system)}
       >
-        {modelLabel(modelConfig.system)} ·{' '}
-        {effortLabel(modelConfig.system.reasoningEffort)}
+        {modelEffortLabel(modelConfig.system)}
       </div>
       {modelConfig.panel?.executors.map((executor, index) => (
         <React.Fragment key={`${executor.provider}/${executor.name}/${index}`}>
           <div className="text-fg-subtle">Panel executor {index + 1}</div>
-          <div className="font-medium truncate" title={modelLabel(executor)}>
-            {modelLabel(executor)} · {effortLabel(executor.reasoningEffort)}
+          <div
+            className="font-medium truncate"
+            title={modelEffortLabel(executor)}
+          >
+            {modelEffortLabel(executor)}
           </div>
         </React.Fragment>
       ))}

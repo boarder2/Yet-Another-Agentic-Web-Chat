@@ -16,12 +16,22 @@ export function acceptWarning(): void {
 }
 
 type Props = {
-  onAccept: () => void;
+  onAccept: () => void | Promise<void>;
   onDecline: () => void;
+  mode?: 'manual' | 'auto-run';
+  loading?: boolean;
+  error?: string | null;
 };
 
-export function CodeExecutionWarning({ onAccept, onDecline }: Props) {
+export function CodeExecutionWarning({
+  onAccept,
+  onDecline,
+  mode = 'manual',
+  loading = false,
+  error,
+}: Props) {
   const [declining, setDeclining] = useState(false);
+  const autoRun = mode === 'auto-run';
 
   const decline = () => {
     setDeclining(true);
@@ -39,26 +49,29 @@ export function CodeExecutionWarning({ onAccept, onDecline }: Props) {
             variant="dangerSoft"
             size="lg"
             onClick={decline}
-            disabled={declining}
+            disabled={declining || loading}
           >
-            Decline
+            {autoRun ? 'Cancel' : 'Decline'}
           </Button>
           <Button
             variant="successSoft"
             size="lg"
             onClick={() => {
-              acceptWarning();
-              onAccept();
+              if (!autoRun) acceptWarning();
+              void onAccept();
             }}
+            loading={loading}
           >
-            I understand the risks — Enable code execution
+            {autoRun
+              ? 'I understand the risks — Enable auto-run'
+              : 'I understand the risks — Enable code execution'}
           </Button>
         </>
       }
     >
       <div className="bg-warning-soft border-b border-warning px-6 py-4">
         <h2 className="text-lg font-semibold text-fg flex items-center gap-2">
-          ⚠ Code Execution — Risk Acknowledgment
+          ⚠ {autoRun ? 'Auto-run Code' : 'Code Execution'} — Risk Acknowledgment
         </h2>
       </div>
       <div className="px-6 py-4 space-y-4 text-sm text-fg/90">
@@ -74,8 +87,9 @@ export function CodeExecutionWarning({ onAccept, onDecline }: Props) {
               restrictions.
             </li>
             <li>
-              You will be shown each code snippet and asked to approve or deny
-              it individually.
+              {autoRun
+                ? 'Generated code will run without asking you to approve each snippet.'
+                : 'You will be shown each code snippet and asked to approve or deny it individually.'}
             </li>
           </ul>
         </div>
@@ -146,10 +160,16 @@ export function CodeExecutionWarning({ onAccept, onDecline }: Props) {
           </ul>
         </div>
 
+        {error && (
+          <p role="alert" className="text-danger text-sm">
+            {error}
+          </p>
+        )}
+
         <p className="text-fg-muted text-xs italic">
-          If you do not understand the risks described above, do not enable code
-          execution. Click &quot;Decline&quot; to deny this and all future code
-          execution requests.
+          {autoRun
+            ? 'If you do not understand these risks, cancel. Disabling auto-run later does not stop code already running.'
+            : 'If you do not understand the risks described above, do not enable code execution. Click "Decline" to deny this and all future code execution requests.'}
         </p>
       </div>
     </Modal>

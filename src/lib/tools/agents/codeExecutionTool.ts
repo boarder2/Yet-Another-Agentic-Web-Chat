@@ -7,6 +7,7 @@ import {
   ensureImage,
 } from '@/lib/sandbox/dockerExecutor';
 import { getCodeExecutionConfig } from '@/lib/config';
+import { getCodeExecutionAutoRun } from '@/lib/settings/server';
 import { emitStreamEvent } from '@/lib/streaming/events';
 import {
   createCodeChartChannel,
@@ -22,7 +23,7 @@ const CodeExecutionToolSchema = z.object({
   description: z
     .string()
     .max(100)
-    .describe('Under 15 words; shown at approval.'),
+    .describe('Under 15 words; shown with the execution.'),
   code: z
     .string()
     .max(MAX_CODE_LENGTH, 'Code must be 50,000 characters or less.')
@@ -83,58 +84,57 @@ export const codeExecutionTool = defineTool(
 
     const { code, description } = input;
 
-    // interrupt() pauses the graph until user approves/denies.
-    // markupKey enables runHost to resolve the ToolCall markup ID.
-    // ensureImage (expensive) runs AFTER approval, on resume.
-    const response: unknown = interrupt({
-      kind: 'code_execution',
-      toolCallId,
-      markupKey: code,
-      payload: { code, description, createdAt: Date.now() },
-      snapshot: null,
-    });
-
-    // Cancellation discriminator
-    if (response && (response as Record<string, unknown>).__cancelled) {
-      return new Command({
-        update: {
-          messages: [
-            new ToolMessage({
-              content: 'Cancelled by user.',
-              tool_call_id: toolCallId,
-            }),
-          ],
-        },
+    if (!getCodeExecutionAutoRun()) {
+      // interrupt() pauses the graph until user approves/denies.
+      // markupKey enables runHost to resolve the ToolCall markup ID.
+      const response: unknown = interrupt({
+        kind: 'code_execution',
+        toolCallId,
+        markupKey: code,
+        payload: { code, description, createdAt: Date.now() },
+        snapshot: null,
       });
+
+      if (response && (response as Record<string, unknown>).__cancelled) {
+        return new Command({
+          update: {
+            messages: [
+              new ToolMessage({
+                content: 'Cancelled by user.',
+                tool_call_id: toolCallId,
+              }),
+            ],
+          },
+        });
+      }
+
+      const approval = response as { approved: boolean; reason?: string };
+      if (!approval.approved) {
+        // Surface the denial as a result event so the approval modal resolves on
+        // every attached tab (the acting tab already hides via local state).
+        emitStreamEvent(emitter, {
+          type: 'code_execution_result',
+          data: { denied: true, denyReason: approval.reason, toolCallId },
+        });
+
+        const denialMessage = approval.reason
+          ? `Code execution was denied by the user. User feedback: "${approval.reason}"`
+          : 'Code execution was denied by the user.';
+
+        return new Command({
+          update: {
+            messages: [
+              new ToolMessage({
+                content: denialMessage,
+                tool_call_id: toolCallId,
+              }),
+            ],
+          },
+        });
+      }
     }
 
-    const approval = response as { approved: boolean; reason?: string };
-
-    if (!approval.approved) {
-      // Surface the denial as a result event so the approval modal resolves on
-      // every attached tab (the acting tab already hides via local state).
-      emitStreamEvent(emitter, {
-        type: 'code_execution_result',
-        data: { denied: true, denyReason: approval.reason, toolCallId },
-      });
-
-      const denialMessage = approval.reason
-        ? `Code execution was denied by the user. User feedback: "${approval.reason}"`
-        : 'Code execution was denied by the user.';
-
-      return new Command({
-        update: {
-          messages: [
-            new ToolMessage({
-              content: denialMessage,
-              tool_call_id: toolCallId,
-            }),
-          ],
-        },
-      });
-    }
-
-    // Prepare Docker image (post-approval; expensive — runs only once after approval)
+    // Prepare Docker image only after preflight and, in manual mode, approval.
     try {
       await ensureImage(ceConfig.dockerImage);
     } catch (err: unknown) {
@@ -215,7 +215,7 @@ export const codeExecutionTool = defineTool(
   {
     name: 'code_execution',
     description:
-      'Run sandboxed Node.js JS (no network/filesystem, user-approved). Prefer this over reasoning for exact results: math, date/time, counting, regex, encoding, sorting/aggregation, unit conversion. To register a chart from computed data, call the injected global chart(spec) helper; after a successful run, use the returned short handle with show_chart.',
+      'Run sandboxed Node.js JS (no network/filesystem; approval follows the configured mode). Prefer this over reasoning for exact results: math, date/time, counting, regex, encoding, sorting/aggregation, unit conversion. To register a chart from computed data, call the injected global chart(spec) helper; after a successful run, use the returned short handle with show_chart.',
     schema: CodeExecutionToolSchema,
   },
 );

@@ -19,6 +19,8 @@
  * - Legacy `perplexica_dashboard_*` keys (handled by a separate one-shot
  *   localStorage migration).
  */
+export const CODE_EXECUTION_AUTO_RUN_SETTING_KEY = 'codeExecutionAutoRun';
+
 export const MIGRATED_SETTING_KEYS = [
   // Model selection
   'chatModelProvider',
@@ -54,6 +56,7 @@ export const MIGRATED_SETTING_KEYS = [
   'personalization.sendLocationEnabled',
   'personalization.sendProfileEnabled',
   // Behavior / composer
+  CODE_EXECUTION_AUTO_RUN_SETTING_KEY,
   'autoSuggestions',
   'autoTitleEnabled',
   'selectedSystemPromptIds',

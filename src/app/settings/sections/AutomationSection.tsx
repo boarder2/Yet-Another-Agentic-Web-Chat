@@ -1,7 +1,7 @@
 'use client';
 
 import SettingToggleRow from '@/components/ui/SettingToggleRow';
-import { Layers3, Type } from 'lucide-react';
+import { Code2, Layers3, Type } from 'lucide-react';
 import SettingsSection from '../components/SettingsSection';
 
 export default function AutomationSection({
@@ -9,11 +9,19 @@ export default function AutomationSection({
   onToggle,
   autoTitleEnabled,
   onToggleAutoTitle,
+  codeExecutionAutoRun,
+  codeExecutionAvailable,
+  codeExecutionSaving,
+  onToggleCodeExecutionAutoRun,
 }: {
   automaticSuggestions: boolean;
   onToggle: (checked: boolean) => void;
   autoTitleEnabled: boolean;
   onToggleAutoTitle: (checked: boolean) => void;
+  codeExecutionAutoRun: boolean;
+  codeExecutionAvailable: boolean;
+  codeExecutionSaving: boolean;
+  onToggleCodeExecutionAutoRun: (checked: boolean) => void;
 }) {
   return (
     <SettingsSection title="Automation">
@@ -25,6 +33,19 @@ export default function AutomationSection({
           description="Automatically show related suggestions after responses"
           checked={automaticSuggestions}
           onChange={onToggle}
+        />
+        <SettingToggleRow
+          icon={Code2}
+          className="p-3 rounded-surface bg-surface transition-colors duration-150 hover:bg-surface-2"
+          label="Auto-run generated code"
+          description={
+            codeExecutionAvailable
+              ? 'Run generated JavaScript without approving each request. Applies instance-wide.'
+              : 'Unavailable because code execution is not enabled by the operator. Your saved preference is retained.'
+          }
+          checked={codeExecutionAutoRun}
+          onChange={onToggleCodeExecutionAutoRun}
+          disabled={!codeExecutionAvailable || codeExecutionSaving}
         />
         <SettingToggleRow
           icon={Type}

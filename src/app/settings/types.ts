@@ -12,6 +12,9 @@ export interface SettingsType {
   deepseekApiKey: string;
   customOpenaiApiKey: string;
   encryptionConfigured: boolean;
+  codeExecution: {
+    enabled: boolean;
+  };
   contextWindowSize: number;
   braveSearchApiKey: string;
   braveLLMApiKey: string;

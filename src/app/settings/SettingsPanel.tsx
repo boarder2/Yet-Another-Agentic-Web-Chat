@@ -6,9 +6,11 @@ import { toast } from 'sonner';
 import { Prompt } from '@/lib/types/prompt';
 import {
   writeLocalStorage,
+  useLocalStorageBoolean,
   useLocalStorageJSON,
 } from '@/lib/hooks/useLocalStorage';
-import { subscribeSettingsSynced } from '@/lib/settings/persist';
+import { flushSettings, subscribeSettingsSynced } from '@/lib/settings/persist';
+import { CODE_EXECUTION_AUTO_RUN_SETTING_KEY } from '@/lib/settings/keys';
 import { useQueryClient } from '@tanstack/react-query';
 import { useConfig, useSaveConfig } from '@/lib/hooks/api/useConfig';
 import { useModels } from '@/lib/hooks/api/useModels';
@@ -52,6 +54,7 @@ import ImageGenerationSection from './sections/ImageGenerationSection';
 import ApiKeysSection from './sections/ApiKeysSection';
 import SkillsSection from './sections/SkillsSection';
 import McpServersSection from './sections/McpServersSection';
+import { CodeExecutionWarning } from '@/components/CodeExecutionWarning';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import { IconButton } from '@/components/ui/IconButton';
 import { ListLoading } from '@/components/ui/List';
@@ -107,6 +110,13 @@ export default function SettingsPanel({
   const [isLoading, setIsLoading] = useState(true);
   const [automaticSuggestions, setAutomaticSuggestions] = useState(true);
   const [autoTitleEnabled, setAutoTitleEnabled] = useState(true);
+  const [codeExecutionAutoRun, setCodeExecutionAutoRun] =
+    useLocalStorageBoolean(CODE_EXECUTION_AUTO_RUN_SETTING_KEY, false);
+  const [codeExecutionTransition, setCodeExecutionTransition] = useState<{
+    previous: boolean;
+  } | null>(null);
+  const [showAutoRunConfirmation, setShowAutoRunConfirmation] = useState(false);
+  const [autoRunSaveError, setAutoRunSaveError] = useState<string | null>(null);
   const [personalizationLocation, setPersonalizationLocation] = useState('');
   const [personalizationAbout, setPersonalizationAbout] = useState('');
   const [memoryEnabled, setMemoryEnabled] = useState(false);
@@ -581,6 +591,35 @@ export default function SettingsPanel({
     );
   };
 
+  const persistCodeExecutionAutoRun = async (enabled: boolean) => {
+    const previous = codeExecutionAutoRun;
+    setCodeExecutionTransition({ previous });
+    setCodeExecutionAutoRun(enabled);
+    setAutoRunSaveError(null);
+    try {
+      await flushSettings();
+      setCodeExecutionTransition(null);
+      if (enabled) setShowAutoRunConfirmation(false);
+    } catch (error) {
+      setCodeExecutionAutoRun(previous);
+      setCodeExecutionTransition(null);
+      const message = 'Could not save the auto-run setting. Try again.';
+      setAutoRunSaveError(message);
+      if (enabled) setShowAutoRunConfirmation(true);
+      toast.error(message);
+      console.error('Failed to save code execution auto-run setting:', error);
+    }
+  };
+
+  const handleCodeExecutionAutoRunToggle = (checked: boolean) => {
+    if (checked) {
+      setAutoRunSaveError(null);
+      setShowAutoRunConfirmation(true);
+      return;
+    }
+    void persistCodeExecutionAutoRun(false);
+  };
+
   const handleProviderVisibilityToggle = (
     providerModels: Record<string, unknown>,
     showAll: boolean,
@@ -774,6 +813,14 @@ export default function SettingsPanel({
                       // where the chat route reads it server-side.
                       localStorage.setItem('autoTitleEnabled', String(checked));
                     }}
+                    codeExecutionAutoRun={
+                      codeExecutionTransition?.previous ?? codeExecutionAutoRun
+                    }
+                    codeExecutionAvailable={config.codeExecution.enabled}
+                    codeExecutionSaving={codeExecutionTransition !== null}
+                    onToggleCodeExecutionAutoRun={
+                      handleCodeExecutionAutoRunToggle
+                    }
                   />
                 )}
 
@@ -941,6 +988,20 @@ export default function SettingsPanel({
             </div>
           </>
         )
+      )}
+
+      {showAutoRunConfirmation && (
+        <CodeExecutionWarning
+          mode="auto-run"
+          loading={codeExecutionTransition !== null}
+          error={autoRunSaveError}
+          onDecline={() => {
+            if (codeExecutionTransition) return;
+            setShowAutoRunConfirmation(false);
+            setAutoRunSaveError(null);
+          }}
+          onAccept={() => persistCodeExecutionAutoRun(true)}
+        />
       )}
 
       <ConfirmModal

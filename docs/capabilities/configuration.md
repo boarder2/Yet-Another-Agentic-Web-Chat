@@ -47,12 +47,14 @@ Code execution is disabled by default and requires a reachable Docker daemon. Th
 
 The loader supplies the defaults above when fields are omitted. It validates the image and Docker host but does not range-check the numeric limits. Docker-backed code execution also fails closed when the daemon cannot be reached. Code widgets use the same timeout and memory settings while applying their own output limit.
 
+`ENABLED` is the operator-controlled availability gate; it does not select the approval mode. When code execution is available, Settings → Automation exposes the instance-wide, database-backed **Auto-run generated code** preference. It defaults to off, requires risk confirmation for each local enable, and is shared across devices. If operator configuration later makes code execution unavailable, Settings retains and displays the saved preference but disables its switch; restoring availability restores that preference. A malformed or unreadable preference fails closed to per-call approval. Automatic mode retains the same Docker checks, sandbox limits, visible code/results, and execution failures as manual mode.
+
 ## Database-backed settings and credentials
 
 The database is the runtime source of truth for settings that used to live in `config.toml`:
 
 - Model and search provider API keys are encrypted rows in the `credentials` table.
-- Provider and search endpoint URLs, provider selection, locale, model visibility, retention, image generation, embedding selection, memory-model selection, and other Settings values are rows in `app_settings`.
+- Provider and search endpoint URLs, provider selection, locale, model visibility, retention, image generation, embedding selection, memory-model selection, the code-execution auto-run preference, and other Settings values are rows in `app_settings`.
 - The active Chat and System model choices are selected by the composer or saved workflow, schedule, workspace, and preset settings.
 
 Manage these values in Settings rather than adding new TOML fields. Legacy provider, search, and migrated setting fields may still be read once during boot migration for existing installations, but they are not the runtime source of those values. Device-local appearance preferences remain local to the browser.

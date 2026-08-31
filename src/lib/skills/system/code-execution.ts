@@ -1,5 +1,6 @@
 import type { Skill } from '../types';
 import { getCodeExecutionConfig } from '@/lib/config';
+import { getCodeExecutionAutoRun } from '@/lib/settings/server';
 
 const DESCRIPTION =
   'How to use the code_execution tool — what language and runtime, sandbox limits, what works and what does not, and when to prefer it over reasoning.';
@@ -8,6 +9,7 @@ function buildContent(
   timeoutSeconds: number,
   memoryMb: number,
   maxOutputChars: number,
+  autoRun: boolean,
 ): string {
   return `# Using the \`code_execution\` tool
 
@@ -62,15 +64,17 @@ Practical consequences:
 
 ## Approval and timing
 
-Every call shows the code to the user for approval **before** it runs. They can approve or deny (with a reason). Treat denial as feedback: the user has told you why, adapt rather than retry the same code.
-
-Because there's an approval step, batching is friendlier than firing many tiny calls. Prefer one cohesive script over five round-trips when the steps are related.
+${
+  autoRun
+    ? 'Automatic execution is enabled. Calls run immediately after availability checks without a per-call approval prompt; the code and result remain visible to the user.'
+    : "Every call shows the code to the user for approval **before** it runs. They can approve or deny (with a reason). Treat denial as feedback: the user has told you why, adapt rather than retry the same code.\n\nBecause there's an approval step, batching is friendlier than firing many tiny calls. Prefer one cohesive script over five round-trips when the steps are related."
+}
 
 ## Schema and shape
 
 \`\`\`ts
 {
-  description: string; // <= 100 chars, ~15 words; shown to user at approval
+  description: string; // <= 100 chars, ~15 words; shown with the execution
   code: string;        // Node.js JS; <= 50,000 chars
 }
 \`\`\`
@@ -143,7 +147,12 @@ export function buildCodeExecutionSkill(): Skill | null {
     source: 'system',
     name: 'code-execution',
     description: DESCRIPTION,
-    content: buildContent(ce.timeoutSeconds, ce.memoryMb, ce.maxOutputChars),
+    content: buildContent(
+      ce.timeoutSeconds,
+      ce.memoryMb,
+      ce.maxOutputChars,
+      getCodeExecutionAutoRun(),
+    ),
     disableModelInvocation: false,
   };
 }

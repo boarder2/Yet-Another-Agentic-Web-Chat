@@ -1,6 +1,6 @@
 ---
 name: yaawc-code-execution
-description: 'User-approved Docker code execution: availability, sandbox limits, interrupts, output, cancellation, and chart correlation.'
+description: 'Docker code execution: availability, approval modes, sandbox limits, output, cancellation, and chart correlation.'
 ---
 
 # Agent Code Execution
@@ -13,8 +13,8 @@ This skill documents the interactive chat `code_execution` tool. Dashboard code 
 
 - `DOCKER_IMAGE` accepts only official `node[:tag][@sha256:digest]` forms.
 - `DOCKER_HOST` accepts the default Unix socket or explicit HTTP(S).
-- The tool pings Docker before asking for approval; configured-but-unreachable is unavailable.
-- Execution requires a top-level interactive streamed session. Do not expose it to deep-research children, Panel executors, or headless scheduled runs.
+- The tool pings Docker before reading the approval-mode setting; configured-but-unreachable is unavailable.
+- Execution requires a top-level interactive streamed session: normal chats, private chats, and continuable manual workflow chats qualify. Do not expose it to deep-research children, Panel executors, schedules, or headless workflow runs.
 
 The model supplies JavaScript for `node -e`, a description up to 100 characters, and code up to 50,000 characters. Submit JavaScript—not Python, TypeScript, or shell syntax—and use Node built-ins/`console.log`; there are no installed third-party dependencies or persistence. This is a language contract, not a capability restriction: JavaScript can still invoke `child_process`.
 
@@ -23,13 +23,13 @@ The model supplies JavaScript for `node -e`, a description up to 100 characters,
 The sequence is strict:
 
 1. Perform cheap config/session/Docker checks.
-2. Interrupt with `kind: 'code_execution'`, exact code as `markupKey`, and code/description payload.
-3. Wait for `{ approved, reason? }` resume input.
-4. Prepare/pull the image and execute only after approval.
+2. Read the instance-wide `codeExecutionAutoRun` setting, failing closed to manual mode.
+3. In manual mode, interrupt with `kind: 'code_execution'`, exact code as `markupKey`, and code/description payload; wait for `{ approved, reason? }` resume input.
+4. In automatic mode, bypass the interrupt. Prepare/pull the image and execute immediately.
 
-The UI displays the exact original code and description. Browser-local risk acknowledgment is separate from per-request Run/Deny. Denial feedback returns to the model; it should adapt rather than retry unchanged code. Cancellation and stale approvals follow the shared interrupt/reconnect lifecycle.
+The UI displays the exact original code and result in either mode. Browser-local risk acknowledgment is separate from per-request Run/Deny and the durable automatic-mode setting. Denial feedback in manual mode returns to the model; it should adapt rather than retry unchanged code. Cancellation and stale approvals follow the shared interrupt/reconnect lifecycle. Setting changes affect subsequent calls only and do not resolve existing interrupts or stop executions underway.
 
-Never imply that code ran before acceptance. There is no approval surface in noninteractive children or scheduled runs.
+Never imply that manually approved code ran before acceptance. There is no approval surface or automatic execution in noninteractive children or scheduled runs.
 
 ## Sandbox boundary
 
@@ -70,7 +70,7 @@ Keep approval markup and callback correlation separate. `codeExecutionCorrelatio
 - Config: `src/lib/config.ts`
 - UI/events: `CodeExecution.tsx`, `CodeExecutionWarning.tsx`, streaming approval/result types
 
-Use focused tests for private chart channels, malformed/overflow records, failed-run discard, correlation cleanup, early availability exits, approval sequencing, result/persist shapes, resource options, timeout/OOM, truncation, and forced cleanup.
+Use focused tests for private chart channels, malformed/overflow records, failed-run discard, correlation cleanup, early availability exits before the setting read, fail-closed setting reads, manual approval sequencing and denial, automatic interrupt bypass, result/persist shapes, resource options, timeout/OOM, truncation, and forced cleanup.
 
 Update `docs/capabilities/agent-capabilities.md` or `configuration.md` when availability, limits, risks, or failures change.
 

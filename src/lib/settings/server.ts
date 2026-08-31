@@ -6,6 +6,7 @@ import type {
   SearchProviderIdType,
   ImageGenerationConfig,
 } from '@/lib/config';
+import { CODE_EXECUTION_AUTO_RUN_SETTING_KEY } from '@/lib/settings/keys';
 import {
   OPENROUTER_QUANTIZATIONS_SETTING_KEY,
   parseOpenRouterQuantizations,
@@ -106,6 +107,16 @@ export function getBooleanSetting(
   const raw = settings[key];
   if (raw === undefined) return fallback;
   return raw === 'true';
+}
+
+/** Automatic code execution is opt-in and fails closed on invalid/unreadable state. */
+export function getCodeExecutionAutoRun(): boolean {
+  try {
+    const settings = getSettings([CODE_EXECUTION_AUTO_RUN_SETTING_KEY]);
+    return settings[CODE_EXECUTION_AUTO_RUN_SETTING_KEY] === 'true';
+  } catch {
+    return false;
+  }
 }
 
 // ---------------------------------------------------------------------------

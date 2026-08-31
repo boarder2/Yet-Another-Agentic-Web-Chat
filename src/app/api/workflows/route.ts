@@ -3,6 +3,7 @@ import db from '@/lib/db';
 import { chats, workflows } from '@/lib/db/schema';
 import { and, desc, isNotNull } from 'drizzle-orm';
 import { parseWorkflowTemplate } from '@/lib/workflows/template';
+import { parseModelReference } from '@/lib/providers/resolveModels';
 
 export const runtime = 'nodejs';
 
@@ -36,6 +37,23 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  let chatModel;
+  let systemModel = null;
+  try {
+    chatModel = parseModelReference(body.chatModel);
+    if (body.systemModel !== undefined && body.systemModel !== null) {
+      systemModel = parseModelReference(body.systemModel);
+    }
+  } catch (error) {
+    return Response.json(
+      {
+        error:
+          error instanceof Error ? error.message : 'Invalid model reference',
+      },
+      { status: 400 },
+    );
+  }
+
   const { errors } = parseWorkflowTemplate(body.prompt);
   if (errors.length > 0) {
     return Response.json(
@@ -52,8 +70,8 @@ export async function POST(req: NextRequest) {
     icon: body.icon ?? null,
     prompt: body.prompt,
     focusMode: body.focusMode || 'webSearch',
-    chatModel: body.chatModel,
-    systemModel: body.systemModel || null,
+    chatModel,
+    systemModel,
     selectedSystemPromptIds: body.selectedSystemPromptIds || [],
     selectedMethodologyId: body.selectedMethodologyId || null,
     createdAt: now,

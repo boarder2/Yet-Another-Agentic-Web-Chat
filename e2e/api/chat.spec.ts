@@ -337,7 +337,7 @@ test.describe('POST /api/chat (test-direct)', () => {
     });
     expect(res.status()).toBe(400);
     const body = await res.json();
-    expect(body.error).toContain('provider + name');
+    expect(body.error).toContain('executors.1.provider');
   });
 
   test('panel turn: executor models appear as perModel rows and panel_executor_completed carries usage', async ({

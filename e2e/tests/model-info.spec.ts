@@ -113,7 +113,9 @@ test.describe('Model Information popover (ModelStats v2)', () => {
       // The default chat/system model in tests is "test-direct" for both
       // roles — it collapses into a single per-model row (identity-only
       // rollup).
-      await expect(page.getByText('test-direct')).toBeVisible();
+      await expect(
+        page.getByText('test-direct', { exact: true }),
+      ).toBeVisible();
       await expect(page.getByText('In:', { exact: true })).toBeVisible();
       await expect(page.getByText('Out:', { exact: true })).toBeVisible();
       await expect(page.getByText('Total:', { exact: true })).toBeVisible();

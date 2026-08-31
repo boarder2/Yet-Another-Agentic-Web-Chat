@@ -44,6 +44,7 @@ import { Input } from '@/components/ui/Input';
 import { IconButton } from '@/components/ui/IconButton';
 import { ListEmptyState } from '@/components/ui/List';
 import Badge from '@/components/ui/Badge';
+import type { ReasoningEffort } from '@/lib/providers/reasoningEffort';
 
 const EMPTY_PRESETS: ModelPresetList = [];
 
@@ -56,6 +57,12 @@ function editToSelection(s: EditState): ModelSelection {
     systemModel: s.systemModel,
     imageCapable: s.imageCapable,
     contextWindowSize: s.contextWindowSize,
+    ...(s.chatReasoningEffort
+      ? { chatReasoningEffort: s.chatReasoningEffort }
+      : {}),
+    ...(s.systemReasoningEffort
+      ? { systemReasoningEffort: s.systemReasoningEffort }
+      : {}),
   };
 }
 
@@ -64,11 +71,15 @@ interface ModelPresetsProps {
   selectedChatModel: string | null;
   selectedSystemModelProvider: string | null;
   selectedSystemModel: string | null;
+  selectedChatReasoningEffort?: ReasoningEffort;
+  selectedSystemReasoningEffort?: ReasoningEffort;
   contextWindowSize: number;
   setSelectedChatModelProvider: (v: string | null) => void;
   setSelectedChatModel: (v: string | null) => void;
   setSelectedSystemModelProvider: (v: string | null) => void;
   setSelectedSystemModel: (v: string | null) => void;
+  setSelectedChatReasoningEffort: (v: ReasoningEffort | undefined) => void;
+  setSelectedSystemReasoningEffort: (v: ReasoningEffort | undefined) => void;
   setContextWindowSize: (v: number) => void;
   setIsCustomContextWindow: (v: boolean) => void;
 }
@@ -82,6 +93,8 @@ type EditState = {
   systemModel: string;
   imageCapable: boolean;
   contextWindowSize: number;
+  chatReasoningEffort?: ReasoningEffort;
+  systemReasoningEffort?: ReasoningEffort;
 };
 
 export default function ModelPresetsSection({
@@ -89,11 +102,15 @@ export default function ModelPresetsSection({
   selectedChatModel,
   selectedSystemModelProvider,
   selectedSystemModel,
+  selectedChatReasoningEffort,
+  selectedSystemReasoningEffort,
   contextWindowSize,
   setSelectedChatModelProvider,
   setSelectedChatModel,
   setSelectedSystemModelProvider,
   setSelectedSystemModel,
+  setSelectedChatReasoningEffort,
+  setSelectedSystemReasoningEffort,
   setContextWindowSize,
   setIsCustomContextWindow,
 }: ModelPresetsProps) {
@@ -125,6 +142,12 @@ export default function ModelPresetsSection({
     systemModel: selectedSystemModel ?? '',
     imageCapable,
     contextWindowSize,
+    ...(selectedChatReasoningEffort
+      ? { chatReasoningEffort: selectedChatReasoningEffort }
+      : {}),
+    ...(selectedSystemReasoningEffort
+      ? { systemReasoningEffort: selectedSystemReasoningEffort }
+      : {}),
   };
   const matchingPreset = findMatchingPreset(presets, activeSelection);
 
@@ -139,6 +162,8 @@ export default function ModelPresetsSection({
     setSelectedChatModel(preset.chatModel);
     setSelectedSystemModelProvider(preset.systemProvider);
     setSelectedSystemModel(preset.systemModel);
+    setSelectedChatReasoningEffort(preset.chatReasoningEffort);
+    setSelectedSystemReasoningEffort(preset.systemReasoningEffort);
     setContextWindowSize(preset.contextWindowSize);
     setIsCustomContextWindow(
       !PREDEFINED_CONTEXT_SIZES.includes(preset.contextWindowSize),
@@ -205,6 +230,18 @@ export default function ModelPresetsSection({
       systemModel: selectedSystemModel ?? sel.systemModel,
       imageCapable: sel.imageCapable,
       contextWindowSize,
+      ...((sel.chatReasoningEffort ?? selectedChatReasoningEffort)
+        ? {
+            chatReasoningEffort:
+              sel.chatReasoningEffort ?? selectedChatReasoningEffort,
+          }
+        : {}),
+      ...((sel.systemReasoningEffort ?? selectedSystemReasoningEffort)
+        ? {
+            systemReasoningEffort:
+              sel.systemReasoningEffort ?? selectedSystemReasoningEffort,
+          }
+        : {}),
     });
     updatePresets([...presets, preset]);
     setCurrentNameInput('');
@@ -239,6 +276,10 @@ export default function ModelPresetsSection({
               systemModel: editState.systemModel,
               imageCapable: editState.imageCapable,
               contextWindowSize: Math.max(512, editState.contextWindowSize),
+              // Explicitly replace these optional fields so clearing an old
+              // preset's effort does not retain the value from `p`.
+              chatReasoningEffort: editState.chatReasoningEffort,
+              systemReasoningEffort: editState.systemReasoningEffort,
             }
           : p,
       ),
@@ -257,6 +298,12 @@ export default function ModelPresetsSection({
       systemModel: preset.systemModel,
       imageCapable: preset.imageCapable,
       contextWindowSize: preset.contextWindowSize,
+      ...(preset.chatReasoningEffort
+        ? { chatReasoningEffort: preset.chatReasoningEffort }
+        : {}),
+      ...(preset.systemReasoningEffort
+        ? { systemReasoningEffort: preset.systemReasoningEffort }
+        : {}),
     });
     setAddingNew(false);
     setDeleteTarget(null);
@@ -396,6 +443,9 @@ export default function ModelPresetsSection({
                                 imageCapable: next.imageCapable ?? false,
                                 contextWindowSize:
                                   next.contextWindowSize ?? s.contextWindowSize,
+                                chatReasoningEffort: next.chatReasoningEffort,
+                                systemReasoningEffort:
+                                  next.systemReasoningEffort,
                               }
                             : s,
                         )
@@ -405,6 +455,7 @@ export default function ModelPresetsSection({
                         vision: true,
                         contextWindow: true,
                       }}
+                      showStoredEffortState
                     />
                     <div className="flex items-center gap-2">
                       <Button
@@ -531,6 +582,15 @@ export default function ModelPresetsSection({
                       systemModel: selectedSystemModel ?? '',
                       imageCapable: false,
                       contextWindowSize: contextWindowSize,
+                      ...(selectedChatReasoningEffort
+                        ? { chatReasoningEffort: selectedChatReasoningEffort }
+                        : {}),
+                      ...(selectedSystemReasoningEffort
+                        ? {
+                            systemReasoningEffort:
+                              selectedSystemReasoningEffort,
+                          }
+                        : {}),
                     },
               )
             }
@@ -551,11 +611,14 @@ export default function ModelPresetsSection({
                         imageCapable: next.imageCapable ?? false,
                         contextWindowSize:
                           next.contextWindowSize ?? s.contextWindowSize,
+                        chatReasoningEffort: next.chatReasoningEffort,
+                        systemReasoningEffort: next.systemReasoningEffort,
                       }
                     : s,
                 )
               }
               fields={{ system: true, vision: true, contextWindow: true }}
+              showStoredEffortState
             />
           )}
           <div className="flex items-center gap-2">
@@ -588,6 +651,12 @@ export default function ModelPresetsSection({
                   systemModel: editState.systemModel,
                   imageCapable: editState.imageCapable,
                   contextWindowSize: Math.max(512, editState.contextWindowSize),
+                  ...(editState.chatReasoningEffort
+                    ? { chatReasoningEffort: editState.chatReasoningEffort }
+                    : {}),
+                  ...(editState.systemReasoningEffort
+                    ? { systemReasoningEffort: editState.systemReasoningEffort }
+                    : {}),
                 });
                 updatePresets([...presets, preset]);
                 setAddingNew(false);
@@ -627,6 +696,12 @@ export default function ModelPresetsSection({
               systemModel: selectedSystemModel ?? '',
               imageCapable: false,
               contextWindowSize: contextWindowSize,
+              ...(selectedChatReasoningEffort
+                ? { chatReasoningEffort: selectedChatReasoningEffort }
+                : {}),
+              ...(selectedSystemReasoningEffort
+                ? { systemReasoningEffort: selectedSystemReasoningEffort }
+                : {}),
             });
           }}
           className="w-full border-dashed border-surface-2"

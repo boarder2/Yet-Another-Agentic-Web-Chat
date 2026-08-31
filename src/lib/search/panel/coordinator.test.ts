@@ -3,6 +3,10 @@ import { describe, expect, it, vi } from 'vitest';
 import type { CachedEmbeddings } from '@/lib/utils/cachedEmbeddings';
 import type { TokenTracker } from '@/lib/tokens/tracker';
 
+const coordinatorMocks = vi.hoisted(() => ({
+  runs: [] as Array<Record<string, unknown>>,
+}));
+
 vi.mock('@/lib/search/simplifiedAgent', () => ({
   SimplifiedAgent: class FakeSimplifiedAgent {
     private readonly emitter: {
@@ -15,7 +19,9 @@ vi.mock('@/lib/search/simplifiedAgent', () => ({
           emit: (channel: string, event: unknown) => void;
         };
       };
+      run: Record<string, unknown>;
     }) {
+      coordinatorMocks.runs.push(options.run);
       this.emitter = options.dependencies.emitter;
     }
 
@@ -76,8 +82,9 @@ vi.mock('@/lib/utils/contentUtils', () => ({
 import { PanelCoordinator } from './coordinator';
 
 const fakeModel = {} as never;
+const registerRecorder = vi.fn(() => ({}));
 const fakeTracker = {
-  register: vi.fn(() => ({})),
+  register: registerRecorder,
   scopeUsage: vi.fn(() => undefined),
 } as unknown as TokenTracker;
 
@@ -156,6 +163,99 @@ describe('PanelCoordinator structured chart bridge', () => {
     expect(result.executorResults.map((executor) => executor.text)).toEqual([
       'Answer',
       'Answer',
+    ]);
+  });
+
+  it('registers each executor with its effort and shares the System effort', async () => {
+    registerRecorder.mockClear();
+    coordinatorMocks.runs.length = 0;
+    const coordinator = new PanelCoordinator({
+      executors: [
+        {
+          ref: {
+            provider: 'openai',
+            name: 'executor-a',
+            reasoningEffort: 'high',
+          },
+          llm: fakeModel,
+        },
+        {
+          ref: {
+            provider: 'anthropic',
+            name: 'executor-b',
+            reasoningEffort: 'low',
+          },
+          llm: fakeModel,
+        },
+      ],
+      systemLlm: fakeModel,
+      embeddings: {} as CachedEmbeddings,
+      parentEmitter: new EventEmitter(),
+      signal: new AbortController().signal,
+      messageId: 'message-effort',
+      tracker: fakeTracker,
+      systemModelRef: {
+        provider: 'openai',
+        name: 'system',
+        reasoningEffort: 'medium',
+      },
+    });
+
+    await coordinator.run('query', [], [], 'webSearch');
+
+    expect(registerRecorder).toHaveBeenCalledWith({
+      provider: 'openai',
+      model: 'executor-a',
+      reasoningEffort: 'high',
+      role: 'chat',
+      scope: 'panel_executor:0',
+    });
+    expect(registerRecorder).toHaveBeenCalledWith({
+      provider: 'anthropic',
+      model: 'executor-b',
+      reasoningEffort: 'low',
+      role: 'chat',
+      scope: 'panel_executor:1',
+    });
+    expect(registerRecorder).toHaveBeenCalledWith({
+      provider: 'openai',
+      model: 'system',
+      reasoningEffort: 'medium',
+      role: 'system',
+      scope: 'panel_executor:0',
+    });
+    expect(registerRecorder).toHaveBeenCalledWith({
+      provider: 'openai',
+      model: 'system',
+      reasoningEffort: 'medium',
+      role: 'system',
+      scope: 'panel_executor:1',
+    });
+    expect(coordinatorMocks.runs).toEqual([
+      expect.objectContaining({
+        chatModelRef: {
+          provider: 'openai',
+          name: 'executor-a',
+          reasoningEffort: 'high',
+        },
+        systemModelRef: {
+          provider: 'openai',
+          name: 'system',
+          reasoningEffort: 'medium',
+        },
+      }),
+      expect.objectContaining({
+        chatModelRef: {
+          provider: 'anthropic',
+          name: 'executor-b',
+          reasoningEffort: 'low',
+        },
+        systemModelRef: {
+          provider: 'openai',
+          name: 'system',
+          reasoningEffort: 'medium',
+        },
+      }),
     ]);
   });
 });

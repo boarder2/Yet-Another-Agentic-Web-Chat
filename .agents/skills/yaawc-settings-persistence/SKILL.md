@@ -41,8 +41,9 @@ Sections live in `src/app/settings/sections/*`; section components in `src/app/s
 
 `ModelPicker` (`src/components/models/`) drives chat/system/embedding/memory model choice. Note:
 
-- **Per-request composer choices** (chat/system model, selected prompts, vision) are NOT read server-side from `app_settings` — they remain **request parameters** so a live change takes effect immediately without a debounce-staleness race.
+- **Per-request composer choices** (chat/system model, each role's optional reasoning effort, selected prompts, vision) are NOT read server-side from `app_settings` — they remain **request parameters** so a live change takes effect immediately without a debounce-staleness race.
 - **Ambient settings** (memory flags, personalization, `autoTitleEnabled`) ARE read server-side and are no longer sent in request bodies. `autoTitleEnabled` (instance-wide, **default `true`**) gates auto-generated chat titles; the chat route reads it via `getBooleanSetting(..., true)`.
 - The **memory-processing model** and the **embedding model** have their OWN keys (`memoryModel*`, `embeddingModel*`), independent of the chat picker's `systemModel`.
+- Reasoning effort is native-model capability metadata, not part of model identity. `chatReasoningEffort` and `systemReasoningEffort` are DB-synced optional keys; omission is Provider default and selecting it removes the key. Unsupported or stale values are resolved by the server when a model reference is resolved, without rewriting durable definitions.
 
 Related: `yaawc-api-endpoints` (the `/api/settings` route), `yaawc-agent-panel` (`panelPresets`/`panelSelection` keys), `yaawc-dashboard-widgets` (`yaawc_dashboard_*` keys), `yaawc-database` (the `app_settings` schema).

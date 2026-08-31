@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   AGENT_RUN_CONFIG_VERSION,
+  LEGACY_AGENT_RUN_CONFIG_VERSION,
   AgentRunConfigError,
   agentRunConfigCodec,
+  buildAgentModelConfigAudit,
   createAgentRunConfig,
   decodeAgentRunConfig,
   encodeAgentRunConfig,
@@ -77,6 +79,98 @@ describe('agent run config codec', () => {
     expect(config.messageId).toBeNull();
     expect(config.aiMessageId).toBeNull();
     expect(config.interactiveSession).toBe(false);
+  });
+
+  it('round-trips resolved role and panel effort in the v2 snapshot', () => {
+    const config = createAgentRunConfig({
+      ...validInput(),
+      chatModelRef: {
+        ...validInput().chatModelRef,
+        reasoningEffort: 'high',
+      },
+      systemModelRef: {
+        ...validInput().systemModelRef!,
+        reasoningEffort: 'low',
+      },
+      panel: {
+        executors: [
+          {
+            provider: 'openai',
+            name: 'gpt-5-mini',
+            reasoningEffort: 'medium',
+            imageCapable: true,
+          },
+          {
+            provider: 'anthropic',
+            name: 'claude-haiku',
+            reasoningEffort: 'off',
+          },
+        ],
+        options: {},
+      },
+    });
+
+    expect(config.version).toBe(AGENT_RUN_CONFIG_VERSION);
+    expect(
+      agentRunConfigCodec.decode(JSON.parse(JSON.stringify(config))),
+    ).toEqual(config);
+    expect(buildAgentModelConfigAudit(config)).toEqual({
+      chat: { provider: 'openai', name: 'gpt-5', reasoningEffort: 'high' },
+      system: {
+        provider: 'anthropic',
+        name: 'claude-sonnet',
+        reasoningEffort: 'low',
+      },
+      panel: {
+        executors: [
+          {
+            provider: 'openai',
+            name: 'gpt-5-mini',
+            reasoningEffort: 'medium',
+          },
+          {
+            provider: 'anthropic',
+            name: 'claude-haiku',
+            reasoningEffort: 'off',
+          },
+        ],
+      },
+    });
+  });
+
+  it('migrates v1 snapshots to v2 with Provider default omitted', () => {
+    const legacy = {
+      ...validConfig(),
+      version: LEGACY_AGENT_RUN_CONFIG_VERSION,
+    };
+
+    const migrated = decodeAgentRunConfig(legacy);
+
+    expect(migrated).toEqual({
+      ...validConfig(),
+      version: AGENT_RUN_CONFIG_VERSION,
+    });
+    expect(migrated.chatModelRef).not.toHaveProperty('reasoningEffort');
+    expect(migrated.systemModelRef).not.toHaveProperty('reasoningEffort');
+    expect(migrated.panel?.executors[0]).not.toHaveProperty('reasoningEffort');
+  });
+
+  it('uses the chat reference for both audited roles when system is omitted', () => {
+    const config = createAgentRunConfig({
+      ...validInput(),
+      chatModelRef: {
+        provider: 'openai',
+        name: 'gpt-5',
+        reasoningEffort: 'xhigh',
+      },
+      systemModelRef: null,
+      panel: null,
+    });
+
+    expect(buildAgentModelConfigAudit(config)).toEqual({
+      chat: { provider: 'openai', name: 'gpt-5', reasoningEffort: 'xhigh' },
+      system: { provider: 'openai', name: 'gpt-5', reasoningEffort: 'xhigh' },
+    });
   });
 
   it('persists only the current non-sensitive configuration fields', () => {
@@ -206,7 +300,7 @@ describe('agent run config codec', () => {
     ['an array', []],
     ['a string', 'snapshot'],
     ['an unversioned object', { ...validConfig(), version: undefined }],
-    ['an unsupported version', { ...validConfig(), version: 2 }],
+    ['an unsupported version', { ...validConfig(), version: 99 }],
   ])('rejects %s snapshots as explicit codec errors', (_name, snapshot) => {
     expect(() => decodeAgentRunConfig(snapshot)).toThrow(AgentRunConfigError);
   });

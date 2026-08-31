@@ -1,10 +1,38 @@
 import db from '@/lib/db';
 import { workspaces } from '@/lib/db/schema';
 import { eq, isNull, isNotNull, desc } from 'drizzle-orm';
-import type { WorkspaceCreate, WorkspaceUpdate } from './types';
+import {
+  parseWorkspaceModelOverride,
+  WorkspaceInputValidationError,
+  type WorkspaceCreate,
+  type WorkspaceUpdate,
+} from './types';
+
+function normalizeWorkspaceInput<T extends WorkspaceCreate | WorkspaceUpdate>(
+  input: T,
+): T {
+  if (input.modelOverride === undefined || input.modelOverride === null) {
+    return input;
+  }
+  try {
+    return {
+      ...input,
+      modelOverride: parseWorkspaceModelOverride(input.modelOverride),
+    } as T;
+  } catch (error) {
+    throw new WorkspaceInputValidationError(
+      error instanceof Error
+        ? error.message
+        : 'Invalid workspace model override.',
+    );
+  }
+}
 
 export async function createWorkspace(input: WorkspaceCreate) {
-  const [row] = await db.insert(workspaces).values(input).returning();
+  const [row] = await db
+    .insert(workspaces)
+    .values(normalizeWorkspaceInput(input))
+    .returning();
   return row;
 }
 
@@ -30,7 +58,7 @@ export async function listWorkspaces({
 export async function updateWorkspace(id: string, patch: WorkspaceUpdate) {
   const [row] = await db
     .update(workspaces)
-    .set({ ...patch, updatedAt: new Date() })
+    .set({ ...normalizeWorkspaceInput(patch), updatedAt: new Date() })
     .where(eq(workspaces.id, id))
     .returning();
   return row ?? null;

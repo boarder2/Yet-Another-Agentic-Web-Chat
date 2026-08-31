@@ -57,11 +57,11 @@ Non-secret settings are DB-backed with a localStorage cache — the sync layer, 
 
 ## Model Selection UI
 
-`ModelPicker` (`src/components/models/`) is the single controlled model-selection component — it owns no persistence; callers pass `value: ModelSelection` and persist `onChange`:
+`ModelPicker` (`src/components/models/`) is the single controlled model-selection component — it owns no persistence; callers pass `value: ModelSelection` and persist `onChange`. When a selected catalog entry advertises native reasoning levels, it renders independent Chat/System effort selects; Provider default is an omitted value and model changes clamp stale values:
 
 ```tsx
 <ModelPicker value={selection} onChange={persist}
-  fields={{ system?, vision?, contextWindow? }}   // each optional, default off
+  fields={{ system?, vision?, contextWindow?, reasoningEffort? }} // each optional, default off
   presets={'full' | 'apply-save' | 'none'}        // default 'none'
   layout={'inline' | 'dialog'} />
 ```

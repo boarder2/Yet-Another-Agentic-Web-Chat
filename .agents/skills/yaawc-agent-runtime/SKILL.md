@@ -7,7 +7,7 @@ description: 'SimplifiedAgent toolsets and run lifecycle: checkpoints, resume/in
 
 This skill owns a top-level turn from chat-route wiring through terminal persistence: `SimplifiedAgent`, `AgentStreamDriver`, checkpoint/resume, run hub/host, cancellation, and token tracking. Prompt content, individual tools, stream vocabulary, Panel, and deep-research internals belong to their specialized skills.
 
-The durable boundary is the strict versioned `AgentRunConfig`. Never persist live models, signals, embeddings, retrieved memory text, invoked skill bodies, or secrets. Agent producers emit typed events; `runHost`, not the agent, owns wire translation and durable assistant projection.
+The durable boundary is the strict versioned `AgentRunConfig`. Its v2 snapshot carries resolver-effective Chat/System and panel executor model references, including optional native reasoning effort; v1 snapshots decode as Provider default. Never persist live models, signals, embeddings, retrieved memory text, invoked skill bodies, or secrets. Agent producers emit typed events; `runHost`, not the agent, owns wire translation and durable assistant projection.
 
 ## New-turn lifecycle
 
@@ -35,7 +35,7 @@ Resume must:
 
 - lock and validate unresolved approval IDs;
 - strictly decode the recorded config and verify approval, run, chat, message, and checkpoint-thread identity; current code checks active-thread presence/chat/message but does not fully bind every recorded thread ID, so do not treat presence as proof;
-- re-resolve recorded model refs and rebuild workspace/MCP tools;
+- re-resolve recorded model refs (preserving the snapshotted effective effort) and rebuild workspace/MCP tools;
 - reject stale external snapshots as synthetic tool responses rather than applying them; missing expected hashes currently skip parts of freshness checking, so snapshot shape must fail closed;
 - seed a fresh tracker from persisted cumulative stats;
 - use keyed resume maps when several approvals remain;
@@ -47,7 +47,7 @@ After process restart/eviction, reconstruct controllers, assistant content, mile
 
 `runHub.ts` is the in-memory status/fan-out registry: sequence, buffered events, subscribers, controllers, replay content, pause/terminal TTLs, and idempotent lookup. Replay sends authoritative accumulated content, `replay_complete`, then live NDJSON.
 
-`runHost.ts` is the DB/wire adapter: partial/final assistant rows, active markers, widget accumulation, control-event translation, approval rows, checkpoint cleanup, milestone flushing, and terminal status.
+`runHost.ts` is the DB/wire adapter: partial/final assistant rows, active markers, widget accumulation, control-event translation, approval rows, checkpoint cleanup, milestone flushing, terminal status, and effective model-configuration audit metadata for historical Model Info.
 
 `runEventsPersistence.ts` stores reconstruction milestones—not response-token deltas—and force-flushes at pause and termination. Its current flush clears the buffer before a swallowed insert failure, so awaiting the flush is not a durability guarantee; preserve/requeue or propagate failures when changing this boundary.
 

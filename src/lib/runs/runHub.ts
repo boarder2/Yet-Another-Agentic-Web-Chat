@@ -1,6 +1,7 @@
 import type { EventEmitter } from 'stream';
 import type { StreamEvent } from '@/lib/streaming/events';
 import { TurnChartRegistry } from '@/lib/chart/turnChartRegistry';
+import type { AgentRunConfig } from '@/lib/search/agentRunConfig';
 
 export type RunStatus =
   'running' | 'awaiting_user' | 'completed' | 'errored' | 'cancelled';
@@ -38,6 +39,8 @@ export type Run = {
   recievedMessage: string;
   /** Turn-local chart handles shared by tools, runHost, and resume. */
   chartRegistry: TurnChartRegistry;
+  /** Versioned effective configuration used to build this run. */
+  configSnapshot?: AgentRunConfig;
 };
 
 type Registry = {
@@ -72,6 +75,7 @@ export function startRun(params: {
   abortController: AbortController;
   retrievalController: AbortController;
   chartRegistry?: TurnChartRegistry;
+  configSnapshot?: AgentRunConfig;
 }): { run: Run; isNew: boolean } {
   const reg = getRegistry();
   const existing = reg.byMessageId.get(params.messageId);
@@ -94,6 +98,7 @@ export function startRun(params: {
     startedAt: Date.now(),
     recievedMessage: '',
     chartRegistry: params.chartRegistry ?? new TurnChartRegistry(),
+    configSnapshot: params.configSnapshot,
   };
 
   reg.byMessageId.set(params.messageId, run);

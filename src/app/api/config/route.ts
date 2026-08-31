@@ -3,11 +3,9 @@ import {
   getBaseUrl,
   getCustomOpenaiApiKey,
   getGeminiApiKey,
-  getGroqApiKey,
   getOpenaiApiKey,
   getOpenrouterApiKey,
   getDeepseekApiKey,
-  getAimlApiKey,
   getBraveSearchApiKey,
   getBraveLLMApiKey,
   getMojeekApiKey,
@@ -60,13 +58,11 @@ export const GET = async (_req: Request) => {
 
     // Mask all API keys in the response
     config['openaiApiKey'] = maskSecret(getOpenaiApiKey());
-    config['groqApiKey'] = maskSecret(getGroqApiKey());
     config['anthropicApiKey'] = maskSecret(getAnthropicApiKey());
     config['geminiApiKey'] = maskSecret(getGeminiApiKey());
     config['deepseekApiKey'] = maskSecret(getDeepseekApiKey());
     config['openrouterApiKey'] = maskSecret(getOpenrouterApiKey());
     config['customOpenaiApiKey'] = maskSecret(getCustomOpenaiApiKey());
-    config['aimlApiKey'] = maskSecret(getAimlApiKey());
 
     config['baseUrl'] = getBaseUrl();
 
@@ -106,11 +102,9 @@ export const POST = async (req: Request) => {
     // Model/search provider API keys — encrypted, stored in `credentials`.
     const credentialFields: Array<{ body: string; key: CredentialKey }> = [
       { body: 'openaiApiKey', key: 'model.openai' },
-      { body: 'groqApiKey', key: 'model.groq' },
       { body: 'anthropicApiKey', key: 'model.anthropic' },
       { body: 'geminiApiKey', key: 'model.gemini' },
       { body: 'deepseekApiKey', key: 'model.deepseek' },
-      { body: 'aimlApiKey', key: 'model.aimlapi' },
       { body: 'openrouterApiKey', key: 'model.openrouter' },
       { body: 'customOpenaiApiKey', key: 'model.customOpenai' },
       { body: 'braveSearchApiKey', key: 'search.braveSearch' },

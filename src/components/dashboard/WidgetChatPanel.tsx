@@ -10,6 +10,7 @@ import WidgetProposalCard, {
 } from '@/components/dashboard/WidgetProposalCard';
 import { WidgetBuilderState } from '@/lib/tools/agents/widgetBuilderTools';
 import { captureCurrentSelection, ModelSelection } from '@/lib/models/presets';
+import { REASONING_EFFORT_LABELS } from '@/lib/providers/reasoningEffort';
 import { resolveWidgetTheme } from '@/lib/widgets/widgetTheme';
 
 interface ChatMessage {
@@ -95,6 +96,9 @@ const WidgetChatPanel = ({
                 ? {
                     provider: selection.chatProvider,
                     name: selection.chatModel,
+                    ...(selection.chatReasoningEffort
+                      ? { reasoningEffort: selection.chatReasoningEffort }
+                      : {}),
                   }
                 : undefined,
             systemModel:
@@ -102,6 +106,11 @@ const WidgetChatPanel = ({
                 ? {
                     provider: selection.systemProvider,
                     name: selection.systemModel,
+                    ...(selection.systemReasoningEffort
+                      ? {
+                          reasoningEffort: selection.systemReasoningEffort,
+                        }
+                      : {}),
                   }
                 : undefined,
           }),
@@ -285,9 +294,17 @@ const WidgetChatPanel = ({
               title="Choose the model the assistant uses"
             >
               Model: {selection.chatModel || 'default'}
+              {selection.chatReasoningEffort
+                ? ` · ${REASONING_EFFORT_LABELS[selection.chatReasoningEffort]}`
+                : ''}
               {selection.systemModel &&
-              selection.systemModel !== selection.chatModel
-                ? ` · sys: ${selection.systemModel}`
+              (selection.systemModel !== selection.chatModel ||
+                selection.systemReasoningEffort)
+                ? ` · sys: ${selection.systemModel}${
+                    selection.systemReasoningEffort
+                      ? ` · ${REASONING_EFFORT_LABELS[selection.systemReasoningEffort]}`
+                      : ''
+                  }`
                 : ''}{' '}
               {showModel ? '▲' : '▼'}
             </button>
@@ -299,6 +316,7 @@ const WidgetChatPanel = ({
                   fields={{ system: true }}
                   presets="apply-save"
                   layout="dialog"
+                  showStoredEffortState
                 />
               </div>
             )}

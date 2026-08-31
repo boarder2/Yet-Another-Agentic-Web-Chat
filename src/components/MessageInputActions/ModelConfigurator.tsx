@@ -30,6 +30,12 @@ import {
   selectionToActiveSelection,
   isPresetAvailable,
 } from '@/lib/models/presets';
+import {
+  isReasoningEffort,
+  REASONING_EFFORT_LABELS,
+  type ReasoningEffort,
+} from '@/lib/providers/reasoningEffort';
+import { ReasoningEffortSummary } from '@/components/models/ReasoningEffortField';
 import { toast } from 'sonner';
 import ModelPicker from '@/components/models/ModelPicker';
 import PresetOption from '@/components/models/PresetOption';
@@ -61,6 +67,24 @@ export default function ModelConfigurator({
     SELECTION_KEYS.systemModel,
     '',
   );
+  const [chatReasoningEffortRaw] = useLocalStorageString(
+    SELECTION_KEYS.chatReasoningEffort,
+    '',
+  );
+  const [systemReasoningEffortRaw] = useLocalStorageString(
+    SELECTION_KEYS.systemReasoningEffort,
+    '',
+  );
+  const chatReasoningEffort: ReasoningEffort | undefined = isReasoningEffort(
+    chatReasoningEffortRaw,
+  )
+    ? chatReasoningEffortRaw
+    : undefined;
+  const systemReasoningEffort: ReasoningEffort | undefined = isReasoningEffort(
+    systemReasoningEffortRaw,
+  )
+    ? systemReasoningEffortRaw
+    : undefined;
   const [imageCapable] = useLocalStorageBoolean(
     SELECTION_KEYS.imageCapable,
     false,
@@ -74,10 +98,17 @@ export default function ModelConfigurator({
     EMPTY_PRESETS,
   );
 
-  const { data: modelsData } = useModels();
+  const { data: modelsData, isFetched } = useModels();
+  const capabilitiesLoaded = isFetched || modelsData !== undefined;
   const chatProviders = (modelsData?.chatModelProviders ?? {}) as Record<
     string,
-    Record<string, { displayName: string }>
+    Record<
+      string,
+      {
+        displayName: string;
+        supportedReasoningEfforts?: ReasoningEffort[];
+      }
+    >
   >;
 
   const cwParsed = parseInt(contextWindowSizeStr, 10);
@@ -91,6 +122,8 @@ export default function ModelConfigurator({
     systemModel: systemModelKey,
     imageCapable,
     contextWindowSize,
+    ...(chatReasoningEffort ? { chatReasoningEffort } : {}),
+    ...(systemReasoningEffort ? { systemReasoningEffort } : {}),
   };
 
   // Responsive default for showing model text on the main button
@@ -107,8 +140,11 @@ export default function ModelConfigurator({
   const mainButtonText = useMemo(() => {
     if (!computedShowName) return null;
     if (!chatModelKey) return 'Loading...';
-    return `Chat: ${chatModelKey} (${chatProvider})`;
-  }, [computedShowName, chatModelKey, chatProvider]);
+    const effort = chatReasoningEffort
+      ? ` · ${REASONING_EFFORT_LABELS[chatReasoningEffort]}`
+      : '';
+    return `Chat: ${chatModelKey} (${chatProvider})${effort}`;
+  }, [computedShowName, chatModelKey, chatProvider, chatReasoningEffort]);
 
   const matchingPreset = useMemo(
     () => findMatchingPreset(presets, selectionToActiveSelection(value)),
@@ -122,6 +158,8 @@ export default function ModelConfigurator({
       systemModelKey,
       imageCapable,
       contextWindowSize,
+      chatReasoningEffort,
+      systemReasoningEffort,
     ],
   );
 
@@ -158,6 +196,13 @@ export default function ModelConfigurator({
     const systemName =
       chatProviders[modelOverride.systemProvider]?.[modelOverride.systemModel]
         ?.displayName ?? modelOverride.systemModel;
+    const capabilityLoaded = capabilitiesLoaded;
+    const chatCapabilities =
+      chatProviders[modelOverride.chatProvider]?.[modelOverride.chatModel]
+        ?.supportedReasoningEfforts;
+    const systemCapabilities =
+      chatProviders[modelOverride.systemProvider]?.[modelOverride.systemModel]
+        ?.supportedReasoningEfforts;
     return (
       <Popover className="relative">
         {({ open }) => (
@@ -207,6 +252,18 @@ export default function ModelConfigurator({
                         {systemName} · {modelOverride.systemProvider}
                       </span>
                     </div>
+                    <ReasoningEffortSummary
+                      label="Chat effort"
+                      value={modelOverride.chatReasoningEffort}
+                      supported={chatCapabilities}
+                      capabilityKnown={capabilityLoaded}
+                    />
+                    <ReasoningEffortSummary
+                      label="System effort"
+                      value={modelOverride.systemReasoningEffort}
+                      supported={systemCapabilities}
+                      capabilityKnown={capabilityLoaded}
+                    />
                   </div>
                   <div className="border-t border-surface-2 px-3 py-2 text-xs text-fg-subtle">
                     Change this in the workspace&apos;s settings.
@@ -316,6 +373,7 @@ export default function ModelConfigurator({
           fields={{ system: true, vision: true, contextWindow: true }}
           presets="full"
           layout="dialog"
+          showStoredEffortState
         />
       </Modal>
     </>

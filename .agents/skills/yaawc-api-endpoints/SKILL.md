@@ -14,8 +14,8 @@ description: Generic HTTP route conventions and /api/chat run flow; defer subsys
   message: { messageId: string; chatId: string; content: string };
   focusMode: string;     // "webSearch" | "localResearch" | "chat"
   files: string[];
-  chatModel: { provider: string; name: string; contextWindowSize?: number };
-  systemModel?: { provider: string; name: string; contextWindowSize?: number };
+  chatModel: { provider: string; name: string; contextWindowSize?: number; reasoningEffort?: ReasoningEffort };
+  systemModel?: { provider: string; name: string; contextWindowSize?: number; reasoningEffort?: ReasoningEffort };
   // Embedding model is NOT sent — resolved server-side from app_settings
   selectedSystemPromptIds: string[];  // persona prompt IDs (legacy name)
   selectedMethodologyId?: string;
@@ -42,14 +42,14 @@ POST /api/chat
   → idempotency check (getRun) → re-subscribe if live
   → resolve workspace; workspace.modelOverride overwrites body models (server-side pin —
     unresolvable pinned model = 400 with workspace-specific message)
-  → resolveChatAndEmbedding() → chatLlm, systemLlm, embedding
+  → validate model refs → resolveChatAndEmbedding() → request-local effective Chat/System refs + chatLlm, systemLlm, embedding
   → memory retrieval → handleHistorySave() → resolveSkillsForChat()
   → buildHistoryFromDb() (compaction-aware)
   → new SimplifiedAgent + startRun() + attachRunHost() → searchAndAnswer() (fire-and-forget)
   → subscribe(run, 0, req.signal) → stream to client
 ```
 
-If `systemModel` is omitted it falls back to `chatModel`. Backgrounded runs persist; clients reconnect via the stream route below. Interrupts pause the run (`awaiting_user`); resume via `/api/chat/runs/resume`.
+If `systemModel` is omitted it falls back to the complete Chat reference, including effective reasoning effort. Malformed effort values return HTTP 400; valid stale values resolve against current capabilities without rewriting durable definitions. Backgrounded runs persist; clients reconnect via the stream route below. Interrupts pause the run (`awaiting_user`); resume via `/api/chat/runs/resume`.
 
 ## Run Management
 

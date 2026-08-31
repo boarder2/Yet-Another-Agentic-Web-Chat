@@ -5,7 +5,7 @@ description: 'Workflows and schedules: templates, manual/headless runs, cron lif
 
 # Workflows and Schedules
 
-Automations are reusable parameterized workflows plus DB-backed cron schedules. Every run uses the workflow's saved focus mode, Chat/System models, personas, and methodology. It does not inherit a launching chat's workspace, MCP tools, memory, panel, or personalization.
+Automations are reusable parameterized workflows plus DB-backed cron schedules. Every run uses the workflow's saved focus mode, Chat/System model references (including optional native reasoning effort), personas, and methodology. It does not inherit a launching chat's workspace, MCP tools, memory, panel, or personalization.
 
 ## Template contract
 
@@ -17,11 +17,11 @@ Automations are reusable parameterized workflows plus DB-backed cron schedules. 
 - Reject malformed, duplicate, undefined, unclosed, invalid-option, and invalid-default tokens. Preserve unused-field warnings.
 - Substitution strips frontmatter, applies defaults, joins `multi` values with `, `, and accepts an explicit clock for deterministic dates.
 
-`resolveWorkflowRun.ts` is the shared run-time resolver. Create/edit routes reject parser errors; schedule create/edit validates the stored fill-set against the current prompt. Workflow edits that invalidate child schedules must disable and unregister them with a repair reason.
+`resolveWorkflowRun.ts` is the shared run-time resolver. Create/edit routes reject parser errors and malformed model references; schedule create/edit validates the stored fill-set against the current prompt. Workflow edits that invalidate child schedules must disable and unregister them with a repair reason. Saved model effort is resolved at run time without rewriting the workflow or schedule definition.
 
 ## Manual runs
 
-`src/lib/workflows/runManual.ts` starts a normal, background-capable chat from substituted input. It inserts the chat and verbatim user message with `workflowId`, starts the run host/hub, and returns the chat without awaiting completion. Manual runs are live and continuable, but retain the workflow's non-workspace configuration.
+`src/lib/workflows/runManual.ts` starts a normal, background-capable chat from substituted input. It inserts the chat and verbatim user message with `workflowId`, starts the run host/hub, and returns the chat without awaiting completion. Manual runs are live and continuable, but retain the workflow's non-workspace configuration and the effective effort captured in their v2 run snapshot.
 
 `POST /api/workflows/[id]/run` returns missing required names as 400 or a new chat as 201. Manual run requests are not idempotent: a retry creates another chat/run. Keep persisted provenance aligned with ordinary chat runs.
 
@@ -29,7 +29,7 @@ Automations are reusable parameterized workflows plus DB-backed cron schedules. 
 
 `src/lib/scheduledTasks/runner.ts` powers cron and Run now. It resolves saved values at fire time, creates a schedule-linked chat plus running assistant row, then folds stream events into one persisted answer.
 
-Scheduled runs must preserve final sources, writer-owned tool widgets, model stats, and chart specs/placements. Mark the chat and schedule successful only after `agent_end`. On any model/provider/prompt/agent failure, best-effort persist a failure answer, clear active markers, mark the chat errored, and record `lastRunStatus=error` and the error text.
+Scheduled runs must preserve final sources, writer-owned tool widgets, model stats, effective Chat/System effort metadata, and chart specs/placements. Mark the chat and schedule successful only after `agent_end`. On any model/provider/prompt/agent failure, best-effort persist a failure answer, clear active markers, mark the chat errored, and record `lastRunStatus=error` and the error text.
 
 Scheduled execution is headless: it cannot wait for ask-user, code execution, workspace edits, or other approval-gated interactions, and it does not perform automatic memory extraction. Charts are supported. Deep-research nested activity is not fully represented in persisted scheduled output; do not claim otherwise.
 

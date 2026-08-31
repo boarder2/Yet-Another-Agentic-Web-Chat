@@ -7,8 +7,10 @@
  */
 import type { Document } from '@langchain/core/documents';
 import type { ModelStats } from './events';
+import type { AgentModelConfigAudit } from '@/lib/search/agentRunConfig';
 
 export type { ModelStats, TokenUsage } from './events';
+export type { AgentModelConfigAudit } from '@/lib/search/agentRunConfig';
 
 export interface File {
   fileName: string;
@@ -39,6 +41,8 @@ export type Message = {
   suggestions?: string[];
   sources?: Document[];
   modelStats?: ModelStats;
+  /** Effective Chat/System/panel model settings used for this completed turn. */
+  modelConfig?: AgentModelConfigAudit;
   searchQuery?: string;
   searchUrl?: string;
   expandedThinkBoxes?: Set<string>;

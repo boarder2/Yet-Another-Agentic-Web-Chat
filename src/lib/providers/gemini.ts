@@ -11,6 +11,7 @@ export const PROVIDER_INFO = {
 };
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { Embeddings } from '@langchain/core/embeddings';
+import { getReasoningEffortMetadata } from './reasoningEffort';
 
 // Replace static model lists with dynamic fetch from Gemini API
 const GEMINI_MODELS_ENDPOINT =
@@ -85,6 +86,7 @@ export const loadGeminiChatModels = async () => {
           maxRetries: 10,
           // temperature: 0.7,
         }) as unknown as BaseChatModel,
+        ...getReasoningEffortMetadata('gemini', model.key),
       };
     });
 

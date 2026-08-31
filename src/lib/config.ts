@@ -46,9 +46,6 @@ interface Config {
     OPENAI: {
       API_KEY: string;
     };
-    GROQ: {
-      API_KEY: string;
-    };
     ANTHROPIC: {
       API_KEY: string;
     };
@@ -56,9 +53,6 @@ interface Config {
       API_KEY: string;
     };
     DEEPSEEK: {
-      API_KEY: string;
-    };
-    AIMLAPI: {
       API_KEY: string;
     };
     LM_STUDIO: {
@@ -176,8 +170,6 @@ export type RetentionPolicy = {
 
 export const getOpenaiApiKey = () => getCredential('model.openai');
 
-export const getGroqApiKey = () => getCredential('model.groq');
-
 export const getOpenrouterApiKey = () => getCredential('model.openrouter');
 
 export const getAnthropicApiKey = () => getCredential('model.anthropic');
@@ -197,8 +189,6 @@ export const getBraveLLMApiKey = () => getCredential('search.braveLLM');
 export const getMojeekApiKey = () => getCredential('search.mojeek');
 
 export const getDeepseekApiKey = () => getCredential('model.deepseek');
-
-export const getAimlApiKey = () => getCredential('model.aimlapi');
 
 export const getCustomOpenaiApiKey = () => getCredential('model.customOpenai');
 
@@ -373,11 +363,9 @@ export const readLegacyCredentialsConfig = (): Record<string, string> => {
   };
 
   put('model.openai', cfg.MODELS?.OPENAI?.API_KEY);
-  put('model.groq', cfg.MODELS?.GROQ?.API_KEY);
   put('model.anthropic', cfg.MODELS?.ANTHROPIC?.API_KEY);
   put('model.gemini', cfg.MODELS?.GEMINI?.API_KEY);
   put('model.deepseek', cfg.MODELS?.DEEPSEEK?.API_KEY);
-  put('model.aimlapi', cfg.MODELS?.AIMLAPI?.API_KEY);
   put('model.openrouter', cfg.MODELS?.OPENROUTER?.API_KEY);
   put('model.customOpenai', cfg.MODELS?.CUSTOM_OPENAI?.API_KEY);
   put('search.braveSearch', cfg.SEARCH?.PROVIDERS?.BRAVE_SEARCH?.API_KEY);

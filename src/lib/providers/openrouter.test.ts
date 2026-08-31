@@ -97,6 +97,54 @@ describe('OpenRouter provider adapter', () => {
     }
   });
 
+  it('retains supported parameters and derives native effort capabilities from discovery', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              id: 'vendor/unknown-reasoning',
+              name: 'Unknown Reasoning',
+              supported_parameters: ['reasoning', 'max_tokens'],
+            },
+            {
+              id: 'vendor/budget-only',
+              name: 'Budget Only',
+              supported_parameters: ['reasoning_tokens', 'max_tokens'],
+            },
+            {
+              id: 'vendor/explicit',
+              name: 'Explicit Efforts',
+              supported_parameters: ['reasoning'],
+              reasoning: {
+                supported_efforts: ['none', 'high'],
+                mandatory: false,
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    const models = await loadOpenrouterChatModels();
+
+    expect(models['vendor/unknown-reasoning'].supportedParameters).toEqual([
+      'reasoning',
+      'max_tokens',
+    ]);
+    expect(
+      models['vendor/unknown-reasoning'].supportedReasoningEfforts,
+    ).toEqual(['low', 'medium', 'high']);
+    expect(models['vendor/budget-only']).not.toHaveProperty(
+      'supportedReasoningEfforts',
+    );
+    expect(models['vendor/explicit'].supportedReasoningEfforts).toEqual([
+      'off',
+      'high',
+    ]);
+  });
+
   it('fails closed on invalid persisted configuration before discovering models', async () => {
     mocks.getOpenrouterQuantizations.mockReturnValue({
       valid: false as const,

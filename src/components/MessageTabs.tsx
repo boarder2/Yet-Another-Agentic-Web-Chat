@@ -251,8 +251,11 @@ const MessageTabs = ({
             <div className="flex flex-row items-center justify-between w-full px-4 py-4">
               <div className="flex flex-row items-center space-x-1">
                 <Rewrite rewrite={rewrite} messageId={message.messageId} />
-                {message.modelStats && (
-                  <ModelInfoButton modelStats={message.modelStats} />
+                {(message.modelStats || message.modelConfig) && (
+                  <ModelInfoButton
+                    modelStats={message.modelStats ?? null}
+                    modelConfig={message.modelConfig}
+                  />
                 )}
                 {hasSources && (
                   <button

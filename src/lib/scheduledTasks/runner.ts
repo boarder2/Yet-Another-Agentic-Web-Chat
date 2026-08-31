@@ -47,7 +47,10 @@ import { resolveChartPlacement } from '@/lib/chart/placement';
 import { ChartSpecSchema, type ChartSpec } from '@/lib/chart/chartSpec';
 import { stripStreamedChartTags } from '@/lib/utils/contentStripping';
 import { resolveWorkflowRun } from '@/lib/workflows/resolveWorkflowRun';
-import { createAgentRunConfig } from '@/lib/search/agentRunConfig';
+import {
+  buildAgentModelConfigAudit,
+  createAgentRunConfig,
+} from '@/lib/search/agentRunConfig';
 
 export async function runSchedule(
   scheduleId: string,
@@ -83,10 +86,13 @@ export async function runSchedule(
       new Date(),
     );
 
-    const { chatLlm, systemLlm, embedding } = await resolveChatAndEmbedding({
+    const resolved = await resolveChatAndEmbedding({
       chatModel: run.chatModel,
       systemModel: run.systemModel,
     });
+    const { chatLlm, systemLlm, embedding } = resolved;
+    const chatModelRef = resolved.chatModelRef;
+    const systemModelRef = resolved.systemModelRef;
 
     const personaInstructionsContent = await getPersonaInstructionsOnly(
       run.selectedSystemPromptIds,
@@ -139,12 +145,12 @@ export async function runSchedule(
     const emitter = new EventEmitter();
     const { tracker, chatRecorder, systemRecorder } = createTurnTracker(
       emitter,
-      run.chatModel,
-      run.systemModel,
+      chatModelRef,
+      systemModelRef,
     );
     const runConfig = createAgentRunConfig({
-      chatModelRef: run.chatModel,
-      systemModelRef: run.systemModel ?? run.chatModel,
+      chatModelRef,
+      systemModelRef,
       focusMode: run.focusMode,
       fileIds: [],
       personaInstructions: personaInstructionsContent,
@@ -260,6 +266,7 @@ export async function runSchedule(
         ...(searchQuery && { searchQuery }),
         ...(searchUrl && { searchUrl }),
         ...(modelStats && { modelStats }),
+        modelConfig: buildAgentModelConfigAudit(runConfig),
         ...(shownChartIds.size > 0 && {
           chartSpecs: Object.fromEntries(
             [...shownChartIds]

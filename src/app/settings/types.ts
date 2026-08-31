@@ -6,12 +6,10 @@ export interface SettingsType {
     [key: string]: { name: string; displayName: string }[];
   };
   openaiApiKey: string;
-  groqApiKey: string;
   openrouterApiKey: string;
   anthropicApiKey: string;
   geminiApiKey: string;
   deepseekApiKey: string;
-  aimlApiKey: string;
   customOpenaiApiKey: string;
   encryptionConfigured: boolean;
   contextWindowSize: number;

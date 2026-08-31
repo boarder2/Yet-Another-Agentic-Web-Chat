@@ -170,6 +170,7 @@ export function WorkspaceModelOverrideField({
           fields={{ system: true, vision: true, contextWindow: true }}
           presets="none"
           layout="inline"
+          showStoredEffortState
         />
       )}
     </>

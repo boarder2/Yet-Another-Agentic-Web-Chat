@@ -79,4 +79,32 @@ describe('PATCH /api/settings OpenRouter cache invalidation', () => {
     expect(mocks.transaction).not.toHaveBeenCalled();
     expect(mocks.invalidateModelCache).not.toHaveBeenCalled();
   });
+
+  it('accepts independent effort keys and deletes them for Provider default', async () => {
+    expect(
+      (
+        await patch({
+          chatReasoningEffort: 'high',
+          systemReasoningEffort: 'off',
+        })
+      ).status,
+    ).toBe(204);
+    expect(mocks.transaction).toHaveBeenCalledTimes(1);
+    expect(mocks.transactionTarget.insert).toHaveBeenCalledTimes(2);
+
+    mocks.transaction.mockClear();
+    mocks.transactionTarget.delete.mockClear();
+    expect((await patch({ chatReasoningEffort: null })).status).toBe(204);
+    expect(mocks.transactionTarget.delete).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['default', 'MAX', '', 'unsupported'])(
+    'rejects malformed effort setting %s before writing it',
+    async (value) => {
+      const response = await patch({ chatReasoningEffort: value });
+
+      expect(response.status).toBe(400);
+      expect(mocks.transaction).not.toHaveBeenCalled();
+    },
+  );
 });

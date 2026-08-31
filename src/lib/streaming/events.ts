@@ -22,6 +22,7 @@ import type { EventEmitter } from 'events';
 import type { Document } from '@langchain/core/documents';
 import type { SubagentExecution } from '@/lib/state/chatAgentState';
 import type { ChartSpec } from '@/lib/chart/chartSpec';
+import type { AgentModelConfigAudit } from '@/lib/search/agentRunConfig';
 
 // ── Shared payload types (single source of truth) ────────────────────────────
 
@@ -354,6 +355,8 @@ export type StreamEvent =
       usedLocation?: boolean;
       usedPersonalization?: boolean;
       memoriesUsed?: Array<{ id: string; content: string }>;
+      /** Effective model settings for live and replayed historical Model Info. */
+      modelConfig?: AgentModelConfigAudit;
       projectedNextInputTokens?: number;
     } & WithMessageId)
   | ({ type: 'chatTitle'; chatId: string; title: string } & WithMessageId)

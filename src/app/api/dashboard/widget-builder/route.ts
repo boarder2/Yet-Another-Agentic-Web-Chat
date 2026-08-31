@@ -5,8 +5,9 @@ import { SimplifiedAgent } from '@/lib/search/simplifiedAgent';
 import { createTurnTracker } from '@/lib/tokens/tracker';
 import { onStreamEvent } from '@/lib/streaming/events';
 import {
+  parseModelReference,
   resolveChatAndEmbedding,
-  ModelRef,
+  type ModelRef,
 } from '@/lib/providers/resolveModels';
 import { widgetBuilderSystemPrompt } from '@/lib/prompts/simplifiedAgent/widgetBuilder';
 import {
@@ -49,10 +50,28 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { chatLlm, systemLlm, embedding } = await resolveChatAndEmbedding({
+  try {
+    if (body.chatModel !== undefined) {
+      body.chatModel = parseModelReference(body.chatModel);
+    }
+    if (body.systemModel !== undefined && body.systemModel !== null) {
+      body.systemModel = parseModelReference(body.systemModel);
+    }
+  } catch (error) {
+    return Response.json(
+      {
+        error:
+          error instanceof Error ? error.message : 'Invalid model reference',
+      },
+      { status: 400 },
+    );
+  }
+
+  const resolved = await resolveChatAndEmbedding({
     chatModel: body.chatModel,
     systemModel: body.systemModel,
   });
+  const { chatLlm, systemLlm, embedding } = resolved;
 
   const ctx = {
     state: body.widget,
@@ -97,17 +116,16 @@ export async function POST(req: NextRequest) {
 
   // Widget builder doesn't surface a token-usage popover, but SimplifiedAgent
   // requires a tracker to attribute any LLM calls it makes.
-  const unknownModel = { provider: 'unknown', name: 'unknown' };
   const { tracker, chatRecorder, systemRecorder } = createTurnTracker(
     emitter,
-    body.chatModel ?? unknownModel,
-    body.systemModel ?? body.chatModel ?? unknownModel,
+    resolved.chatModelRef,
+    resolved.systemModelRef,
   );
 
   const agentMessageId = `widget-builder-${Date.now()}`;
   const runConfig = createAgentRunConfig({
-    chatModelRef: body.chatModel ?? unknownModel,
-    systemModelRef: body.systemModel ?? body.chatModel ?? unknownModel,
+    chatModelRef: resolved.chatModelRef,
+    systemModelRef: resolved.systemModelRef,
     focusMode: 'chat',
     fileIds: [],
     personaInstructions: '',

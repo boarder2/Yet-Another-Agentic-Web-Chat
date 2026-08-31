@@ -8,6 +8,7 @@ import {
   index,
 } from 'drizzle-orm/sqlite-core';
 import type { WorkspaceModelOverride } from '@/lib/workspaces/types';
+import type { ModelRef } from '@/lib/providers/resolveModels';
 
 export const messages = sqliteTable(
   'messages',
@@ -182,14 +183,8 @@ export const scheduledTasks = sqliteTable('scheduled_tasks', {
   sourceUrls: text('source_urls', { mode: 'json' })
     .$type<string[]>()
     .default(sql`'[]'`),
-  chatModel: text('chat_model', { mode: 'json' })
-    .$type<{ provider: string; name: string; contextWindowSize?: number }>()
-    .notNull(),
-  systemModel: text('system_model', { mode: 'json' }).$type<{
-    provider: string;
-    name: string;
-    contextWindowSize?: number;
-  } | null>(),
+  chatModel: text('chat_model', { mode: 'json' }).$type<ModelRef>().notNull(),
+  systemModel: text('system_model', { mode: 'json' }).$type<ModelRef | null>(),
   selectedSystemPromptIds: text('selected_system_prompt_ids', { mode: 'json' })
     .$type<string[]>()
     .default(sql`'[]'`),
@@ -229,14 +224,8 @@ export const workflows = sqliteTable('workflows', {
   icon: text('icon'), // lucide icon name for the card
   prompt: text('prompt').notNull(),
   focusMode: text('focus_mode').notNull(),
-  chatModel: text('chat_model', { mode: 'json' })
-    .$type<{ provider: string; name: string; contextWindowSize?: number }>()
-    .notNull(),
-  systemModel: text('system_model', { mode: 'json' }).$type<{
-    provider: string;
-    name: string;
-    contextWindowSize?: number;
-  } | null>(),
+  chatModel: text('chat_model', { mode: 'json' }).$type<ModelRef>().notNull(),
+  systemModel: text('system_model', { mode: 'json' }).$type<ModelRef | null>(),
   selectedSystemPromptIds: text('selected_system_prompt_ids', { mode: 'json' })
     .$type<string[]>()
     .default(sql`'[]'`),

@@ -6,15 +6,13 @@
  */
 
 import { PANEL_MIN_EXECUTORS, PANEL_MAX_EXECUTORS } from '@/lib/types/panel';
+import type { ModelRef } from '@/lib/providers/resolveModels';
 
 export const PANEL_SELECTION_KEY = 'panelSelection';
 
-export interface PanelModelEntry {
-  provider: string;
-  name: string;
-  contextWindowSize?: number;
+export type PanelModelEntry = ModelRef & {
   imageCapable?: boolean;
-}
+};
 
 export interface PanelSelection {
   enabled: boolean;
@@ -43,4 +41,15 @@ export function isPanelSelectionReady(sel: PanelSelection): boolean {
 
 export function sameModel(a: PanelModelEntry, b: PanelModelEntry): boolean {
   return a.provider === b.provider && a.name === b.name;
+}
+
+/** Compare a persisted executor identity and its configured effort. */
+export function sameModelConfiguration(
+  a: PanelModelEntry,
+  b: PanelModelEntry,
+): boolean {
+  return (
+    sameModel(a, b) &&
+    (a.reasoningEffort ?? undefined) === (b.reasoningEffort ?? undefined)
+  );
 }

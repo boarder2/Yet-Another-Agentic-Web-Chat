@@ -5,9 +5,13 @@ import { Info } from 'lucide-react';
 import { ModelStats } from '../ChatWindow';
 import TokenPill from '@/components/common/TokenPill';
 import { IconButton } from '@/components/ui/IconButton';
+import type { AgentModelConfigAudit } from '@/lib/search/agentRunConfig';
+import { REASONING_EFFORT_LABELS } from '@/lib/providers/reasoningEffort';
 
 interface ModelInfoButtonProps {
   modelStats: ModelStats | null;
+  /** Effective role/executor settings retained in completed assistant metadata. */
+  modelConfig?: AgentModelConfigAudit | null;
 }
 
 /** Shared response-time / location / personalization / memories rows (present on both v1 and v2). */
@@ -232,7 +236,51 @@ const ModelInfoRowsV1: React.FC<{
   );
 };
 
-const ModelInfoButton: React.FC<ModelInfoButtonProps> = ({ modelStats }) => {
+const ModelConfigRows: React.FC<{
+  modelConfig: AgentModelConfigAudit;
+}> = ({ modelConfig }) => {
+  const effortLabel = (effort?: keyof typeof REASONING_EFFORT_LABELS) =>
+    effort ? REASONING_EFFORT_LABELS[effort] : 'Provider default';
+  const modelLabel = (ref: { provider: string; name: string }) =>
+    `${ref.name} · ${ref.provider}`;
+
+  return (
+    <>
+      <div className="col-span-2 border-t border-surface-2 pt-2 font-medium text-fg">
+        Effective model settings
+      </div>
+      <div className="text-fg-subtle">Chat effort</div>
+      <div
+        className="font-medium truncate"
+        title={modelLabel(modelConfig.chat)}
+      >
+        {modelLabel(modelConfig.chat)} ·{' '}
+        {effortLabel(modelConfig.chat.reasoningEffort)}
+      </div>
+      <div className="text-fg-subtle">System effort</div>
+      <div
+        className="font-medium truncate"
+        title={modelLabel(modelConfig.system)}
+      >
+        {modelLabel(modelConfig.system)} ·{' '}
+        {effortLabel(modelConfig.system.reasoningEffort)}
+      </div>
+      {modelConfig.panel?.executors.map((executor, index) => (
+        <React.Fragment key={`${executor.provider}/${executor.name}/${index}`}>
+          <div className="text-fg-subtle">Panel executor {index + 1}</div>
+          <div className="font-medium truncate" title={modelLabel(executor)}>
+            {modelLabel(executor)} · {effortLabel(executor.reasoningEffort)}
+          </div>
+        </React.Fragment>
+      ))}
+    </>
+  );
+};
+
+const ModelInfoButton: React.FC<ModelInfoButtonProps> = ({
+  modelStats,
+  modelConfig,
+}) => {
   const [showPopover, setShowPopover] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -279,6 +327,7 @@ const ModelInfoButton: React.FC<ModelInfoButtonProps> = ({ modelStats }) => {
                 ) : (
                   <ModelInfoRowsV1 modelStats={modelStats} />
                 ))}
+              {modelConfig && <ModelConfigRows modelConfig={modelConfig} />}
             </div>
           </div>
         </div>

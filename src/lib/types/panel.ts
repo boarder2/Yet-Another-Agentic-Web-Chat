@@ -11,10 +11,22 @@
 // with the resolver; re-export it here so panel code has one definition.
 export type { ModelRef } from '@/lib/providers/resolveModels';
 import type { ModelRef } from '@/lib/providers/resolveModels';
+import { modelRefSchema } from '@/lib/providers/reasoningEffort';
+import { z } from 'zod';
 
 export type PanelExecutorConfig = ModelRef & {
   imageCapable?: boolean;
 };
+
+const panelExecutorSchema = modelRefSchema
+  .extend({ imageCapable: z.boolean().optional() })
+  .strict();
+export const panelConfigSchema = z
+  .object({
+    executors: z.array(panelExecutorSchema),
+    options: z.object({}).strict().optional(),
+  })
+  .strict();
 
 export type PanelConfig = {
   executors: PanelExecutorConfig[];
@@ -24,17 +36,6 @@ export type PanelConfig = {
 
 export const PANEL_MIN_EXECUTORS = 2;
 export const PANEL_MAX_EXECUTORS = 4;
-
-function isModelRef(v: unknown): v is ModelRef {
-  if (typeof v !== 'object' || v === null) return false;
-  const r = v as Record<string, unknown>;
-  return (
-    typeof r.provider === 'string' &&
-    r.provider.length > 0 &&
-    typeof r.name === 'string' &&
-    r.name.length > 0
-  );
-}
 
 /**
  * Pure validation of a panel config: enforces 2–4 executors. The turn's chat
@@ -63,8 +64,14 @@ export function validatePanelConfig(
       error: `Panel allows at most ${PANEL_MAX_EXECUTORS} executors.`,
     };
   }
-  if (!cfg.executors.every(isModelRef)) {
-    return { ok: false, error: 'Each executor must specify provider + name.' };
+  const parsedConfig = panelConfigSchema.safeParse(p);
+  if (!parsedConfig.success) {
+    const issue = parsedConfig.error.issues[0];
+    const path = issue?.path.length ? `${issue.path.join('.')}: ` : '';
+    return {
+      ok: false,
+      error: `Invalid panel config: ${path}${issue?.message || 'invalid value'}`,
+    };
   }
   return { ok: true };
 }

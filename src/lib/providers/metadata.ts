@@ -10,12 +10,10 @@
  */
 export const PROVIDER_METADATA = {
   openai: { key: 'openai', displayName: 'OpenAI' },
-  groq: { key: 'groq', displayName: 'Groq' },
   anthropic: { key: 'anthropic', displayName: 'Anthropic' },
   gemini: { key: 'gemini', displayName: 'Google Gemini' },
   transformers: { key: 'transformers', displayName: 'Hugging Face' },
   deepseek: { key: 'deepseek', displayName: 'Deepseek AI' },
-  aimlapi: { key: 'aimlapi', displayName: 'AI/ML API' },
   lmstudio: { key: 'lmstudio', displayName: 'LM Studio' },
   openrouter: { key: 'openrouter', displayName: 'OpenRouter' },
   custom_openai: { key: 'custom_openai', displayName: 'Custom OpenAI' },

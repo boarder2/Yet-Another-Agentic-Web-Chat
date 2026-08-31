@@ -5,6 +5,7 @@ import {
   missingRequired,
   type FieldDef,
 } from './template';
+import { parseModelReference } from '@/lib/providers/resolveModels';
 
 export type Workflow = typeof workflows.$inferSelect;
 
@@ -40,14 +41,19 @@ export function resolveWorkflowRun(
   now: Date = new Date(),
 ): ResolvedWorkflowRun {
   const { fields } = parseWorkflowTemplate(workflow.prompt);
+  const chatModel = parseModelReference(workflow.chatModel);
+  const systemModel =
+    workflow.systemModel == null
+      ? null
+      : parseModelReference(workflow.systemModel);
   const missing = missingRequired(fields, values);
   if (missing.length > 0) throw new RequiredInputsError(missing);
 
   return {
     composedQuery: substitute(workflow.prompt, fields, values, now),
     focusMode: workflow.focusMode,
-    chatModel: workflow.chatModel,
-    systemModel: workflow.systemModel,
+    chatModel,
+    systemModel,
     selectedSystemPromptIds: workflow.selectedSystemPromptIds ?? [],
     selectedMethodologyId: workflow.selectedMethodologyId ?? null,
     fields,

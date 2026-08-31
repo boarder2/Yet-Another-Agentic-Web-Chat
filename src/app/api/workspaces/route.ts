@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createWorkspace, listWorkspaces } from '@/lib/workspaces/service';
+import { WorkspaceInputValidationError } from '@/lib/workspaces/types';
 
 export async function GET(req: NextRequest) {
   const archived = req.nextUrl.searchParams.get('archived') === 'true';
@@ -22,7 +23,10 @@ export async function POST(req: NextRequest) {
     }
     const row = await createWorkspace(body);
     return NextResponse.json({ workspace: row });
-  } catch {
+  } catch (error) {
+    if (error instanceof WorkspaceInputValidationError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     return NextResponse.json(
       { error: 'Failed to create workspace' },
       { status: 500 },

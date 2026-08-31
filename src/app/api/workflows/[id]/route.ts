@@ -4,6 +4,7 @@ import { chats, schedules, workflows } from '@/lib/db/schema';
 import { eq, inArray } from 'drizzle-orm';
 import { parseWorkflowTemplate, fillSetErrors } from '@/lib/workflows/template';
 import { unregisterSchedule } from '@/lib/scheduledTasks/scheduler';
+import { parseModelReference } from '@/lib/providers/resolveModels';
 
 export const runtime = 'nodejs';
 
@@ -30,6 +31,33 @@ export async function PATCH(
     where: eq(workflows.id, id),
   });
   if (!existing) return Response.json({ error: 'Not found' }, { status: 404 });
+
+  if (body.chatModel !== undefined) {
+    try {
+      body.chatModel = parseModelReference(body.chatModel);
+    } catch (error) {
+      return Response.json(
+        {
+          error:
+            error instanceof Error ? error.message : 'Invalid model reference',
+        },
+        { status: 400 },
+      );
+    }
+  }
+  if (body.systemModel !== undefined && body.systemModel !== null) {
+    try {
+      body.systemModel = parseModelReference(body.systemModel);
+    } catch (error) {
+      return Response.json(
+        {
+          error:
+            error instanceof Error ? error.message : 'Invalid model reference',
+        },
+        { status: 400 },
+      );
+    }
+  }
 
   if (body.prompt !== undefined) {
     const { errors } = parseWorkflowTemplate(body.prompt);

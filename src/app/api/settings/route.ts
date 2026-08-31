@@ -9,6 +9,7 @@ import {
   OPENROUTER_QUANTIZATIONS_SETTING_KEY,
   parseOpenRouterQuantizations,
 } from '@/lib/settings/openrouterQuantizations';
+import { parseReasoningEffort } from '@/lib/providers/reasoningEffort';
 
 // Uses better-sqlite3 and Buffer — Node runtime only (not edge).
 export const runtime = 'nodejs';
@@ -72,6 +73,22 @@ export async function PATCH(req: Request) {
           { error: `Value for "${key}" exceeds the maximum size` },
           { status: 413 },
         );
+      }
+
+      if (key === 'chatReasoningEffort' || key === 'systemReasoningEffort') {
+        try {
+          parseReasoningEffort(value);
+        } catch (error) {
+          return NextResponse.json(
+            {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : 'Invalid reasoning effort',
+            },
+            { status: 400 },
+          );
+        }
       }
 
       if (isOpenrouterQuantizations) {

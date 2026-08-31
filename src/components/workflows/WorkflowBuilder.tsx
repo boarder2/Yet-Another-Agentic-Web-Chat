@@ -64,17 +64,53 @@ export default function WorkflowBuilder({ workflow }: { workflow?: Workflow }) {
     chatModel: chatModel?.name ?? '',
     systemProvider: systemModel?.provider ?? chatModel?.provider ?? '',
     systemModel: systemModel?.name ?? chatModel?.name ?? '',
+    ...(chatModel?.reasoningEffort
+      ? { chatReasoningEffort: chatModel.reasoningEffort }
+      : {}),
+    ...(systemModel?.reasoningEffort
+      ? { systemReasoningEffort: systemModel.reasoningEffort }
+      : systemModel === null && chatModel?.reasoningEffort
+        ? { systemReasoningEffort: chatModel.reasoningEffort }
+        : {}),
   };
 
   const handleModelChange = (next: ModelSelection) => {
     setChatModel(
       next.chatProvider && next.chatModel
-        ? { provider: next.chatProvider, name: next.chatModel }
+        ? {
+            provider: next.chatProvider,
+            name: next.chatModel,
+            ...((next.contextWindowSize ?? chatModel?.contextWindowSize)
+              ? {
+                  contextWindowSize:
+                    next.contextWindowSize ?? chatModel?.contextWindowSize,
+                }
+              : {}),
+            ...(next.chatReasoningEffort
+              ? { reasoningEffort: next.chatReasoningEffort }
+              : {}),
+          }
         : null,
     );
     setSystemModel(
       next.systemProvider && next.systemModel
-        ? { provider: next.systemProvider, name: next.systemModel }
+        ? {
+            provider: next.systemProvider,
+            name: next.systemModel,
+            ...((next.contextWindowSize ??
+            systemModel?.contextWindowSize ??
+            chatModel?.contextWindowSize)
+              ? {
+                  contextWindowSize:
+                    next.contextWindowSize ??
+                    systemModel?.contextWindowSize ??
+                    chatModel?.contextWindowSize,
+                }
+              : {}),
+            ...(next.systemReasoningEffort
+              ? { reasoningEffort: next.systemReasoningEffort }
+              : {}),
+          }
         : null,
     );
   };
@@ -227,6 +263,7 @@ export default function WorkflowBuilder({ workflow }: { workflow?: Workflow }) {
                 onChange={handleModelChange}
                 fields={{ system: true }}
                 presets="apply-save"
+                showStoredEffortState
               />
             </Field>
 

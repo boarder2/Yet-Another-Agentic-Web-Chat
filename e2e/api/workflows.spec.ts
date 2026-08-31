@@ -243,6 +243,61 @@ test.describe('POST /api/workflows/[id]/run', () => {
     expect(userMsg.content).toBe('Research Acme');
   });
 
+  test('retains workflow effort through a completed manual run', async ({
+    request,
+  }) => {
+    const chatModel = {
+      provider: 'test',
+      name: 'test-reasoning',
+      reasoningEffort: 'high',
+    };
+    const systemModel = {
+      provider: 'test',
+      name: 'test-reasoning',
+      reasoningEffort: 'low',
+    };
+    const create = await request.post('/api/workflows', {
+      data: {
+        name: uniq('effort-workflow'),
+        prompt: 'Run the durable reasoning workflow',
+        chatModel,
+        systemModel,
+      },
+    });
+    expect(create.status()).toBe(201);
+    const workflow = await create.json();
+    expect(workflow.chatModel).toEqual(chatModel);
+    expect(workflow.systemModel).toEqual(systemModel);
+
+    const run = await request.post(`/api/workflows/${workflow.id}/run`);
+    expect(run.status()).toBe(201);
+    const { chatId } = await run.json();
+    const expectedModelConfig = { chat: chatModel, system: systemModel };
+
+    await expect
+      .poll(
+        async () => {
+          const chatResponse = await request.get(`/api/chats/${chatId}`);
+          if (!chatResponse.ok()) return null;
+          const body = await chatResponse.json();
+          const assistant = (
+            body.messages as Array<{ role: string; metadata?: string }>
+          )
+            .filter((message) => message.role === 'assistant')
+            .at(-1);
+          if (!assistant?.metadata) return null;
+          try {
+            return (JSON.parse(assistant.metadata) as Record<string, unknown>)
+              .modelConfig;
+          } catch {
+            return null;
+          }
+        },
+        { timeout: 10_000 },
+      )
+      .toEqual(expectedModelConfig);
+  });
+
   test('blocks a run missing a required input (server-side)', async ({
     request,
   }) => {

@@ -7,8 +7,16 @@ import { ChatGenerationChunk, type ChatResult } from '@langchain/core/outputs';
 import type { CallbackManagerForLLMRun } from '@langchain/core/callbacks/manager';
 import { Embeddings, type EmbeddingsParams } from '@langchain/core/embeddings';
 import type { ChatModel, EmbeddingModel } from '.';
+import type { ReasoningEffort } from './reasoningEffort';
 
 export const PROVIDER_INFO = { key: 'test', displayName: 'Test' };
+
+const TEST_REASONING_EFFORTS: ReasoningEffort[] = [
+  'off',
+  'low',
+  'medium',
+  'high',
+];
 
 // Deterministic args for the tool `withStructuredOutput` binds for a given
 // schema name. Only the real call sites in the app need an entry; unknown
@@ -756,6 +764,13 @@ export async function loadTestChatModels(): Promise<Record<string, ChatModel>> {
       model: new FakeChatModel({
         modelName: 'test-direct',
       }) as unknown as BaseChatModel,
+    },
+    'test-reasoning': {
+      displayName: 'Test (reasoning)',
+      model: new FakeChatModel({
+        modelName: 'test-reasoning',
+      }) as unknown as BaseChatModel,
+      supportedReasoningEfforts: [...TEST_REASONING_EFFORTS],
     },
     'test-tool': {
       displayName: 'Test (tool loop)',

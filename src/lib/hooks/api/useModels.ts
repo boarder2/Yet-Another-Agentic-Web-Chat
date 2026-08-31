@@ -6,9 +6,11 @@ import { toast } from 'sonner';
 import { apiFetch } from '@/lib/api/client';
 import { qk } from '@/lib/api/keys';
 import { flushSettings } from '@/lib/settings/persist';
+import type { ReasoningEffort } from '@/lib/providers/reasoningEffort';
 
 export interface ModelEntry {
   displayName: string;
+  supportedReasoningEfforts?: ReasoningEffort[];
 }
 
 export interface ImageGenerationModel {

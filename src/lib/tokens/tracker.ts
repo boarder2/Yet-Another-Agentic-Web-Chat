@@ -23,6 +23,13 @@ import {
   type PanelUsage,
   type TokenUsage,
 } from '@/lib/streaming/events';
+import type { ReasoningEffort } from '@/lib/providers/reasoningEffort';
+
+export interface ModelIdentity {
+  provider: string;
+  name: string;
+  reasoningEffort?: ReasoningEffort;
+}
 
 export type RecorderRole = 'chat' | 'system' | 'image_gen';
 
@@ -34,6 +41,7 @@ export interface Recorder {
 interface RegisterOptions {
   provider: string;
   model: string;
+  reasoningEffort?: ReasoningEffort;
   /** Used ONLY to fill frozen legacy wire shapes (`scopeUsage`'s chat/system split). */
   role: RecorderRole;
   /** `'panel_executor:N'` | `'subagent:<id>'` | absent (root turn scope). */
@@ -116,7 +124,7 @@ export class TokenTracker {
   private firstChatCallInputTokens = 0;
   private rootIdentities = new Map<
     RecorderRole,
-    { provider: string; model: string }
+    { provider: string; model: string; reasoningEffort?: ReasoningEffort }
   >();
 
   constructor(emitter: EventEmitter) {
@@ -144,6 +152,9 @@ export class TokenTracker {
       this.rootIdentities.set(opts.role, {
         provider: opts.provider,
         model: opts.model,
+        ...(opts.reasoningEffort
+          ? { reasoningEffort: opts.reasoningEffort }
+          : {}),
       });
     }
 
@@ -256,7 +267,9 @@ export class TokenTracker {
   /** The (provider, model) identity registered for a role at the root (turn) scope, if any. */
   rootIdentity(
     role: RecorderRole,
-  ): { provider: string; model: string } | undefined {
+  ):
+    | { provider: string; model: string; reasoningEffort?: ReasoningEffort }
+    | undefined {
     return this.rootIdentities.get(role);
   }
 
@@ -282,19 +295,21 @@ function modelKey(provider: string, model: string): string {
  */
 export function createTurnTracker(
   emitter: EventEmitter,
-  chatModel: { provider: string; name: string },
-  systemModel?: { provider: string; name: string } | null,
+  chatModel: ModelIdentity,
+  systemModel?: ModelIdentity | null,
 ): { tracker: TokenTracker; chatRecorder: Recorder; systemRecorder: Recorder } {
   const tracker = new TokenTracker(emitter);
   const chatRecorder = tracker.register({
     provider: chatModel.provider,
     model: chatModel.name,
+    reasoningEffort: chatModel.reasoningEffort,
     role: 'chat',
   });
   const sys = systemModel ?? chatModel;
   const systemRecorder = tracker.register({
     provider: sys.provider,
     model: sys.name,
+    reasoningEffort: sys.reasoningEffort,
     role: 'system',
   });
   return { tracker, chatRecorder, systemRecorder };

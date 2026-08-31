@@ -64,22 +64,6 @@ export default function ApiKeysSection({
           />
         </Field>
 
-        <Field label="GROQ API Key">
-          <InputComponent
-            type="password"
-            placeholder="GROQ API Key"
-            value={config.groqApiKey}
-            isSaving={savingStates['groqApiKey']}
-            onChange={(e) => {
-              setConfig((prev) => ({
-                ...prev!,
-                groqApiKey: e.target.value,
-              }));
-            }}
-            onSave={(value) => saveConfig('groqApiKey', value)}
-          />
-        </Field>
-
         <Field label="OpenRouter API Key">
           <InputComponent
             type="password"
@@ -141,22 +125,6 @@ export default function ApiKeysSection({
               }));
             }}
             onSave={(value) => saveConfig('deepseekApiKey', value)}
-          />
-        </Field>
-
-        <Field label="AI/ML API Key">
-          <InputComponent
-            type="text"
-            placeholder="AI/ML API Key"
-            value={config.aimlApiKey}
-            isSaving={savingStates['aimlApiKey']}
-            onChange={(e) => {
-              setConfig((prev) => ({
-                ...prev!,
-                aimlApiKey: e.target.value,
-              }));
-            }}
-            onSave={(value) => saveConfig('aimlApiKey', value)}
           />
         </Field>
 

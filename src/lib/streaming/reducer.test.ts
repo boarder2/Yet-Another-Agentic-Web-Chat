@@ -8,7 +8,11 @@ import {
 import type { StreamEvent, ModelStatsV1 } from './events';
 import type { Message } from './chatState';
 import { normalizeChartInput } from '@/lib/chart/chartInput';
-import { findWidget, type PanelPayload } from '@/lib/widgets/envelope';
+import {
+  findWidget,
+  type PanelPayload,
+  type ToolCallPayload,
+} from '@/lib/widgets/envelope';
 
 const AI = 'ai1';
 const chartSpec = normalizeChartInput({
@@ -133,6 +137,41 @@ describe('tool call widgets', () => {
       }),
     ).state;
     expect(rowContent(s)).toContain('"status":"success"');
+  });
+
+  it('adds automatic code execution output using the callback widget ID', () => {
+    const { state } = run(liveStart(), [
+      ev({
+        type: 'tool_call_started',
+        data: {
+          toolCallId: 'callback-run-1',
+          toolType: 'code_execution',
+          status: 'running',
+          attrs: { code: 'console.log(42)' },
+        },
+      }),
+      ev({
+        type: 'code_execution_result',
+        data: {
+          toolCallId: 'stable-model-call-1',
+          markupToolCallId: 'callback-run-1',
+          stdout: '42\n',
+          exitCode: 0,
+        },
+      }),
+      ev({
+        type: 'tool_call_success',
+        data: { toolCallId: 'callback-run-1', status: 'success' },
+      }),
+    ]);
+
+    expect(
+      findWidget<ToolCallPayload>(
+        rowContent(state)!,
+        'tool_call',
+        'callback-run-1',
+      ),
+    ).toMatchObject({ status: 'success', stdout: '42\n', exitCode: 0 });
   });
 
   it('is idempotent: replaying the same started event does not duplicate the widget', () => {

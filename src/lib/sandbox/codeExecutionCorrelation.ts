@@ -1,8 +1,8 @@
 /**
- * Correlates callback runIds from handleToolStart with code_execution_pending events.
+ * Correlates callback runIds from handleToolStart with code execution events.
  *
  * When parallel code_execution tools run, handleToolStart fires in order but
- * the code_execution_pending events may arrive in a different order due to async
+ * approval or result events may arrive in a different order due to async
  * initialization (Docker checks). This module provides a direct correlation
  * using the code content as the key, with per-key FIFO queues for identical code.
  */
@@ -19,8 +19,8 @@ export function pushCallbackRunId(code: string, runId: string) {
 }
 
 /**
- * Called from codeExecutionTool when emitting code_execution_pending.
- * Returns the callback runId (used as toolCallId in ToolCall markup) for correlation.
+ * Called when emitting a manual approval or automatic result.
+ * Returns the callback runId used by the ToolCall widget.
  */
 export function popCallbackRunId(code: string): string | undefined {
   const queue = codeRunIdQueues.get(code);

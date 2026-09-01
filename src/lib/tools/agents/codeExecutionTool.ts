@@ -16,6 +16,7 @@ import {
   registerCodeExecutionCharts,
 } from './codeExecutionCharts';
 import { defineTool } from '@/lib/tools/defineTool';
+import { popCallbackRunId } from '@/lib/sandbox/codeExecutionCorrelation';
 
 const MAX_CODE_LENGTH = 50_000;
 
@@ -84,7 +85,8 @@ export const codeExecutionTool = defineTool(
 
     const { code, description } = input;
 
-    if (!getCodeExecutionAutoRun()) {
+    const autoRun = getCodeExecutionAutoRun();
+    if (!autoRun) {
       // interrupt() pauses the graph until user approves/denies.
       // markupKey enables runHost to resolve the ToolCall markup ID.
       const response: unknown = interrupt({
@@ -168,6 +170,7 @@ export const codeExecutionTool = defineTool(
       toolCallId,
     });
 
+    const markupToolCallId = autoRun ? popCallbackRunId(code) : undefined;
     emitStreamEvent(emitter, {
       type: 'code_execution_result',
       data: {
@@ -177,6 +180,7 @@ export const codeExecutionTool = defineTool(
         timedOut: result.timedOut,
         oomKilled: result.oomKilled,
         toolCallId,
+        markupToolCallId,
         chartHandles: chartOutcome.handles,
         chartTitles: chartOutcome.titles,
         chartErrors: chartOutcome.errors,

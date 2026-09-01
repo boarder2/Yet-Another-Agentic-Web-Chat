@@ -154,6 +154,8 @@ export type CodeExecutionResultData = {
   timedOut?: boolean;
   oomKilled?: boolean;
   toolCallId?: string;
+  /** Callback run ID used by the writer-owned tool-call widget. */
+  markupToolCallId?: string;
   executionId?: string;
   chartIds?: string[];
   chartHandles?: string[];

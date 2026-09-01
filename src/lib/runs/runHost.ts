@@ -1563,6 +1563,7 @@ export async function attachRunHost(params: {
         messageId: aiMessageId,
       });
       const tcId =
+        event.data.markupToolCallId ||
         (event.data.executionId &&
           codeExecutionRunIdMap.get(event.data.executionId)) ||
         event.data.toolCallId;

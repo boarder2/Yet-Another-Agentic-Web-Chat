@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   },
   order: [] as string[],
   interruptResponse: { approved: true } as unknown,
+  popCallbackRunId: vi.fn(() => 'callback-run-1' as string | undefined),
 }));
 
 vi.mock('@/lib/tools/defineTool', () => ({
@@ -60,6 +61,9 @@ vi.mock('@/lib/sandbox/dockerExecutor', () => ({
   }),
 }));
 vi.mock('@/lib/streaming/events', () => ({ emitStreamEvent: vi.fn() }));
+vi.mock('@/lib/sandbox/codeExecutionCorrelation', () => ({
+  popCallbackRunId: mocks.popCallbackRunId,
+}));
 vi.mock('./codeExecutionCharts', () => ({
   createCodeChartChannel: () => ({ prefix: 'private' }),
   injectChartHelper: (code: string) => code,
@@ -108,6 +112,7 @@ describe('codeExecutionTool approval modes', () => {
       'image',
       'execute',
     ]);
+    expect(mocks.popCallbackRunId).not.toHaveBeenCalled();
   });
 
   it('does not read the setting or interrupt when Docker is unavailable', async () => {
@@ -144,9 +149,14 @@ describe('codeExecutionTool approval modes', () => {
       emitter,
       expect.objectContaining({
         type: 'code_execution_result',
-        data: expect.objectContaining({ stdout: '42\n', toolCallId: 'call-1' }),
+        data: expect.objectContaining({
+          stdout: '42\n',
+          toolCallId: 'call-1',
+          markupToolCallId: 'callback-run-1',
+        }),
       }),
     );
+    expect(mocks.popCallbackRunId).toHaveBeenCalledWith(input.code);
     expect(persist).toHaveBeenCalledWith({
       kind: 'code_execution',
       body: expect.stringContaining(

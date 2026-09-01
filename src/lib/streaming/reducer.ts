@@ -947,6 +947,7 @@ function reduceCodeExecutionResult(
   };
 
   const tcId =
+    (d.markupToolCallId as string | undefined) ||
     (execId && state.codeExecutionRunIds[execId]) ||
     (toolCallId && state.codeExecutionRunIds[toolCallId]) ||
     toolCallId;

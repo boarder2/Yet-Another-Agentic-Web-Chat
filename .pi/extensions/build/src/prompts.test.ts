@@ -52,4 +52,39 @@ describe('phasePrompt', () => {
       'ask the user instead of inferring an answer',
     );
   });
+
+  it('gives lighter agents a grounded code-structure contract', () => {
+    const prompt = promptFor('plan');
+
+    expect(prompt).toContain('`## Code Structure`');
+    expect(prompt).toContain(
+      '`Not applicable — no production code structure change`',
+    );
+    expect(prompt).toContain('the complete affected call path');
+    expect(prompt).toContain('Search for prior art');
+    expect(prompt).toContain('target responsibilities, ownership');
+    expect(prompt).toContain('the touch and removal map');
+    expect(prompt).toContain('second genuine implementation');
+    expect(prompt).toContain('direct authoritative path');
+    expect(prompt).toContain('lowest practical test level');
+    expect(prompt).toContain('same coherent vertical slice');
+  });
+
+  it('gives lighter agents a positively framed UI/UX implementation contract', () => {
+    const prompt = promptFor('plan');
+
+    expect(prompt).toContain('`## UI/UX Specification`');
+    expect(prompt).toContain('`Not applicable — no user-visible change`');
+    expect(prompt).toContain("repository's design guidance");
+    expect(prompt).toContain('name exact files, components, primitives, tokens');
+    expect(prompt).toContain('concrete repository-grounded direction');
+    expect(prompt).toContain('Scale UI detail to the change');
+    expect(prompt).toContain('representative narrow and wide widths');
+    expect(prompt).toContain('both themes');
+    expect(prompt).toContain('Repeat the observable UI outcomes');
+    expect(prompt).toContain('The plan is the canonical design specification');
+    expect(prompt).toContain("client's presentation and response");
+    expect(prompt).not.toContain('anti-goals');
+    expect(prompt).not.toContain('Never invent placeholder names');
+  });
 });

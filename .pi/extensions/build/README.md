@@ -87,6 +87,14 @@ the whole approved build. If it blocks, fresh coder and tester sessions receive 
 review findings; each reviewer verification is a fresh agent, so it checks the repair without stale
 assumptions.
 
+Planning treats code structure and UI/UX as implementation contracts for the lighter chunk agents.
+Every plan states whether each applies. Structural guidance traces the real call path and specifies
+reuse, ownership, interfaces, lifecycle, compatibility, removals, and verification according to the
+repository's DRY and minimal-touch conventions. UI guidance grounds concrete visual, interaction,
+responsive, accessibility, and state behavior in real primitives and tokens. Each affected chunk
+carries the exact subset it owns and its observable checks. This is planning guidance, not semantic
+validation by the harness.
+
 The reset is keyed on the chunk, so re-running a chunk that failed reattaches to the sessions already
 working on it instead of throwing their work away. Within a chunk, an agent that passes
 `contextBudget` of its window — read from the session file pi writes — is still retired and reseeded,

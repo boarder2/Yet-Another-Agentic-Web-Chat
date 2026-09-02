@@ -178,7 +178,7 @@ export function registerGates(pi: ExtensionAPI, controller: Controller): void {
       parameters: Type.Object({
         plan: Type.String({
           description:
-            'The whole plan. Needs ## Problem, ## Scope, ## Approach, ## Changes (naming files), ## Acceptance Criteria.',
+            'The whole plan. Needs ## Problem, ## Scope, ## Approach, ## Changes (naming files), ## Code Structure, ## UI/UX Specification (each with an explicit not-applicable statement when appropriate), and ## Acceptance Criteria.',
         }),
         tasks: Type.String({
           description:

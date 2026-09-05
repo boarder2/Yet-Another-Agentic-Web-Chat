@@ -1,28 +1,28 @@
 import { AGENT_ROLES, type AgentRole } from './models.ts';
 
-/**
- * The typed signals every role reports through. Interactive agents own their own
- * terminal, so the parent cannot read their stdout: each submit tool writes its
- * payload to the file named by `YAAWC_BUILD_RESULT` and the loop decodes that.
- *
- * Fail-closed throughout — a missing, stale, or unreadable signal is a failure
- * with its reason, never coerced into a pass.
- */
+export type ReviewOutcome = 'pass' | 'changes-required' | 'needs-replan';
+export type TestOutcome = 'passed' | 'failed' | 'blocked' | 'needs-replan';
+export type CompletionOutcome = 'completed' | 'blocked' | 'needs-replan';
+
 export interface ReviewVerdict {
-  verdict: 'pass' | 'changes-required';
+  verdict: ReviewOutcome;
   blocking: string[];
   notes: string;
+  rationale: string;
 }
 
 export interface TestResult {
+  outcome: TestOutcome;
   passed: number;
   failed: number;
   output: string;
+  rationale: string;
 }
 
 export interface CoderCompletion {
-  status: 'completed' | 'blocked';
+  status: CompletionOutcome;
   summary: string;
+  rationale: string;
 }
 
 export type Decoded<T> = { ok: true; value: T } | { ok: false; reason: string };
@@ -37,7 +37,6 @@ export const REPORT_TOOL_BY_ROLE = {
   reviewer: VERDICT_TOOL,
 } as const satisfies Record<AgentRole, string>;
 
-/** Env vars identifying a subagent's reporting contract and result channel. */
 export const BUILD_ROLE_ENV = 'PI_BUILD_EXT_ROLE';
 export const RESULT_FILE_ENV = 'YAAWC_BUILD_RESULT';
 
@@ -57,7 +56,6 @@ export function serializeResult(
   return `${JSON.stringify({ kind, payload }, null, 2)}\n`;
 }
 
-/** `null` when the file was absent — the agent never reported at all. */
 export function parseResult(text: string | null): ResultEnvelope | null {
   if (text === null) return null;
   try {
@@ -84,9 +82,7 @@ function payloadFor(
   tool: string,
   role: string,
 ): Decoded<Record<string, unknown>> {
-  if (!envelope) {
-    return { ok: false, reason: `The ${role} never called ${tool}.` };
-  }
+  if (!envelope) return { ok: false, reason: `The ${role} never called ${tool}.` };
   if (envelope.kind !== tool) {
     return {
       ok: false,
@@ -96,15 +92,18 @@ function payloadFor(
   return { ok: true, value: envelope.payload };
 }
 
+function needsRationale(outcome: string): boolean {
+  return outcome === 'blocked' || outcome === 'needs-replan';
+}
+
 export function decodeVerdict(
   envelope: ResultEnvelope | null,
 ): Decoded<ReviewVerdict> {
   const found = payloadFor(envelope, VERDICT_TOOL, 'reviewer');
   if (!found.ok) return found;
   const args = found.value;
-
   const verdict = args.verdict;
-  if (verdict !== 'pass' && verdict !== 'changes-required') {
+  if (verdict !== 'pass' && verdict !== 'changes-required' && verdict !== 'needs-replan') {
     return {
       ok: false,
       reason: `${VERDICT_TOOL} reported an unreadable verdict: ${JSON.stringify(verdict)}.`,
@@ -112,16 +111,34 @@ export function decodeVerdict(
   }
 
   const blocking = asStrings(args.blocking);
-  if (verdict === 'changes-required' && blocking.length === 0) {
+  const rationale = asText(args.rationale).trim();
+  if (verdict === 'pass' && blocking.length > 0) {
     return {
       ok: false,
-      reason: `${VERDICT_TOOL} reported changes-required with no blocking findings.`,
+      reason: `${VERDICT_TOOL} reported pass with blocking findings.`,
+    };
+  }
+  if (verdict !== 'pass' && blocking.length === 0) {
+    return {
+      ok: false,
+      reason: `${VERDICT_TOOL} reported ${verdict} with no blocking findings.`,
+    };
+  }
+  if (verdict === 'needs-replan' && !rationale) {
+    return {
+      ok: false,
+      reason: `${VERDICT_TOOL} reported needs-replan with no rationale.`,
     };
   }
 
   return {
     ok: true,
-    value: { verdict, blocking, notes: asText(args.notes) },
+    value: {
+      verdict,
+      blocking,
+      notes: asText(args.notes),
+      rationale,
+    },
   };
 }
 
@@ -130,16 +147,37 @@ export function decodeTestResult(
 ): Decoded<TestResult> {
   const found = payloadFor(envelope, TEST_RESULT_TOOL, 'tester');
   if (!found.ok) return found;
-  const { passed, failed, output } = found.value;
-
-  if (typeof passed !== 'number' || typeof failed !== 'number') {
+  const { outcome, passed, failed, output } = found.value;
+  if (!['passed', 'failed', 'blocked', 'needs-replan'].includes(String(outcome))) {
     return {
       ok: false,
-      reason: `${TEST_RESULT_TOOL} reported unreadable counts.`,
+      reason: `${TEST_RESULT_TOOL} reported an unreadable outcome: ${JSON.stringify(outcome)}.`,
+    };
+  }
+  if (
+    typeof passed !== 'number' || !Number.isInteger(passed) || passed < 0 ||
+    typeof failed !== 'number' || !Number.isInteger(failed) || failed < 0
+  ) {
+    return { ok: false, reason: `${TEST_RESULT_TOOL} reported unreadable counts.` };
+  }
+  const rationale = asText(found.value.rationale).trim();
+  if (needsRationale(String(outcome)) && !rationale) {
+    return {
+      ok: false,
+      reason: `${TEST_RESULT_TOOL} reported ${outcome} with no rationale.`,
     };
   }
 
-  return { ok: true, value: { passed, failed, output: asText(output) } };
+  return {
+    ok: true,
+    value: {
+      outcome: outcome as TestOutcome,
+      passed,
+      failed,
+      output: asText(output),
+      rationale,
+    },
+  };
 }
 
 export function decodeCompletion(
@@ -148,17 +186,25 @@ export function decodeCompletion(
   const found = payloadFor(envelope, COMPLETION_TOOL, 'coder');
   if (!found.ok) return found;
   const { status, summary } = found.value;
-
-  if (status !== 'completed' && status !== 'blocked') {
+  if (status !== 'completed' && status !== 'blocked' && status !== 'needs-replan') {
     return {
       ok: false,
       reason: `${COMPLETION_TOOL} reported an unreadable status: ${JSON.stringify(status)}.`,
     };
   }
-
-  return { ok: true, value: { status, summary: asText(summary) } };
+  const rationale = asText(found.value.rationale).trim();
+  if (needsRationale(status) && !rationale) {
+    return {
+      ok: false,
+      reason: `${COMPLETION_TOOL} reported ${status} with no rationale.`,
+    };
+  }
+  return {
+    ok: true,
+    value: { status, summary: asText(summary), rationale },
+  };
 }
 
 export function isGreen(result: TestResult): boolean {
-  return result.failed === 0 && result.passed > 0;
+  return result.outcome === 'passed' && result.failed === 0 && result.passed > 0;
 }

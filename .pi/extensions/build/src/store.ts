@@ -2,6 +2,7 @@ import {
   existsSync,
   mkdirSync,
   readdirSync,
+  readFileSync,
   rmSync,
   rmdirSync,
 } from 'node:fs';
@@ -10,6 +11,7 @@ import { AGENT_ROLES } from './models.ts';
 import {
   buildPaths,
   readStateFile,
+  revisionPaths,
   writeStateFile,
   type BuildState,
 } from './state.ts';
@@ -18,10 +20,29 @@ const BUILDS_DIR = '.ai/builds';
 const SAFE_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const SAFE_SLUG = /^[a-z0-9][a-z0-9_-]*$/i;
 
-export interface StoredBuild {
-  state: BuildState;
-  file: string;
+export interface UnsupportedBuildState {
+  version: number;
+  slug: string;
+  date: string;
+  ask: string;
+  phase: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  lastAttachedAt: string | null;
+  planPath?: string | null;
+  taskPath?: string | null;
 }
+
+export type StoredBuild =
+  | { supported: true; state: BuildState; file: string }
+  | { supported: false; state: UnsupportedBuildState; file: string };
+
+type ArtifactState = Pick<UnsupportedBuildState, 'version' | 'date' | 'slug'> & {
+  planPath?: string | null;
+  taskPath?: string | null;
+  revisions?: BuildState['revisions'];
+};
 
 export function statePath(cwd: string, date: string, slug: string): string {
   return join(cwd, buildPaths(date, slug).state);
@@ -29,6 +50,32 @@ export function statePath(cwd: string, date: string, slug: string): string {
 
 export function saveBuild(cwd: string, state: BuildState): void {
   writeStateFile(statePath(cwd, state.date, state.slug), state);
+}
+
+function unsupportedState(text: string): UnsupportedBuildState | null {
+  try {
+    const raw = JSON.parse(text) as Record<string, unknown>;
+    if (
+      typeof raw.version !== 'number' ||
+      typeof raw.slug !== 'string' ||
+      typeof raw.date !== 'string'
+    ) return null;
+    return {
+      version: raw.version,
+      slug: raw.slug,
+      date: raw.date,
+      ask: typeof raw.ask === 'string' ? raw.ask : '',
+      phase: typeof raw.phase === 'string' ? raw.phase : 'unknown',
+      status: typeof raw.status === 'string' ? raw.status : 'unsupported',
+      createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : '',
+      updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : '',
+      lastAttachedAt: typeof raw.lastAttachedAt === 'string' ? raw.lastAttachedAt : null,
+      planPath: typeof raw.planPath === 'string' ? raw.planPath : null,
+      taskPath: typeof raw.taskPath === 'string' ? raw.taskPath : null,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function listBuilds(cwd: string): StoredBuild[] {
@@ -40,13 +87,14 @@ export function listBuilds(cwd: string): StoredBuild[] {
     if (!name.endsWith('.json')) continue;
     const file = join(dir, name);
     try {
-      builds.push({ state: readStateFile(file), file });
+      builds.push({ supported: true, state: readStateFile(file), file });
     } catch {
-      // A corrupt or half-written state file must not hide the healthy ones.
+      const state = unsupportedState(readFileSync(file, 'utf-8'));
+      if (state) builds.push({ supported: false, state, file });
     }
   }
-  return builds.sort((a, b) =>
-    b.state.createdAt.localeCompare(a.state.createdAt),
+  return builds.sort((left, right) =>
+    right.state.createdAt.localeCompare(left.state.createdAt),
   );
 }
 
@@ -55,33 +103,47 @@ export function findBuild(
   slug: string,
   date?: string,
 ): StoredBuild | null {
-  return (
-    listBuilds(cwd).find(
-      (build) =>
-        build.state.slug === slug && (date === undefined || build.state.date === date),
-    ) ?? null
-  );
+  return listBuilds(cwd).find(
+    (build) =>
+      build.state.slug === slug &&
+      (date === undefined || build.state.date === date),
+  ) ?? null;
 }
 
-/** Every project file owned by one workflow, including agent scratch. */
-export function buildArtifactPaths(state: Pick<BuildState, 'date' | 'slug'>): string[] {
+export function buildArtifactPaths(state: ArtifactState): string[] {
   const paths = buildPaths(state.date, state.slug);
+  const approved = state.version === 2
+    ? (state.revisions ?? []).flatMap((revision) => {
+        const paths = revisionPaths(state.date, state.slug, revision.revision);
+        return [paths.plan, paths.task];
+      })
+    : [];
+  const legacyName = `${state.date}-${state.slug}.md`;
+  const legacy = state.version === 2
+    ? []
+    : [`.ai/plans/${legacyName}`, `.ai/task/${legacyName}`];
+  const documents = [
+    paths.planCandidate,
+    paths.taskCandidate,
+    ...approved,
+    ...legacy,
+  ];
   const scratch = AGENT_ROLES.flatMap((role) => [
     `.ai/builds/${state.date}-${state.slug}-${role}.system.md`,
     `.ai/builds/${state.date}-${state.slug}-${role}.result.json`,
   ]);
-
-  return [paths.state, paths.plan, paths.task, ...scratch];
+  return [...new Set([paths.state, ...documents, ...scratch])];
 }
 
-/** Remove a workflow's files without touching the rest of `.ai`. */
 export function removeBuildArtifacts(
   cwd: string,
-  state: Pick<BuildState, 'date' | 'slug'>,
+  state: ArtifactState,
   stateFile?: string,
 ): void {
   if (!SAFE_DATE.test(state.date) || !SAFE_SLUG.test(state.slug)) {
-    throw new Error(`Refusing to remove workflow with unsafe date or slug: ${state.date}/${state.slug}`);
+    throw new Error(
+      `Refusing to remove workflow with unsafe date or slug: ${state.date}/${state.slug}`,
+    );
   }
 
   for (const relative of buildArtifactPaths(state)) {
@@ -89,19 +151,15 @@ export function removeBuildArtifacts(
   }
   if (stateFile) rmSync(stateFile, { force: true });
 
-  // Empty artifact directories are traces too, but never remove a directory that
-  // still belongs to another build or contains an unrelated file.
   for (const relative of ['.ai/builds', '.ai/plans', '.ai/task', '.ai']) {
     try {
       rmdirSync(join(cwd, relative));
     } catch {
-      // Missing or non-empty directories are both expected.
+      // Missing or non-empty directories are expected.
     }
   }
 }
 
-// Renaming rewrites under the new name and drops the old file, so `/build:list`
-// never shows the same workflow twice.
 export function renameBuild(
   cwd: string,
   previousSlug: string,
@@ -109,19 +167,14 @@ export function renameBuild(
 ): void {
   saveBuild(cwd, state);
   const stale = statePath(cwd, state.date, previousSlug);
-  if (previousSlug !== state.slug && existsSync(stale)) {
-    rmSync(stale);
-  }
+  if (previousSlug !== state.slug && existsSync(stale)) rmSync(stale);
 }
 
-// A slug is a filename, so it must be unique per date even when two asks reduce
-// to the same words.
 export function uniqueSlug(cwd: string, date: string, slug: string): string {
   mkdirSync(join(cwd, BUILDS_DIR), { recursive: true });
-
   let candidate = slug;
-  for (let n = 2; existsSync(statePath(cwd, date, candidate)); n++) {
-    candidate = `${slug}-${n}`;
+  for (let number = 2; existsSync(statePath(cwd, date, candidate)); number++) {
+    candidate = `${slug}-${number}`;
   }
   return candidate;
 }

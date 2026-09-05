@@ -10,6 +10,7 @@ import { loadConfig, CONFIG_PATH } from './config.ts';
 import type { Controller } from './gates.ts';
 import { resolveModel, type AgentRole } from './models.ts';
 import {
+  closeBuildAgents,
   ensureCrew,
   retireRole,
   runRole,
@@ -24,7 +25,10 @@ import {
   beginReview,
   recordOverride,
   reseedAgent,
+  returnToPlanning,
   type AgentName,
+  type BuildState,
+  type ReplanRole,
 } from './state.ts';
 import {
   completeChunk,
@@ -69,7 +73,10 @@ const sections = (...parts: string[]): string =>
 function chunkText(chunk: TaskChunk): string {
   return [
     `## Chunk ${chunk.number} — ${chunk.title}`,
-    ...chunk.items.map((item) => `- ${item.text}`),
+    '### Implementation Contract',
+    ...chunk.implementationContract,
+    '### Verification',
+    ...chunk.verification,
   ].join('\n');
 }
 
@@ -164,7 +171,10 @@ function testFailure(
 ): string {
   if (!tests.ok) return `Tests: ${problem ?? tests.reason}`;
   if (isGreen(tests.value)) return '';
-  return `Tests: ${tests.value.failed} failing.\n${tests.value.output.slice(0, 2000)}`;
+  if (tests.value.outcome === 'blocked') {
+    return `Tests blocked: ${tests.value.rationale}`;
+  }
+  return `Tests: outcome ${tests.value.outcome}, ${tests.value.failed} failing.\n${tests.value.output.slice(0, 2000)}`;
 }
 
 function reviewFailure(
@@ -176,6 +186,37 @@ function reviewFailure(
   return sections(
     `Reviewer blocking:\n- ${verdict.value.blocking.join('\n- ')}`,
     verdict.value.notes,
+  );
+}
+
+export function approvedDocumentProblem(
+  state: Pick<BuildState, 'planHash' | 'taskHash'>,
+  plan: string,
+  tasks: string,
+): string | null {
+  const changed = [
+    ...(hashContent(plan) !== state.planHash ? ['plan'] : []),
+    ...(hashContent(tasks) !== state.taskHash ? ['task list'] : []),
+  ];
+  return changed.length
+    ? `Approved ${changed.join(' and ')} changed or disappeared after approval.`
+    : null;
+}
+
+async function requestReplan(
+  controller: Controller,
+  state: BuildState,
+  role: ReplanRole,
+  rationale: string,
+): Promise<AgentToolResult<unknown>> {
+  controller.update(returnToPlanning(state, role, rationale, new Date()));
+  const cleanup = await closeBuildAgents(state.slug);
+  const cleanupNote = cleanup.failed.length
+    ? ` Agent panes that could not be retired: ${cleanup.failed.join(', ')}.`
+    : '';
+  return say(
+    `Revision ${state.revision} needs re-planning (${role}): ${rationale} ` +
+      `The workflow returned to planning; all revised chunks will restart unchecked.${cleanupNote}`,
   );
 }
 
@@ -194,7 +235,9 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
         if (state.phase !== 'execute') {
           throw new Error(`workflow_run_chunk is not available in the ${state.phase} phase.`);
         }
-        if (!state.taskPath) throw new Error('This workflow has no task list.');
+        if (!state.planPath || !state.taskPath || !state.planHash || !state.taskHash) {
+          throw new Error('This workflow has no approved design revision.');
+        }
 
         const loaded = loadConfig(ctx.cwd);
         if (!loaded.ok) {
@@ -202,15 +245,16 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
         }
         const config = loaded.config;
         const taskFile = join(ctx.cwd, state.taskPath);
-        const original = readFileSync(taskFile, 'utf-8');
-        const hash = hashContent(original);
-
-        if (state.taskHash && state.taskHash !== hash && ctx.hasUI) {
-          const proceed = await ctx.ui.confirm(
-            'The task list changed since the last chunk.',
-            'Run the next unfinished chunk from the edited file?',
+        const plan = readDocument(ctx.cwd, state.planPath);
+        const original = readDocument(ctx.cwd, state.taskPath);
+        const integrityProblem = approvedDocumentProblem(state, plan, original);
+        if (integrityProblem) {
+          return requestReplan(
+            controller,
+            state,
+            'integrity',
+            integrityProblem,
           );
-          if (!proceed) return say('Stopped: the task list changed and was not confirmed.');
         }
 
         const tasks = parseTasks(original);
@@ -223,7 +267,7 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
         const brief: ChunkBrief = {
           chunk,
           ask: state.ask,
-          plan: readDocument(ctx.cwd, state.planPath),
+          plan,
           planPath: state.planPath,
           taskPath: state.taskPath,
           outline: outlineOf(tasks.chunks, chunk),
@@ -238,7 +282,12 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
           DEFAULT_CONTEXT_WINDOW;
         let working = state;
         const chunkSessionId = (name: AgentName): string =>
-          agentSessionId(working.slug, name, working.agents[name]);
+          agentSessionId(
+            working.slug,
+            working.revision,
+            name,
+            working.agents[name],
+          );
         const crewContext = (): CrewContext => ({
           cwd: ctx.cwd,
           date: working.date,
@@ -291,19 +340,54 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
           note(`--- chunk round ${round} of ${config.maxRounds} ---`);
           const coderRun = await runOne('coder', testFeedback);
           const completion = decodeCompletion(coderRun.envelope);
+          if (completion.ok && completion.value.status === 'needs-replan') {
+            return requestReplan(
+              controller,
+              working,
+              'coder',
+              completion.value.rationale,
+            );
+          }
           if (!completion.ok || completion.value.status === 'blocked') {
             const why = completion.ok
-              ? completion.value.summary
+              ? completion.value.rationale
               : (coderRun.problem ?? completion.reason);
             return say(
               `The coder stopped without implementing chunk ${chunk.number}: ${why}\n\n` +
-                'Decide what to do and re-run the chunk, or revise the task list.',
+                'Resolve the operational blocker and re-run the chunk.',
             );
           }
 
           const testerRun = await runOne('tester', testFeedback);
           const tests = decodeTestResult(testerRun.envelope);
+          if (tests.ok && tests.value.outcome === 'needs-replan') {
+            return requestReplan(
+              controller,
+              working,
+              'tester',
+              tests.value.rationale,
+            );
+          }
+          if (tests.ok && tests.value.outcome === 'blocked') {
+            return say(
+              `The tester is blocked on chunk ${chunk.number}: ${tests.value.rationale}\n\n` +
+                'Resolve the operational blocker and re-run the chunk.',
+            );
+          }
           if (tests.ok && isGreen(tests.value)) {
+            const lateIntegrityProblem = approvedDocumentProblem(
+              working,
+              readDocument(ctx.cwd, state.planPath),
+              readDocument(ctx.cwd, state.taskPath),
+            );
+            if (lateIntegrityProblem) {
+              return requestReplan(
+                controller,
+                working,
+                'integrity',
+                lateIntegrityProblem,
+              );
+            }
             writeFileSync(taskFile, completeChunk(original, chunk.id), 'utf-8');
             const completedTasks = parseTasks(readFileSync(taskFile, 'utf-8'));
             const finished = {
@@ -329,7 +413,28 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
           note(`chunk round ${round} failed`);
         }
 
-        return overrideChunk(ctx, controller, working, taskFile, original, chunk, problems.join('\n\n'));
+        const lateIntegrityProblem = approvedDocumentProblem(
+          working,
+          readDocument(ctx.cwd, state.planPath),
+          readDocument(ctx.cwd, state.taskPath),
+        );
+        if (lateIntegrityProblem) {
+          return requestReplan(
+            controller,
+            working,
+            'integrity',
+            lateIntegrityProblem,
+          );
+        }
+        return overrideChunk(
+          ctx,
+          controller,
+          working,
+          taskFile,
+          original,
+          chunk,
+          problems.join('\n\n'),
+        );
       },
     }),
   );
@@ -348,21 +453,34 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
         if (state.phase !== 'review') {
           throw new Error(`workflow_run_review is not available in the ${state.phase} phase.`);
         }
-        if (!state.taskPath) throw new Error('This workflow has no task list.');
+        if (!state.planPath || !state.taskPath || !state.planHash || !state.taskHash) {
+          throw new Error('This workflow has no approved design revision.');
+        }
 
         const loaded = loadConfig(ctx.cwd);
         if (!loaded.ok) {
           throw new Error(`${CONFIG_PATH} is not usable:\n- ${loaded.problems.join('\n- ')}`);
         }
         const config = loaded.config;
-        const tasks = parseTasks(readFileSync(join(ctx.cwd, state.taskPath), 'utf-8'));
+        const plan = readDocument(ctx.cwd, state.planPath);
+        const taskText = readDocument(ctx.cwd, state.taskPath);
+        const integrityProblem = approvedDocumentProblem(state, plan, taskText);
+        if (integrityProblem) {
+          return requestReplan(
+            controller,
+            state,
+            'integrity',
+            integrityProblem,
+          );
+        }
+        const tasks = parseTasks(taskText);
         if (nextChunk(tasks)) {
           throw new Error('Final review requires every chunk to be complete.');
         }
 
         const brief: WorkflowBrief = {
           ask: state.ask,
-          plan: readDocument(ctx.cwd, state.planPath),
+          plan,
           planPath: state.planPath,
           taskPath: state.taskPath,
           outline: outlineOf(tasks.chunks),
@@ -377,7 +495,12 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
           DEFAULT_CONTEXT_WINDOW;
         let working = state;
         const sessionId = (role: AgentName) =>
-          agentSessionId(working.slug, role, working.agents[role]);
+          agentSessionId(
+            working.slug,
+            working.revision,
+            role,
+            working.agents[role],
+          );
         const crewContext = (): CrewContext => ({
           cwd: ctx.cwd,
           date: working.date,
@@ -407,7 +530,28 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
         if (!initialVerdict.ok) {
           return say(`The final reviewer did not produce a usable verdict: ${initialRun.problem ?? initialVerdict.reason}`);
         }
+        if (initialVerdict.value.verdict === 'needs-replan') {
+          return requestReplan(
+            controller,
+            working,
+            'reviewer',
+            initialVerdict.value.rationale,
+          );
+        }
         if (initialVerdict.value.verdict === 'pass') {
+          const lateIntegrityProblem = approvedDocumentProblem(
+            working,
+            readDocument(ctx.cwd, state.planPath),
+            readDocument(ctx.cwd, state.taskPath),
+          );
+          if (lateIntegrityProblem) {
+            return requestReplan(
+              controller,
+              working,
+              'integrity',
+              lateIntegrityProblem,
+            );
+          }
           controller.update(advance(working, 'close', new Date()));
           return say('Final review passed. Close the workflow with workflow_close.');
         }
@@ -446,23 +590,63 @@ export function registerLoop(pi: ExtensionAPI, controller: Controller): void {
           note(`--- final-review repair ${round} of ${config.maxRounds} ---`);
           const coderRun = await repair('coder', feedback);
           const completion = decodeCompletion(coderRun.envelope);
+          if (completion.ok && completion.value.status === 'needs-replan') {
+            return requestReplan(
+              controller,
+              working,
+              'coder',
+              completion.value.rationale,
+            );
+          }
           if (!completion.ok || completion.value.status === 'blocked') {
             const why = completion.ok
-              ? completion.value.summary
+              ? completion.value.rationale
               : (coderRun.problem ?? completion.reason);
             return say(`The coder stopped during final-review repairs: ${why}`);
           }
 
           const testerRun = await repair('tester', feedback);
           const tests = decodeTestResult(testerRun.envelope);
+          if (tests.ok && tests.value.outcome === 'needs-replan') {
+            return requestReplan(
+              controller,
+              working,
+              'tester',
+              tests.value.rationale,
+            );
+          }
+          if (tests.ok && tests.value.outcome === 'blocked') {
+            return say(`The tester stopped during final-review repairs: ${tests.value.rationale}`);
+          }
           const testsGreen = tests.ok && isGreen(tests.value);
           const testFeedback = testFailure(tests, testerRun.problem);
           const reviewerRun = await review(feedback);
           const verdict = decodeVerdict(reviewerRun.envelope);
+          if (verdict.ok && verdict.value.verdict === 'needs-replan') {
+            return requestReplan(
+              controller,
+              working,
+              'reviewer',
+              verdict.value.rationale,
+            );
+          }
           const reviewFeedback = reviewFailure(verdict, reviewerRun.problem);
           const reviewPassed = verdict.ok && verdict.value.verdict === 'pass';
 
           if (testsGreen && reviewPassed) {
+            const lateIntegrityProblem = approvedDocumentProblem(
+              working,
+              readDocument(ctx.cwd, state.planPath),
+              readDocument(ctx.cwd, state.taskPath),
+            );
+            if (lateIntegrityProblem) {
+              return requestReplan(
+                controller,
+                working,
+                'integrity',
+                lateIntegrityProblem,
+              );
+            }
             controller.update(advance(working, 'close', new Date()));
             return say(
               `Final review passed after repair ${round}. Tests: ${tests.value.passed} passed. ` +
@@ -496,7 +680,14 @@ function notifyBlocked(
 }
 
 async function overrideChunk(
-  ctx: { hasUI: boolean; ui: { select(title: string, options: string[]): Promise<string | undefined>; editor(title: string, initial: string): Promise<string | undefined> } },
+  ctx: {
+    cwd: string;
+    hasUI: boolean;
+    ui: {
+      select(title: string, options: string[]): Promise<string | undefined>;
+      editor(title: string, initial: string): Promise<string | undefined>;
+    };
+  },
   controller: Controller,
   state: Parameters<typeof recordOverride>[0],
   taskFile: string,
@@ -516,6 +707,18 @@ async function overrideChunk(
 
   const reason = (await ctx.ui.editor('Why is this override justified?', '')) ?? '';
   if (!reason.trim()) return say(`Override cancelled — no reason given.\n\n${summary}`);
+
+  if (!state.planPath || !state.taskPath) {
+    throw new Error('This workflow has no approved design revision.');
+  }
+  const integrityProblem = approvedDocumentProblem(
+    state,
+    readDocument(ctx.cwd, state.planPath),
+    readDocument(ctx.cwd, state.taskPath),
+  );
+  if (integrityProblem) {
+    return requestReplan(controller, state, 'integrity', integrityProblem);
+  }
 
   writeFileSync(taskFile, completeChunk(original, chunk.id, { override: reason }), 'utf-8');
   const overridden = recordOverride(state, `Chunk ${chunk.number}`, reason, new Date());

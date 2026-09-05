@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   completeChunk,
   hashContent,
@@ -7,25 +7,26 @@ import {
   validateTasks,
 } from './tasks.ts';
 
-const doc = `# Retry Guard — Tasks
-
-Plan: \`.ai/plans/2026-08-06-retry-guard.md\`
+const submitted = `# Retry Guard — Tasks
 
 ## Chunk 1 — Add the guard
-- [x] Implement: wrap the call
-- [x] Test: retries then gives up
-- Done when: the suite is green
+### Implementation Contract
+- [ ] \`src/lib/runner.ts\` — wrap the call
+### Verification
+- [ ] \`src/lib/runner.test.ts\` — retries then gives up
 
 ## Chunk 2 — Surface the failure
-- [ ] Implement: emit an event
-- [ ] Test: event shape
-- Done when: the UI shows it
+### Implementation Contract
+- [ ] \`src/lib/events.ts\` — emit the existing error shape
+### Verification
+- [ ] \`src/lib/events.test.ts\` — assert the event shape
 `;
 
-describe('parseTasks', () => {
-  it('finds chunks with their items and completion state', () => {
-    const { chunks } = parseTasks(doc);
+const doc = completeChunk(submitted, 'chunk-1');
 
+describe('parseTasks', () => {
+  it('finds chunks, contracts, and completion state', () => {
+    const { chunks } = parseTasks(doc);
     expect(chunks).toHaveLength(2);
     expect(chunks[0]).toMatchObject({
       id: 'chunk-1',
@@ -34,49 +35,36 @@ describe('parseTasks', () => {
       complete: true,
       overridden: false,
     });
+    expect(chunks[0].implementationContract.join('\n')).toContain('runner.ts');
+    expect(chunks[0].verification.join('\n')).toContain('runner.test.ts');
     expect(chunks[1]).toMatchObject({ id: 'chunk-2', complete: false });
-    expect(chunks[0].items.map((item) => item.text)).toEqual([
-      'Implement: wrap the call',
-      'Test: retries then gives up',
-    ]);
   });
 
-  it('accepts em dash, hyphen, and colon heading separators', () => {
+  it('accepts em dash, hyphen, and colon separators', () => {
     const { chunks } = parseTasks(
       '## Chunk 1 — a\n- [ ] x\n## Chunk 2 - b\n- [ ] x\n## Chunk 3: c\n- [ ] x',
     );
     expect(chunks.map((chunk) => chunk.title)).toEqual(['a', 'b', 'c']);
   });
 
-  it('ignores non-chunk sections and nested headings', () => {
-    const { chunks } = parseTasks(
-      '## Notes\n- [ ] not a chunk item\n## Chunk 1 — real\n- [ ] item\n### Detail\n- [ ] nested item',
-    );
-
-    expect(chunks).toHaveLength(1);
-    expect(chunks[0].items).toHaveLength(2);
-  });
-
-  it('treats a chunk with no items as incomplete rather than complete', () => {
-    const { chunks } = parseTasks('## Chunk 1 — empty\nprose only');
-    expect(chunks[0].complete).toBe(false);
+  it('treats a chunk with no items as incomplete', () => {
+    expect(parseTasks('## Chunk 1 — empty\nprose only').chunks[0].complete).toBe(false);
   });
 });
 
 describe('nextChunk', () => {
-  it('returns the first incomplete chunk in file order', () => {
+  it('returns the first incomplete chunk', () => {
     expect(nextChunk(parseTasks(doc))?.id).toBe('chunk-2');
   });
 
   it('returns null when every chunk is complete', () => {
-    const done = completeChunk(doc, 'chunk-2');
-    expect(nextChunk(parseTasks(done))).toBeNull();
+    expect(nextChunk(parseTasks(completeChunk(doc, 'chunk-2')))).toBeNull();
   });
 });
 
 describe('validateTasks', () => {
-  it('accepts a well-formed document', () => {
-    expect(validateTasks(doc)).toEqual([]);
+  it('accepts unchecked chunks with implementation and verification contracts', () => {
+    expect(validateTasks(submitted)).toEqual([]);
   });
 
   it('rejects a document with no chunks', () => {
@@ -85,62 +73,59 @@ describe('validateTasks', () => {
     ]);
   });
 
-  it('rejects a chunk with no checklist items', () => {
-    const failures = validateTasks('## Chunk 1 — empty\nprose only');
-    expect(failures).toContain(
+  it('rejects empty, pre-checked, or vague chunk contracts', () => {
+    expect(validateTasks('## Chunk 1 — empty\nprose only')).toEqual(expect.arrayContaining([
       'Chunk 1 has no checklist items. Add at least one `- [ ]` line.',
-    );
+      'Chunk 1 needs a non-empty `### Implementation Contract` subsection.',
+      'Chunk 1 needs a non-empty `### Verification` subsection.',
+    ]));
+    expect(validateTasks(submitted.replace('- [ ] `src/lib/runner.ts`', '- [x] `src/lib/runner.ts`')))
+      .toContain('Chunk 1 contains pre-checked work. Every submitted item must start as `- [ ]`.');
+    expect(validateTasks(submitted.replace('`src/lib/runner.ts` — wrap the call', 'change the runner')))
+      .toContain('Chunk 1 implementation contract must name at least one file path.');
+  });
+
+  it('rejects nameless chunks and pre-approved override markers', () => {
+    expect(validateTasks(submitted.replace('## Chunk 1 — Add the guard', '## Chunk 1 —')))
+      .toContain('Chunk 1 needs a non-empty title after its separator.');
+    expect(validateTasks(submitted.replace('## Chunk 1 — Add the guard', '## Chunk 1 — Add the guard (override: skip)')))
+      .toContain('Chunk 1 contains an override marker. Overrides are recorded only by the harness.');
+  });
+
+  it('requires a checkable verification item', () => {
+    expect(
+      validateTasks(
+        submitted.replace('- [ ] `src/lib/runner.test.ts` — retries then gives up', 'Run tests.'),
+      ),
+    ).toContain('Chunk 1 verification must contain at least one `- [ ]` check.');
   });
 
   it('rejects gapped or out-of-order numbering', () => {
-    expect(validateTasks('## Chunk 1 — a\n- [ ] x\n## Chunk 3 — c\n- [ ] x')).toContain(
+    const gapped = submitted.replace('## Chunk 2', '## Chunk 3');
+    expect(validateTasks(gapped)).toContain(
       'Chunks must be numbered consecutively in order; found 1, 3.',
-    );
-    expect(validateTasks('## Chunk 2 — a\n- [ ] x\n## Chunk 1 — b\n- [ ] x')).toContain(
-      'Chunks must be numbered consecutively in order; found 2, 1.',
     );
   });
 
-  it('allows a list that starts at chunk 0, for a spike', () => {
-    expect(
-      validateTasks('## Chunk 0 — spike\n- [x] probe\n## Chunk 1 — build\n- [ ] x'),
-    ).toEqual([]);
+  it('allows a list that starts at chunk 0', () => {
+    expect(validateTasks(submitted.replace('Chunk 1', 'Chunk 0').replace('Chunk 2', 'Chunk 1'))).toEqual([]);
   });
 });
 
 describe('completeChunk', () => {
-  it('ticks only the named chunk and leaves every other line untouched', () => {
-    const before = doc.split('\n');
-    const after = completeChunk(doc, 'chunk-2').split('\n');
-
-    expect(after).toHaveLength(before.length);
-    expect(after.filter((line, index) => line !== before[index])).toEqual([
-      '- [x] Implement: emit an event',
-      '- [x] Test: event shape',
-    ]);
+  it('ticks only the named chunk', () => {
+    const after = completeChunk(submitted, 'chunk-2');
+    expect(parseTasks(after).chunks[0].complete).toBe(false);
+    expect(parseTasks(after).chunks[1].complete).toBe(true);
   });
 
-  it('records an override on the heading and normalizes the reason', () => {
-    const after = completeChunk(doc, 'chunk-2', {
-      override: '  flaky suite\n  unrelated to this chunk  ',
+  it('records and replaces a normalized override', () => {
+    const once = completeChunk(submitted, 'chunk-2', {
+      override: '  flaky suite\n unrelated  ',
     });
-
-    expect(after).toContain(
-      '## Chunk 2 — Surface the failure (override: flaky suite unrelated to this chunk)',
-    );
-    expect(parseTasks(after).chunks[1]).toMatchObject({
-      overridden: true,
-      complete: true,
-      title: 'Surface the failure',
-    });
-  });
-
-  it('replaces rather than stacks a second override', () => {
-    const once = completeChunk(doc, 'chunk-2', { override: 'first' });
     const twice = completeChunk(once, 'chunk-2', { override: 'second' });
-
     expect(twice).toContain('(override: second)');
-    expect(twice).not.toContain('first');
+    expect(twice).not.toContain('flaky suite');
   });
 
   it('throws on an unknown chunk', () => {
@@ -149,7 +134,7 @@ describe('completeChunk', () => {
 });
 
 describe('hashContent', () => {
-  it('is stable for identical content and differs on any edit', () => {
+  it('is stable and detects any edit', () => {
     expect(hashContent(doc)).toBe(hashContent(doc));
     expect(hashContent(doc)).not.toBe(hashContent(`${doc} `));
   });

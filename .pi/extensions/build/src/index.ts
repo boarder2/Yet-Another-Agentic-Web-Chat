@@ -21,11 +21,13 @@ import {
   saveBuild,
   uniqueSlug,
   type StoredBuild,
+  type UnsupportedBuildState,
 } from './store.ts';
 import {
   createState,
   formatDate,
   mintSlug,
+  returnToPlanning,
   setStatus,
   type BuildState,
   type Phase,
@@ -50,31 +52,42 @@ interface ModelChoice {
 }
 
 type ManageAction = 'inspect' | 'resume' | 'pause' | 'abort' | 'delete';
+type ListedState = BuildState | UnsupportedBuildState;
 
-function sameBuild(left: BuildState | null, right: BuildState): boolean {
+function sameBuild(left: BuildState | null, right: ListedState): boolean {
   return Boolean(left && left.date === right.date && left.slug === right.slug);
 }
 
-function workflowLabel(state: BuildState, current: BuildState | null): string {
+function workflowLabel(
+  state: ListedState,
+  current: BuildState | null,
+  supported = state.version === 2,
+): string {
   const here = sameBuild(current, state) ? ' · this session' : '';
-  return `${state.date} · ${state.slug} — ${state.phase} / ${state.status}${here}`;
+  const unsupported = supported ? '' : ` · unsupported v${state.version}`;
+  return `${state.date} · ${state.slug} — ${state.phase} / ${state.status}${unsupported}${here}`;
 }
 
-function workflowDetails(state: BuildState): string {
+function workflowDetails(stored: StoredBuild): string {
+  const { state } = stored;
   return [
-    workflowLabel(state, null),
+    workflowLabel(state, null, stored.supported),
     `Ask: ${state.ask}`,
-    `Created: ${state.createdAt}`,
-    `Updated: ${state.updatedAt}`,
+    `Created: ${state.createdAt || 'unknown'}`,
+    `Updated: ${state.updatedAt || 'unknown'}`,
     `Last attached: ${state.lastAttachedAt ?? 'never'}`,
     `State: ${buildArtifactPaths(state)[0]}`,
     `Plan: ${state.planPath ?? 'not written'}`,
     `Tasks: ${state.taskPath ?? 'not written'}`,
+    ...(stored.supported
+      ? [`Revision: ${stored.state.revision}`]
+      : ['Execution: unsupported; inspect or delete only']),
   ].join('\n');
 }
 
-function isResumable(state: BuildState): boolean {
-  return state.status === 'active' || state.status === 'paused';
+function isResumable(stored: StoredBuild): boolean {
+  return stored.supported &&
+    (stored.state.status === 'active' || stored.state.status === 'paused');
 }
 
 export default function buildWorkflow(pi: ExtensionAPI): void {
@@ -233,14 +246,14 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
 
   function buildCompletions(
     prefix: string,
-    predicate: (state: BuildState) => boolean,
+    predicate: (stored: StoredBuild) => boolean,
   ) {
     const needle = prefix.trim();
     const items = listBuilds(projectCwd)
-      .filter(({ state }) => predicate(state))
-      .map(({ state }) => ({
-        value: state.slug,
-        label: `${state.slug} (${state.status}, ${state.phase}, ${state.date})`,
+      .filter(predicate)
+      .map((stored) => ({
+        value: stored.state.slug,
+        label: workflowLabel(stored.state, active, stored.supported),
       }))
       .filter(({ value }) => value.startsWith(needle));
     return items.length > 0 ? items : null;
@@ -248,10 +261,10 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
 
   async function chooseBuild(
     ctx: ExtensionContext,
-    predicate: (state: BuildState) => boolean,
+    predicate: (stored: StoredBuild) => boolean,
     title: string,
   ): Promise<StoredBuild | null> {
-    const builds = listBuilds(ctx.cwd).filter(({ state }) => predicate(state));
+    const builds = listBuilds(ctx.cwd).filter(predicate);
     if (builds.length === 0) {
       ctx.ui.notify('No matching workflows.', 'info');
       return null;
@@ -264,7 +277,9 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
       return null;
     }
 
-    const labels = builds.map(({ state }) => workflowLabel(state, active));
+    const labels = builds.map((stored) =>
+      workflowLabel(stored.state, active, stored.supported),
+    );
     const selected = await ctx.ui.select(title, labels);
     if (!selected) return null;
     const index = labels.indexOf(selected);
@@ -282,7 +297,14 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
       );
       return false;
     }
-    if (!isResumable(stored.state)) {
+    if (!stored.supported) {
+      ctx.ui.notify(
+        `Workflow "${stored.state.slug}" uses unsupported state version ${stored.state.version}; inspect or delete it.`,
+        'warning',
+      );
+      return false;
+    }
+    if (!isResumable(stored)) {
       ctx.ui.notify(
         `Workflow "${stored.state.slug}" is ${stored.state.status} and cannot be resumed.`,
         'warning',
@@ -351,7 +373,7 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
   }
 
   async function confirmDelete(
-    state: BuildState,
+    state: ListedState,
     ctx: ExtensionContext,
   ): Promise<boolean> {
     if (!ctx.hasUI) return true;
@@ -437,13 +459,13 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
   }
 
   function manageActions(
-    state: BuildState,
+    stored: StoredBuild,
     current: BuildState | null,
   ): ManageAction[] {
     const actions: ManageAction[] = ['inspect'];
-    if (sameBuild(current, state) && state.status === 'active') {
+    if (stored.supported && sameBuild(current, stored.state) && stored.state.status === 'active') {
       actions.push('pause', 'abort');
-    } else if (!current && isResumable(state)) {
+    } else if (!current && isResumable(stored)) {
       actions.push('resume');
     }
     actions.push('delete');
@@ -477,7 +499,7 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
     if (!attachment) return;
 
     const stored = findBuild(ctx.cwd, attachment.slug, attachment.date);
-    if (!stored || stored.state.status !== 'active') return;
+    if (!stored?.supported || stored.state.status !== 'active') return;
 
     active = stored.state;
     syncWorkflowTools();
@@ -613,6 +635,55 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
     },
   });
 
+  pi.registerCommand('build:replan', {
+    description: 'Invalidate the approved design and return to planning',
+    handler: async (_args, ctx) => {
+      if (!active) {
+        ctx.ui.notify('No active workflow.', 'warning');
+        return;
+      }
+      if (!['execute', 'review', 'close'].includes(active.phase)) {
+        ctx.ui.notify(`Cannot re-plan from the ${active.phase} phase.`, 'warning');
+        return;
+      }
+      if (!ctx.hasUI) {
+        ctx.ui.notify('Re-planning requires interactive human approval.', 'error');
+        return;
+      }
+      const rationale = (await ctx.ui.editor(
+        'Why must the approved design change?',
+        '',
+      ))?.trim();
+      if (!rationale) return;
+      const approved = await ctx.ui.confirm(
+        `Invalidate revision ${active.revision}?`,
+        `${rationale}\n\nAll revised chunks will restart unchecked. Existing approved revisions remain immutable.`,
+      );
+      if (!approved) return;
+
+      if (!ctx.isIdle()) {
+        ctx.abort();
+        await ctx.waitForIdle();
+      }
+      if (!active || !['execute', 'review', 'close'].includes(active.phase)) {
+        ctx.ui.notify('The workflow changed before re-planning could begin.', 'warning');
+        return;
+      }
+      const previous = active;
+      const next = returnToPlanning(previous, 'human', rationale, new Date());
+      persist(ctx.cwd, next);
+      syncWorkflowTools();
+      enforceGating();
+      showStatus(ctx);
+      const cleanup = await closeBuildAgents(previous.slug);
+      ctx.ui.notify(
+        `Revision ${previous.revision} invalidated. Returned to planning.` +
+          cleanupReport(cleanup.missing, cleanup.failed),
+        cleanup.failed.length ? 'warning' : 'info',
+      );
+    },
+  });
+
   pi.registerCommand('build:delete', {
     description: 'Delete the current workflow and all of its artifacts',
     handler: async (_args, ctx) => {
@@ -623,7 +694,7 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
         );
         return;
       }
-      await deleteOne({ state: active, file: '' }, ctx);
+      await deleteOne({ supported: true, state: active, file: '' }, ctx);
     },
   });
 
@@ -639,7 +710,7 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
       }
 
       const names = completed
-        .map(({ state }) => `- ${workflowLabel(state, active)}`)
+        .map((stored) => `- ${workflowLabel(stored.state, active, stored.supported)}`)
         .join('\n');
       const ok = !ctx.hasUI
         ? true
@@ -695,11 +766,11 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
       }
 
       if (!ctx.hasUI) {
-        ctx.ui.notify(workflowDetails(stored.state), 'info');
+        ctx.ui.notify(workflowDetails(stored), 'info');
         return;
       }
 
-      const actions = manageActions(stored.state, active);
+      const actions = manageActions(stored, active);
       const selected = await ctx.ui.select(
         `Manage ${stored.state.slug}`,
         actions.map((action) => actionLabels[action]),
@@ -713,7 +784,7 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
 
       switch (action) {
         case 'inspect':
-          ctx.ui.notify(workflowDetails(stored.state), 'info');
+          ctx.ui.notify(workflowDetails(stored), 'info');
           break;
         case 'resume':
           await resumeStored(stored, ctx);
@@ -740,12 +811,11 @@ export default function buildWorkflow(pi: ExtensionAPI): void {
         return;
       }
 
-      const lines = builds.map(({ state }) => {
-        const here = sameBuild(active, state) ? ' (this session)' : '';
-        const seen = state.lastAttachedAt
-          ? ` last attached ${state.lastAttachedAt}`
+      const lines = builds.map((stored) => {
+        const seen = stored.state.lastAttachedAt
+          ? ` last attached ${stored.state.lastAttachedAt}`
           : '';
-        return `${state.date} · ${state.slug} — ${state.phase} / ${state.status}${here}${seen}`;
+        return `${workflowLabel(stored.state, active, stored.supported)}${seen}`;
       });
       ctx.ui.notify(lines.join('\n'), 'info');
     },

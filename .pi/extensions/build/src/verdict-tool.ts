@@ -67,11 +67,11 @@ const submitVerdict = defineTool({
   promptSnippet: 'Report the review verdict as a terminating tool call',
   promptGuidelines: [
     `Always finish a review by calling ${VERDICT_TOOL}. Prose alone is not a verdict.`,
-    'Use changes-required whenever there is at least one blocking finding, and list every one.',
+    'Use changes-required for implementation defects. Use needs-replan only when the approved design itself must change.',
   ],
   parameters: Type.Object({
     verdict: Type.String({
-      description: 'Exactly "pass" or "changes-required"',
+      description: 'Exactly "pass", "changes-required", or "needs-replan"',
     }),
     blocking: Type.Array(Type.String(), {
       description:
@@ -81,6 +81,10 @@ const submitVerdict = defineTool({
       description:
         'The reasoning behind the findings. This is the only prose the coder will see.',
     }),
+    rationale: Type.String({
+      description:
+        'Required for needs-replan: the approved contract that must change and concrete evidence why.',
+    }),
   }),
 
   async execute(_toolCallId, params) {
@@ -88,6 +92,7 @@ const submitVerdict = defineTool({
       verdict: params.verdict,
       blocking: params.blocking,
       notes: params.notes,
+      rationale: params.rationale,
     });
     return {
       content: [{ type: 'text', text: `Verdict recorded: ${params.verdict}` }],
@@ -105,30 +110,39 @@ const submitTestResult = defineTool({
   promptSnippet: 'Report the observed test counts as a terminating tool call',
   promptGuidelines: [
     `Always finish by calling ${TEST_RESULT_TOOL} with counts from a real run.`,
-    'Never report a pass you did not observe; a failing suite is reported as failing.',
+    'Use needs-replan only when testing proves the approved contract itself must change; never redesign it.',
   ],
   parameters: Type.Object({
-    passed: Type.Number({ description: 'Tests observed passing' }),
-    failed: Type.Number({ description: 'Tests observed failing' }),
+    outcome: Type.String({
+      description: 'Exactly "passed", "failed", "blocked", or "needs-replan"',
+    }),
+    passed: Type.Integer({ minimum: 0, description: 'Tests observed passing' }),
+    failed: Type.Integer({ minimum: 0, description: 'Tests observed failing' }),
     output: Type.String({
       description: 'Verbatim failure output, or a short summary when green',
+    }),
+    rationale: Type.String({
+      description: 'Required for blocked or needs-replan; otherwise an empty string.',
     }),
   }),
 
   async execute(_toolCallId, params) {
     record(TEST_RESULT_TOOL, {
+      outcome: params.outcome,
       passed: params.passed,
       failed: params.failed,
       output: params.output,
+      rationale: params.rationale,
     });
     return {
       content: [
         {
           type: 'text',
-          text: `Tests recorded: ${params.passed} passed, ${params.failed} failed`,
+          text: `Tests recorded: ${params.outcome}; ${params.passed} passed, ${params.failed} failed`,
         },
       ],
       details: {
+        outcome: params.outcome,
         passed: params.passed,
         failed: params.failed,
         output: params.output,
@@ -146,15 +160,17 @@ const submitCompletion = defineTool({
   promptSnippet: 'Report the chunk outcome as a terminating tool call',
   promptGuidelines: [
     `Always finish by calling ${COMPLETION_TOOL}.`,
-    'Report blocked — never completed — when the chunk turned out to be wrong, ambiguous, or impossible as written.',
+    'Use needs-replan instead of inventing an architecture when the approved contract is wrong, ambiguous, or impossible.',
   ],
   parameters: Type.Object({
     status: Type.String({
-      description: 'Exactly "completed" or "blocked"',
+      description: 'Exactly "completed", "blocked", or "needs-replan"',
     }),
     summary: Type.String({
-      description:
-        'What you implemented, or what blocked you and what you need decided.',
+      description: 'What you implemented, or a concise blocker summary.',
+    }),
+    rationale: Type.String({
+      description: 'Required for blocked or needs-replan; otherwise an empty string.',
     }),
   }),
 
@@ -162,6 +178,7 @@ const submitCompletion = defineTool({
     record(COMPLETION_TOOL, {
       status: params.status,
       summary: params.summary,
+      rationale: params.rationale,
     });
     return {
       content: [{ type: 'text', text: `Completion recorded: ${params.status}` }],

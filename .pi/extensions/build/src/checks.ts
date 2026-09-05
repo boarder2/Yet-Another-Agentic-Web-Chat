@@ -63,10 +63,25 @@ export function registerClose(pi: ExtensionAPI, controller: Controller): void {
         controller.detach(ctx);
 
         const failed = outcomes.filter((outcome) => outcome.exitCode !== 0);
+        const currentOverrides = state.overrides.filter(
+          (override) => override.revision === state.revision,
+        );
+        const supersededOverrides = state.overrides.filter(
+          (override) => override.revision !== state.revision,
+        );
+        const overrideSummary = [
+          currentOverrides.length
+            ? `Current revision overrides:\n${currentOverrides.map((entry) => `- ${entry.chunk}: ${entry.reason}`).join('\n')}`
+            : 'Current revision overrides: none.',
+          supersededOverrides.length
+            ? `Superseded revision overrides retained for history: ${supersededOverrides.length}.`
+            : '',
+        ].filter(Boolean).join('\n');
         // Advisory by design: a pre-existing failure must not deadlock the close.
         return say(
           [
-            `Workflow ${state.slug} closed.`,
+            `Workflow ${state.slug} revision ${state.revision} closed.`,
+            overrideSummary,
             formatChecks(outcomes),
             failed.length
               ? `${failed.length} check(s) failed. Report this plainly to the user; do not claim a pass.`

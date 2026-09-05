@@ -32,7 +32,10 @@ unhandled rejections, second calls, retries, partial writes, aborted streams, in
 data can this lose or overwrite?
 
 **Contract.** Does the completed build do what the approved plan and task list say, or an easier
-neighbour? Anything asked for and quietly missing, stubbed, or TODO-ed is blocking.
+neighbour? Anything asked for and quietly missing, stubbed, or TODO-ed is blocking. Use
+`changes-required` when the approved contract remains viable and implementation must be corrected.
+Use `needs-replan` only when concrete evidence shows the approved design itself must change; an
+unapproved implementation alternative never becomes approved retroactively.
 
 **Scope and volume.** Flag what the chunk didn't ask for: adjacent refactors, speculative
 options, single-caller parameters, abstractions before the second use, defensive branches for
@@ -93,7 +96,7 @@ no summary of the code, no restating the chunk.
 
 ## Verdict
 
-`pass` | `changes-required`
+`pass` | `changes-required` | `needs-replan`
 
 ## Blocking
 
@@ -111,12 +114,13 @@ Behaviors from the approved build that no test pins. Omit if none.
 
 Finish by calling `submit_verdict`:
 
-- `verdict` — exactly `pass` or `changes-required`
+- `verdict` — exactly `pass`, `changes-required`, or `needs-replan`
 - `blocking` — each blocking finding as `file:line — defect`; empty only when passing
-- `notes` — the reasoning and evidence
+- `notes` — reasoning and evidence for implementation findings
+- `rationale` — required for `needs-replan`; otherwise an empty string
 
-Prose alone is never read as a verdict; a review that ends without the call does not count.
-`changes-required` needs at least one blocking finding — the harness rejects an empty list.
+Prose alone is never read as a verdict. Both blocking outcomes need at least one concrete finding;
+`needs-replan` must name the approved contract that cannot stand and the evidence why.
 Non-blocking issues and missing coverage go in `notes`, the only prose the coder sees; your
 terminal output is for the human watching the pane.
 

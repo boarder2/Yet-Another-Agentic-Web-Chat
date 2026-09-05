@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { splitSections } from './markdown.ts';
+import { isBlank, splitSections, type Section } from './markdown.ts';
+import { normalizeHeading } from './plan.ts';
 
 export interface TaskItem {
   line: number;
@@ -13,6 +14,8 @@ export interface TaskChunk {
   title: string;
   headingLine: number;
   items: TaskItem[];
+  implementationContract: string[];
+  verification: string[];
   complete: boolean;
   overridden: boolean;
 }
@@ -21,10 +24,16 @@ export interface TaskDocument {
   chunks: TaskChunk[];
 }
 
-// `## Chunk 3 — name`, with an em dash, hyphen, or colon separator.
 const CHUNK_HEADING = /^chunk\s+(\d+)\s*(?:[—–:-]\s*(.*))?$/i;
 const CHECKBOX = /^(\s*[-*]\s+)\[( |x|X)\]\s?(.*)$/;
 const OVERRIDE = /\(override:\s*(.*?)\)\s*$/;
+const PATH = /`[^`]*[/.][^`]*`|(?:^|\s)[\w./-]+\.[a-z]{1,5}(?:\s|$)/i;
+
+function nestedSection(section: Section, heading: string): Section | undefined {
+  return splitSections(section.body, 3).find(
+    (candidate) => normalizeHeading(candidate.heading) === normalizeHeading(heading),
+  );
+}
 
 export function parseTasks(text: string): TaskDocument {
   const lines = text.split('\n');
@@ -53,6 +62,9 @@ export function parseTasks(text: string): TaskDocument {
       title: (match[2] ?? '').replace(OVERRIDE, '').trim(),
       headingLine: section.line,
       items,
+      implementationContract:
+        nestedSection(section, 'Implementation Contract')?.body ?? [],
+      verification: nestedSection(section, 'Verification')?.body ?? [],
       complete: items.length > 0 && items.every((item) => item.checked),
       overridden: OVERRIDE.test(section.heading),
     });
@@ -71,14 +83,33 @@ export function validateTasks(text: string): string[] {
     );
   }
 
-  const empty = chunks.filter((chunk) => chunk.items.length === 0);
-  for (const chunk of empty) {
-    failures.push(
-      `Chunk ${chunk.number} has no checklist items. Add at least one \`- [ ]\` line.`,
-    );
+  for (const chunk of chunks) {
+    if (!chunk.title) {
+      failures.push(`Chunk ${chunk.number} needs a non-empty title after its separator.`);
+    }
+    if (chunk.overridden) {
+      failures.push(`Chunk ${chunk.number} contains an override marker. Overrides are recorded only by the harness.`);
+    }
+    if (chunk.items.length === 0) {
+      failures.push(
+        `Chunk ${chunk.number} has no checklist items. Add at least one \`- [ ]\` line.`,
+      );
+    }
+    if (chunk.items.some((item) => item.checked)) {
+      failures.push(`Chunk ${chunk.number} contains pre-checked work. Every submitted item must start as \`- [ ]\`.`);
+    }
+    if (isBlank(chunk.implementationContract)) {
+      failures.push(`Chunk ${chunk.number} needs a non-empty \`### Implementation Contract\` subsection.`);
+    } else if (!chunk.implementationContract.some((line) => PATH.test(line))) {
+      failures.push(`Chunk ${chunk.number} implementation contract must name at least one file path.`);
+    }
+    if (isBlank(chunk.verification)) {
+      failures.push(`Chunk ${chunk.number} needs a non-empty \`### Verification\` subsection.`);
+    } else if (!chunk.verification.some((line) => CHECKBOX.test(line))) {
+      failures.push(`Chunk ${chunk.number} verification must contain at least one \`- [ ]\` check.`);
+    }
   }
 
-  // Consecutive and ascending, but free to start at 0 so a spike can be chunk 0.
   const numbers = chunks.map((chunk) => chunk.number);
   const gapped = numbers.some(
     (number, index) => index > 0 && number !== numbers[index - 1] + 1,
@@ -104,7 +135,6 @@ export interface CompleteOptions {
   override?: string;
 }
 
-// Rewrites only the chunk's own lines, so everything else survives byte-for-byte.
 export function completeChunk(
   text: string,
   id: string,
@@ -112,9 +142,7 @@ export function completeChunk(
 ): string {
   const doc = parseTasks(text);
   const chunk = doc.chunks.find((candidate) => candidate.id === id);
-  if (!chunk) {
-    throw new Error(`Unknown chunk: ${id}`);
-  }
+  if (!chunk) throw new Error(`Unknown chunk: ${id}`);
 
   const lines = text.split('\n');
   for (const item of chunk.items) {

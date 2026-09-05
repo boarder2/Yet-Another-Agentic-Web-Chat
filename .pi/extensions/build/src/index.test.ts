@@ -146,15 +146,19 @@ function writeConfig(cwd: string): void {
 function context(
   cwd: string,
   entries: unknown[] = [],
+  interactive = false,
 ): ExtensionCommandContext {
   const model = { provider: 'test', id: 'model', name: 'model' };
   return {
     cwd,
-    hasUI: false,
-    mode: 'print',
+    hasUI: interactive,
+    mode: interactive ? 'tui' : 'print',
     ui: {
       notify: () => {},
       setStatus: () => {},
+      select: async () => 'Complex — grill it first',
+      confirm: async () => true,
+      editor: async () => 'design must change',
       theme: { fg: (_color: string, text: string) => text },
     },
     sessionManager: { getEntries: () => entries },
@@ -202,7 +206,7 @@ describe('grilling guidance', () => {
     process.env.HERDR_ENV = '1';
     const pi = new FakePi();
     buildWorkflow(pi.api);
-    const ctx = context(cwd);
+    const ctx = context(cwd, [], true);
 
     await pi.command('build', 'add a retry guard', ctx);
     const result = await pi.tool(

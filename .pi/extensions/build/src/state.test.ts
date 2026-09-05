@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   advance,
   agentSessionId,
+  approveRevision,
   beginChunk,
   beginReview,
   buildPaths,
@@ -13,6 +14,8 @@ import {
   phaseAfterTriage,
   recordOverride,
   reseedAgent,
+  returnToPlanning,
+  revisionPaths,
   serializeState,
   setStatus,
   type BuildState,
@@ -56,45 +59,57 @@ describe('formatDate and buildPaths', () => {
     expect(formatDate(new Date(2026, 0, 1))).toBe('2026-01-01');
   });
 
-  it('derives all three paths from one date and slug', () => {
+  it('derives candidate, revision, and state paths', () => {
     expect(buildPaths('2026-08-06', 'retry-guard')).toEqual({
-      plan: '.ai/plans/2026-08-06-retry-guard.md',
-      task: '.ai/task/2026-08-06-retry-guard.md',
+      planCandidate: '.ai/plans/2026-08-06-retry-guard.candidate.md',
+      taskCandidate: '.ai/task/2026-08-06-retry-guard.candidate.md',
       state: '.ai/builds/2026-08-06-retry-guard.json',
+    });
+    expect(revisionPaths('2026-08-06', 'retry-guard', 2)).toEqual({
+      plan: '.ai/plans/2026-08-06-retry-guard-r2.md',
+      task: '.ai/task/2026-08-06-retry-guard-r2.md',
     });
   });
 });
 
 describe('agentSessionId', () => {
-  it('names the chunk the session belongs to', () => {
+  it('names the revision and chunk the session belongs to', () => {
     expect(
-      agentSessionId('retry-guard', 'coder', {
+      agentSessionId('retry-guard', 2, 'coder', {
         chunkId: 'chunk-2',
         generation: 0,
       }),
-    ).toBe('wf-retry-guard-coder-chunk-2');
+    ).toBe('wf-retry-guard-r2-coder-chunk-2');
   });
 
   it('suffixes reseeded generations within a chunk', () => {
     expect(
-      agentSessionId('retry-guard', 'coder', {
+      agentSessionId('retry-guard', 2, 'coder', {
         chunkId: 'chunk-2',
         generation: 3,
       }),
-    ).toBe('wf-retry-guard-coder-chunk-2-g3');
+    ).toBe('wf-retry-guard-r2-coder-chunk-2-g3');
   });
 
   it('has a stable id before any chunk has begun', () => {
     expect(
-      agentSessionId('retry-guard', 'tester', { chunkId: null, generation: 0 }),
-    ).toBe('wf-retry-guard-tester');
+      agentSessionId('retry-guard', 1, 'tester', {
+        chunkId: null,
+        generation: 0,
+      }),
+    ).toBe('wf-retry-guard-r1-tester');
   });
 
-  // Two chunks must never share a session, or the reset is cosmetic.
-  it('gives every chunk a distinct session', () => {
-    const ids = ['chunk-1', 'chunk-2', 'chunk-10'].map((chunkId) =>
-      agentSessionId('retry-guard', 'coder', { chunkId, generation: 0 }),
-    );
+  it('gives every chunk and revision a distinct session', () => {
+    const ids = [
+      ...['chunk-1', 'chunk-2'].map((chunkId) =>
+        agentSessionId('retry-guard', 1, 'coder', { chunkId, generation: 0 }),
+      ),
+      agentSessionId('retry-guard', 2, 'coder', {
+        chunkId: 'chunk-1',
+        generation: 0,
+      }),
+    ];
     expect(new Set(ids).size).toBe(3);
   });
 });
@@ -160,7 +175,12 @@ describe('overrides and reseeding', () => {
     const after = recordOverride(state(), 'Chunk 3', 'flaky suite', LATER);
 
     expect(after.overrides).toEqual([
-      { chunk: 'Chunk 3', reason: 'flaky suite', at: LATER.toISOString() },
+      {
+        revision: 0,
+        chunk: 'Chunk 3',
+        reason: 'flaky suite',
+        at: LATER.toISOString(),
+      },
     ]);
   });
 
@@ -192,8 +212,10 @@ describe('beginChunk', () => {
     const first = beginChunk(state(), 'chunk-1', NOW);
     const second = beginChunk(first, 'chunk-2', LATER);
 
-    expect(agentSessionId(second.slug, 'coder', second.agents.coder)).not.toBe(
-      agentSessionId(first.slug, 'coder', first.agents.coder),
+    expect(
+      agentSessionId(second.slug, second.revision, 'coder', second.agents.coder),
+    ).not.toBe(
+      agentSessionId(first.slug, first.revision, 'coder', first.agents.coder),
     );
   });
 
@@ -241,6 +263,77 @@ describe('beginReview', () => {
   });
 });
 
+describe('approved revisions and re-planning', () => {
+  it('snapshots approval metadata and resets execution sessions', () => {
+    const planning = advance(state(), 'plan', NOW);
+    const approved = approveRevision(
+      planning,
+      {
+        planPath: '.ai/plans/retry-r1.md',
+        taskPath: '.ai/task/retry-r1.md',
+        planHash: 'plan-hash',
+        taskHash: 'task-hash',
+        designSummary: '- bounded retry',
+      },
+      LATER,
+    );
+
+    expect(approved).toMatchObject({
+      phase: 'execute',
+      revision: 1,
+      planHash: 'plan-hash',
+      taskHash: 'task-hash',
+      pendingReplan: null,
+      rounds: {},
+    });
+    expect(approved.revisions[0]).toMatchObject({
+      revision: 1,
+      trigger: null,
+      designSummary: '- bounded retry',
+    });
+  });
+
+  it('returns an approved workflow to targeted planning with evidence', () => {
+    const approved = approveRevision(
+      advance(state(), 'plan', NOW),
+      {
+        planPath: 'plan-r1.md',
+        taskPath: 'task-r1.md',
+        planHash: 'p',
+        taskHash: 't',
+        designSummary: '- design',
+      },
+      NOW,
+    );
+    const replanning = returnToPlanning(
+      {
+        ...beginChunk(approved, 'chunk-2', NOW),
+        rounds: { 'chunk-1': 1 },
+        overrides: [{
+          revision: 1,
+          chunk: 'Chunk 1',
+          reason: 'known flaky check',
+          at: NOW.toISOString(),
+        }],
+      },
+      'tester',
+      'API error shape is contradictory',
+      LATER,
+    );
+
+    expect(replanning.phase).toBe('plan');
+    expect(replanning.pendingReplan).toMatchObject({
+      role: 'tester',
+      rationale: 'API error shape is contradictory',
+      supersededRevision: 1,
+      completedChunks: ['chunk-1'],
+      overrides: [{ chunk: 'Chunk 1', reason: 'known flaky check' }],
+    });
+    expect(replanning.agents.coder.chunkId).toBeNull();
+    expect(replanning.planPath).toBe('plan-r1.md');
+  });
+});
+
 describe('serialization', () => {
   it('round-trips a state through JSON', () => {
     const before = recordOverride(state(), 'Chunk 1', 'pre-existing', LATER);
@@ -253,26 +346,41 @@ describe('serialization', () => {
       'Unsupported build state version: 99',
     );
     expect(() => parseState('{"version":1}')).toThrow(
-      'missing required fields',
+      'Unsupported build state version: 1',
     );
     expect(() =>
       parseState(
         JSON.stringify({
-          version: 1,
-          slug: 's',
-          date: 'd',
+          ...state(),
           phase: 'shipping',
-          status: 'active',
         }),
       ),
-    ).toThrow('Unknown phase: shipping');
+    ).toThrow('invalid version-2 fields');
   });
 
-  // A workflow written before plan and chunking merged must still load.
-  it('reads the retired tasks phase as planning', () => {
-    const migrated = parseState(
-      serializeState({ ...state(), phase: 'tasks' as never }),
-    );
-    expect(migrated.phase).toBe('plan');
+  it('rejects malformed version-2 metadata rather than making it executable', () => {
+    expect(() =>
+      parseState(JSON.stringify({
+        version: 2,
+        slug: 'retry-guard',
+        date: '2026-08-06',
+        ask: 'x',
+        phase: 'execute',
+        status: 'active',
+        revision: 1,
+        revisions: [],
+        overrides: [],
+        agents: {},
+        rounds: {},
+        createdAt: NOW.toISOString(),
+        updatedAt: NOW.toISOString(),
+      })),
+    ).toThrow();
+  });
+
+  it('does not migrate retired phases', () => {
+    expect(() =>
+      parseState(serializeState({ ...state(), phase: 'tasks' as never })),
+    ).toThrow('invalid version-2 fields');
   });
 });

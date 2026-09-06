@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest';
 
 import {
+  SECRET_HEADER_VALUE_MAX_BYTES,
+  SECRET_HEADERS_MAX_BYTES,
+} from '@/lib/http/secretHeaders';
+import {
   buildRequestInit,
   encryptHeaderPatch,
   parseExtraHeaders,
@@ -171,6 +175,13 @@ describe('redactServer', () => {
 });
 
 describe('validateExtraHeaders', () => {
+  it('preserves MCP compatibility for transport-owned RFC-token names', () => {
+    expect(validateExtraHeaders({ Host: 'virtual-host' })).toBeNull();
+    expect(
+      validateExtraHeaders({ 'Content-Length': '0' }, { allowNull: true }),
+    ).toBeNull();
+  });
+
   it('accepts a flat string map', () => {
     expect(validateExtraHeaders({ 'X-Api-Key': 'abc' })).toBeNull();
   });
@@ -213,5 +224,24 @@ describe('validateExtraHeaders', () => {
       Array.from({ length: 51 }, (_, i) => [`H${i}`, 'v']),
     );
     expect(validateExtraHeaders(many)).toMatch(/too many entries/);
+  });
+
+  it('preserves MCP acceptance of oversized values and maps', () => {
+    expect(
+      validateExtraHeaders({
+        'X-Large': 'x'.repeat(SECRET_HEADER_VALUE_MAX_BYTES + 1),
+      }),
+    ).toBeNull();
+
+    const largeMap = Object.fromEntries(
+      Array.from({ length: 50 }, (_, index) => [
+        `X-${index}`,
+        'x'.repeat(1_500),
+      ]),
+    );
+    expect(Buffer.byteLength(JSON.stringify(largeMap), 'utf8')).toBeGreaterThan(
+      SECRET_HEADERS_MAX_BYTES,
+    );
+    expect(validateExtraHeaders(largeMap)).toBeNull();
   });
 });

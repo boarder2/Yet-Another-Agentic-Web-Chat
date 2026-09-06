@@ -9,6 +9,10 @@ vi.mock('@/lib/db', () => ({
   default: {
     select: () => ({
       from: () => ({
+        all: () => {
+          if (state.readError) throw state.readError;
+          return state.rows;
+        },
         where: () => ({
           all: () => {
             if (state.readError) throw state.readError;
@@ -28,7 +32,12 @@ vi.mock('drizzle-orm', () => ({
   inArray: vi.fn(),
 }));
 
-import { getCodeExecutionAutoRun, getOpenrouterQuantizations } from './server';
+import {
+  getAllSettings,
+  getCodeExecutionAutoRun,
+  getHiddenModels,
+  getOpenrouterQuantizations,
+} from './server';
 
 describe('getCodeExecutionAutoRun', () => {
   it.each([
@@ -57,6 +66,39 @@ describe('getCodeExecutionAutoRun', () => {
     state.readError = new Error('database unavailable');
     expect(getCodeExecutionAutoRun()).toBe(false);
     state.readError = null;
+  });
+});
+
+describe('active settings and hidden model references', () => {
+  it('does not hydrate retired provider settings while retaining active settings', () => {
+    state.readError = null;
+    state.rows = [
+      { key: 'lmStudioApiUrl', value: 'http://old-lmstudio' },
+      { key: 'customOpenaiApiUrl', value: 'http://old-custom' },
+      { key: 'customOpenaiModelName', value: 'old-model' },
+      { key: 'chatModel', value: 'gpt-5.4' },
+    ];
+
+    expect(getAllSettings()).toEqual({ chatModel: 'gpt-5.4' });
+  });
+
+  it('parses legacy global and provider-scoped hidden model entries', () => {
+    state.readError = null;
+    state.rows = [
+      {
+        key: 'hiddenModels',
+        value: JSON.stringify([
+          'legacy-model',
+          { provider: 'openai-compatible:one', model: 'local-model' },
+          { provider: '', model: 'invalid' },
+        ]),
+      },
+    ];
+
+    expect(getHiddenModels()).toEqual([
+      'legacy-model',
+      { provider: 'openai-compatible:one', model: 'local-model' },
+    ]);
   });
 });
 

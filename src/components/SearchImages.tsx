@@ -55,8 +55,6 @@ const SearchImages = ({
 
       const chatModelProvider = localStorage.getItem('chatModelProvider');
       const chatModel = localStorage.getItem('chatModel');
-      const customOpenAIBaseURL = localStorage.getItem('openAIBaseURL');
-      const customOpenAIKey = localStorage.getItem('openAIApiKey');
       const contextWindowSize = parseInt(
         localStorage.getItem('contextWindowSize') ||
           String(DEFAULT_CONTEXT_WINDOW),
@@ -86,15 +84,14 @@ const SearchImages = ({
           body: JSON.stringify({
             query: query,
             chatHistory: chatHistory,
-            chatModel: {
-              provider: chatModelProvider,
-              model: chatModel,
-              contextWindowSize,
-              ...(chatModelProvider === 'custom_openai' && {
-                customOpenAIBaseURL: customOpenAIBaseURL,
-                customOpenAIKey: customOpenAIKey,
-              }),
-            },
+            chatModel:
+              chatModelProvider !== null || chatModel !== null
+                ? {
+                    provider: chatModelProvider ?? '',
+                    model: chatModel ?? '',
+                    contextWindowSize,
+                  }
+                : undefined,
             selectedSystemPromptIds: selectedSystemPromptIds,
             isPrivate,
           }),

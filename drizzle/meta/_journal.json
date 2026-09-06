@@ -225,6 +225,13 @@
       "when": 1786209908718,
       "tag": "0031_awesome_stephen_strange",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1788673570018,
+      "tag": "0032_perfect_firedrake",
+      "breakpoints": true
     }
   ]
 }

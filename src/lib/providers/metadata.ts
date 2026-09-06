@@ -8,14 +8,17 @@
  * Keep the `key`/`displayName` values in sync with each provider module's
  * `PROVIDER_INFO` export (`src/lib/providers/<provider>.ts`).
  */
+export interface ProviderMetadata {
+  key: string;
+  displayName: string;
+}
+
 export const PROVIDER_METADATA = {
   openai: { key: 'openai', displayName: 'OpenAI' },
   anthropic: { key: 'anthropic', displayName: 'Anthropic' },
   gemini: { key: 'gemini', displayName: 'Google Gemini' },
   transformers: { key: 'transformers', displayName: 'Hugging Face' },
   deepseek: { key: 'deepseek', displayName: 'Deepseek AI' },
-  lmstudio: { key: 'lmstudio', displayName: 'LM Studio' },
   openrouter: { key: 'openrouter', displayName: 'OpenRouter' },
-  custom_openai: { key: 'custom_openai', displayName: 'Custom OpenAI' },
   test: { key: 'test', displayName: 'Test' },
 };

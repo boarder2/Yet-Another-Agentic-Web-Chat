@@ -115,7 +115,7 @@ export default function MemorySection({
   );
 
   const memoryModel =
-    memoryModelProvider && memoryModelName
+    memoryModelProvider !== '' || memoryModelName !== ''
       ? { provider: memoryModelProvider, model: memoryModelName }
       : null;
 

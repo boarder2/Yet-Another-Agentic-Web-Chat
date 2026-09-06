@@ -5,9 +5,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   getAvailableChatModelProviders: vi.fn(),
   getAvailableEmbeddingModelProviders: vi.fn(),
-  getCustomOpenaiApiKey: vi.fn(() => ''),
-  getCustomOpenaiApiUrl: vi.fn(() => ''),
-  getCustomOpenaiModelName: vi.fn(() => ''),
   getEmbeddingModelSelection: vi.fn(() => ({ provider: '', name: '' })),
 }));
 
@@ -15,11 +12,6 @@ vi.mock('@/lib/providers', () => ({
   getAvailableChatModelProviders: mocks.getAvailableChatModelProviders,
   getAvailableEmbeddingModelProviders:
     mocks.getAvailableEmbeddingModelProviders,
-}));
-vi.mock('@/lib/config', () => ({
-  getCustomOpenaiApiKey: mocks.getCustomOpenaiApiKey,
-  getCustomOpenaiApiUrl: mocks.getCustomOpenaiApiUrl,
-  getCustomOpenaiModelName: mocks.getCustomOpenaiModelName,
 }));
 vi.mock('@/lib/settings/server', () => ({
   getEmbeddingModelSelection: mocks.getEmbeddingModelSelection,

@@ -78,7 +78,7 @@ const ensureBlockElements = (text: string): string => {
 
 /**
  * Remove think-tag content, handling both properly paired <think>...</think>
- * and orphaned </think> (no opening tag) from providers like LM Studio.
+ * and orphaned </think> (no opening tag) from OpenAI-format providers.
  */
 const removeThinkTags = (content: string): string => {
   // Remove properly paired <think>...</think>
@@ -109,7 +109,7 @@ interface ContentSegment {
 /**
  * Split content by think blocks, handling both:
  * 1. Properly paired <think>...</think>
- * 2. Orphaned </think> (no opening <think>) from providers like LM Studio
+ * 2. Orphaned </think> (no opening <think>) from OpenAI-format providers
  *    that stream thinking content as regular text.
  */
 const splitByThinkBlocks = (content: string): ContentSegment[] => {

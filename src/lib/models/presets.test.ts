@@ -21,9 +21,9 @@ describe('isModelRefAvailable', () => {
     );
   });
 
-  it('returns true for custom_openai regardless of model', () => {
+  it('treats a retired Custom OpenAI reference as unavailable', () => {
     expect(isModelRefAvailable('custom_openai', 'anything', modelsData)).toBe(
-      true,
+      false,
     );
   });
 

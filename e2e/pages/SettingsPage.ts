@@ -7,7 +7,10 @@ import { BasePage } from './BasePage';
  */
 export class SettingsPage extends BasePage {
   private readonly trigger = this.page.getByLabel('Settings');
-  private readonly closeBtn = this.page.getByLabel('Close');
+  private readonly closeBtn = this.page
+    .locator('[role="dialog"]:visible')
+    .last()
+    .getByLabel('Close');
 
   async goto() {
     await super.goto('/');

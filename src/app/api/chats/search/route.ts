@@ -1,8 +1,3 @@
-import {
-  getCustomOpenaiApiKey,
-  getCustomOpenaiApiUrl,
-  getCustomOpenaiModelName,
-} from '@/lib/config';
 import { DEFAULT_CONTEXT_WINDOW } from '@/lib/models/presets';
 import { getAvailableChatModelProviders } from '@/lib/providers';
 import { removeThinkingBlocks } from '@/lib/utils/contentUtils';
@@ -11,7 +6,6 @@ import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { StringOutputParser } from '@langchain/core/output_parsers';
 import { PromptTemplate } from '@langchain/core/prompts';
 import { RunnableSequence } from '@langchain/core/runnables';
-import { ChatOpenAI } from '@langchain/openai';
 
 const searchTermsPrompt = `You are a search assistant. Given a natural language query, extract specific search terms to find relevant conversations in a personal chat history.
 
@@ -43,36 +37,32 @@ export const POST = async (req: Request) => {
     }
 
     const chatModelProviders = await getAvailableChatModelProviders();
-    const chatModelProvider =
-      chatModelProviders[
-        chatModel?.provider || Object.keys(chatModelProviders)[0]
-      ];
-    const selectedChatModel =
-      chatModelProvider?.[
-        chatModel?.model || Object.keys(chatModelProvider)[0]
-      ];
+    const requestedModel = chatModel as
+      | { provider: string; model: string; contextWindowSize?: number }
+      | undefined;
+    const modelSelectionPresent =
+      requestedModel !== undefined && requestedModel !== null;
+    const providerKey = modelSelectionPresent
+      ? requestedModel.provider
+      : Object.keys(chatModelProviders)[0];
+    const chatModelProvider = chatModelProviders[providerKey];
+    const modelKey = modelSelectionPresent
+      ? requestedModel.model
+      : Object.keys(chatModelProvider ?? {})[0];
+    const selectedChatModel = chatModelProvider?.[modelKey];
 
     let llm: BaseChatModel | undefined;
-
-    if (chatModel?.provider === 'custom_openai') {
-      llm = new ChatOpenAI({
-        apiKey: getCustomOpenaiApiKey(),
-        modelName: getCustomOpenaiModelName(),
-        configuration: {
-          baseURL: getCustomOpenaiApiUrl(),
-        },
-      }) as unknown as BaseChatModel;
-    } else if (chatModelProvider && selectedChatModel) {
+    if (selectedChatModel) {
       llm = selectedChatModel.model;
       (llm as unknown as { contextWindowSize?: number }).contextWindowSize =
-        chatModel.contextWindowSize || DEFAULT_CONTEXT_WINDOW;
+        requestedModel?.contextWindowSize || DEFAULT_CONTEXT_WINDOW;
     }
 
     if (!llm) {
       return Response.json({ error: 'Invalid chat model' }, { status: 400 });
     }
 
-    (llm as unknown as ChatOpenAI).temperature = 0;
+    (llm as unknown as { temperature?: number }).temperature = 0;
 
     const chain = RunnableSequence.from([
       PromptTemplate.fromTemplate(searchTermsPrompt),

@@ -100,13 +100,19 @@ const PanelSelector = ({ focusMode }: { focusMode: string }) => {
       }
     >
   >;
+  const catalogProviders = modelsData?.chatModelProviders as
+    Record<string, Record<string, { displayName: string }>> | undefined;
 
   const supported = focusMode === 'webSearch' || focusMode === 'localResearch';
   const configured = hasValidExecutors(selection);
   const active = supported && isPanelSelectionReady(selection);
 
+  const providerDisplayName = (provider: string): string =>
+    modelsData?.providerMetadata?.[provider]?.displayName ||
+    provider.charAt(0).toUpperCase() + provider.slice(1);
   const displayName = (m: PanelModelEntry): string =>
-    providers[m.provider]?.[m.name]?.displayName ?? m.name;
+    providers[m.provider]?.[m.name]?.displayName ??
+    (capabilitiesLoaded ? 'Unavailable' : m.name);
 
   const update = (patch: Partial<PanelSelection>) =>
     setSelection({ ...selection, ...patch });
@@ -115,7 +121,7 @@ const PanelSelector = ({ focusMode }: { focusMode: string }) => {
     ? `Agent Panel: on · ${selection.executors
         .map(
           (executor) =>
-            `${displayName(executor)}${
+            `${displayName(executor)} (${providerDisplayName(executor.provider)})${
               executor.reasoningEffort
                 ? ` (${REASONING_EFFORT_LABELS[executor.reasoningEffort]})`
                 : ''
@@ -397,7 +403,7 @@ const PanelSelector = ({ focusMode }: { focusMode: string }) => {
                               isActive={matchingPreset?.id === preset.id}
                               available={isPanelPresetAvailable(
                                 preset,
-                                providers,
+                                catalogProviders,
                               )}
                               aria-label={`Apply panel preset ${preset.name}`}
                               onClick={() => {
@@ -431,12 +437,17 @@ const PanelSelector = ({ focusMode }: { focusMode: string }) => {
                               className="rounded-control bg-surface-2 px-2.5 py-1.5 text-xs"
                             >
                               <div className="flex items-center gap-1">
-                                <span className="min-w-0 flex-1 truncate">
-                                  {displayName(e)}
+                                <span className="flex min-w-0 flex-1 flex-col">
+                                  <span className="truncate">
+                                    {displayName(e)}
+                                  </span>
+                                  <span className="truncate text-2xs text-fg-subtle">
+                                    {providerDisplayName(e.provider)}
+                                  </span>
                                 </span>
                                 <IconButton
                                   icon={X}
-                                  label={`Remove ${displayName(e)}`}
+                                  label={`Remove ${displayName(e)} (${providerDisplayName(e.provider)})`}
                                   tone="danger"
                                   onClick={() => removeExecutor(e)}
                                   className="p-0.5"

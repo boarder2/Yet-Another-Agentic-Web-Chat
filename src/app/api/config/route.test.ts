@@ -7,7 +7,6 @@ const mocks = vi.hoisted(() => ({
     getBraveLLMApiKey: vi.fn(() => ''),
     getBraveSearchApiKey: vi.fn(() => ''),
     getCodeExecutionConfig: vi.fn(() => ({ enabled: false })),
-    getCustomOpenaiApiKey: vi.fn(() => ''),
     getDeepseekApiKey: vi.fn(() => ''),
     getGeminiApiKey: vi.fn(() => ''),
     getMojeekApiKey: vi.fn(() => ''),
@@ -20,6 +19,13 @@ const mocks = vi.hoisted(() => ({
   invalidateModelCache: vi.fn(),
   getAvailableChatModelProviders: vi.fn(async () => ({})),
   getAvailableEmbeddingModelProviders: vi.fn(async () => ({})),
+  getAvailableProviderMetadata: vi.fn(async () => ({
+    openai: { key: 'openai', displayName: 'OpenAI' },
+    'openai-compatible:provider-1': {
+      key: 'openai-compatible:provider-1',
+      displayName: 'Local Gateway',
+    },
+  })),
 }));
 
 vi.mock('@/lib/config', () => mocks.config);
@@ -37,6 +43,7 @@ vi.mock('@/lib/providers', () => ({
   getAvailableChatModelProviders: mocks.getAvailableChatModelProviders,
   getAvailableEmbeddingModelProviders:
     mocks.getAvailableEmbeddingModelProviders,
+  getAvailableProviderMetadata: mocks.getAvailableProviderMetadata,
 }));
 
 import { GET, POST } from './route';
@@ -62,6 +69,13 @@ describe('/api/config retired provider contract', () => {
     const body = await response.json();
     expect(body).not.toHaveProperty('groqApiKey');
     expect(body).not.toHaveProperty('aimlApiKey');
+    expect(body.providerMetadata).toEqual({
+      openai: { key: 'openai', displayName: 'OpenAI' },
+      'openai-compatible:provider-1': {
+        key: 'openai-compatible:provider-1',
+        displayName: 'Local Gateway',
+      },
+    });
   });
 
   it('accepts retired credential fields as a successful no-op', async () => {

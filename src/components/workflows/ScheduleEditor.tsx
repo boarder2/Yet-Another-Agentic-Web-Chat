@@ -66,6 +66,11 @@ export default function ScheduleEditor({
     ];
   const systemModelInfo =
     modelsData?.chatModelProviders[systemModel.provider]?.[systemModel.name];
+  const providerDisplayName = (provider: string) =>
+    modelsData?.providerMetadata?.[provider]?.displayName ||
+    provider.charAt(0).toUpperCase() + provider.slice(1);
+  const chatUnavailable = capabilitiesLoaded && !chatModelInfo;
+  const systemUnavailable = capabilitiesLoaded && !systemModelInfo;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -168,8 +173,11 @@ export default function ScheduleEditor({
                 className="truncate text-right text-fg/90"
                 title={`${workflow.chatModel.provider}/${workflow.chatModel.name}`}
               >
-                {chatModelInfo?.displayName ?? workflow.chatModel.name} ·{' '}
-                {workflow.chatModel.provider}
+                {chatUnavailable
+                  ? 'Unavailable'
+                  : (chatModelInfo?.displayName ??
+                    workflow.chatModel.name)}{' '}
+                · {providerDisplayName(workflow.chatModel.provider)}
               </span>
             </div>
             <ReasoningEffortSummary
@@ -186,8 +194,10 @@ export default function ScheduleEditor({
                 className="truncate text-right text-fg/90"
                 title={`${systemModel.provider}/${systemModel.name}`}
               >
-                {systemModelInfo?.displayName ?? systemModel.name} ·{' '}
-                {systemModel.provider}
+                {systemUnavailable
+                  ? 'Unavailable'
+                  : (systemModelInfo?.displayName ?? systemModel.name)}{' '}
+                · {providerDisplayName(systemModel.provider)}
               </span>
             </div>
             <ReasoningEffortSummary

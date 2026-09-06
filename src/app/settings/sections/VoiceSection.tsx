@@ -48,7 +48,7 @@ export default function VoiceSection() {
   );
   const narrationModel = useMemo(
     () =>
-      narrationProvider && narrationModelName
+      narrationProvider !== '' || narrationModelName !== ''
         ? { provider: narrationProvider, model: narrationModelName }
         : null,
     [narrationProvider, narrationModelName],

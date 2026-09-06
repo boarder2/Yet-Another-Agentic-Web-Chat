@@ -339,6 +339,37 @@ export const workspaceFiles = sqliteTable(
   }),
 );
 
+export const openaiCompatibleProviders = sqliteTable(
+  'openai_compatible_providers',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    name: text('name').notNull(),
+    normalizedName: text('normalized_name').notNull(),
+    baseUrl: text('base_url').notNull(),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    supportsEmbeddings: integer('supports_embeddings', { mode: 'boolean' })
+      .notNull()
+      .default(false),
+    headers: text('headers', { mode: 'json' })
+      .$type<Record<string, string>>()
+      .notNull()
+      .default(sql`'{}'`),
+    createdAt: integer('created_at', { mode: 'timestamp' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer('updated_at', { mode: 'timestamp' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => ({
+    normalizedNameUnique: uniqueIndex(
+      'openai_compatible_providers_normalized_name_unique',
+    ).on(t.normalizedName),
+  }),
+);
+
 export const mcpServers = sqliteTable(
   'mcp_servers',
   {

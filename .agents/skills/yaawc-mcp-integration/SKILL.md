@@ -17,7 +17,7 @@ Tables: `mcpServers`, `mcpServerWorkspaces`, `mcpOauth`, `mcpOauthFlows`; `appro
 
 ## Library (`src/lib/mcp/`)
 
-- `types.ts` — row/descriptor types, `serverNameSlug()`, `buildNamespacedName()`, `resolveToolSetting()`, `redactServer()`, `decryptServerSecrets()`, `isServerVisibleForChat()`, `buildRequestInit()`, `validateExtraHeaders()`
+- `types.ts` — row/descriptor types, `serverNameSlug()`, `buildNamespacedName()`, `resolveToolSetting()`, `redactServer()`, `decryptServerSecrets()`, `isServerVisibleForChat()`, `buildRequestInit()`, and the MCP-compatible `validateExtraHeaders()` wrapper
 - `client.ts` — `connectMcpServer(server)`: decrypts, handles none/bearer/auto inline; delegates OAuth variants to `oauth.ts`
 - `manager.ts` — module-scoped connection cache; `getToolDescriptorsForEnabledServers()` (stale-while-revalidate, parallel, 3s/server timeout, 100-tool cap); `getEnabledServerToolConfigs()` + `getServerWorkspaceScopes()` (fresh per turn); `callMcpTool()`, `testMcpServerConnection()`, `invalidateServer()`
 - `oauth.ts` — DB-backed provider classes; discovery/token fetch/401 re-fetch all handled by the SDK's `auth()`, no manual token plumbing
@@ -38,7 +38,7 @@ Hooks: `src/lib/hooks/api/useMcpServers.ts` + `useMcpServerWorkspaceScopes.ts`; 
 
 ## Extra headers
 
-`extraHeaders` is a JSON `Record<string,string>` for a second credential beyond `authType`. Each **value** is encrypted individually (`encryptHeaderValues`) so the JSON structure stays visible to SQLite — PATCH can merge one header atomically instead of forcing the user to retype every secret. `buildRequestInit(server)` merges bearer + extra headers (extra wins) at **every** transport construction site in `client.ts` and `oauth.ts`. `validateExtraHeaders` enforces RFC 7230 token names, no CR/LF/NUL, entry cap. `redactServer()` returns `extraHeaderNames` only — values never leave the server.
+`extraHeaders` is a JSON `Record<string,string>` for a second credential beyond `authType`. Each **value** is encrypted individually (`encryptHeaderValues`) so the JSON structure stays visible to SQLite — PATCH can merge one header atomically instead of forcing the user to retype every secret. The shared `src/lib/http/secretHeaders.ts` owns bounded validation, encryption, decryption, and redaction-name handling; `types.ts` preserves MCP's existing wrapper and field names. `buildRequestInit(server)` merges bearer + extra headers (extra wins) at **every** transport construction site in `client.ts` and `oauth.ts`. `validateExtraHeaders` enforces RFC 7230 token names, no CR/LF/NUL, entry cap. `redactServer()` returns `extraHeaderNames` only — values never leave the server.
 
 ## Settings UI
 

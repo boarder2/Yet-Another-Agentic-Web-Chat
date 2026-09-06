@@ -156,6 +156,39 @@ test.describe('POST /api/mcp/servers', () => {
     expect(JSON.stringify(body.server)).not.toContain('ptr_super_secret');
   });
 
+  test('accepts existing transport-named extra headers on create and patch', async ({
+    request,
+  }) => {
+    let serverId: string | undefined;
+    try {
+      const createdResponse = await request.post('/api/mcp/servers', {
+        data: {
+          name: uniq('mcp-transport-header'),
+          url: 'https://example.com/mcp',
+          extraHeaders: { Host: 'virtual-host' },
+        },
+      });
+      expect(createdResponse.status()).toBe(201);
+      const created = (await createdResponse.json()).server as {
+        id: string;
+        extraHeaderNames: string[];
+      };
+      serverId = created.id;
+      expect(created.extraHeaderNames).toEqual(['Host']);
+
+      const patchedResponse = await request.patch(
+        `/api/mcp/servers/${serverId}`,
+        { data: { extraHeadersPatch: { Host: 'updated-host' } } },
+      );
+      expect(patchedResponse.status()).toBe(200);
+      expect((await patchedResponse.json()).server.extraHeaderNames).toEqual([
+        'Host',
+      ]);
+    } finally {
+      if (serverId) await request.delete(`/api/mcp/servers/${serverId}`);
+    }
+  });
+
   test('reports no extra headers when none are configured', async ({
     request,
   }) => {

@@ -162,8 +162,7 @@ Provide a comprehensive summary of the above web page content, focusing on infor
 
             // Record token usage from this LLM call onto the turn's system model row.
             // Prefer usage_metadata (standardized LangChain field); fall back to
-            // response_metadata.usage for OpenAI-format providers (LM Studio, etc.)
-            // that don't populate usage_metadata but do include prompt_tokens/completion_tokens.
+            // response_metadata.usage when it includes prompt_tokens/completion_tokens.
             const usageData =
               result.usage_metadata ??
               (result.response_metadata?.usage as

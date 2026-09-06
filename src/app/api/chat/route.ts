@@ -49,12 +49,12 @@ import {
   subscribe,
   pushEvent,
   evictByChatId,
+  type RunModelSnapshot,
 } from '@/lib/runs/runHub';
 import { attachRunHost } from '@/lib/runs/runHost';
 import {
   parseModelReference,
   resolveChatAndEmbedding,
-  resolveModelRef,
   resolveModelRefWithReference,
   type ModelRef,
 } from '@/lib/providers/resolveModels';
@@ -203,6 +203,7 @@ export const POST = async (req: Request) => {
     // Validate panel config up front (when present). An invalid panel is a 400;
     // an absent panel leaves the single-model path byte-for-byte unchanged.
     let panelConfig = body.panel;
+    let resolvedPanelExecutors: Array<ResolvedExecutor | null> | null = null;
     if (panelConfig !== undefined && panelConfig !== null) {
       const check = validatePanelConfig(panelConfig);
       if (!check.ok) {
@@ -278,7 +279,12 @@ export const POST = async (req: Request) => {
     }
 
     try {
-      body.chatModel = parseModelReference(body.chatModel);
+      // An omitted chat model is resolved to the first available model below;
+      // a supplied reference must remain exact so stale selections cannot be
+      // replaced by that default.
+      if (body.chatModel !== undefined && body.chatModel !== null) {
+        body.chatModel = parseModelReference(body.chatModel);
+      }
       if (body.systemModel !== undefined && body.systemModel !== null) {
         body.systemModel = parseModelReference(body.systemModel);
       }
@@ -295,6 +301,7 @@ export const POST = async (req: Request) => {
     let chatLlm: BaseChatModel | undefined;
     let systemLlm: BaseChatModel | undefined;
     let embedding: CachedEmbeddings;
+    let modelSnapshot: RunModelSnapshot | undefined;
 
     try {
       const resolved = await resolveChatAndEmbedding({
@@ -304,6 +311,7 @@ export const POST = async (req: Request) => {
       chatLlm = resolved.chatLlm;
       systemLlm = resolved.systemLlm;
       embedding = resolved.embedding;
+      modelSnapshot = resolved;
       // Keep request-local effective references in the durable snapshot; the
       // source workspace/preset/workflow definition is never rewritten.
       body.chatModel = resolved.chatModelRef;
@@ -329,6 +337,12 @@ export const POST = async (req: Request) => {
         panelConfig.executors.map(({ imageCapable: _imageCapable, ...ref }) =>
           resolveModelRefWithReference(ref, { isolate: true }),
         ),
+      );
+      // Capture the isolated model instances before the run is registered. A
+      // provider can be edited or disabled while this request is streaming;
+      // active executors must continue using the snapshot they started with.
+      resolvedPanelExecutors = resolvedExecutors.map((resolved) =>
+        resolved ? { ref: resolved.ref, llm: resolved.model } : null,
       );
       panelConfig = {
         ...panelConfig,
@@ -662,6 +676,7 @@ export const POST = async (req: Request) => {
       retrievalController,
       chartRegistry,
       configSnapshot: runConfig,
+      modelSnapshot,
     });
 
     if (isNew) {
@@ -714,22 +729,12 @@ export const POST = async (req: Request) => {
         // subscribe immediately.
         (async () => {
           try {
-            // Resolve all executor models in parallel. `isolate` gives each its
-            // own model instance so concurrent executors (and the Phase-2 chat
-            // model) can't clobber each other's context window on a shared,
-            // catalog-cached singleton.
-            const resolved = await Promise.all(
-              panelConfig.executors.map(async (executor) => {
-                const { imageCapable: _imageCapable, ...ref } = executor;
-                return {
-                  ref: executor,
-                  llm: await resolveModelRef(ref, { isolate: true }),
-                };
-              }),
-            );
-            const executors: ResolvedExecutor[] = resolved.filter(
-              (e): e is ResolvedExecutor => e.llm !== null,
-            );
+            // Use the isolated executor instances captured before the run was
+            // registered. Unavailable references stay out of execution rather
+            // than being replaced by a default model.
+            const executors: ResolvedExecutor[] = (
+              resolvedPanelExecutors ?? []
+            ).filter((e): e is ResolvedExecutor => e !== null);
             if (executors.length < 2) {
               throw new Error(
                 'Fewer than 2 panel executor models could be resolved.',

@@ -16,6 +16,7 @@ import SourceListEditor from '@/components/dashboard/SourceListEditor';
 import { LlmWidgetConfig } from '@/lib/types/widget';
 import { resolveWidgetTheme } from '@/lib/widgets/widgetTheme';
 import type { ModelSelection } from '@/lib/models/presets';
+import { useModels } from '@/lib/hooks/api/useModels';
 
 // Helper function to replace date/time variables in prompts on the client side
 const replaceDateTimeVariables = (prompt: string): string => {
@@ -57,8 +58,8 @@ const defaultConfig = (): LlmWidgetConfig => ({
   title: '',
   sources: [{ url: '', type: 'Web Page' }],
   prompt: '',
-  provider: 'openai',
-  model: 'gpt-4',
+  provider: '',
+  model: '',
   refreshFrequency: 60,
   refreshUnit: 'minutes',
 });
@@ -80,6 +81,7 @@ const WidgetConfigModal = ({
   } | null>(null);
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
   const [showThinking, setShowThinking] = useState(false);
+  const { data: modelsData } = useModels();
 
   // Reset the form state when the widget being edited changes (or a new widget
   // is started). Syncing form fields to the editing target is an intentional
@@ -104,15 +106,26 @@ const WidgetConfigModal = ({
       });
       setSelectedTools(editingWidget.tool_names || []);
     } else {
-      // Reset to default values for new widget
+      // A new widget has no saved model reference. Leave it empty until the
+      // live catalog can provide its first model.
       setConfig(defaultConfig());
-      setSelectedModel({
-        provider: 'openai',
-        model: 'gpt-4',
-      });
+      setSelectedModel(null);
       setSelectedTools([]);
     }
   }, [editingWidget]);
+
+  useEffect(() => {
+    if (editingWidget || selectedModel || !modelsData?.chatModelProviders) {
+      return;
+    }
+    const first = Object.entries(modelsData.chatModelProviders).find(
+      ([, models]) => Object.keys(models).length > 0,
+    );
+    const model = first ? Object.keys(first[1])[0] : undefined;
+    if (first && model) {
+      setSelectedModel({ provider: first[0], model });
+    }
+  }, [editingWidget, modelsData, selectedModel]);
 
   // Update config when model selection changes
   useEffect(() => {

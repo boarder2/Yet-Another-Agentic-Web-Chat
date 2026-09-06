@@ -27,6 +27,13 @@ import {
 } from '@/lib/models/presets';
 import { cn } from '@/lib/utils';
 import {
+  addHiddenModel,
+  addHiddenModels,
+  showHiddenModel,
+  showHiddenModels,
+  type HiddenModel,
+} from '@/lib/models/hiddenModels';
+import {
   isReasoningEffort,
   type ReasoningEffort,
 } from '@/lib/providers/reasoningEffort';
@@ -50,6 +57,7 @@ import ModelSettingsSection from './sections/ModelSettingsSection';
 import ModelPresetsSection from './sections/ModelPresetsSection';
 import PanelPresetsSection from './sections/PanelPresetsSection';
 import ModelVisibilitySection from './sections/ModelVisibilitySection';
+import OpenAICompatibleProvidersSection from './sections/OpenAICompatibleProvidersSection';
 import ImageGenerationSection from './sections/ImageGenerationSection';
 import ApiKeysSection from './sections/ApiKeysSection';
 import SkillsSection from './sections/SkillsSection';
@@ -60,7 +68,7 @@ import { IconButton } from '@/components/ui/IconButton';
 import { ListLoading } from '@/components/ui/List';
 
 // Stable default reference for useLocalStorageJSON (required by useSyncExternalStore).
-const EMPTY_HIDDEN_MODELS: string[] = [];
+const EMPTY_HIDDEN_MODELS: HiddenModel[] = [];
 
 export type SettingsPanelVariant = 'page' | 'modal';
 
@@ -153,7 +161,7 @@ export default function SettingsPanel({
     embedding: Record<string, Record<string, { displayName: string }>>;
   }>({ chat: {}, embedding: {} });
   // Hidden models are DB-backed (app_settings, synced from localStorage).
-  const [hiddenModels, setHiddenModels] = useLocalStorageJSON<string[]>(
+  const [hiddenModels, setHiddenModels] = useLocalStorageJSON<HiddenModel[]>(
     'hiddenModels',
     EMPTY_HIDDEN_MODELS,
   );
@@ -202,46 +210,50 @@ export default function SettingsPanel({
           ? embeddingModelProvidersKeys[0]
           : '';
 
-      const chatModelProvider =
-        localStorage.getItem('chatModelProvider') ||
-        defaultChatModelProvider ||
-        '';
-      const chatModel =
-        localStorage.getItem('chatModel') ||
-        (data.chatModelProviders &&
-        data.chatModelProviders[chatModelProvider]?.length > 0
-          ? data.chatModelProviders[chatModelProvider][0].name
-          : undefined) ||
-        '';
+      const storedChatModelProvider = localStorage.getItem('chatModelProvider');
+      const storedChatModel = localStorage.getItem('chatModel');
+      const chatSelectionPresent =
+        storedChatModelProvider !== null || storedChatModel !== null;
+      const chatModelProvider = chatSelectionPresent
+        ? (storedChatModelProvider ?? '')
+        : defaultChatModelProvider;
+      const chatModel = chatSelectionPresent
+        ? (storedChatModel ?? '')
+        : data.chatModelProviders?.[chatModelProvider]?.[0]?.name || '';
 
       // The settings page only displays the chat system model (for Model
       // Presets); it is owned by the chat input's ModelConfigurator (localStorage,
       // DB-backed), NOT config.toml. The memory-processing model is separate.
-      const systemModelProvider =
-        localStorage.getItem('systemModelProvider') ||
-        defaultChatModelProvider ||
-        '';
-      const systemModel =
-        localStorage.getItem('systemModel') ||
-        (data.chatModelProviders &&
-        data.chatModelProviders[systemModelProvider]?.length > 0
-          ? data.chatModelProviders[systemModelProvider][0].name
-          : undefined) ||
-        '';
+      const storedSystemModelProvider = localStorage.getItem(
+        'systemModelProvider',
+      );
+      const storedSystemModel = localStorage.getItem('systemModel');
+      const systemSelectionPresent =
+        storedSystemModelProvider !== null || storedSystemModel !== null;
+      const systemModelProvider = systemSelectionPresent
+        ? (storedSystemModelProvider ?? '')
+        : defaultChatModelProvider;
+      const systemModel = systemSelectionPresent
+        ? (storedSystemModel ?? '')
+        : data.chatModelProviders?.[systemModelProvider]?.[0]?.name || '';
 
       // The embedding model is DB-backed via the `embeddingModelProvider`/
       // `embeddingModel` localStorage keys (synced to the DB by the settings
       // persistence layer), NOT config.toml. Hydrate from there, defaulting to
       // the first available provider/model on a fresh install.
-      const embeddingModelProvider =
-        localStorage.getItem('embeddingModelProvider') ||
-        defaultEmbeddingModelProvider ||
-        '';
-      const embeddingModel =
-        localStorage.getItem('embeddingModel') ||
-        (data.embeddingModelProviders &&
-          data.embeddingModelProviders[embeddingModelProvider]?.[0].name) ||
-        '';
+      const storedEmbeddingModelProvider = localStorage.getItem(
+        'embeddingModelProvider',
+      );
+      const storedEmbeddingModel = localStorage.getItem('embeddingModel');
+      const embeddingSelectionPresent =
+        storedEmbeddingModelProvider !== null || storedEmbeddingModel !== null;
+      const embeddingModelProvider = embeddingSelectionPresent
+        ? (storedEmbeddingModelProvider ?? '')
+        : defaultEmbeddingModelProvider;
+      const embeddingModel = embeddingSelectionPresent
+        ? (storedEmbeddingModel ?? '')
+        : data.embeddingModelProviders?.[embeddingModelProvider]?.[0]?.name ||
+          '';
 
       setSelectedChatModelProvider(chatModelProvider);
       setSelectedChatModel(chatModel);
@@ -270,7 +282,12 @@ export default function SettingsPanel({
       // system model is owned by the chat input's ModelConfigurator (localStorage,
       // DB-backed). The embedding selection is likewise DB-backed; persist its
       // resolved default so a fresh install has a concrete value.
-      if (persist) {
+      if (
+        persist &&
+        !embeddingSelectionPresent &&
+        embeddingModelProvider &&
+        embeddingModel
+      ) {
         localStorage.setItem('embeddingModelProvider', embeddingModelProvider);
         localStorage.setItem('embeddingModel', embeddingModel);
       }
@@ -346,6 +363,28 @@ export default function SettingsPanel({
       });
     });
   }, [configData, readLocalStorageSettings]);
+
+  useEffect(() => {
+    if (!configData || !isInitializedRef.current) return;
+    const hasPersistedEmbeddingSelection =
+      localStorage.getItem('embeddingModelProvider') !== null ||
+      localStorage.getItem('embeddingModel') !== null;
+    if (hasPersistedEmbeddingSelection) return;
+
+    const data = configData as unknown as SettingsType;
+    const firstProvider = Object.keys(data.embeddingModelProviders || {}).find(
+      (provider) => (data.embeddingModelProviders?.[provider]?.length ?? 0) > 0,
+    );
+    const firstModel = firstProvider
+      ? data.embeddingModelProviders[firstProvider]?.[0]?.name
+      : undefined;
+    if (!firstProvider || !firstModel) return;
+
+    setSelectedEmbeddingModelProvider(firstProvider);
+    setSelectedEmbeddingModel(firstModel);
+    localStorage.setItem('embeddingModelProvider', firstProvider);
+    localStorage.setItem('embeddingModel', firstModel);
+  }, [configData]);
 
   useEffect(() => {
     if (!modelsData) return;
@@ -439,46 +478,27 @@ export default function SettingsPanel({
         setEmbeddingModels(data.embeddingModelProviders || {});
 
         const currentChatProvider = selectedChatModelProvider;
+        const currentChatModel = selectedChatModel;
+        const hasPersistedChatSelection =
+          localStorage.getItem('chatModelProvider') !== null ||
+          localStorage.getItem('chatModel') !== null;
         const newChatProviders = Object.keys(data.chatModelProviders || {});
 
-        if (!currentChatProvider && newChatProviders.length > 0) {
+        // Initialize only a truly absent selection. A provider/model that has
+        // gone stale remains selected and is surfaced as unavailable elsewhere.
+        if (
+          !hasPersistedChatSelection &&
+          !currentChatProvider &&
+          !currentChatModel &&
+          newChatProviders.length > 0
+        ) {
           const firstProvider = newChatProviders[0];
           const firstModel = data.chatModelProviders[firstProvider]?.[0]?.name;
-
           if (firstModel) {
             setSelectedChatModelProvider(firstProvider);
             setSelectedChatModel(firstModel);
             localStorage.setItem('chatModelProvider', firstProvider);
             localStorage.setItem('chatModel', firstModel);
-          }
-        } else if (
-          currentChatProvider &&
-          (!data.chatModelProviders ||
-            !data.chatModelProviders[currentChatProvider] ||
-            !Array.isArray(data.chatModelProviders[currentChatProvider]) ||
-            data.chatModelProviders[currentChatProvider].length === 0)
-        ) {
-          const firstValidProvider = Object.entries(
-            data.chatModelProviders || {},
-          ).find(
-            ([, models]) => Array.isArray(models) && models.length > 0,
-          )?.[0];
-
-          if (firstValidProvider) {
-            setSelectedChatModelProvider(firstValidProvider);
-            setSelectedChatModel(
-              data.chatModelProviders[firstValidProvider][0].name,
-            );
-            localStorage.setItem('chatModelProvider', firstValidProvider);
-            localStorage.setItem(
-              'chatModel',
-              data.chatModelProviders[firstValidProvider][0].name,
-            );
-          } else {
-            setSelectedChatModelProvider(null);
-            setSelectedChatModel(null);
-            localStorage.removeItem('chatModelProvider');
-            localStorage.removeItem('chatModel');
           }
         }
 
@@ -487,51 +507,28 @@ export default function SettingsPanel({
         // neither persists nor re-defaults it on provider changes.
 
         const currentEmbeddingProvider = selectedEmbeddingModelProvider;
+        const currentEmbeddingModel = selectedEmbeddingModel;
+        const hasPersistedEmbeddingSelection =
+          localStorage.getItem('embeddingModelProvider') !== null ||
+          localStorage.getItem('embeddingModel') !== null;
         const newEmbeddingProviders = Object.keys(
           data.embeddingModelProviders || {},
         );
 
-        if (!currentEmbeddingProvider && newEmbeddingProviders.length > 0) {
+        if (
+          !hasPersistedEmbeddingSelection &&
+          !currentEmbeddingProvider &&
+          !currentEmbeddingModel &&
+          newEmbeddingProviders.length > 0
+        ) {
           const firstProvider = newEmbeddingProviders[0];
           const firstModel =
             data.embeddingModelProviders[firstProvider]?.[0]?.name;
-
           if (firstModel) {
             setSelectedEmbeddingModelProvider(firstProvider);
             setSelectedEmbeddingModel(firstModel);
             localStorage.setItem('embeddingModelProvider', firstProvider);
             localStorage.setItem('embeddingModel', firstModel);
-          }
-        } else if (
-          currentEmbeddingProvider &&
-          (!data.embeddingModelProviders ||
-            !data.embeddingModelProviders[currentEmbeddingProvider] ||
-            !Array.isArray(
-              data.embeddingModelProviders[currentEmbeddingProvider],
-            ) ||
-            data.embeddingModelProviders[currentEmbeddingProvider].length === 0)
-        ) {
-          const firstValidProvider = Object.entries(
-            data.embeddingModelProviders || {},
-          ).find(
-            ([, models]) => Array.isArray(models) && models.length > 0,
-          )?.[0];
-
-          if (firstValidProvider) {
-            setSelectedEmbeddingModelProvider(firstValidProvider);
-            setSelectedEmbeddingModel(
-              data.embeddingModelProviders[firstValidProvider][0].name,
-            );
-            localStorage.setItem('embeddingModelProvider', firstValidProvider);
-            localStorage.setItem(
-              'embeddingModel',
-              data.embeddingModelProviders[firstValidProvider][0].name,
-            );
-          } else {
-            setSelectedEmbeddingModelProvider(null);
-            setSelectedEmbeddingModel(null);
-            localStorage.removeItem('embeddingModelProvider');
-            localStorage.removeItem('embeddingModel');
           }
         }
 
@@ -581,13 +578,14 @@ export default function SettingsPanel({
   // hiddenModels is DB-backed via useLocalStorageJSON; setHiddenModels persists
   // to localStorage and syncs to the DB, so no separate save call is needed.
   const handleModelVisibilityToggle = (
-    modelKey: string,
+    provider: string,
+    model: string,
     isVisible: boolean,
   ) => {
     setHiddenModels(
       isVisible
-        ? hiddenModels.filter((m) => m !== modelKey)
-        : [...hiddenModels, modelKey],
+        ? showHiddenModel(hiddenModels, provider, model)
+        : addHiddenModel(hiddenModels, provider, model),
     );
   };
 
@@ -621,20 +619,19 @@ export default function SettingsPanel({
   };
 
   const handleProviderVisibilityToggle = (
+    provider: string,
     providerModels: Record<string, unknown>,
     showAll: boolean,
   ) => {
-    const modelKeys = Object.keys(providerModels);
-    if (showAll) {
-      setHiddenModels(
-        hiddenModels.filter((modelKey) => !modelKeys.includes(modelKey)),
-      );
-    } else {
-      const modelsToHide = modelKeys.filter(
-        (modelKey) => !hiddenModels.includes(modelKey),
-      );
-      setHiddenModels([...hiddenModels, ...modelsToHide]);
-    }
+    const models = Object.keys(providerModels).map((model) => ({
+      provider,
+      model,
+    }));
+    setHiddenModels(
+      showAll
+        ? showHiddenModels(hiddenModels, models)
+        : addHiddenModels(hiddenModels, models),
+    );
   };
 
   const toggleProviderExpansion = (providerId: string) => {
@@ -921,12 +918,10 @@ export default function SettingsPanel({
                       selectedEmbeddingModelProvider
                     }
                     selectedEmbeddingModel={selectedEmbeddingModel}
-                    savingStates={savingStates}
                     setSelectedEmbeddingModelProvider={
                       setSelectedEmbeddingModelProvider
                     }
                     setSelectedEmbeddingModel={setSelectedEmbeddingModel}
-                    setConfig={setConfig}
                     saveConfig={saveConfig}
                   />
                 )}
@@ -964,12 +959,19 @@ export default function SettingsPanel({
                 {activeSection === 'model-visibility' && (
                   <ModelVisibilitySection
                     allModels={allModels}
+                    providerMetadata={
+                      modelsData?.providerMetadata ?? config.providerMetadata
+                    }
                     hiddenModels={hiddenModels}
                     expandedProviders={expandedProviders}
                     onToggleModel={handleModelVisibilityToggle}
                     onToggleProvider={handleProviderVisibilityToggle}
                     onToggleExpand={toggleProviderExpansion}
                   />
+                )}
+
+                {activeSection === 'openai-compatible-providers' && (
+                  <OpenAICompatibleProvidersSection />
                 )}
 
                 {activeSection === 'image-generation' && config && (

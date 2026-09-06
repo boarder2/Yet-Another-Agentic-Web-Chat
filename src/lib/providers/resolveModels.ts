@@ -1,15 +1,9 @@
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { DEFAULT_CONTEXT_WINDOW } from '@/lib/models/presets';
-import { ChatOpenAI } from '@langchain/openai';
 import {
   getAvailableChatModelProviders,
   getAvailableEmbeddingModelProviders,
 } from '@/lib/providers';
-import {
-  getCustomOpenaiApiKey,
-  getCustomOpenaiApiUrl,
-  getCustomOpenaiModelName,
-} from '@/lib/config';
 import { getEmbeddingModelSelection } from '@/lib/settings/server';
 import { CachedEmbeddings } from '@/lib/utils/cachedEmbeddings';
 import {
@@ -359,16 +353,6 @@ function bindCatalogModel(
   };
 }
 
-function makeCustomOpenaiModel(): BaseChatModel {
-  return new ChatOpenAI({
-    apiKey: getCustomOpenaiApiKey(),
-    modelName: getCustomOpenaiModelName(),
-    configuration: {
-      baseURL: getCustomOpenaiApiUrl(),
-    },
-  }) as unknown as BaseChatModel;
-}
-
 /**
  * Resolve one model and return both its private runtime instance and its
  * request-local effective reference. A valid stale effort is clamped against
@@ -379,13 +363,6 @@ export async function resolveModelRefWithReference(
   opts?: { isolate?: boolean; preserveEffort?: boolean },
 ): Promise<ResolvedModelRef | null> {
   const parsedRef = parseModelReference(ref);
-
-  if (parsedRef.provider === 'custom_openai') {
-    return {
-      model: makeCustomOpenaiModel(),
-      ref: effectiveModelRef(parsedRef, undefined),
-    };
-  }
 
   const providers = await getAvailableChatModelProviders();
   const modelEntry = providers[parsedRef.provider]?.[parsedRef.name];
@@ -399,8 +376,7 @@ export const resolveModelReference = resolveModelRefWithReference;
 
 /**
  * Resolve a single chat model from a `ModelRef` against the live provider
- * catalog (or the custom_openai config). Returns null if the model isn't
- * available, so callers can fall back.
+ * catalog. Returns null if the model isn't available.
  */
 export async function resolveModelRef(
   ref: ModelRef,
@@ -423,7 +399,7 @@ export async function resolveChatAndEmbedding(input: {
   systemModelRef: ModelRef;
 }> {
   // Parse both references before looking up providers so malformed values are
-  // rejected consistently, including when the selected model is custom.
+  // rejected consistently.
   const chatInput =
     input.chatModel == null ? undefined : parseModelReference(input.chatModel);
   const systemInput =
@@ -436,13 +412,16 @@ export async function resolveChatAndEmbedding(input: {
     getAvailableEmbeddingModelProviders(),
   ]);
 
-  const chatProviderName =
-    chatInput?.provider || Object.keys(chatModelProviders)[0];
+  const chatSelectionPresent = chatInput !== undefined;
+  const chatProviderName = chatSelectionPresent
+    ? chatInput.provider
+    : Object.keys(chatModelProviders)[0];
   const chatModelProvider = chatProviderName
     ? chatModelProviders[chatProviderName]
     : undefined;
-  const chatModelName =
-    chatInput?.name || Object.keys(chatModelProvider || {})[0];
+  const chatModelName = chatSelectionPresent
+    ? chatInput.name
+    : Object.keys(chatModelProvider || {})[0];
   const chatModelEntry = chatModelName
     ? chatModelProvider?.[chatModelName]
     : undefined;
@@ -451,12 +430,18 @@ export async function resolveChatAndEmbedding(input: {
   // (source of truth), never from the request. This keeps indexing, querying,
   // and the embedding cache on one model so their vectors stay comparable.
   const selectedEmbedding = getEmbeddingModelSelection();
-  const embeddingProviderKey =
-    selectedEmbedding.provider || Object.keys(embeddingModelProviders)[0];
+  const embeddingSelectionPresent =
+    selectedEmbedding.provider !== '' || selectedEmbedding.name !== '';
+  const embeddingProviderKey = embeddingSelectionPresent
+    ? selectedEmbedding.provider
+    : Object.keys(embeddingModelProviders)[0];
   const embeddingProvider = embeddingModelProviders[embeddingProviderKey];
-  const embeddingModelName =
-    selectedEmbedding.name || Object.keys(embeddingProvider || {})[0];
-  const embeddingModelEntry = embeddingProvider?.[embeddingModelName];
+  const embeddingModelName = embeddingSelectionPresent
+    ? selectedEmbedding.name
+    : Object.keys(embeddingProvider || {})[0];
+  const embeddingModelEntry = embeddingModelName
+    ? embeddingProvider?.[embeddingModelName]
+    : undefined;
 
   if (!embeddingModelEntry) {
     throw new Error('Invalid embedding model');
@@ -469,12 +454,7 @@ export async function resolveChatAndEmbedding(input: {
   );
 
   let chatResolved: ResolvedModelRef | undefined;
-  if (chatInput?.provider === 'custom_openai') {
-    chatResolved = {
-      model: makeCustomOpenaiModel(),
-      ref: effectiveModelRef(chatInput, undefined),
-    };
-  } else if (chatProviderName && chatModelName && chatModelEntry) {
+  if (chatProviderName && chatModelName && chatModelEntry) {
     chatResolved = bindCatalogModel(
       chatInput ?? {
         provider: chatProviderName,
@@ -493,28 +473,20 @@ export async function resolveChatAndEmbedding(input: {
 
   let systemResolved: ResolvedModelRef | undefined;
   if (systemInput) {
-    if (systemInput.provider === 'custom_openai') {
-      systemResolved = {
-        model: makeCustomOpenaiModel(),
-        ref: effectiveModelRef(systemInput, undefined),
-      };
-    } else {
-      const systemEntry =
-        chatModelProviders[systemInput.provider]?.[systemInput.name];
-      if (systemEntry) {
-        systemResolved = bindCatalogModel(systemInput, systemEntry, {
-          isolate: true,
-          preserveEffort: input.preserveEffort,
-        });
-      }
-    }
-    if (systemResolved)
-      setContextWindow(systemResolved.model, systemResolved.ref);
+    const systemEntry =
+      chatModelProviders[systemInput.provider]?.[systemInput.name];
+    if (!systemEntry) throw new Error('Invalid system model');
+    systemResolved = bindCatalogModel(systemInput, systemEntry, {
+      isolate: true,
+      preserveEffort: input.preserveEffort,
+    });
+    setContextWindow(systemResolved.model, systemResolved.ref);
   }
 
-  // An omitted or unavailable system model follows the complete effective Chat
-  // reference, including its clamped effort and context window configuration.
-  if (!systemResolved) systemResolved = chatResolved;
+  // An omitted system model follows the complete effective Chat reference,
+  // including its clamped effort and context window configuration.
+  if (!systemInput) systemResolved = chatResolved;
+  if (!systemResolved) throw new Error('Invalid system model');
 
   return {
     chatLlm: chatResolved.model,

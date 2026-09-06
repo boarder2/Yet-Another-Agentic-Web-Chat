@@ -123,10 +123,8 @@ export default function ModelPresetsSection({
     EMPTY_PRESETS,
   );
   const { data: modelsData } = useModels();
-  const chatProviders = (modelsData?.chatModelProviders ?? {}) as Record<
-    string,
-    Record<string, { displayName: string }>
-  >;
+  const chatProviders = modelsData?.chatModelProviders as
+    Record<string, Record<string, { displayName: string }>> | undefined;
 
   const [addingNew, setAddingNew] = useState(false);
   const [editState, setEditState] = useState<EditState | null>(null);

@@ -78,8 +78,14 @@ export default function PanelPresetsSection() {
       }
     >
   >;
+  const catalogProviders = modelsData?.chatModelProviders as
+    Record<string, Record<string, { displayName: string }>> | undefined;
+  const providerDisplayName = (provider: string): string =>
+    modelsData?.providerMetadata?.[provider]?.displayName ||
+    provider.charAt(0).toUpperCase() + provider.slice(1);
   const displayName = (m: PanelModelEntry): string =>
-    providers[m.provider]?.[m.name]?.displayName ?? m.name;
+    providers[m.provider]?.[m.name]?.displayName ??
+    (capabilitiesLoaded ? 'Unavailable' : m.name);
 
   const [draft, setDraft] = useState<Draft | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PanelPreset | null>(null);
@@ -235,12 +241,20 @@ export default function PanelPresetsSection() {
                 className="rounded-control bg-surface-2 px-2.5 py-1.5 text-xs"
               >
                 <div className="flex items-center gap-1">
-                  <span className="min-w-0 flex-1 truncate">
-                    {displayName(e)}
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span
+                      className="truncate"
+                      title={`${e.provider}/${e.name}`}
+                    >
+                      {displayName(e)}
+                    </span>
+                    <span className="truncate text-2xs text-fg-subtle">
+                      {providerDisplayName(e.provider)}
+                    </span>
                   </span>
                   <IconButton
                     icon={X}
-                    label={`Remove ${displayName(e)}`}
+                    label={`Remove ${displayName(e)} (${providerDisplayName(e.provider)})`}
                     tone="danger"
                     onClick={() => removeDraftExecutor(e)}
                     className="p-0.5"
@@ -317,7 +331,7 @@ export default function PanelPresetsSection() {
             if (draft?.id === preset.id) {
               return <div key={preset.id}>{draftForm}</div>;
             }
-            const available = isPanelPresetAvailable(preset, providers);
+            const available = isPanelPresetAvailable(preset, catalogProviders);
             return (
               <Card key={preset.id} className="p-3">
                 <div className="flex items-start gap-2">

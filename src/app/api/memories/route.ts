@@ -22,19 +22,20 @@ async function getEmbeddingModel(): Promise<CachedEmbeddings | null> {
   const embeddingModelProviders = await getAvailableEmbeddingModelProviders();
   const selected = getEmbeddingModelSelection();
 
-  // Use configured selection if available
-  if (selected.provider && selected.name) {
+  const selectionPresent = selected.provider !== '' || selected.name !== '';
+  if (selectionPresent) {
     const provider = embeddingModelProviders[selected.provider];
-    if (provider && provider[selected.name]) {
-      return new CachedEmbeddings(
-        provider[selected.name].model,
-        selected.provider,
-        selected.name,
-      );
+    if (!provider?.[selected.name]) {
+      throw new Error('Invalid embedding model');
     }
+    return new CachedEmbeddings(
+      provider[selected.name].model,
+      selected.provider,
+      selected.name,
+    );
   }
 
-  // Fallback to first available
+  // No selection: use the first available model.
   const defaultProvider = Object.keys(embeddingModelProviders)[0];
   if (!defaultProvider) return null;
   const provider = embeddingModelProviders[defaultProvider];
@@ -51,19 +52,19 @@ async function getMemoryModel() {
   const chatModelProviders = await getAvailableChatModelProviders();
   const selected = getMemoryModelSelection();
 
-  // Use configured selection if available
-  if (selected.provider && selected.name) {
+  const selectionPresent = selected.provider !== '' || selected.name !== '';
+  if (selectionPresent) {
     const provider = chatModelProviders[selected.provider];
-    if (provider && provider[selected.name]) {
-      return provider[selected.name].model;
+    if (!provider?.[selected.name]) {
+      throw new Error('Invalid memory model');
     }
+    return provider[selected.name].model;
   }
 
-  // Fallback to first non-embedding chat model
+  // No selection: use the first available chat model.
   for (const providerName of Object.keys(chatModelProviders)) {
     const provider = chatModelProviders[providerName];
     for (const modelName of Object.keys(provider)) {
-      if (modelName.toLowerCase().includes('embedding')) continue;
       return provider[modelName].model;
     }
   }

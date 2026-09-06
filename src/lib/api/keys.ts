@@ -13,6 +13,9 @@ export const qk = {
   config: ['config'] as const,
   settings: ['settings'] as const,
   models: ['models'] as const,
+  openAICompatibleProviders: ['openai-compatible-providers'] as const,
+  openAICompatibleProvider: (id: string) =>
+    ['openai-compatible-providers', id] as const,
   tools: ['tools'] as const,
   voices: ['tts', 'voices'] as const,
   workspaces: (archived?: boolean) => ['workspaces', { archived }] as const,

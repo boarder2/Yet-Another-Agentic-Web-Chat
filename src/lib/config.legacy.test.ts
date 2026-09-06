@@ -7,8 +7,6 @@ vi.mock('@/lib/credentials', () => ({
   getCredential: vi.fn(),
 }));
 vi.mock('@/lib/settings/server', () => ({
-  getCustomOpenaiUrlAndModel: vi.fn(() => ({ url: '', modelName: '' })),
-  getLMStudioApiUrl: vi.fn(() => ''),
   getSearxngApiUrl: vi.fn(() => ''),
 }));
 

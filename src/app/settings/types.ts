@@ -5,12 +5,14 @@ export interface SettingsType {
   embeddingModelProviders: {
     [key: string]: { name: string; displayName: string }[];
   };
+  providerMetadata: {
+    [key: string]: { key: string; displayName: string };
+  };
   openaiApiKey: string;
   openrouterApiKey: string;
   anthropicApiKey: string;
   geminiApiKey: string;
   deepseekApiKey: string;
-  customOpenaiApiKey: string;
   encryptionConfigured: boolean;
   codeExecution: {
     enabled: boolean;
@@ -50,6 +52,7 @@ export type SectionKey =
   | 'model-presets'
   | 'panel-presets'
   | 'model-visibility'
+  | 'openai-compatible-providers'
   | 'image-generation'
   | 'api-keys';
 
@@ -81,6 +84,11 @@ export const SETTINGS_SECTIONS: {
   { key: 'model-presets', label: 'Model Presets', group: 'AI Models' },
   { key: 'panel-presets', label: 'Agent Panel Presets', group: 'AI Models' },
   { key: 'model-visibility', label: 'Model Visibility', group: 'AI Models' },
+  {
+    key: 'openai-compatible-providers',
+    label: 'OpenAI-Compatible Providers',
+    group: 'AI Models',
+  },
   {
     key: 'image-generation',
     label: 'Image Generation',

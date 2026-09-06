@@ -94,11 +94,11 @@ export default function ModelPicker({
   };
 
   const chatModel =
-    value.chatProvider && value.chatModel
+    value.chatProvider !== '' || value.chatModel !== ''
       ? { provider: value.chatProvider, model: value.chatModel }
       : null;
   const systemModel =
-    value.systemProvider && value.systemModel
+    value.systemProvider !== '' || value.systemModel !== ''
       ? { provider: value.systemProvider, model: value.systemModel }
       : null;
 

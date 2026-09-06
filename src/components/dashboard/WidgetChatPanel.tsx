@@ -12,6 +12,7 @@ import { WidgetBuilderState } from '@/lib/tools/agents/widgetBuilderTools';
 import { captureCurrentSelection, ModelSelection } from '@/lib/models/presets';
 import { REASONING_EFFORT_LABELS } from '@/lib/providers/reasoningEffort';
 import { resolveWidgetTheme } from '@/lib/widgets/widgetTheme';
+import { useModels } from '@/lib/hooks/api/useModels';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -55,6 +56,8 @@ const WidgetChatPanel = ({
   // spin forever under auto-apply, burning tokens and sandbox runs.
   const autoRepairCount = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { data: modelsData, isFetched: modelsFetched } = useModels();
+  const modelsCatalogLoaded = modelsFetched || modelsData !== undefined;
   // Stick to the bottom while streaming, but don't yank the user down if they've
   // scrolled up to read earlier messages.
   const stickToBottom = useRef(true);
@@ -92,7 +95,8 @@ const WidgetChatPanel = ({
             // Preview with the user's live theme so the agent sees true colors.
             theme: resolveWidgetTheme(),
             chatModel:
-              selection?.chatProvider && selection?.chatModel
+              selection &&
+              (selection.chatProvider !== '' || selection.chatModel !== '')
                 ? {
                     provider: selection.chatProvider,
                     name: selection.chatModel,
@@ -102,7 +106,8 @@ const WidgetChatPanel = ({
                   }
                 : undefined,
             systemModel:
-              selection?.systemProvider && selection?.systemModel
+              selection &&
+              (selection.systemProvider !== '' || selection.systemModel !== '')
                 ? {
                     provider: selection.systemProvider,
                     name: selection.systemModel,
@@ -293,14 +298,40 @@ const WidgetChatPanel = ({
               className="border border-transparent text-fg-muted hover:text-fg focus-border-neutral"
               title="Choose the model the assistant uses"
             >
-              Model: {selection.chatModel || 'default'}
+              Model:{' '}
+              {(selection.chatProvider !== '' || selection.chatModel !== '') &&
+              modelsCatalogLoaded &&
+              !modelsData?.chatModelProviders?.[selection.chatProvider]?.[
+                selection.chatModel
+              ]
+                ? 'Unavailable'
+                : selection.chatModel || 'default'}
+              {selection.chatProvider
+                ? ` (${
+                    modelsData?.providerMetadata?.[selection.chatProvider]
+                      ?.displayName || selection.chatProvider
+                  })`
+                : ''}
               {selection.chatReasoningEffort
                 ? ` · ${REASONING_EFFORT_LABELS[selection.chatReasoningEffort]}`
                 : ''}
-              {selection.systemModel &&
-              (selection.systemModel !== selection.chatModel ||
+              {(selection.systemProvider !== '' ||
+                selection.systemModel !== '') &&
+              (selection.systemProvider !== selection.chatProvider ||
+                selection.systemModel !== selection.chatModel ||
                 selection.systemReasoningEffort)
-                ? ` · sys: ${selection.systemModel}${
+                ? ` · sys: ${
+                    modelsCatalogLoaded &&
+                    !modelsData?.chatModelProviders?.[
+                      selection.systemProvider
+                    ]?.[selection.systemModel]
+                      ? 'Unavailable'
+                      : selection.systemModel || 'Unavailable'
+                  }${
+                    selection.systemProvider
+                      ? ` (${modelsData?.providerMetadata?.[selection.systemProvider]?.displayName || selection.systemProvider})`
+                      : ''
+                  }${
                     selection.systemReasoningEffort
                       ? ` · ${REASONING_EFFORT_LABELS[selection.systemReasoningEffort]}`
                       : ''

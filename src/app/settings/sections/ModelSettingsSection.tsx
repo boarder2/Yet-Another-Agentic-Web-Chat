@@ -2,20 +2,18 @@
 
 import { useState, useSyncExternalStore } from 'react';
 import { LoaderCircle, RefreshCw, RotateCcw } from 'lucide-react';
-import { PROVIDER_METADATA } from '@/lib/providers/metadata';
 import SettingsSection from '../components/SettingsSection';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import Select from '@/components/ui/Select';
-import InputComponent from '../components/InputComponent';
 import { SettingsType } from '../types';
 import {
   readLocalStorage,
   subscribeLocalStorage,
-  useLocalStorageString,
   writeLocalStorage,
 } from '@/lib/hooks/useLocalStorage';
 import { useRefreshModels } from '@/lib/hooks/api/useModels';
+import { useSettingsModal } from '@/components/settings/SettingsModalProvider';
 import { flushSettings } from '@/lib/settings/persist';
 import {
   OPENROUTER_QUANTIZATION_OPTIONS,
@@ -199,31 +197,59 @@ export default function ModelSettingsSection({
   config,
   selectedEmbeddingModelProvider,
   selectedEmbeddingModel,
-  savingStates,
   setSelectedEmbeddingModelProvider,
   setSelectedEmbeddingModel,
-  setConfig,
   saveConfig,
 }: {
   config: SettingsType;
   selectedEmbeddingModelProvider: string | null;
   selectedEmbeddingModel: string | null;
-  savingStates: Record<string, boolean>;
   setSelectedEmbeddingModelProvider: (val: string | null) => void;
   setSelectedEmbeddingModel: (val: string | null) => void;
-  setConfig: React.Dispatch<React.SetStateAction<SettingsType | null>>;
   saveConfig: (
     key: string,
     value: string | string[] | number | boolean,
   ) => void;
 }) {
   const { refresh, refreshing } = useRefreshModels();
-  const [customOpenaiModelName, setCustomOpenaiModelName] =
-    useLocalStorageString('customOpenaiModelName', '');
-  const [customOpenaiApiUrl, setCustomOpenaiApiUrl] = useLocalStorageString(
-    'customOpenaiApiUrl',
-    '',
+  const { openSettings } = useSettingsModal();
+  const embeddingProviders = config.embeddingModelProviders ?? {};
+  const providerKeys = Array.from(
+    new Set([
+      ...Object.keys(embeddingProviders),
+      ...(selectedEmbeddingModelProvider
+        ? [selectedEmbeddingModelProvider]
+        : []),
+    ]),
   );
+  const selectedProviderModels = selectedEmbeddingModelProvider
+    ? (embeddingProviders[selectedEmbeddingModelProvider] ?? [])
+    : [];
+  const selectedProviderUnavailable =
+    !!selectedEmbeddingModelProvider &&
+    !Object.prototype.hasOwnProperty.call(
+      embeddingProviders,
+      selectedEmbeddingModelProvider,
+    );
+  const selectedProviderMissing =
+    !selectedEmbeddingModelProvider && !!selectedEmbeddingModel;
+  const hasEmbeddingSelection =
+    !!selectedEmbeddingModelProvider || !!selectedEmbeddingModel;
+  const selectedModelUnavailable =
+    hasEmbeddingSelection &&
+    (!selectedEmbeddingModelProvider ||
+      !selectedEmbeddingModel ||
+      selectedProviderUnavailable ||
+      !selectedProviderModels.some(
+        (model) => model.name === selectedEmbeddingModel,
+      ));
+  const compatibleProviderPrefix = 'openai-compatible:';
+  const openProviderSettings = () =>
+    openSettings(
+      selectedEmbeddingModelProvider?.startsWith(compatibleProviderPrefix)
+        ? 'openai-compatible-providers'
+        : 'model-settings',
+    );
 
   return (
     <SettingsSection
@@ -241,56 +267,13 @@ export default function ModelSettingsSection({
       }
     >
       <p className="text-xs text-fg-muted">
-        Configure the embedding provider and model, Custom OpenAI connection
-        details, and OpenRouter endpoint quantization preferences. Refresh
-        provider model catalogs here.
+        Configure the embedding provider and model, and OpenRouter endpoint
+        quantization preferences. Refresh provider model catalogs here.
       </p>
 
       {config.chatModelProviders?.openrouter?.length > 0 && (
         <OpenRouterQuantizationSettings />
       )}
-
-      {/* Custom OpenAI credentials (provider configuration) */}
-      <div className="flex flex-col space-y-4 pt-4 border-t border-surface-2">
-        <p className="text-sm font-medium">Custom OpenAI</p>
-        <Field label="Model Name">
-          <InputComponent
-            type="text"
-            placeholder="Model name"
-            value={customOpenaiModelName}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-              setCustomOpenaiModelName(e.target.value)
-            }
-            onSave={() => refresh({ reload: true })}
-          />
-        </Field>
-        <Field label="Custom OpenAI API Key">
-          <InputComponent
-            type="password"
-            placeholder="Custom OpenAI API Key"
-            value={config.customOpenaiApiKey}
-            isSaving={savingStates['customOpenaiApiKey']}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-              setConfig((prev) => ({
-                ...prev!,
-                customOpenaiApiKey: e.target.value,
-              }));
-            }}
-            onSave={(value) => saveConfig('customOpenaiApiKey', value)}
-          />
-        </Field>
-        <Field label="Custom OpenAI Base URL">
-          <InputComponent
-            type="text"
-            placeholder="Custom OpenAI Base URL"
-            value={customOpenaiApiUrl}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-              setCustomOpenaiApiUrl(e.target.value)
-            }
-            onSave={() => refresh({ reload: true })}
-          />
-        </Field>
-      </div>
 
       {config.embeddingModelProviders && (
         <div className="flex flex-col space-y-4 mt-4 pt-4 border-t border-surface-2">
@@ -301,46 +284,63 @@ export default function ModelSettingsSection({
                 const value = e.target.value;
                 setSelectedEmbeddingModelProvider(value);
                 saveConfig('embeddingModelProvider', value);
-                const firstModel =
-                  config.embeddingModelProviders[value]?.[0]?.name;
-                if (firstModel) {
-                  setSelectedEmbeddingModel(firstModel);
-                  saveConfig('embeddingModel', firstModel);
-                }
+                const firstModel = embeddingProviders[value]?.[0]?.name ?? '';
+                setSelectedEmbeddingModel(firstModel);
+                saveConfig('embeddingModel', firstModel);
               }}
-              options={Object.keys(config.embeddingModelProviders).map(
-                (provider) => ({
+              options={[
+                ...(selectedProviderMissing
+                  ? [
+                      {
+                        value: '',
+                        label: 'Unavailable — no provider selected',
+                        disabled: true,
+                      },
+                    ]
+                  : []),
+                ...providerKeys.map((provider) => ({
                   value: provider,
                   label:
-                    (
-                      PROVIDER_METADATA as Record<
-                        string,
-                        { displayName?: string }
-                      >
-                    )[provider]?.displayName ||
-                    provider.charAt(0).toUpperCase() + provider.slice(1),
-                }),
-              )}
+                    provider === selectedEmbeddingModelProvider &&
+                    selectedProviderUnavailable
+                      ? `Unavailable — ${
+                          config.providerMetadata?.[provider]?.displayName ||
+                          provider
+                        }`
+                      : config.providerMetadata?.[provider]?.displayName ||
+                        provider.charAt(0).toUpperCase() + provider.slice(1),
+                  disabled:
+                    provider === selectedEmbeddingModelProvider &&
+                    selectedProviderUnavailable,
+                })),
+              ]}
             />
           </Field>
 
-          {selectedEmbeddingModelProvider && (
-            <Field label="Embedding Model">
-              <Select
-                value={selectedEmbeddingModel ?? undefined}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setSelectedEmbeddingModel(value);
-                  saveConfig('embeddingModel', value);
-                }}
-                options={(() => {
-                  const embeddingModelProvider =
-                    config.embeddingModelProviders[
-                      selectedEmbeddingModelProvider
-                    ];
-                  return embeddingModelProvider
-                    ? embeddingModelProvider.length > 0
-                      ? embeddingModelProvider.map((model) => ({
+          {(selectedEmbeddingModelProvider || selectedEmbeddingModel) && (
+            <>
+              <Field label="Embedding Model">
+                <Select
+                  value={selectedEmbeddingModel ?? undefined}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setSelectedEmbeddingModel(value);
+                    saveConfig('embeddingModel', value);
+                  }}
+                  options={[
+                    ...(selectedModelUnavailable
+                      ? [
+                          {
+                            value: selectedEmbeddingModel ?? '',
+                            label: selectedEmbeddingModel
+                              ? `Unavailable — ${selectedEmbeddingModel}`
+                              : 'Unavailable — no model selected',
+                            disabled: true,
+                          },
+                        ]
+                      : []),
+                    ...(selectedProviderModels.length > 0
+                      ? selectedProviderModels.map((model) => ({
                           value: model.name,
                           label: model.displayName,
                         }))
@@ -350,17 +350,26 @@ export default function ModelSettingsSection({
                             label: 'No models available',
                             disabled: true,
                           },
-                        ]
-                    : [
-                        {
-                          value: '',
-                          label: 'Invalid provider, please check backend logs',
-                          disabled: true,
-                        },
-                      ];
-                })()}
-              />
-            </Field>
+                        ]),
+                  ]}
+                />
+              </Field>
+              {(selectedProviderUnavailable || selectedModelUnavailable) && (
+                <div className="flex flex-wrap items-center gap-2 text-xs text-warning">
+                  <span>
+                    <strong>Unavailable:</strong> the saved embedding model is
+                    not in the current catalog.
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={openProviderSettings}
+                  >
+                    Open settings
+                  </Button>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

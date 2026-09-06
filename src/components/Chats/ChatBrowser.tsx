@@ -87,7 +87,9 @@ const ChatBrowser = ({ workspaceId }: Props) => {
     if (typeof window === 'undefined') return null;
     const provider = localStorage.getItem('chatModelProvider');
     const model = localStorage.getItem('chatModel');
-    return provider && model ? { provider, model } : null;
+    return provider !== null || model !== null
+      ? { provider: provider ?? '', model: model ?? '' }
+      : null;
   }, []);
 
   const privateSessionDurationMs = useMemo(() => {

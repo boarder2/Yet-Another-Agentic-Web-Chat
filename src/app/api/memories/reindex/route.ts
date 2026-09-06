@@ -13,20 +13,24 @@ export async function POST() {
     const selected = getEmbeddingModelSelection();
 
     let embeddingModel: CachedEmbeddings | null = null;
+    const selectionPresent = selected.provider !== '' || selected.name !== '';
 
-    // Use configured selection if available
-    if (selected.provider && selected.name) {
+    if (selectionPresent) {
       const provider = embeddingModelProviders[selected.provider];
-      if (provider && provider[selected.name]) {
-        embeddingModel = new CachedEmbeddings(
-          provider[selected.name].model,
-          selected.provider,
-          selected.name,
+      if (!provider?.[selected.name]) {
+        return NextResponse.json(
+          { error: 'Invalid embedding model selected' },
+          { status: 400 },
         );
       }
+      embeddingModel = new CachedEmbeddings(
+        provider[selected.name].model,
+        selected.provider,
+        selected.name,
+      );
     }
 
-    // Fallback to first available
+    // No selection: use the first available model.
     if (!embeddingModel) {
       const defaultProvider = Object.keys(embeddingModelProviders)[0];
       if (!defaultProvider) {

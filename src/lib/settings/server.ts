@@ -6,12 +6,16 @@ import type {
   SearchProviderIdType,
   ImageGenerationConfig,
 } from '@/lib/config';
-import { CODE_EXECUTION_AUTO_RUN_SETTING_KEY } from '@/lib/settings/keys';
+import {
+  CODE_EXECUTION_AUTO_RUN_SETTING_KEY,
+  isMigratedSettingKey,
+} from '@/lib/settings/keys';
 import {
   OPENROUTER_QUANTIZATIONS_SETTING_KEY,
   parseOpenRouterQuantizations,
   type OpenRouterQuantizationParseResult,
 } from '@/lib/settings/openrouterQuantizations';
+import { parseHiddenModels, type HiddenModel } from '@/lib/models/hiddenModels';
 
 /**
  * Server-side reads of the database-backed settings (`app_settings`). These are
@@ -26,7 +30,9 @@ import {
 export function getAllSettings(): Record<string, string> {
   const rows = db.select().from(appSettings).all();
   const out: Record<string, string> = {};
-  for (const row of rows) out[row.key] = row.value;
+  for (const row of rows) {
+    if (isMigratedSettingKey(row.key)) out[row.key] = row.value;
+  }
   return out;
 }
 
@@ -37,10 +43,12 @@ export function getAllSettings(): Record<string, string> {
  */
 export function getSettings(keys: string[]): Record<string, string> {
   if (keys.length === 0) return {};
+  const activeKeys = keys.filter(isMigratedSettingKey);
+  if (activeKeys.length === 0) return {};
   const rows = db
     .select()
     .from(appSettings)
-    .where(inArray(appSettings.key, keys))
+    .where(inArray(appSettings.key, activeKeys))
     .all();
   const out: Record<string, string> = {};
   for (const row of rows) out[row.key] = row.value;
@@ -201,15 +209,12 @@ export function getSearchLocale(): { language: string; region: string } {
   };
 }
 
-/** Hidden models list. Seeded from legacy `GENERAL.HIDDEN_MODELS`. */
-export function getHiddenModels(): string[] {
+/** Hidden models list. Legacy strings remain global hides; new entries are scoped. */
+export function getHiddenModels(): HiddenModel[] {
   const raw = getSettings(['hiddenModels'])['hiddenModels'];
   if (!raw) return [];
   try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed)
-      ? parsed.filter((m): m is string => typeof m === 'string')
-      : [];
+    return parseHiddenModels(JSON.parse(raw));
   } catch {
     return [];
   }
@@ -236,11 +241,6 @@ export function getImageGenerationConfig(): ImageGenerationConfig | null {
   };
 }
 
-/** LM Studio API URL. Seeded from legacy `MODELS.LM_STUDIO.API_URL`. */
-export function getLMStudioApiUrl(): string {
-  return getSettings(['lmStudioApiUrl'])['lmStudioApiUrl'] ?? '';
-}
-
 /**
  * SearXNG API URL. Seeded from legacy `SEARCH.PROVIDERS.SEARXNG.API_URL` /
  * `API_ENDPOINTS.SEARXNG`. Callers needing the `SEARXNG_API_URL` env override
@@ -248,21 +248,4 @@ export function getLMStudioApiUrl(): string {
  */
 export function getSearxngApiUrl(): string {
   return getSettings(['searxngApiUrl'])['searxngApiUrl'] ?? '';
-}
-
-/**
- * Custom OpenAI endpoint URL + model name. Seeded from legacy
- * `MODELS.CUSTOM_OPENAI.API_URL`/`MODEL_NAME`. The API key is a separate
- * lookup in `credentials.ts` — same logical provider, two stores, because one
- * half is a secret and the other isn't.
- */
-export function getCustomOpenaiUrlAndModel(): {
-  url: string;
-  modelName: string;
-} {
-  const s = getSettings(['customOpenaiApiUrl', 'customOpenaiModelName']);
-  return {
-    url: s['customOpenaiApiUrl'] ?? '',
-    modelName: s['customOpenaiModelName'] ?? '',
-  };
 }

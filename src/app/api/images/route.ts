@@ -1,14 +1,8 @@
 import handleImageSearch from '@/lib/chains/imageSearchAgent';
 import { DEFAULT_CONTEXT_WINDOW } from '@/lib/models/presets';
-import {
-  getCustomOpenaiApiKey,
-  getCustomOpenaiApiUrl,
-  getCustomOpenaiModelName,
-} from '@/lib/config';
 import { getAvailableChatModelProviders } from '@/lib/providers';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { AIMessage, BaseMessage, HumanMessage } from '@langchain/core/messages';
-import { ChatOpenAI } from '@langchain/openai';
 
 interface ChatModel {
   provider: string;
@@ -39,31 +33,23 @@ export const POST = async (req: Request) => {
       .filter((msg) => msg !== undefined) as BaseMessage[];
 
     const chatModelProviders = await getAvailableChatModelProviders();
-
-    const chatModelProvider =
-      chatModelProviders[
-        body.chatModel?.provider || Object.keys(chatModelProviders)[0]
-      ];
-    const chatModel =
-      chatModelProvider?.[
-        body.chatModel?.model || Object.keys(chatModelProvider ?? {})[0]
-      ];
+    const requestedModel = body.chatModel;
+    const modelSelectionPresent =
+      requestedModel !== undefined && requestedModel !== null;
+    const providerKey = modelSelectionPresent
+      ? requestedModel.provider
+      : Object.keys(chatModelProviders)[0];
+    const chatModelProvider = chatModelProviders[providerKey];
+    const modelKey = modelSelectionPresent
+      ? requestedModel.model
+      : Object.keys(chatModelProvider ?? {})[0];
+    const chatModel = chatModelProvider?.[modelKey];
 
     let llm: BaseChatModel | undefined;
-
-    if (body.chatModel?.provider === 'custom_openai') {
-      llm = new ChatOpenAI({
-        apiKey: getCustomOpenaiApiKey(),
-        modelName: getCustomOpenaiModelName(),
-        // temperature: 0.7,
-        configuration: {
-          baseURL: getCustomOpenaiApiUrl(),
-        },
-      }) as unknown as BaseChatModel;
-    } else if (chatModelProvider && chatModel) {
+    if (chatModel) {
       llm = chatModel.model;
       (llm as unknown as { contextWindowSize?: number }).contextWindowSize =
-        body.chatModel?.contextWindowSize || DEFAULT_CONTEXT_WINDOW;
+        requestedModel?.contextWindowSize || DEFAULT_CONTEXT_WINDOW;
     }
 
     if (!llm) {

@@ -3,12 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   config: {
     getAnthropicApiKey: vi.fn(() => ''),
-    getCustomOpenaiApiKey: vi.fn(() => ''),
-    getCustomOpenaiApiUrl: vi.fn(() => ''),
-    getCustomOpenaiModelName: vi.fn(() => ''),
     getDeepseekApiKey: vi.fn(() => ''),
     getGeminiApiKey: vi.fn(() => ''),
-    getLMStudioApiEndpoint: vi.fn(() => ''),
     getOpenaiApiKey: vi.fn(() => ''),
     getOpenrouterApiKey: vi.fn(() => 'openrouter-key'),
   },

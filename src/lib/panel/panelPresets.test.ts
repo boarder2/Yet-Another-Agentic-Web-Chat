@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   findMatchingPanelPreset,
+  isPanelPresetAvailable,
   loadPanelPresets,
   panelPresetSummary,
   PANEL_PRESETS_KEY,
@@ -79,5 +80,33 @@ describe('panel preset reasoning persistence', () => {
     expect(findMatchingPanelPreset([preset()], executors())).toMatchObject({
       id: 'panel-preset-1',
     });
+  });
+
+  it('marks retired or stale executor references unavailable while accepting dynamic keys in the catalog', () => {
+    expect(
+      isPanelPresetAvailable(
+        preset([
+          { provider: 'custom_openai', name: 'legacy-model' },
+          executors()[1],
+        ]),
+        {
+          openai: { 'gpt-5.4': { displayName: 'GPT-5.4' } },
+        },
+      ),
+    ).toBe(false);
+    expect(
+      isPanelPresetAvailable(
+        preset([
+          { provider: 'openai-compatible:provider-1', name: 'local-model' },
+          executors()[1],
+        ]),
+        {
+          'openai-compatible:provider-1': {
+            'local-model': { displayName: 'Local model' },
+          },
+          anthropic: { 'claude-opus-4-6': { displayName: 'Claude' } },
+        },
+      ),
+    ).toBe(true);
   });
 });

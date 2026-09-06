@@ -25,7 +25,11 @@ import {
 import { SimplifiedAgent } from '@/lib/search/simplifiedAgent';
 import { createTurnTracker } from '@/lib/tokens/tracker';
 import { getSettings, getBooleanSetting } from '@/lib/settings/server';
-import { startRun, evictByChatId } from '@/lib/runs/runHub';
+import {
+  startRun,
+  evictByChatId,
+  type RunModelSnapshot,
+} from '@/lib/runs/runHub';
 import { attachRunHost } from '@/lib/runs/runHost';
 import {
   resolveWorkflowRun,
@@ -154,6 +158,13 @@ export async function startWorkflowRun(
     retrievalController,
     chartRegistry,
     configSnapshot: runConfig,
+    modelSnapshot: {
+      chatLlm,
+      systemLlm,
+      embedding,
+      chatModelRef,
+      systemModelRef,
+    } satisfies RunModelSnapshot,
   });
 
   if (isNew) {

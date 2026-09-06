@@ -1,11 +1,7 @@
 import {
   getAnthropicApiKey,
-  getCustomOpenaiApiKey,
-  getCustomOpenaiApiUrl,
-  getCustomOpenaiModelName,
   getDeepseekApiKey,
   getGeminiApiKey,
-  getLMStudioApiEndpoint,
   getOpenaiApiKey,
   getOpenrouterApiKey,
 } from '../config';
@@ -39,8 +35,6 @@ const providerSignature = (provider: string): string => {
       return getGeminiApiKey() || '';
     case 'deepseek':
       return getDeepseekApiKey() || '';
-    case 'lmstudio':
-      return getLMStudioApiEndpoint() || '';
     case 'openrouter':
       return JSON.stringify({
         apiKey: getOpenrouterApiKey() || '',
@@ -48,10 +42,6 @@ const providerSignature = (provider: string): string => {
       });
     case 'transformers':
       return 'local';
-    case 'custom_openai':
-      return `${getCustomOpenaiApiUrl() || ''}::${
-        getCustomOpenaiApiKey() || ''
-      }::${getCustomOpenaiModelName() || ''}`;
     default:
       return '';
   }

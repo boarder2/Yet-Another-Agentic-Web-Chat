@@ -243,7 +243,11 @@ describe('native reasoning effort request fragments', () => {
 
   it('does not map unsupported providers', () => {
     expect(
-      getNativeReasoningEffortConfig('custom_openai', 'model', 'high'),
+      getNativeReasoningEffortConfig(
+        'openai-compatible:provider-1',
+        'model',
+        'high',
+      ),
     ).toBeUndefined();
   });
 });

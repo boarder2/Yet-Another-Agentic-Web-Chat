@@ -18,15 +18,17 @@ async function getEmbeddingModel(): Promise<CachedEmbeddings | null> {
   const providers = await getAvailableEmbeddingModelProviders();
   const selected = getEmbeddingModelSelection();
 
-  if (selected.provider && selected.name) {
+  const selectionPresent = selected.provider !== '' || selected.name !== '';
+  if (selectionPresent) {
     const provider = providers[selected.provider];
-    if (provider?.[selected.name]) {
-      return new CachedEmbeddings(
-        provider[selected.name].model,
-        selected.provider,
-        selected.name,
-      );
+    if (!provider?.[selected.name]) {
+      throw new Error('Invalid embedding model');
     }
+    return new CachedEmbeddings(
+      provider[selected.name].model,
+      selected.provider,
+      selected.name,
+    );
   }
 
   const defaultProvider = Object.keys(providers)[0];
@@ -45,14 +47,17 @@ async function getMemoryModel() {
   const providers = await getAvailableChatModelProviders();
   const selected = getMemoryModelSelection();
 
-  if (selected.provider && selected.name) {
+  const selectionPresent = selected.provider !== '' || selected.name !== '';
+  if (selectionPresent) {
     const provider = providers[selected.provider];
-    if (provider?.[selected.name]) return provider[selected.name].model;
+    if (!provider?.[selected.name]) {
+      throw new Error('Invalid memory model');
+    }
+    return provider[selected.name].model;
   }
 
   for (const provider of Object.values(providers)) {
     for (const modelName of Object.keys(provider)) {
-      if (modelName.toLowerCase().includes('embedding')) continue;
       return provider[modelName].model;
     }
   }

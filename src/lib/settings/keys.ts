@@ -90,11 +90,7 @@ export const MIGRATED_SETTING_KEYS = [
   'imageGenerationModel',
   'imageGenerationAspectRatio',
   'imageGenerationImageSize',
-  // Provider/search endpoint URLs (non-secret; the API keys they pair with
-  // live in `credentials.ts`). Seeded once from legacy config.toml.
-  'lmStudioApiUrl',
-  'customOpenaiApiUrl',
-  'customOpenaiModelName',
+  // Search endpoint URLs are non-secret and seeded once from legacy config.toml.
   'searxngApiUrl',
   // Text-to-speech
   'ttsVoice',

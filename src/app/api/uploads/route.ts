@@ -4,18 +4,12 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { getAvailableEmbeddingModelProviders, getAvailableChatModelProviders } from '@/lib/providers';
-import {
-  getCustomOpenaiApiKey,
-  getCustomOpenaiApiUrl,
-  getCustomOpenaiModelName,
-} from '@/lib/config';
 import { UPLOADS_DIR } from '@/lib/dataDir';
 import { getEmbeddingModelSelection } from '@/lib/settings/server';
 import { extractText } from '@/lib/workspaces/extractAdapter';
 import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
 import { Document } from '@langchain/core/documents';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import { ChatOpenAI } from '@langchain/openai';
 import { z } from 'zod';
 // import { getLangfuseCallbacks } from '@/lib/tracing/langfuse';
 
@@ -98,14 +92,16 @@ export async function POST(req: Request) {
     // Embedding model is a system-level setting: resolve from the DB (source of
     // truth) so uploads are indexed with the same model used at query time.
     const selectedEmbedding = getEmbeddingModelSelection();
-    const embeddingProvider =
-      embeddingModelProviders[
-        selectedEmbedding.provider || Object.keys(embeddingModelProviders)[0]
-      ];
-    const embeddingModelConfig =
-      embeddingProvider?.[
-        selectedEmbedding.name || Object.keys(embeddingProvider || {})[0]
-      ];
+    const embeddingSelectionPresent =
+      selectedEmbedding.provider !== '' || selectedEmbedding.name !== '';
+    const embeddingProviderKey = embeddingSelectionPresent
+      ? selectedEmbedding.provider
+      : Object.keys(embeddingModelProviders)[0] ?? '';
+    const embeddingProvider = embeddingModelProviders[embeddingProviderKey];
+    const embeddingModelKey = embeddingSelectionPresent
+      ? selectedEmbedding.name
+      : Object.keys(embeddingProvider || {})[0] ?? '';
+    const embeddingModelConfig = embeddingProvider?.[embeddingModelKey];
 
     if (!embeddingModelConfig) {
       return NextResponse.json(
@@ -117,33 +113,34 @@ export async function POST(req: Request) {
     let embeddingsModel = embeddingModelConfig.model;
 
     // Setup chat model for topic generation (similar to chat route)
-    const chatModelProvider =
-      chatModelProviders[
-        chat_model_provider as string ?? Object.keys(chatModelProviders)[0]
-      ];
-    const chatModelConfig =
-      chatModelProvider[
-        chat_model as string ?? Object.keys(chatModelProvider)[0]
-      ];
+    const requestedChatProvider =
+      typeof chat_model_provider === 'string' ? chat_model_provider : undefined;
+    const requestedChatModel =
+      typeof chat_model === 'string' ? chat_model : undefined;
+    const chatSelectionPresent =
+      requestedChatProvider !== undefined || requestedChatModel !== undefined;
+    const chatProviderKey = chatSelectionPresent
+      ? requestedChatProvider ?? ''
+      : Object.keys(chatModelProviders)[0] ?? '';
+    const chatModelProvider = chatModelProviders[chatProviderKey];
+    const chatModelKey = chatSelectionPresent
+      ? requestedChatModel ?? ''
+      : Object.keys(chatModelProvider || {})[0] ?? '';
+    const chatModelConfig = chatModelProvider?.[chatModelKey];
 
-    let llm: BaseChatModel;
+    const llm: BaseChatModel | undefined = chatModelConfig?.model;
+    if (llm) {
+      (llm as unknown as { contextWindowSize?: number }).contextWindowSize =
+        context_window
+          ? parseInt(context_window as string, 10)
+          : DEFAULT_CONTEXT_WINDOW;
+    }
 
-    // Handle chat model creation like in chat route
-    if (chat_model_provider === 'custom_openai') {
-      llm = new ChatOpenAI({
-        apiKey: getCustomOpenaiApiKey(),
-        modelName: getCustomOpenaiModelName(),
-        temperature: 0.1,
-        configuration: {
-          baseURL: getCustomOpenaiApiUrl(),
-        },
-      }) as unknown as BaseChatModel;
-    } else if (chatModelProvider && chatModelConfig) {
-      llm = chatModelConfig.model;
-
-      (llm as any).contextWindowSize = context_window
-        ? parseInt(context_window as string, 10)
-        : DEFAULT_CONTEXT_WINDOW;
+    if (!llm) {
+      return NextResponse.json(
+        { message: 'Invalid chat model selected' },
+        { status: 400 },
+      );
     }
 
     // Reject unsupported types up front: returning from the map callback below

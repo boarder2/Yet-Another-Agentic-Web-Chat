@@ -11,14 +11,13 @@ import {
 } from '@/lib/encryption';
 import { readLegacyCredentialsConfig } from '@/lib/config';
 
-/** The 9 active provider/search API keys stored encrypted in the `credentials` table. */
+/** The active provider/search API keys stored encrypted in the `credentials` table. */
 export const CREDENTIAL_KEYS = [
   'model.openai',
   'model.anthropic',
   'model.gemini',
   'model.deepseek',
   'model.openrouter',
-  'model.customOpenai',
   'search.braveSearch',
   'search.braveLLM',
   'search.mojeek',

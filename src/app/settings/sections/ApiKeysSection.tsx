@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import InputComponent from '../components/InputComponent';
 import { SettingsType } from '../types';
-import { useLocalStorageString } from '@/lib/hooks/useLocalStorage';
 import { useRefreshModels } from '@/lib/hooks/api/useModels';
 
 export default function ApiKeysSection({
@@ -24,11 +23,6 @@ export default function ApiKeysSection({
   ) => void;
 }) {
   const { refresh, refreshing } = useRefreshModels();
-  const [lmStudioApiUrl, setLmStudioApiUrl] = useLocalStorageString(
-    'lmStudioApiUrl',
-    '',
-  );
-
   return (
     <SettingsSection
       title="API Keys"
@@ -125,16 +119,6 @@ export default function ApiKeysSection({
               }));
             }}
             onSave={(value) => saveConfig('deepseekApiKey', value)}
-          />
-        </Field>
-
-        <Field label="LM Studio API URL">
-          <InputComponent
-            type="text"
-            placeholder="LM Studio API URL"
-            value={lmStudioApiUrl}
-            onChange={(e) => setLmStudioApiUrl(e.target.value)}
-            onSave={() => refresh()}
           />
         </Field>
       </div>

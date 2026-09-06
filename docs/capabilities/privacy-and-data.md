@@ -6,13 +6,15 @@ YAAWC is self-hosted: the operator controls the application process, database, d
 
 The local YAAWC database and data directory hold conversation messages and run state, settings, encrypted credentials, memories, workflow and schedule definitions, workspace metadata and files, artifacts, generated images, and relevant caches. Uploaded chat files and generated images are stored as local data files referenced by database records.
 
-Non-secret settings are synchronized through the database-backed settings store. Provider and search API keys are kept in a dedicated encrypted credential store using AES-256-GCM. The encryption key is derived from the operator-supplied passphrase in `config.toml` or `ENCRYPTION_PASSPHRASE`; the passphrase itself is not stored in the database or returned to the client.
+Non-secret settings are synchronized through the database-backed settings store. Provider and search API keys, along with OpenAI-compatible provider header values and MCP authentication values, are kept encrypted at rest using AES-256-GCM. Compatible-provider names, canonical URLs, capability flags, and header names are metadata; header values are encrypted individually and never returned by the API. The encryption key is derived from the operator-supplied passphrase in `config.toml` or `ENCRYPTION_PASSPHRASE`; the passphrase itself is not stored in the database or returned to the client.
 
 ## What can be sent to external services
 
 Depending on the selected feature and provider, YAAWC can send:
 
-- User prompts, conversation context, selected persona instructions, and requested outputs to the configured Chat or System model endpoint.
+- User prompts, conversation context, selected persona instructions, and requested outputs to the configured Chat or System model endpoint, including an enabled OpenAI-compatible endpoint when selected.
+- Attached content and embedding inputs to the selected embedding endpoint, including an OpenAI-compatible provider marked Supports Embeddings.
+- Configured compatible-provider request headers are sent with discovery and model requests; their values are never returned by YAAWC's API.
 - Web queries to the selected search provider and page, PDF, image, or YouTube URLs to retrieve their content.
 - Attached or workspace file content to the model or embedding provider needed for indexing, search, analysis, or answering.
 - Image data to a vision-capable model for analysis, or image prompts to the configured image-generation provider.
@@ -49,6 +51,6 @@ Dashboard and widget source URLs are authored by the operator and fetched by the
 
 ## Availability and failure states
 
-A missing encryption passphrase blocks credential-backed use. If the passphrase changes, existing encrypted credentials cannot be decrypted and must be entered again. A provider or source outage can prevent a feature from completing while leaving local chats and settings available. Memory, embeddings, code execution, image generation, MCP, and search each have independent prerequisites; a failure in one does not imply that all YAAWC data or features are unavailable.
+A missing encryption passphrase blocks credential-backed use and non-empty compatible-provider header writes. If the passphrase changes, existing encrypted credentials or compatible-provider headers cannot be decrypted and must be entered again. Compatible-provider discovery rejects redirects, times out after 20 seconds, and sanitizes upstream failures; a bad endpoint affects only its own catalog or request. A provider or source outage can prevent a feature from completing while leaving local chats and settings available. Memory, embeddings, code execution, image generation, MCP, and search each have independent prerequisites; a failure in one does not imply that all YAAWC data or features are unavailable.
 
 For configuration controls, see [Administration and settings](./administration-and-settings.md). For provider-specific requirements, see [Models and providers](./models-and-providers.md).

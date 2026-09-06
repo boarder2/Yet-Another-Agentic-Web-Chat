@@ -1,7 +1,6 @@
 import {
   getAnthropicApiKey,
   getBaseUrl,
-  getCustomOpenaiApiKey,
   getGeminiApiKey,
   getOpenaiApiKey,
   getOpenrouterApiKey,
@@ -16,6 +15,7 @@ import { MASKED_SECRET, maskSecret } from '@/lib/maskedSecret';
 import { getCodeExecutionConfig } from '@/lib/config';
 import { getResolvedSearchCapabilities } from '@/lib/search/providers';
 import { invalidateModelCache } from '@/lib/providers/modelCache';
+import * as providerCatalog from '@/lib/providers';
 import {
   getAvailableChatModelProviders,
   getAvailableEmbeddingModelProviders,
@@ -26,13 +26,24 @@ export const GET = async (_req: Request) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const config: Record<string, any> = {};
 
-    const [chatModelProviders, embeddingModelProviders] = await Promise.all([
-      getAvailableChatModelProviders(),
-      getAvailableEmbeddingModelProviders(),
-    ]);
+    const providerMetadataPromise = Object.prototype.hasOwnProperty.call(
+      providerCatalog,
+      'getAvailableProviderMetadata',
+    )
+      ? providerCatalog.getAvailableProviderMetadata()
+      : Promise.resolve(undefined);
+    const [chatModelProviders, embeddingModelProviders, providerMetadata] =
+      await Promise.all([
+        getAvailableChatModelProviders(),
+        getAvailableEmbeddingModelProviders(),
+        providerMetadataPromise,
+      ]);
 
     config['chatModelProviders'] = {};
     config['embeddingModelProviders'] = {};
+    if (providerMetadata !== undefined) {
+      config['providerMetadata'] = providerMetadata;
+    }
 
     for (const provider in chatModelProviders) {
       config['chatModelProviders'][provider] = Object.keys(
@@ -62,7 +73,6 @@ export const GET = async (_req: Request) => {
     config['geminiApiKey'] = maskSecret(getGeminiApiKey());
     config['deepseekApiKey'] = maskSecret(getDeepseekApiKey());
     config['openrouterApiKey'] = maskSecret(getOpenrouterApiKey());
-    config['customOpenaiApiKey'] = maskSecret(getCustomOpenaiApiKey());
 
     config['baseUrl'] = getBaseUrl();
 
@@ -106,7 +116,6 @@ export const POST = async (req: Request) => {
       { body: 'geminiApiKey', key: 'model.gemini' },
       { body: 'deepseekApiKey', key: 'model.deepseek' },
       { body: 'openrouterApiKey', key: 'model.openrouter' },
-      { body: 'customOpenaiApiKey', key: 'model.customOpenai' },
       { body: 'braveSearchApiKey', key: 'search.braveSearch' },
       { body: 'braveLLMApiKey', key: 'search.braveLLM' },
       { body: 'mojeekApiKey', key: 'search.mojeek' },

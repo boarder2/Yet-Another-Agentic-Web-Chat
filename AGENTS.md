@@ -31,6 +31,7 @@ Subsystem detail lives in the `.agents/skills/yaawc-*` skills — read the relev
 - **TTS** (`src/lib/tts/`): local Kokoro speech synthesis for messages — plain read or LLM-rewritten narration (cached per message); served via `/api/tts(/stream)`.
 - **Theming** (`src/lib/theme/`): a theme is seven seed colors written onto `:root`; every other token derives in `globals.css` via `color-mix`. Device-local, restored before first paint.
 - **Settings** (`src/lib/settings/`): non-secret settings sync localStorage ⇄ DB (DB is source of truth); credentials live in a dedicated table, encrypted at rest (`src/lib/credentials.ts`).
+- **OpenAI-compatible providers** (`src/lib/providers/openaiCompatible/`): instance-wide named database rows discover `/v1/models`, use streaming Chat Completions, and optionally expose embeddings; header values are encrypted and write-only. Requests resolve from the YAAWC server process/container, not the browser.
 
 ## Conventions
 

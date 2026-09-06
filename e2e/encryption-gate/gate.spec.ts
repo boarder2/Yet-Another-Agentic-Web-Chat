@@ -89,4 +89,20 @@ apiTest.describe('encryption gate: API', () => {
       await request.delete(`/api/mcp/servers/${body.server.id}`);
     },
   );
+
+  apiTest(
+    'POST /api/providers/openai-compatible refuses headers with 503',
+    async ({ request }) => {
+      const res = await request.post('/api/providers/openai-compatible', {
+        data: {
+          name: `gate-provider-${Date.now()}`,
+          baseUrl: 'http://localhost:9999',
+          headers: { Authorization: 'Bearer should-not-be-saved' },
+        },
+      });
+      expect(res.status()).toBe(503);
+      const body = await res.json();
+      expect(body.error).toContain('ENCRYPTION_PASSPHRASE');
+    },
+  );
 });

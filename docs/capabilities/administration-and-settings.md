@@ -18,13 +18,22 @@ Settings are opened from the desktop sidebar or the mobile chat settings control
 ## Model settings
 
 - **Default Search:** choose the Chat model used for browser `?q=` searches when no override is needed.
-- **Model Settings:** configure the embedding model and Custom OpenAI model name, base URL, and credential.
+- **Model Settings:** configure the embedding model and OpenRouter routing options when available.
+- **OpenAI-Compatible Providers:** add, edit, enable, disable, test, and delete named OpenAI-compatible endpoints.
 - **Model Presets:** save, apply, edit, duplicate, reorder, and delete named Chat/System/vision/context combinations. The active selection is shown when it matches a preset.
 - **Agent Panel Presets:** save two-to-four executor models for the Agent Panel and apply them from Settings or the composer. A preset can become unavailable if a provider model disappears.
 - **Model Visibility:** hide individual models or every model from a provider so they do not appear in selection controls. Hidden models remain configuration data and can make a saved preset unavailable.
 - **Image Generation:** enable the OpenRouter image tool, refresh image-capable model choices, and set default aspect ratio and resolution. See [Models and providers](./models-and-providers.md).
 
 Chat and System models are selected from the chat composer. The memory-processing model and embedding model are separate selections; changing the embedding model requires memory re-indexing and may require re-uploading incompatible file indexes.
+
+### OpenAI-compatible providers
+
+Each provider has a unique display name, a canonical HTTP(S) `/v1` base URL, an Enabled switch, and an optional Supports Embeddings switch. YAAWC discovers model IDs from `GET /v1/models`; enabled providers appear in model selectors using their configured display names. The Chat adapter always uses streaming `/v1/chat/completions`. A provider can be tested even while disabled, including an endpoint that returns zero models.
+
+Optional request headers are entered as repeatable write-only fields. Header names are visible for editing, while values are encrypted individually and never returned. A blank existing value means unchanged; removing a row deletes that header. Redirects, invalid model responses, and slow or unreachable endpoints produce sanitized test errors without affecting other providers.
+
+Provider discovery and model requests run from the YAAWC server process. For a container deployment, a provider URL using `localhost` points to the YAAWC container, not the browser or the host machine. Use an address reachable from the application container for local services on another host.
 
 ## Search provider controls
 
@@ -42,7 +51,7 @@ MCP availability is based on the saved server state and the connection/discovery
 
 ## Credential and configuration storage
 
-`config.toml` is intentionally small at runtime. It contains the required encryption passphrase, optional base URL, and infrastructure settings such as Docker-backed code execution. Model/search credentials, provider URLs, model visibility, retention, image-generation settings, and model choices are managed in Settings and stored in the database or encrypted credential table.
+`config.toml` is intentionally small at runtime. It contains the required encryption passphrase, optional base URL, and infrastructure settings such as Docker-backed code execution. Model/search credentials, named OpenAI-compatible provider definitions, model visibility, retention, image-generation settings, and model choices are managed in Settings and stored in the database or encrypted credential/provider tables.
 
 The passphrase must be supplied before credentials can be saved. Keep it stable across restarts and back up it separately from the encrypted database. Detailed deployment options are in the [Configuration](./configuration.md) guide; backup and update procedures are in [Updating YAAWC](./updating.md).
 
@@ -60,4 +69,4 @@ A workspace file or skill may change while an approval is open. YAAWC rejects th
 
 ## If a setting does not take effect
 
-Refresh provider models after changing credentials or endpoints. Check whether a workspace model pin, hidden model, private-session rule, focus mode, or non-interactive run is overriding the expected option. A setting that is device-local, such as the active theme or chat width, does not propagate through the database settings sync. An unavailable optional service should show an explicit empty, disabled, or error state rather than making unrelated chats fail.
+Refresh provider models after changing credentials or endpoints. For an OpenAI-compatible provider, use its Test action and verify that the URL is reachable from the YAAWC server process or container. Check whether a workspace model pin, hidden model, private-session rule, focus mode, or non-interactive run is overriding the expected option. A setting that is device-local, such as the active theme or chat width, does not propagate through the database settings sync. An unavailable optional service should show an explicit empty, disabled, or error state rather than making unrelated chats fail.

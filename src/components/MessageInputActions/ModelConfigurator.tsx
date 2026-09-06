@@ -110,6 +110,9 @@ export default function ModelConfigurator({
       }
     >
   >;
+  const providerDisplayName = (provider: string) =>
+    modelsData?.providerMetadata?.[provider]?.displayName ||
+    provider.charAt(0).toUpperCase() + provider.slice(1);
 
   const cwParsed = parseInt(contextWindowSizeStr, 10);
   const contextWindowSize = isNaN(cwParsed) ? DEFAULT_CONTEXT_WINDOW : cwParsed;
@@ -137,14 +140,21 @@ export default function ModelConfigurator({
     writeSelectionToStorage(next);
   };
 
-  const mainButtonText = useMemo(() => {
+  const mainButtonText = (() => {
     if (!computedShowName) return null;
-    if (!chatModelKey) return 'Loading...';
+    if (!chatModelKey && !chatProvider) return 'Loading...';
     const effort = chatReasoningEffort
       ? ` · ${REASONING_EFFORT_LABELS[chatReasoningEffort]}`
       : '';
-    return `Chat: ${chatModelKey} (${chatProvider})${effort}`;
-  }, [computedShowName, chatModelKey, chatProvider, chatReasoningEffort]);
+    const available =
+      !capabilitiesLoaded || !!chatProviders[chatProvider]?.[chatModelKey];
+    const modelLabel = !capabilitiesLoaded
+      ? chatModelKey || 'Loading...'
+      : available && chatModelKey
+        ? chatModelKey
+        : 'Unavailable';
+    return `Chat: ${modelLabel} (${providerDisplayName(chatProvider)})${effort}`;
+  })();
 
   const matchingPreset = useMemo(
     () => findMatchingPreset(presets, selectionToActiveSelection(value)),
@@ -190,12 +200,23 @@ export default function ModelConfigurator({
   );
 
   if (modelOverride) {
-    const chatName =
-      chatProviders[modelOverride.chatProvider]?.[modelOverride.chatModel]
-        ?.displayName ?? modelOverride.chatModel;
-    const systemName =
-      chatProviders[modelOverride.systemProvider]?.[modelOverride.systemModel]
-        ?.displayName ?? modelOverride.systemModel;
+    const chatAvailable =
+      !capabilitiesLoaded ||
+      !!chatProviders[modelOverride.chatProvider]?.[modelOverride.chatModel];
+    const systemAvailable =
+      !capabilitiesLoaded ||
+      !!chatProviders[modelOverride.systemProvider]?.[
+        modelOverride.systemModel
+      ];
+    const chatName = chatAvailable
+      ? (chatProviders[modelOverride.chatProvider]?.[modelOverride.chatModel]
+          ?.displayName ?? modelOverride.chatModel)
+      : 'Unavailable';
+    const systemName = systemAvailable
+      ? (chatProviders[modelOverride.systemProvider]?.[
+          modelOverride.systemModel
+        ]?.displayName ?? modelOverride.systemModel)
+      : 'Unavailable';
     const capabilityLoaded = capabilitiesLoaded;
     const chatCapabilities =
       chatProviders[modelOverride.chatProvider]?.[modelOverride.chatModel]
@@ -243,13 +264,15 @@ export default function ModelConfigurator({
                     <div className="flex justify-between gap-3">
                       <span className="text-fg-subtle">Chat</span>
                       <span className="text-fg/90 text-right truncate">
-                        {chatName} · {modelOverride.chatProvider}
+                        {chatName} ·{' '}
+                        {providerDisplayName(modelOverride.chatProvider)}
                       </span>
                     </div>
                     <div className="flex justify-between gap-3">
                       <span className="text-fg-subtle">System</span>
                       <span className="text-fg/90 text-right truncate">
-                        {systemName} · {modelOverride.systemProvider}
+                        {systemName} ·{' '}
+                        {providerDisplayName(modelOverride.systemProvider)}
                       </span>
                     </div>
                     <ReasoningEffortSummary

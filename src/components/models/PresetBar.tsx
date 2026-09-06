@@ -48,10 +48,8 @@ export default function PresetBar({
   );
 
   const { data: modelsData } = useModels();
-  const chatProviders = (modelsData?.chatModelProviders ?? {}) as Record<
-    string,
-    Record<string, { displayName: string }>
-  >;
+  const chatProviders = modelsData?.chatModelProviders as
+    Record<string, Record<string, { displayName: string }>> | undefined;
 
   const [namingPreset, setNamingPreset] = useState(false);
   const [nameInput, setNameInput] = useState('');

@@ -25,11 +25,11 @@ Chat and System effort are independent. If System is omitted, its complete Chat 
 
 Effort settings for the composer sync through the database alongside other model selections; selecting Provider default removes the optional setting. Presets, workspace/workflow/schedule/widget/panel definitions retain configured values. A continuable run stores the effective Chat/System/executor references in its versioned snapshot, so resume uses the paused run's effort rather than current settings. Completed assistant metadata retains effective model configuration, and historical Model Info displays it after the active snapshot is cleared.
 
-Reasoning effort applies only to agent Chat/System work and Agent Panel/subagent role routing. It does not apply to embeddings, memory-processing models, image generation, TTS narration, LM Studio, Custom OpenAI, or other non-agent model tasks.
+Reasoning effort applies only to agent Chat/System work and Agent Panel/subagent role routing. It does not apply to embeddings, memory-processing models, image generation, TTS narration, OpenAI-compatible providers, or other non-agent model tasks.
 
 ## Supported model providers
 
-Chat models can come from OpenAI, Anthropic, Google Gemini, DeepSeek AI, LM Studio, OpenRouter, or a Custom OpenAI-compatible endpoint. Model lists are discovered from the configured provider; the available model names depend on the provider account or local server.
+Chat models can come from OpenAI, Anthropic, Google Gemini, DeepSeek AI, OpenRouter, or a configured OpenAI-compatible provider. Built-in and compatible-provider model lists are discovered from their configured endpoints; the available model names depend on the provider account or local server.
 
 ### OpenRouter endpoint quantization
 
@@ -39,9 +39,17 @@ Selecting one or more values sends them as OpenRouter `provider.quantizations`; 
 
 Quantized endpoints can have different quality characteristics, and restricting the list can reduce endpoint availability. A malformed persisted value makes OpenRouter unavailable until the setting is reset or replaced with supported values. Changes apply to newly started LangChain-backed OpenRouter operations; in-flight operations are unchanged. The separate OpenRouter image-generation integration is unaffected.
 
-Embedding models can come from OpenAI, Google Gemini, Hugging Face Transformers, or LM Studio. The Transformers option runs a local `Xenova/all-MiniLM-L6-v2` embedding model. Embeddings are used for chat-document indexing and search, memory retrieval, and memory re-indexing.
+### OpenAI-compatible providers
 
-Custom OpenAI requires a model name, base URL, and API key. LM Studio requires its local API URL and a model served by that installation. Refresh models after changing a key, endpoint, or model name.
+Configure named endpoints in **Settings → AI Models → OpenAI-Compatible Providers**. Multiple providers may share a URL, while their names and encrypted request headers remain independent. Names are case-insensitively unique and renaming a provider preserves its stable model references.
+
+Enter an HTTP(S) root or a URL ending in `/v1`; YAAWC stores the canonical `/v1` form. Enabled providers are discovered with `GET /v1/models`. A standard `{ data: [{ id, name? }] }` response supplies Chat models, which use streaming `/v1/chat/completions` requests. Enable **Supports Embeddings** to expose every discovered ID as an embedding option; YAAWC does not infer vision, tool, context, or reasoning capabilities.
+
+Request headers are optional. Header names are returned for management, but values are write-only in the UI and API and are encrypted individually at rest. Leaving an existing value blank preserves it; removing a row explicitly deletes it. A non-empty header write requires the encryption passphrase. The provider Test action works while the provider is disabled, accepts a valid empty model list, rejects redirects, and limits discovery to 20 seconds. Errors are sanitized and one unavailable provider does not hide other catalogs.
+
+Compatible-provider requests originate from the YAAWC server process, not the browser. If YAAWC runs in a container, `localhost` and `127.0.0.1` refer to that application container; use a host gateway, service name, or network address reachable from the container for an endpoint running elsewhere. Private or local endpoints must likewise be reachable from the process that runs YAAWC.
+
+Embedding models can come from OpenAI, Google Gemini, Hugging Face Transformers, or enabled OpenAI-compatible providers. The Transformers option runs a local `Xenova/all-MiniLM-L6-v2` embedding model. Embeddings are used for chat-document indexing and search, memory retrieval, and memory re-indexing.
 
 ## Search providers
 
@@ -64,9 +72,9 @@ Image generation needs a valid OpenRouter API key, a selected image-capable mode
 
 ## Credentials and availability
 
-Provider and search API keys are entered in Settings and encrypted at rest. A required encryption passphrase must be configured before credentials can be stored or decrypted. Provider URLs and non-secret model settings are stored separately from credentials; see [Privacy and data](./privacy-and-data.md).
+Provider and search API keys, plus compatible-provider header values, are entered in Settings and encrypted at rest. A required encryption passphrase must be configured before credentials can be stored or decrypted. Provider definitions, URLs, and non-secret model settings are stored separately from credential values; see [Privacy and data](./privacy-and-data.md).
 
-A provider may be absent from the model picker when its credential is missing, its endpoint cannot be loaded, all of its models are hidden, or model discovery fails. The model refresh control retries discovery. A model that was saved in a preset or workspace override can become unavailable later; select a replacement or update the saved configuration.
+A provider may be absent from the model picker when its credential is missing, it is disabled, its endpoint cannot be loaded, all of its models are hidden, or model discovery fails. The model refresh control retries discovery. A model that was saved in a preset or workspace override can become unavailable later; select a replacement or update the saved configuration. Explicit stale compatible-provider references remain unavailable rather than being silently replaced.
 
 ## Embedding and model limits
 
@@ -77,6 +85,6 @@ A provider may be absent from the model picker when its credential is missing, i
 
 ## If a provider does not work
 
-Check the encryption passphrase first, then refresh the provider model list. Re-enter a credential if it was saved under a different passphrase. Verify LM Studio or Custom OpenAI URLs and the model name. For web features, verify the selected search provider and fallback. For image generation, verify that the selected OpenRouter model supports image output. A failed provider does not make local capability documentation, settings, or already stored chats unavailable.
+Check the encryption passphrase first, then refresh the provider model list or use the compatible provider's Test action. Re-enter a credential if it was saved under a different passphrase. For a compatible endpoint, verify that its canonical `/v1` URL and `/v1/models` response are reachable from the YAAWC server process or container; a valid empty `data` list is successful. For web features, verify the selected search provider and fallback. For image generation, verify that the selected OpenRouter model supports image output. A failed provider does not make local capability documentation, settings, or already stored chats unavailable.
 
 For deployment-level configuration, see [Configuration](./configuration.md). For voice and appearance settings, see [Administration and settings](./administration-and-settings.md).

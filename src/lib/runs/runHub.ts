@@ -1,10 +1,26 @@
 import type { EventEmitter } from 'stream';
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import type { StreamEvent } from '@/lib/streaming/events';
 import { TurnChartRegistry } from '@/lib/chart/turnChartRegistry';
 import type { AgentRunConfig } from '@/lib/search/agentRunConfig';
+import type { ModelRef } from '@/lib/providers/resolveModels';
+import type { CachedEmbeddings } from '@/lib/utils/cachedEmbeddings';
 
 export type RunStatus =
   'running' | 'awaiting_user' | 'completed' | 'errored' | 'cancelled';
+
+/**
+ * Request-local model instances captured when a run starts. This is deliberately
+ * in-memory only: resumed active runs must not be rebound to a changed catalog,
+ * while durable run config remains free of live models and secrets.
+ */
+export type RunModelSnapshot = {
+  chatLlm: BaseChatModel;
+  systemLlm: BaseChatModel;
+  embedding: CachedEmbeddings;
+  chatModelRef: ModelRef;
+  systemModelRef: ModelRef;
+};
 
 export type SeqEvent = {
   seq: number;
@@ -41,6 +57,8 @@ export type Run = {
   chartRegistry: TurnChartRegistry;
   /** Versioned effective configuration used to build this run. */
   configSnapshot?: AgentRunConfig;
+  /** Start-time model instances used when an active run is resumed in-process. */
+  modelSnapshot?: RunModelSnapshot;
 };
 
 type Registry = {
@@ -76,6 +94,7 @@ export function startRun(params: {
   retrievalController: AbortController;
   chartRegistry?: TurnChartRegistry;
   configSnapshot?: AgentRunConfig;
+  modelSnapshot?: RunModelSnapshot;
 }): { run: Run; isNew: boolean } {
   const reg = getRegistry();
   const existing = reg.byMessageId.get(params.messageId);
@@ -99,6 +118,7 @@ export function startRun(params: {
     recievedMessage: '',
     chartRegistry: params.chartRegistry ?? new TurnChartRegistry(),
     configSnapshot: params.configSnapshot,
+    modelSnapshot: params.modelSnapshot,
   };
 
   reg.byMessageId.set(params.messageId, run);

@@ -8,9 +8,9 @@ description: Settings sync, model selection, config/DB boundary, encrypted crede
 ## The split (read this first)
 
 - **`config.toml` holds ONLY genuine infra** — Docker/code-execution config, `BASE_URL`/port, and the required encryption passphrase (`SECURITY.ENCRYPTION_PASSPHRASE`, which can't live inside the thing it protects). Never auto-generated: `src/lib/encryption.ts` derives the AES key from it via scrypt; if unset, credential storage is unavailable and `GET /api/config`'s `encryptionConfigured: false` drives a full-app blocking gate (`EncryptionGate`, wraps `RootLayout`) until the user sets it. Never overwrite an existing `config.toml`.
-- **All credentials — MCP auth and provider/search API keys — live encrypted in the DB**, in a dedicated `credentials` table (`src/lib/credentials.ts`, AES-256-GCM via `src/lib/encryption.ts`), distinct from `app_settings`. `app_settings` is shipped verbatim to every client by `GET /api/settings`, so ciphertext must never land there.
-- **Provider/search endpoint URLs are DB-backed too** (LM Studio, Custom OpenAI, SearXNG) — via the ordinary `MIGRATED_SETTING_KEYS`/localStorage-sync path below, unencrypted, same as `searchProvider`. They're non-secret, so they don't need the `credentials` table.
-- Everything else is DB-backed (`app_settings` table) or **request-supplied**.
+- **All credentials — MCP auth, provider/search API keys, and OpenAI-compatible header values — live encrypted in the DB**. API keys use the dedicated `credentials` table (`src/lib/credentials.ts`, AES-256-GCM via `src/lib/encryption.ts`); compatible-provider definitions use `openai_compatible_providers` with independently encrypted header values. `app_settings` is shipped verbatim to every client by `GET /api/settings`, so ciphertext must never land there.
+- **Search endpoint URLs and ordinary settings are DB-backed** via the `MIGRATED_SETTING_KEYS`/localStorage-sync path below, unencrypted, like `searchProvider`. OpenAI-compatible provider definitions are not localStorage settings: manage them through the provider API and Settings → AI Models, where their canonical URLs, enabled/capability flags, and header names are redacted metadata.
+- Everything else is DB-backed (`app_settings` table) or **request-supplied**. Compatible-provider discovery and model requests run from the YAAWC server process/container; a provider URL using `localhost` is resolved there, not in the browser.
 - Non-secret, non-device settings sync **localStorage ⇄ DB**; the **DB is the durable source of truth**. Device-local UI prefs (theme, accent, bg, chat width) are excluded.
 
 ## Adding / changing a synced setting
@@ -46,4 +46,4 @@ Sections live in `src/app/settings/sections/*`; section components in `src/app/s
 - The **memory-processing model** and the **embedding model** have their OWN keys (`memoryModel*`, `embeddingModel*`), independent of the chat picker's `systemModel`.
 - Reasoning effort is native-model capability metadata, not part of model identity. `chatReasoningEffort` and `systemReasoningEffort` are DB-synced optional keys; omission is Provider default and selecting it removes the key. Unsupported or stale values are resolved by the server when a model reference is resolved, without rewriting durable definitions.
 
-Related: `yaawc-api-endpoints` (the `/api/settings` route), `yaawc-agent-panel` (`panelPresets`/`panelSelection` keys), `yaawc-dashboard-widgets` (`yaawc_dashboard_*` keys), `yaawc-database` (the `app_settings` schema).
+Related: `yaawc-api-endpoints` (the `/api/settings` and compatible-provider routes), `yaawc-agent-panel` (`panelPresets`/`panelSelection` keys), `yaawc-dashboard-widgets` (`yaawc_dashboard_*` keys), `yaawc-database` (the `app_settings` and provider schemas).

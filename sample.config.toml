@@ -17,9 +17,10 @@ ENCRYPTION_PASSPHRASE = ""
 
 # Model/search provider API keys have migrated to the database (`credentials`
 # table, encrypted). Manage them from Settings → API Keys / Search Providers.
-# Provider/search endpoint URLs (LM Studio, Custom OpenAI, SearXNG)
-# have likewise migrated to the database (app_settings table, unencrypted).
-# Manage them from Settings → API Keys / Model Settings / Search Providers.
+# SearXNG endpoint settings are DB-backed (`app_settings` table). Named
+# OpenAI-compatible providers, their canonical URLs, and encrypted request
+# headers are managed from Settings → AI Models. Do not add provider endpoints
+# or secrets to this file.
 
 [TOOLS.CODE_EXECUTION]
 ENABLED = false

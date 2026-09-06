@@ -1,13 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage } from '@langchain/core/messages';
 import { getAvailableChatModelProviders } from '@/lib/providers';
-import {
-  getCustomOpenaiApiKey,
-  getCustomOpenaiApiUrl,
-  getCustomOpenaiModelName,
-} from '@/lib/config';
 import { createAgent } from 'langchain';
 import { allTools } from '@/lib/tools';
 import { WidgetProcessRequest } from '@/lib/types/api';
@@ -47,16 +41,6 @@ async function getLLMInstance(
 ): Promise<BaseChatModel | null> {
   try {
     const chatModelProviders = await getAvailableChatModelProviders();
-
-    if (provider === 'custom_openai') {
-      return new ChatOpenAI({
-        modelName: model || getCustomOpenaiModelName(),
-        apiKey: getCustomOpenaiApiKey(),
-        configuration: {
-          baseURL: getCustomOpenaiApiUrl(),
-        },
-      }) as unknown as BaseChatModel;
-    }
 
     if (chatModelProviders[provider] && chatModelProviders[provider][model]) {
       const llm = chatModelProviders[provider][model].model as BaseChatModel;

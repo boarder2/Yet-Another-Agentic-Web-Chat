@@ -64,25 +64,26 @@ If `systemModel` is omitted it falls back to the complete Chat reference, includ
 
 ## Chats, Messages, Config
 
-| Endpoint                     | Method           | Purpose                                                                                                       |
-| ---------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------- |
-| `/api/chats`                 | GET              | List. `limit`, `offset`, `q`, `pinned=1`, `scheduled=0/1`, `workspaceId(s)` → `{ chats, total, hasMore, … }`  |
-| `/api/chats/[id]`            | GET/PATCH/DELETE | One chat; PATCH renames (locks title against auto-regeneration)                                               |
-| `/api/chats/[id]/seen`       | POST             | Mark latest run viewed → `{ historyCount }`                                                                   |
-| `/api/chats/search`          | GET              | Full-text search                                                                                              |
-| `/api/messages/[messageId]`  | GET              | One message                                                                                                   |
-| `/api/config`                | GET              | Server configuration                                                                                          |
-| `/api/models`                | GET              | Available models per provider                                                                                 |
-| `/api/tools`                 | GET              | Tool listing                                                                                                  |
-| `/api/suggestions`           | POST             | Follow-ups. `{ chatHistory, chatModel?, selectedSystemPromptIds? }`                                           |
-| `/api/autocomplete`          | GET              | OpenSearch suggestions. `?q=`                                                                                 |
-| `/api/system-prompts(/[id])` | CRUD             | Persona/methodology prompts                                                                                   |
-| `/api/uploads/images(/[id])` | POST/GET         | Upload (multipart) / serve images — see `yaawc-image-attachments`                                             |
-| `/api/uploads`               | POST             | Document upload for file search: extract → chunk → embed → `{ files: [{ fileName, fileExtension, fileId }] }` |
-| `/api/tts(/stream)`          | GET/POST         | Voice list / speech synthesis (Kokoro, `mode: read\|narrate` — narrate LLM-rewrites and caches per message)   |
-| `/api/images`, `/api/videos` | POST             | Image / video search                                                                                          |
-| `/api/respond-now`           | POST             | Soft-stop / early synthesis. `{ messageId }`                                                                  |
-| `/api/opensearch`            | GET              | OpenSearch description XML                                                                                    |
+| Endpoint                                                  | Method           | Purpose                                                                                                       |
+| --------------------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------- |
+| `/api/chats`                                              | GET              | List. `limit`, `offset`, `q`, `pinned=1`, `scheduled=0/1`, `workspaceId(s)` → `{ chats, total, hasMore, … }`  |
+| `/api/chats/[id]`                                         | GET/PATCH/DELETE | One chat; PATCH renames (locks title against auto-regeneration)                                               |
+| `/api/chats/[id]/seen`                                    | POST             | Mark latest run viewed → `{ historyCount }`                                                                   |
+| `/api/chats/search`                                       | GET              | Full-text search                                                                                              |
+| `/api/messages/[messageId]`                               | GET              | One message                                                                                                   |
+| `/api/config`                                             | GET              | Server configuration and provider metadata                                                                    |
+| `/api/models`                                             | GET              | Available models per provider and provider metadata                                                           |
+| `/api/providers/openai-compatible` (+`[id]`, `[id]/test`) | CRUD/Test        | Named provider definitions with redacted headers; discovery test bypasses enabled filtering                   |
+| `/api/tools`                                              | GET              | Tool listing                                                                                                  |
+| `/api/suggestions`                                        | POST             | Follow-ups. `{ chatHistory, chatModel?, selectedSystemPromptIds? }`                                           |
+| `/api/autocomplete`                                       | GET              | OpenSearch suggestions. `?q=`                                                                                 |
+| `/api/system-prompts(/[id])`                              | CRUD             | Persona/methodology prompts                                                                                   |
+| `/api/uploads/images(/[id])`                              | POST/GET         | Upload (multipart) / serve images — see `yaawc-image-attachments`                                             |
+| `/api/uploads`                                            | POST             | Document upload for file search: extract → chunk → embed → `{ files: [{ fileName, fileExtension, fileId }] }` |
+| `/api/tts(/stream)`                                       | GET/POST         | Voice list / speech synthesis (Kokoro, `mode: read\|narrate` — narrate LLM-rewrites and caches per message)   |
+| `/api/images`, `/api/videos`                              | POST             | Image / video search                                                                                          |
+| `/api/respond-now`                                        | POST             | Soft-stop / early synthesis. `{ messageId }`                                                                  |
+| `/api/opensearch`                                         | GET              | OpenSearch description XML                                                                                    |
 
 ## Subsystem Routes
 
@@ -94,6 +95,7 @@ Domain skills own their route contracts and failure semantics:
 - `/api/skills/*` — `yaawc-runtime-skills`
 - `/api/dashboard/*` — `yaawc-dashboard-widgets`
 - `/api/mcp/*` — `yaawc-mcp-integration`
+- `/api/providers/openai-compatible/*` — named OpenAI-compatible provider CRUD/Test; headers are write-only and encrypted in `openai_compatible_providers`
 - `/api/uploads/images/*` — `yaawc-image-attachments`
 - `/api/settings` — `yaawc-settings-persistence`
 

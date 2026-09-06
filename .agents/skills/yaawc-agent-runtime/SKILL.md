@@ -35,7 +35,7 @@ Resume must:
 
 - lock and validate unresolved approval IDs;
 - strictly decode the recorded config and verify approval, run, chat, message, and checkpoint-thread identity; current code checks active-thread presence/chat/message but does not fully bind every recorded thread ID, so do not treat presence as proof;
-- re-resolve recorded model refs (preserving the snapshotted effective effort) and rebuild workspace/MCP tools;
+- reuse the run's start-time in-memory model snapshot when the paused run is still live; after a restart, re-resolve recorded model refs (preserving the snapshotted effective effort), then rebuild workspace/MCP tools;
 - reject stale external snapshots as synthetic tool responses rather than applying them; missing expected hashes currently skip parts of freshness checking, so snapshot shape must fail closed;
 - seed a fresh tracker from persisted cumulative stats;
 - use keyed resume maps when several approvals remain;

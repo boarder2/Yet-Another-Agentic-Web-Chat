@@ -136,9 +136,8 @@ test.describe('GET /api/config', () => {
     expect(res.status()).toBe(200);
     const body = await res.json();
 
-    // Always present with a string (possibly empty). Provider/search endpoint
-    // URLs (lmStudioApiUrl, searxngApiUrl, ...) are DB-backed settings now — see
-    // settings.spec.ts — not part of this route.
+    // Always present with a string (possibly empty). Search settings and
+    // compatible-provider definitions are not part of this route.
     expect(typeof body.baseUrl).toBe('string');
   });
 

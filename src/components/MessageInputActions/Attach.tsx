@@ -84,8 +84,12 @@ const Attach = ({
         localStorage.getItem('contextWindowSize') ||
         String(DEFAULT_CONTEXT_WINDOW);
 
-      data.append('chat_model_provider', chatModelProvider!);
-      data.append('chat_model', chatModel!);
+      if (chatModelProvider !== null) {
+        data.append('chat_model_provider', chatModelProvider);
+      }
+      if (chatModel !== null) {
+        data.append('chat_model', chatModel);
+      }
       data.append('context_window_size', contextWindowSize);
 
       try {

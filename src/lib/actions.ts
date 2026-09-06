@@ -5,8 +5,6 @@ export const getSuggestions = async (chatHisory: Message[]) => {
   const chatModel = localStorage.getItem('chatModel');
   const chatModelProvider = localStorage.getItem('chatModelProvider');
 
-  const customOpenAIKey = localStorage.getItem('openAIApiKey');
-  const customOpenAIBaseURL = localStorage.getItem('openAIBaseURL');
   const contextWindowSize = parseInt(
     localStorage.getItem('contextWindowSize') || String(DEFAULT_CONTEXT_WINDOW),
     10,
@@ -26,6 +24,8 @@ export const getSuggestions = async (chatHisory: Message[]) => {
     }
   }
 
+  const hasPersistedChatModel =
+    chatModelProvider !== null || chatModel !== null;
   const res = await fetch(`/api/suggestions`, {
     method: 'POST',
     headers: {
@@ -33,15 +33,13 @@ export const getSuggestions = async (chatHisory: Message[]) => {
     },
     body: JSON.stringify({
       chatHistory: chatHisory,
-      chatModel: {
-        provider: chatModelProvider,
-        model: chatModel,
-        contextWindowSize,
-        ...(chatModelProvider === 'custom_openai' && {
-          customOpenAIKey,
-          customOpenAIBaseURL,
-        }),
-      },
+      chatModel: hasPersistedChatModel
+        ? {
+            provider: chatModelProvider ?? '',
+            model: chatModel ?? '',
+            contextWindowSize,
+          }
+        : undefined,
       selectedSystemPromptIds: selectedSystemPromptIds,
     }),
   });

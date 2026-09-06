@@ -109,8 +109,8 @@ export function findMatchingPanelPreset(
 
 /**
  * Cross-checks a preset's models against the live catalog (like
- * `isPresetAvailable`). `custom_openai` is skipped. Returns true when the
- * catalog has not loaded yet so we don't flash a spurious "unavailable" badge.
+ * `isPresetAvailable`). Returns true when the catalog has not loaded yet so
+ * we don't flash a spurious "unavailable" badge.
  */
 export function isPanelPresetAvailable(
   preset: PanelPreset,
@@ -119,7 +119,6 @@ export function isPanelPresetAvailable(
 ): boolean {
   if (!modelsData) return true;
   const has = (m: PanelModelEntry): boolean => {
-    if (m.provider === 'custom_openai') return true;
     const provider = modelsData[m.provider];
     return !!provider && !!provider[m.name];
   };

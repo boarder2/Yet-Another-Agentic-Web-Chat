@@ -32,7 +32,7 @@ E2e uses `.next/standalone/server.js`, not the dev server. The package scripts b
 
 E2e must never call a real LLM or require provider credentials. `YAAWC_TEST_MODE=true` registers deterministic model variants in `src/lib/providers/test.ts`; choose the variant matching the scenario or add a deterministic one there. `test-embed` supplies deterministic embeddings.
 
-Capability-doc test variants must exercise the real non-toggleable `search_yaawc_docs` tool path rather than mocking the route/service. Keep `e2e/config.test.toml` free of provider URLs and keys; `seed-settings.mjs` establishes baseline test models/settings.
+Capability-doc test variants must exercise the real non-toggleable `search_yaawc_docs` tool path rather than mocking the route/service. Keep `e2e/config.test.toml` free of provider URLs and keys; `seed-settings.mjs` establishes baseline test models/settings. Compatible-provider API coverage uses a disposable local HTTP server as the upstream `/v1/models` fixture, so it tests the HTTP boundary without a real model provider; the URL is resolved from the YAAWC server process/container.
 
 ## Data isolation
 
@@ -56,7 +56,7 @@ The request wrapper retries connection failures only, never HTTP status failures
 
 ## Placement and documentation
 
-Keep API permutations out of UI tests. Add one integration assertion for the boundary, then exercise detailed cases at unit/API level. When route/page coverage changes, update `e2e/COVERAGE.md`. A deliberately red known issue belongs in `e2e/KNOWN_ISSUES.md`.
+Keep API permutations out of UI tests. Add one integration assertion for the boundary, then exercise detailed cases at unit/API level. Compatible-provider specs must create and delete their instance-wide rows, including disabled/offline fixtures, so the shared test database stays clean. When route/page coverage changes, update `e2e/COVERAGE.md`. A deliberately red known issue belongs in `e2e/KNOWN_ISSUES.md`.
 
 Read `e2e/CLAUDE.md` completely before e2e work and `e2e/api/CLAUDE.md` for API specs; those files are authoritative for current fixtures/projects.
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Cpu, ChevronDown, ChevronRight, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -9,9 +9,7 @@ import {
   Transition,
 } from '@headlessui/react';
 import { Fragment } from 'react';
-import { useModels } from '@/lib/hooks/api/useModels';
-import { useQueryClient } from '@tanstack/react-query';
-import { qk } from '@/lib/api/keys';
+import { useModels, useRefreshModels } from '@/lib/hooks/api/useModels';
 import { useSettingsModal } from '@/components/settings/SettingsModalProvider';
 import ComposerActionButton from '@/components/MessageInputActions/ComposerActionButton';
 import ComposerPopover from '@/components/MessageInputActions/ComposerPopover';
@@ -29,6 +27,8 @@ interface ProviderModelMap {
     models: ModelOption[];
   };
 }
+
+const OPENAI_COMPATIBLE_PROVIDER_KEY_PREFIX = 'openai-compatible:';
 
 /**
  * Grouped-by-provider model picker for a single role (chat or system). This is
@@ -51,95 +51,78 @@ const ModelField = ({
   role?: 'chat' | 'system';
   panelPosition?: 'above' | 'below';
 }) => {
-  const qc = useQueryClient();
   const { openSettings } = useSettingsModal();
   const { data: modelsData, isLoading: loading } = useModels();
-  const [providerModels, setProviderModels] = useState<ProviderModelMap>({});
-  const [providersList, setProvidersList] = useState<string[]>([]);
-  const [selectedModelDisplay, setSelectedModelDisplay] = useState<string>('');
-  const [selectedProviderDisplay, setSelectedProviderDisplay] =
-    useState<string>('');
-  const [expandedProviders, setExpandedProviders] = useState<
-    Record<string, boolean>
-  >({});
-  const [refreshing, setRefreshing] = useState(false);
+  const { refresh, refreshing } = useRefreshModels();
+  const { providerModels, providersList } = useMemo<{
+    providerModels: ProviderModelMap;
+    providersList: string[];
+  }>(() => {
+    if (!modelsData?.chatModelProviders) {
+      return { providerModels: {}, providersList: [] };
+    }
 
-  /* eslint-disable react-hooks/set-state-in-effect */
-  useEffect(() => {
-    if (!modelsData?.chatModelProviders) return;
     const providersData: ProviderModelMap = {};
-
     Object.entries(modelsData.chatModelProviders).forEach(
       ([provider, models]) => {
         const providerDisplayName =
+          modelsData.providerMetadata?.[provider]?.displayName ||
           provider.charAt(0).toUpperCase() + provider.slice(1);
         providersData[provider] = {
           displayName: providerDisplayName,
-          models: [],
-        };
-
-        Object.entries(models).forEach(([modelKey, modelData]) => {
-          providersData[provider].models.push({
+          models: Object.entries(models).map(([model, modelData]) => ({
             provider,
-            model: modelKey,
-            displayName: modelData.displayName || modelKey,
-          });
-        });
+            model,
+            displayName: modelData.displayName || model,
+          })),
+        };
       },
     );
 
     Object.keys(providersData).forEach((provider) => {
-      if (providersData[provider].models.length === 0)
+      if (providersData[provider].models.length === 0) {
         delete providersData[provider];
+      }
     });
 
-    const sortedProviders = Object.keys(providersData).sort();
-    setProvidersList(sortedProviders);
-    setProviderModels(providersData);
+    const providerKeys = Object.keys(providersData);
+    const staticProviders = providerKeys
+      .filter(
+        (provider) =>
+          !provider.startsWith(OPENAI_COMPATIBLE_PROVIDER_KEY_PREFIX),
+      )
+      .sort();
+    const compatibleProviders = providerKeys
+      .filter((provider) =>
+        provider.startsWith(OPENAI_COMPATIBLE_PROVIDER_KEY_PREFIX),
+      )
+      .sort((a, b) =>
+        providersData[a].displayName.localeCompare(
+          providersData[b].displayName,
+        ),
+      );
+
+    return {
+      providerModels: providersData,
+      providersList: [...staticProviders, ...compatibleProviders],
+    };
   }, [modelsData]);
-  useEffect(() => {
-    if (
-      !selectedModel?.provider ||
-      !selectedModel?.model ||
-      !providerModels ||
-      Object.keys(providerModels).length === 0
-    )
-      return;
-
-    const provider = providerModels[selectedModel.provider];
-    if (!provider) return;
-
-    const currentModel = provider.models.find(
-      (option) => option.model === selectedModel.model,
-    );
-
-    if (currentModel) {
-      setExpandedProviders((prev) => ({
-        ...prev,
-        [provider.displayName]: !prev[provider.displayName],
-      }));
-      setSelectedModelDisplay(currentModel.displayName);
-      setSelectedProviderDisplay(provider.displayName);
-    }
-  }, [providerModels, selectedModel]);
+  const [expandedProviders, setExpandedProviders] = useState<
+    Record<string, boolean>
+  >({});
 
   useEffect(() => {
     if (!selectedModel?.provider) return;
+    // The selected provider is expanded when its controlled value changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setExpandedProviders((prev) => ({
       ...prev,
       [selectedModel.provider]: true,
     }));
   }, [selectedModel?.provider]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   async function handleRefresh() {
-    setRefreshing(true);
-    try {
-      await fetch('/api/models?refresh=true');
-      await qc.invalidateQueries({ queryKey: qk.models });
-    } finally {
-      setRefreshing(false);
-    }
+    await refresh({ silent: true });
   }
 
   const toggleProviderExpanded = (provider: string) => {
@@ -151,16 +134,29 @@ const ModelField = ({
 
   const handleSelectModel = (option: ModelOption) => {
     setSelectedModel({ provider: option.provider, model: option.model });
-    setSelectedModelDisplay(option.displayName);
-    setSelectedProviderDisplay(
-      providerModels[option.provider]?.displayName || option.provider,
-    );
   };
+
+  const selectedProvider = selectedModel
+    ? providerModels[selectedModel.provider]
+    : undefined;
+  const selectedModelOption = selectedProvider?.models.find(
+    (option) => option.model === selectedModel?.model,
+  );
+  const currentModelDisplay = selectedModelOption?.displayName ?? '';
+  const currentProviderDisplay =
+    selectedProvider?.displayName ??
+    (selectedModel
+      ? (modelsData?.providerMetadata?.[selectedModel.provider]?.displayName ??
+        selectedModel.provider)
+      : '');
+  const selectedModelUnavailable =
+    !loading && !!selectedModel && !selectedModelOption;
 
   const getDisplayText = () => {
     if (loading) return 'Loading...';
-    if (!selectedModel || !selectedModelDisplay) return 'Select Model';
-    return `${selectedModelDisplay} (${selectedProviderDisplay})`;
+    if (!selectedModel) return 'Select Model';
+    if (selectedModelUnavailable) return 'Unavailable';
+    return `${currentModelDisplay} (${currentProviderDisplay})`;
   };
 
   return (
@@ -238,6 +234,29 @@ const ModelField = ({
                 }
               >
                 <div className="max-h-72 overflow-y-auto">
+                  {selectedModelUnavailable && selectedModel && (
+                    <div className="border-b border-surface-2 bg-warning-soft px-4 py-3 text-xs text-warning">
+                      <p className="font-medium">Unavailable</p>
+                      <p className="mt-1 break-all">
+                        {selectedModel.model} · {currentProviderDisplay}
+                      </p>
+                      <CloseButton
+                        type="button"
+                        onClick={() =>
+                          openSettings(
+                            selectedModel.provider.startsWith(
+                              OPENAI_COMPATIBLE_PROVIDER_KEY_PREFIX,
+                            )
+                              ? 'openai-compatible-providers'
+                              : 'model-settings',
+                          )
+                        }
+                        className="mt-2 border border-transparent text-accent hover:underline focus-border-neutral"
+                      >
+                        Open settings
+                      </CloseButton>
+                    </div>
+                  )}
                   {loading ? (
                     <div className="px-4 py-3 text-sm text-fg-muted">
                       Loading available models...

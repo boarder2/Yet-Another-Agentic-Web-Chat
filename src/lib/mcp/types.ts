@@ -1,7 +1,17 @@
 import { createHash } from 'crypto';
 
 import type { mcpServers, mcpOauth } from '@/lib/db/schema';
-import { decryptTolerant, encrypt } from '@/lib/encryption';
+import { decryptTolerant } from '@/lib/encryption';
+import {
+  decryptHeaderValues,
+  getSecretHeaderNames,
+  validateSecretHeaders,
+} from '@/lib/http/secretHeaders';
+
+export {
+  encryptHeaderPatch,
+  encryptHeaderValues,
+} from '@/lib/http/secretHeaders';
 
 export type McpServerRow = typeof mcpServers.$inferSelect;
 export type McpOauthRow = typeof mcpOauth.$inferSelect;
@@ -31,7 +41,7 @@ export function redactServer(row: McpServerRow): SanitizedMcpServerRow {
     ...rest,
     hasToken: !!secretToken,
     hasSecret: !!oauthClientSecret,
-    extraHeaderNames: Object.keys(parseExtraHeaders(row)),
+    extraHeaderNames: getSecretHeaderNames(row.extraHeaders),
   };
 }
 
@@ -64,40 +74,7 @@ export function decryptServerSecrets(row: McpServerRow): McpServerRow {
  * only the values are encrypted, so decryption happens per-entry here.
  */
 export function parseExtraHeaders(row: McpServerRow): Record<string, string> {
-  const stored = row.extraHeaders;
-  if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return {};
-
-  const out: Record<string, string> = {};
-  for (const [name, value] of Object.entries(stored)) {
-    if (typeof value !== 'string') continue;
-    const plain = decryptTolerant(value, `header ${name} for server ${row.id}`);
-    if (plain !== null) out[name] = plain;
-  }
-  return out;
-}
-
-/** Encrypt each value of a header map for storage. */
-export function encryptHeaderValues(
-  headers: Record<string, string>,
-): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(headers).map(([name, value]) => [name, encrypt(value)]),
-  );
-}
-
-/**
- * Encrypt a header *patch* for storage, preserving `null` values — RFC 7386
- * merge semantics use them to delete a key, so they must survive untouched.
- */
-export function encryptHeaderPatch(
-  patch: Record<string, string | null>,
-): Record<string, string | null> {
-  return Object.fromEntries(
-    Object.entries(patch).map(([name, value]) => [
-      name,
-      value === null ? null : encrypt(value),
-    ]),
-  );
+  return decryptHeaderValues(row.extraHeaders, `header for server ${row.id}`);
 }
 
 /**
@@ -129,48 +106,19 @@ export function buildRequestInit(
     : undefined;
 }
 
-/** Cap on extra-header entries, keeping the JSON column bounded. */
-const EXTRA_HEADERS_MAX_ENTRIES = 50;
-
-/**
- * Validate an extra-headers payload from the API: a flat object with RFC 7230
- * token names and values free of control characters. When `allowNull` is set
- * (the PATCH merge form), a `null` value is accepted as "delete this header".
- * Returns an error string, or null if valid.
- */
+/** Validate MCP's existing extra-header payload using the shared rules. */
 export function validateExtraHeaders(
   value: unknown,
   { allowNull = false }: { allowNull?: boolean } = {},
 ): string | null {
-  const field = allowNull ? 'extraHeadersPatch' : 'extraHeaders';
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return `${field} must be an object`;
-  }
-  const entries = Object.entries(value as Record<string, unknown>);
-  if (entries.length > EXTRA_HEADERS_MAX_ENTRIES) {
-    return `${field} has too many entries (max ${EXTRA_HEADERS_MAX_ENTRIES})`;
-  }
-  for (const [name, headerValue] of entries) {
-    if (
-      name === '__proto__' ||
-      name === 'constructor' ||
-      name === 'prototype'
-    ) {
-      return `invalid header name: ${name}`;
-    }
-    // RFC 7230 token — anything else risks smuggling a second header.
-    if (!/^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(name)) {
-      return `invalid header name: ${name}`;
-    }
-    if (headerValue === null && allowNull) continue; // deletion
-    if (typeof headerValue !== 'string') {
-      return `header "${name}" must have a string value`;
-    }
-    if (/[\r\n\0]/.test(headerValue)) {
-      return `header "${name}" value contains control characters`;
-    }
-  }
-  return null;
+  return validateSecretHeaders(value, {
+    allowNull,
+    fieldName: allowNull ? 'extraHeadersPatch' : 'extraHeaders',
+    // MCP historically used only the RFC-token/CRLF checks and entry cap.
+    // Keep its accepted value sizes and control-character behavior unchanged;
+    // compatible providers use the stricter default.
+    legacyCompatibility: true,
+  });
 }
 
 /**

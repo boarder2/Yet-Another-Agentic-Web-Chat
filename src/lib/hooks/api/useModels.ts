@@ -18,9 +18,15 @@ export interface ImageGenerationModel {
   name: string;
 }
 
+export interface ProviderMetadata {
+  key: string;
+  displayName: string;
+}
+
 export interface ModelsResponse {
   chatModelProviders: Record<string, Record<string, ModelEntry>>;
   embeddingModelProviders: Record<string, Record<string, ModelEntry>>;
+  providerMetadata: Record<string, ProviderMetadata>;
   imageGenerationModels?: ImageGenerationModel[];
 }
 

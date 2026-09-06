@@ -51,7 +51,9 @@ Install Playwright browsers (run once):
 npx playwright install --with-deps chromium
 ```
 
-The suite does **not** read the developer's root `config.toml`. `playwright.config.ts`'s `webServer.env` sets `CONFIG_PATH` to the committed, intentionally-empty `e2e/config.test.toml`, so nothing from a local config seeds into the test DB (`seedSettingsFromConfig` runs on boot and would otherwise migrate provider URLs like `MODELS.LM_STUDIO.API_URL` into it). Keep `e2e/config.test.toml` empty — never add provider URLs or keys there. `SECURITY.ENCRYPTION_PASSPHRASE` (required for credential storage, see `yaawc-settings-persistence` skill) is supplied via the `ENCRYPTION_PASSPHRASE` env var, not any `config.toml` — tests never need a real passphrase configured.
+The suite does **not** read the developer's root `config.toml`. `playwright.config.ts`'s `webServer.env` sets `CONFIG_PATH` to the committed, intentionally-empty `e2e/config.test.toml`, so nothing from a local config seeds into the test DB. Keep `e2e/config.test.toml` empty — never add provider URLs or keys there. `SECURITY.ENCRYPTION_PASSPHRASE` (required for credential storage, see `yaawc-settings-persistence` skill) is supplied via the `ENCRYPTION_PASSPHRASE` env var, not any `config.toml` — tests never need a real passphrase configured.
+
+Compatible-provider API coverage starts a disposable loopback HTTP server for `/v1/models`. The provider URL is resolved by the YAAWC server process/container, so `127.0.0.1` in that fixture means the same test environment as the app server, not the browser.
 
 Capability-grounding coverage uses the four `test-docs-*` variants above. They exercise the real non-toggleable `search_yaawc_docs` system tool; do not replace these calls with a mocked route, network service, embedding lookup, or a user-selectable tool.
 

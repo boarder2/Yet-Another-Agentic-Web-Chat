@@ -105,85 +105,40 @@ const checkConfig = async (
       return res.json();
     });
 
-    if (!chatModel || !chatModelProvider) {
-      const chatModelProviders = providers.chatModelProviders;
-      const chatModelProvidersKeys = Object.keys(chatModelProviders);
+    const chatModelProviders = providers.chatModelProviders ?? {};
+    const hasPersistedSelection =
+      chatModel !== null || chatModelProvider !== null;
 
-      if (!chatModelProviders || chatModelProvidersKeys.length === 0) {
-        return toast.error('No chat models available');
-      }
-
-      chatModelProvider =
-        chatModelProvidersKeys.find(
-          (provider) => Object.keys(chatModelProviders[provider]).length > 0,
-        ) || chatModelProvidersKeys[0];
-
-      if (
-        chatModelProvider === 'custom_openai' &&
-        Object.keys(chatModelProviders[chatModelProvider]).length === 0
-      ) {
-        toast.error(
-          "Looks like you haven't configured any chat model providers. Please configure them in settings or the config file.",
-          {
-            action: { label: 'Open settings', onClick: onOpenApiKeys },
-          },
-        );
+    // Only an entirely absent selection receives a first-model default. A
+    // persisted reference that no longer exists remains visible to the caller
+    // and is rejected by the server rather than being silently rewritten.
+    if (!hasPersistedSelection) {
+      const providerKeys = Object.keys(chatModelProviders);
+      const firstProvider = providerKeys.find(
+        (provider) => Object.keys(chatModelProviders[provider]).length > 0,
+      );
+      if (!firstProvider) {
+        toast.error('No chat models available', {
+          action: { label: 'Open settings', onClick: onOpenApiKeys },
+        });
         return setHasError(true);
       }
-
-      chatModel = Object.keys(chatModelProviders[chatModelProvider])[0];
-
-      localStorage.setItem('chatModel', chatModel!);
-      localStorage.setItem('chatModelProvider', chatModelProvider!);
-    } else {
-      const chatModelProviders = providers.chatModelProviders;
-
-      if (
-        Object.keys(chatModelProviders).length > 0 &&
-        (!chatModelProviders[chatModelProvider] ||
-          Object.keys(chatModelProviders[chatModelProvider]).length === 0)
-      ) {
-        const chatModelProvidersKeys = Object.keys(chatModelProviders);
-        chatModelProvider =
-          chatModelProvidersKeys.find(
-            (key) => Object.keys(chatModelProviders[key]).length > 0,
-          ) || chatModelProvidersKeys[0];
-
-        localStorage.setItem('chatModelProvider', chatModelProvider);
+      const firstModel = Object.keys(chatModelProviders[firstProvider])[0];
+      if (!firstModel) {
+        toast.error('No chat models available', {
+          action: { label: 'Open settings', onClick: onOpenApiKeys },
+        });
+        return setHasError(true);
       }
-
-      if (
-        chatModelProvider &&
-        !chatModelProviders[chatModelProvider][chatModel]
-      ) {
-        if (
-          chatModelProvider === 'custom_openai' &&
-          Object.keys(chatModelProviders[chatModelProvider]).length === 0
-        ) {
-          toast.error(
-            "Looks like you haven't configured any chat model providers. Please configure them in settings or the config file.",
-            {
-              action: { label: 'Open settings', onClick: onOpenApiKeys },
-            },
-          );
-          return setHasError(true);
-        }
-
-        chatModel = Object.keys(
-          chatModelProviders[
-            Object.keys(chatModelProviders[chatModelProvider]).length > 0
-              ? chatModelProvider
-              : Object.keys(chatModelProviders)[0]
-          ],
-        )[0];
-
-        localStorage.setItem('chatModel', chatModel);
-      }
+      chatModelProvider = firstProvider;
+      chatModel = firstModel;
+      localStorage.setItem('chatModel', firstModel);
+      localStorage.setItem('chatModelProvider', firstProvider);
     }
 
     setChatModelProvider({
-      name: chatModel!,
-      provider: chatModelProvider!,
+      name: chatModel ?? '',
+      provider: chatModelProvider ?? '',
     });
 
     setIsConfigReady(true);
@@ -1389,19 +1344,26 @@ const ChatWindow = ({
     // Get the latest model selection from localStorage
     const currentChatModelProvider = localStorage.getItem('chatModelProvider');
     const currentChatModel = localStorage.getItem('chatModel');
+    const hasPersistedChatModel =
+      currentChatModelProvider !== null || currentChatModel !== null;
 
-    // Use the most current model selection from localStorage, falling back to the state if not available
-    const modelProvider =
-      currentChatModelProvider || chatModelProvider.provider;
-    const modelName = currentChatModel || chatModelProvider.name;
+    // Use the most current model selection from localStorage. Preserve a
+    // partial persisted selection so the server rejects it instead of filling
+    // the missing half from an unrelated default.
+    const modelProvider = hasPersistedChatModel
+      ? (currentChatModelProvider ?? '')
+      : chatModelProvider.provider;
+    const modelName = hasPersistedChatModel
+      ? (currentChatModel ?? '')
+      : chatModelProvider.name;
 
     // An absent System selection means the server should use the complete Chat
-    // reference, including its reasoning effort.
+    // reference, including its reasoning effort. A partial persisted selection
+    // is explicit and must remain invalid rather than falling back to Chat.
     const systemModelProvider = localStorage.getItem('systemModelProvider');
     const systemModelName = localStorage.getItem('systemModel');
-    const hasExplicitSystemModel = Boolean(
-      systemModelProvider && systemModelName,
-    );
+    const hasExplicitSystemModel =
+      systemModelProvider !== null || systemModelName !== null;
     const chatReasoningEffort = localStorage.getItem('chatReasoningEffort');
     const systemReasoningEffort = localStorage.getItem('systemReasoningEffort');
 
@@ -1578,17 +1540,24 @@ const ChatWindow = ({
       );
       const searchChatModel = localStorage.getItem('searchChatModel');
 
-      // Apply saved chat model if valid. One-shot setup before auto-sending the
-      // initial query; the synchronous setState here is intentional.
-      if (searchChatModelProvider && searchChatModel) {
+      // Apply saved chat model if present. One-shot setup before auto-sending
+      // the initial query; the synchronous setState here is intentional. A
+      // partial override stays partial so it cannot silently use the global
+      // model for one half of the selection.
+      const hasSearchModelOverride =
+        searchChatModelProvider !== null || searchChatModel !== null;
+      if (hasSearchModelOverride) {
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setChatModelProvider({
-          name: searchChatModel,
-          provider: searchChatModelProvider,
+          name: searchChatModel ?? '',
+          provider: searchChatModelProvider ?? '',
         });
-        // Also update localStorage to ensure consistency
-        localStorage.setItem('chatModelProvider', searchChatModelProvider);
-        localStorage.setItem('chatModel', searchChatModel);
+        // Also update localStorage to ensure consistency.
+        localStorage.setItem(
+          'chatModelProvider',
+          searchChatModelProvider ?? '',
+        );
+        localStorage.setItem('chatModel', searchChatModel ?? '');
       }
 
       sendMessage(initialMessage);
@@ -1729,14 +1698,14 @@ const ChatWindow = ({
         10,
       );
 
-      const chatModelProvider =
-        localStorage.getItem('chatModelProvider') || undefined;
-      const chatModel = localStorage.getItem('chatModel') || undefined;
+      const chatModelProvider = localStorage.getItem('chatModelProvider');
+      const chatModel = localStorage.getItem('chatModel');
+      const hasPersistedChatModel =
+        chatModelProvider !== null || chatModel !== null;
       const systemModelProvider = localStorage.getItem('systemModelProvider');
       const systemModel = localStorage.getItem('systemModel');
-      const hasExplicitSystemModel = Boolean(
-        systemModelProvider && systemModel,
-      );
+      const hasExplicitSystemModel =
+        systemModelProvider !== null || systemModel !== null;
       const chatReasoningEffort = localStorage.getItem('chatReasoningEffort');
       const systemReasoningEffort = localStorage.getItem(
         'systemReasoningEffort',
@@ -1748,21 +1717,20 @@ const ChatWindow = ({
         body: JSON.stringify({
           chatId,
           instructions,
-          chatModel:
-            chatModelProvider && chatModel
-              ? {
-                  provider: chatModelProvider,
-                  name: chatModel,
-                  contextWindowSize,
-                  ...(isReasoningEffort(chatReasoningEffort)
-                    ? { reasoningEffort: chatReasoningEffort }
-                    : {}),
-                }
-              : undefined,
+          chatModel: hasPersistedChatModel
+            ? {
+                provider: chatModelProvider ?? '',
+                name: chatModel ?? '',
+                contextWindowSize,
+                ...(isReasoningEffort(chatReasoningEffort)
+                  ? { reasoningEffort: chatReasoningEffort }
+                  : {}),
+              }
+            : undefined,
           systemModel: hasExplicitSystemModel
             ? {
-                provider: systemModelProvider,
-                name: systemModel,
+                provider: systemModelProvider ?? '',
+                name: systemModel ?? '',
                 contextWindowSize,
                 ...(isReasoningEffort(systemReasoningEffort)
                   ? { reasoningEffort: systemReasoningEffort }

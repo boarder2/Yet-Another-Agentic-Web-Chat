@@ -114,9 +114,8 @@ export function createPreset(
 
 /**
  * Cross-checks a single provider+model against the live model catalog.
- * `custom_openai` is always available (its model is configured separately and
- * is not enumerable). Returns true when the catalog is not yet loaded so we
- * don't flash a spurious "unavailable" badge during load.
+ * Returns true when the catalog is not yet loaded so we don't flash a
+ * spurious "unavailable" badge during load.
  */
 export function isModelRefAvailable(
   provider: string,
@@ -125,7 +124,6 @@ export function isModelRefAvailable(
     Record<string, Record<string, { displayName: string }>> | undefined,
 ): boolean {
   if (!modelsData) return true;
-  if (provider === 'custom_openai') return true;
   const providerModels = modelsData[provider];
   return !!providerModels && !!providerModels[model];
 }

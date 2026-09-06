@@ -1,3 +1,4 @@
+import * as providerCatalog from '@/lib/providers';
 import {
   getAvailableChatModelProviders,
   getAvailableEmbeddingModelProviders,
@@ -11,12 +12,23 @@ export const GET = async (req: Request) => {
     const includeHidden = url.searchParams.get('include_hidden') === 'true';
     const forceRefresh = url.searchParams.get('refresh') === 'true';
 
-    const [chatModelProviders, embeddingModelProviders, imageGenerationModels] =
-      await Promise.all([
-        getAvailableChatModelProviders({ includeHidden, forceRefresh }),
-        getAvailableEmbeddingModelProviders({ includeHidden, forceRefresh }),
-        getAvailableImageGenerationModels({ forceRefresh }),
-      ]);
+    const providerMetadataPromise = Object.prototype.hasOwnProperty.call(
+      providerCatalog,
+      'getAvailableProviderMetadata',
+    )
+      ? providerCatalog.getAvailableProviderMetadata()
+      : Promise.resolve(undefined);
+    const [
+      chatModelProviders,
+      embeddingModelProviders,
+      imageGenerationModels,
+      providerMetadata,
+    ] = await Promise.all([
+      getAvailableChatModelProviders({ includeHidden, forceRefresh }),
+      getAvailableEmbeddingModelProviders({ includeHidden, forceRefresh }),
+      getAvailableImageGenerationModels({ forceRefresh }),
+      providerMetadataPromise,
+    ]);
 
     // Build serializable copies without mutating the cached model objects
     const chatResult: Record<
@@ -30,18 +42,24 @@ export const GET = async (req: Request) => {
       >
     > = {};
     Object.keys(chatModelProviders).forEach((provider) => {
-      chatResult[provider] = {};
-      Object.keys(chatModelProviders[provider]).forEach((model) => {
-        const entry = chatModelProviders[provider][model];
-        chatResult[provider][model] = {
-          displayName: entry.displayName,
-          ...(entry.supportedReasoningEfforts?.length
-            ? {
-                supportedReasoningEfforts: [...entry.supportedReasoningEfforts],
-              }
-            : {}),
-        };
-      });
+      chatResult[provider] = Object.fromEntries(
+        Object.keys(chatModelProviders[provider]).map((model) => {
+          const entry = chatModelProviders[provider][model];
+          return [
+            model,
+            {
+              displayName: entry.displayName,
+              ...(entry.supportedReasoningEfforts?.length
+                ? {
+                    supportedReasoningEfforts: [
+                      ...entry.supportedReasoningEfforts,
+                    ],
+                  }
+                : {}),
+            },
+          ];
+        }),
+      );
     });
 
     const embeddingResult: Record<
@@ -49,12 +67,14 @@ export const GET = async (req: Request) => {
       Record<string, { displayName: string }>
     > = {};
     Object.keys(embeddingModelProviders).forEach((provider) => {
-      embeddingResult[provider] = {};
-      Object.keys(embeddingModelProviders[provider]).forEach((model) => {
-        embeddingResult[provider][model] = {
-          displayName: embeddingModelProviders[provider][model].displayName,
-        };
-      });
+      embeddingResult[provider] = Object.fromEntries(
+        Object.keys(embeddingModelProviders[provider]).map((model) => [
+          model,
+          {
+            displayName: embeddingModelProviders[provider][model].displayName,
+          },
+        ]),
+      );
     });
 
     return Response.json(
@@ -62,6 +82,7 @@ export const GET = async (req: Request) => {
         chatModelProviders: chatResult,
         embeddingModelProviders: embeddingResult,
         imageGenerationModels,
+        ...(providerMetadata === undefined ? {} : { providerMetadata }),
       },
       {
         status: 200,

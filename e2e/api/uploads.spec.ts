@@ -9,6 +9,7 @@ test.describe('POST /api/uploads', () => {
     const res = await request.post('/api/uploads', {
       multipart: {
         chat_model_provider: 'test',
+        chat_model: 'test-direct',
       },
     });
     expect(res.status()).toBe(200);
@@ -27,6 +28,7 @@ test.describe('POST /api/uploads', () => {
           buffer: Buffer.from('fake png data'),
         },
         chat_model_provider: 'test',
+        chat_model: 'test-direct',
       },
     });
     expect(res.status()).toBe(400);
@@ -61,13 +63,9 @@ test.describe('POST /api/uploads', () => {
     expect(file.fileId).toMatch(/^[0-9a-f]{32}$/);
   });
 
-  test('returns 500 when neither chat model provider resolves', async ({
+  test('returns 400 when the requested chat model does not resolve', async ({
     request,
   }) => {
-    // When chat_model_provider is nonexistent, both the custom_openai branch and
-    // the chatModelProvider && chatModelConfig branch fail, so `llm` is never
-    // assigned. The handler reaches the map callback where llm is used
-    // uninitialized, throws, and hits the 500 catch block.
     const res = await request.post('/api/uploads', {
       multipart: {
         files: {
@@ -79,9 +77,9 @@ test.describe('POST /api/uploads', () => {
         chat_model: 'nope',
       },
     });
-    expect(res.status()).toBe(500);
+    expect(res.status()).toBe(400);
     const body = await res.json();
-    expect(body).toEqual({ message: 'An error has occurred.' });
+    expect(body).toEqual({ message: 'Invalid chat model selected' });
   });
 
   test('generates real semantic topics via structured output', async ({

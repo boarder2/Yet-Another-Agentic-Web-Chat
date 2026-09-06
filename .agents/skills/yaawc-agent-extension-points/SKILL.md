@@ -7,6 +7,12 @@ description: Add an agent tool, model provider, or focus mode; use yaawc-api-end
 
 Established recipes for extending agent tools, model providers, and focus modes. Match existing files in each directory. Generic HTTP routes belong to `yaawc-api-endpoints`; subsystem routes belong to their domain skill.
 
+## Configured OpenAI-compatible providers
+
+OpenAI-compatible endpoints are data, not code registrations. Manage them through `/api/providers/openai-compatible` or **Settings → AI Models → OpenAI-Compatible Providers**. Each named row stores a canonical HTTP(S) `/v1` URL, enabled and embeddings flags, and individually encrypted write-only headers. Discovery runs from the YAAWC server process/container via `GET /v1/models`; enabled rows supply streaming Chat Completions models, and the optional embeddings flag exposes every discovered ID. Do not add a dedicated provider registry, manual model-ID branch, or client-side fetch for one of these endpoints.
+
+Provider requests must use the server/container-reachable URL, reject redirects, and keep upstream errors sanitized. See the provider route contract in `yaawc-api-endpoints` and the implementation under `src/lib/providers/openaiCompatible/`.
+
 ## New Agent Tool (`src/lib/tools/agents/`)
 
 1. **Create the tool** with `defineTool` (`src/lib/tools/defineTool.ts`) — it validates against the typed `ToolContext` (`toolContext.ts`), enforces soft-stop before the handler runs, and provides `runtime.persist(...)`:
@@ -36,7 +42,9 @@ export const myTool = defineTool(
 
 Conventions: use `systemLlm` for internal LLM calls (never the chat LLM); emit extra events via `emitStreamEvent(runtime.context.emitter, …)` (like `todoListTool`); check `runtime.context.retrievalSignal?.aborted` in long loops for hard cancellation.
 
-## New LLM Provider (`src/lib/providers/`)
+## New first-party LLM provider (`src/lib/providers/`)
+
+Use this path only for a provider that needs a dedicated SDK, protocol, or maintained capability metadata. A first-party provider should:
 
 1. Create `myProvider.ts` exporting `PROVIDER_INFO = { key, displayName }` and an async `loadMyProviderChatModels()` that fetches the model list from the provider API (not hardcoded), filters non-chat models, wraps each in the LangChain class (`ChatOpenAI`, …), and returns `{}` on any error (graceful degradation).
 2. **API key is DB-backed, never config.toml** (the `MODELS` config block is legacy, read only by the one-time boot migration): add `'model.myprovider'` to `CREDENTIAL_KEYS` in `src/lib/credentials.ts`, an exported getter in `src/lib/config.ts` (`getMyProviderApiKey = () => getCredential('model.myprovider')`), and a field in Settings → API Keys (`ApiKeysSection` + `/api/config` plumbing).

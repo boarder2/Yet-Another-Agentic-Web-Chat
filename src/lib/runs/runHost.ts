@@ -36,6 +36,7 @@ import {
   registerReconstructedRun,
   setEventPersister,
   type Run,
+  type RunModelSnapshot,
   type RunStatus,
 } from './runHub';
 import {
@@ -639,8 +640,6 @@ async function performResume(items: ResumeItem[]): Promise<void> {
       throw new RunGoneError(`Run for ${first.messageId} has no active thread`);
 
     const { SimplifiedAgent } = await import('@/lib/search/simplifiedAgent');
-    const { resolveChatAndEmbedding } =
-      await import('@/lib/providers/resolveModels');
     const { getRun } = await import('./runHub');
 
     if (
@@ -666,13 +665,25 @@ async function performResume(items: ResumeItem[]): Promise<void> {
       );
     }
 
-    const resolved = await resolveChatAndEmbedding({
-      chatModel: runConfig.chatModelRef,
-      systemModel: runConfig.systemModelRef,
-      // A resume is bound to the effective values captured in its snapshot;
-      // current catalog metadata must not change the paused run's request.
-      preserveEffort: true,
-    });
+    let resolved: RunModelSnapshot;
+    if (run.modelSnapshot) {
+      // A live run owns the exact instances used at its start. Provider CRUD
+      // must not invalidate an approval that is already waiting to resume.
+      resolved = run.modelSnapshot;
+    } else {
+      const { resolveChatAndEmbedding } =
+        await import('@/lib/providers/resolveModels');
+      resolved = await resolveChatAndEmbedding({
+        chatModel: runConfig.chatModelRef,
+        systemModel: runConfig.systemModelRef,
+        // A resume is bound to the effective values captured in its snapshot;
+        // current catalog metadata must not change the paused run's request.
+        preserveEffort: true,
+      });
+      // Keep a reconstructed run pinned for any later approval in this
+      // process, even if its provider is disabled or deleted meanwhile.
+      run.modelSnapshot = resolved;
+    }
 
     // Count unresolved interrupts BEFORE marking resolved. With more than one
     // pending, even a partial resume must use the engine-keyed map form so the
@@ -764,10 +775,6 @@ async function performResume(items: ResumeItem[]): Promise<void> {
       chatModelRef: resolved.chatModelRef,
       systemModelRef: runConfig.systemModelRef ? resolved.systemModelRef : null,
     });
-    // The audit describes the model actually rebound for this resumed turn,
-    // while the database snapshot remains the immutable resume input.
-    run.configSnapshot = resumedRunConfig;
-
     const handler = new SimplifiedAgent({
       dependencies: {
         chatLlm: resolved.chatLlm,

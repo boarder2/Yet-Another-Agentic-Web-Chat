@@ -4,12 +4,14 @@ const mocks = vi.hoisted(() => ({
   getAvailableChatModelProviders: vi.fn(),
   getAvailableEmbeddingModelProviders: vi.fn(),
   getAvailableImageGenerationModels: vi.fn(),
+  getAvailableProviderMetadata: vi.fn(),
 }));
 
 vi.mock('@/lib/providers', () => ({
   getAvailableChatModelProviders: mocks.getAvailableChatModelProviders,
   getAvailableEmbeddingModelProviders:
     mocks.getAvailableEmbeddingModelProviders,
+  getAvailableProviderMetadata: mocks.getAvailableProviderMetadata,
 }));
 vi.mock('@/lib/providers/imageGenerationModels', () => ({
   getAvailableImageGenerationModels: mocks.getAvailableImageGenerationModels,
@@ -44,6 +46,13 @@ describe('GET /api/models reasoning capability serialization', () => {
       },
     });
     mocks.getAvailableImageGenerationModels.mockResolvedValue({});
+    mocks.getAvailableProviderMetadata.mockResolvedValue({
+      openai: { key: 'openai', displayName: 'OpenAI' },
+      'openai-compatible:provider-1': {
+        key: 'openai-compatible:provider-1',
+        displayName: 'Local Gateway',
+      },
+    });
   });
 
   it('serializes supported levels while omitting capability metadata for unsupported models', async () => {
@@ -64,6 +73,13 @@ describe('GET /api/models reasoning capability serialization', () => {
         openai: { 'text-embedding-3-small': { displayName: 'Embedding' } },
       },
       imageGenerationModels: {},
+      providerMetadata: {
+        openai: { key: 'openai', displayName: 'OpenAI' },
+        'openai-compatible:provider-1': {
+          key: 'openai-compatible:provider-1',
+          displayName: 'Local Gateway',
+        },
+      },
     });
   });
 
@@ -87,6 +103,14 @@ describe('GET /api/models reasoning capability serialization', () => {
     expect(
       body.chatModelProviders.provider.model.supportedReasoningEfforts,
     ).toEqual(['low', 'medium']);
+    expect(body.providerMetadata).toEqual({
+      openai: { key: 'openai', displayName: 'OpenAI' },
+      'openai-compatible:provider-1': {
+        key: 'openai-compatible:provider-1',
+        displayName: 'Local Gateway',
+      },
+    });
+    expect(mocks.getAvailableProviderMetadata).toHaveBeenCalledOnce();
     expect(mocks.getAvailableChatModelProviders).toHaveBeenCalledWith({
       includeHidden: true,
       forceRefresh: true,

@@ -3,7 +3,7 @@
 import AppSwitch from '@/components/ui/AppSwitch';
 import { Button } from '@/components/ui/Button';
 import { ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react';
-import { PROVIDER_METADATA } from '@/lib/providers/metadata';
+import { isHiddenModel, type HiddenModel } from '@/lib/models/hiddenModels';
 import SettingsSection from '../components/SettingsSection';
 import { ListEmptyState } from '@/components/ui/List';
 import Badge from '@/components/ui/Badge';
@@ -15,15 +15,18 @@ export default function ModelVisibilitySection({
   onToggleModel,
   onToggleProvider,
   onToggleExpand,
+  providerMetadata = {},
 }: {
   allModels: {
     chat: Record<string, Record<string, { displayName: string }>>;
     embedding: Record<string, Record<string, { displayName: string }>>;
   };
-  hiddenModels: string[];
+  providerMetadata?: Record<string, { displayName: string }>;
+  hiddenModels: HiddenModel[];
   expandedProviders: Set<string>;
-  onToggleModel: (modelKey: string, isVisible: boolean) => void;
+  onToggleModel: (provider: string, model: string, isVisible: boolean) => void;
   onToggleProvider: (
+    provider: string,
     providerModels: Record<string, unknown>,
     showAll: boolean,
   ) => void;
@@ -67,7 +70,7 @@ export default function ModelVisibilitySection({
               const isExpanded = expandedProviders.has(providerId);
               const modelEntries = Object.entries(models);
               const hiddenCount = modelEntries.filter(([modelKey]) =>
-                hiddenModels.includes(modelKey),
+                isHiddenModel(hiddenModels, provider, modelKey),
               ).length;
               const totalCount = modelEntries.length;
 
@@ -88,12 +91,7 @@ export default function ModelVisibilitySection({
                         <ChevronRight size={16} />
                       )}
                       <h4 className="text-sm font-medium">
-                        {(
-                          PROVIDER_METADATA as Record<
-                            string,
-                            { displayName?: string }
-                          >
-                        )[provider]?.displayName ||
+                        {providerMetadata[provider]?.displayName ||
                           provider.charAt(0).toUpperCase() + provider.slice(1)}
                       </h4>
                     </div>
@@ -114,7 +112,7 @@ export default function ModelVisibilitySection({
                           icon={Eye}
                           onClick={(e) => {
                             e.stopPropagation();
-                            onToggleProvider(models, true);
+                            onToggleProvider(provider, models, true);
                           }}
                           title="Show all models in this provider"
                         >
@@ -126,7 +124,7 @@ export default function ModelVisibilitySection({
                           icon={EyeOff}
                           onClick={(e) => {
                             e.stopPropagation();
-                            onToggleProvider(models, false);
+                            onToggleProvider(provider, models, false);
                           }}
                           title="Hide all models in this provider"
                         >
@@ -143,9 +141,11 @@ export default function ModelVisibilitySection({
                               {model.displayName || modelKey}
                             </span>
                             <AppSwitch
-                              checked={!hiddenModels.includes(modelKey)}
+                              checked={
+                                !isHiddenModel(hiddenModels, provider, modelKey)
+                              }
                               onChange={(checked) => {
-                                onToggleModel(modelKey, checked);
+                                onToggleModel(provider, modelKey, checked);
                               }}
                             />
                           </div>

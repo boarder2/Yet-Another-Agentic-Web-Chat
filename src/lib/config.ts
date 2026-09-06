@@ -1,10 +1,6 @@
 import toml from '@iarna/toml';
 import { getCredential } from '@/lib/credentials';
-import {
-  getLMStudioApiUrl,
-  getSearxngApiUrl,
-  getCustomOpenaiUrlAndModel,
-} from '@/lib/settings/server';
+import { getSearxngApiUrl } from '@/lib/settings/server';
 
 // Dynamic require for Node.js modules to prevent client-side bundling errors
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -55,16 +51,8 @@ interface Config {
     DEEPSEEK: {
       API_KEY: string;
     };
-    LM_STUDIO: {
-      API_URL: string;
-    };
     OPENROUTER: {
       API_KEY: string;
-    };
-    CUSTOM_OPENAI: {
-      API_URL: string;
-      API_KEY: string;
-      MODEL_NAME: string;
     };
   };
   API_ENDPOINTS: {
@@ -189,15 +177,6 @@ export const getBraveLLMApiKey = () => getCredential('search.braveLLM');
 export const getMojeekApiKey = () => getCredential('search.mojeek');
 
 export const getDeepseekApiKey = () => getCredential('model.deepseek');
-
-export const getCustomOpenaiApiKey = () => getCredential('model.customOpenai');
-
-export const getCustomOpenaiApiUrl = () => getCustomOpenaiUrlAndModel().url;
-
-export const getCustomOpenaiModelName = () =>
-  getCustomOpenaiUrlAndModel().modelName;
-
-export const getLMStudioApiEndpoint = () => getLMStudioApiUrl();
 
 // Any tag or digest of the official `node` image: the sandbox only ever runs
 // `node -e`, so the repository is the security boundary, not the variant.
@@ -334,11 +313,8 @@ export const readLegacyMigratableConfig = (): Record<string, string> => {
   put('imageGenerationAspectRatio', ig?.ASPECT_RATIO);
   put('imageGenerationImageSize', ig?.IMAGE_SIZE);
 
-  // Provider/search endpoint URLs — non-secret, DB-backed via the same
+  // Search endpoint URLs are non-secret and DB-backed via the same
   // migrated-settings path as the fields above.
-  put('lmStudioApiUrl', cfg.MODELS?.LM_STUDIO?.API_URL);
-  put('customOpenaiApiUrl', cfg.MODELS?.CUSTOM_OPENAI?.API_URL);
-  put('customOpenaiModelName', cfg.MODELS?.CUSTOM_OPENAI?.MODEL_NAME);
   put(
     'searxngApiUrl',
     cfg.SEARCH?.PROVIDERS?.SEARXNG?.API_URL || cfg.API_ENDPOINTS?.SEARXNG,
@@ -367,7 +343,6 @@ export const readLegacyCredentialsConfig = (): Record<string, string> => {
   put('model.gemini', cfg.MODELS?.GEMINI?.API_KEY);
   put('model.deepseek', cfg.MODELS?.DEEPSEEK?.API_KEY);
   put('model.openrouter', cfg.MODELS?.OPENROUTER?.API_KEY);
-  put('model.customOpenai', cfg.MODELS?.CUSTOM_OPENAI?.API_KEY);
   put('search.braveSearch', cfg.SEARCH?.PROVIDERS?.BRAVE_SEARCH?.API_KEY);
   put('search.braveLLM', cfg.SEARCH?.PROVIDERS?.BRAVE_LLM?.API_KEY);
   put('search.mojeek', cfg.SEARCH?.PROVIDERS?.MOJEEK?.API_KEY);

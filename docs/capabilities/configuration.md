@@ -1,6 +1,6 @@
 # Configuration
 
-YAAWC reads deployment settings from a TOML file and selected environment variables. The file contains infrastructure settings and the encryption passphrase; model and search credentials, provider URLs, model choices, retention, visibility, and other application settings are managed in the web UI.
+YAAWC reads deployment settings from a TOML file and selected environment variables. The file contains infrastructure settings and the encryption passphrase; model and search credentials, named OpenAI-compatible provider definitions, model choices, retention, visibility, and other application settings are managed in the web UI.
 
 ## Configuration file and precedence
 
@@ -28,9 +28,13 @@ For `BASE_URL` and `SEARXNG_API_URL`, an empty environment value falls back to t
 
 ### `[SECURITY]`
 
-`ENCRYPTION_PASSPHRASE` is required for normal use. It is never generated automatically. YAAWC derives an AES-256-GCM key from it to encrypt provider and search API keys and MCP authentication values in the database. Without a non-empty passphrase, the encryption gate blocks normal use and credential writes return an error.
+`ENCRYPTION_PASSPHRASE` is required for normal use. It is never generated automatically. YAAWC derives an AES-256-GCM key from it to encrypt provider and search API keys, OpenAI-compatible request-header values, and MCP authentication values in the database. Without a non-empty passphrase, the encryption gate blocks normal use and credential writes return an error.
 
 Keep the passphrase stable and back it up separately from the database. Changing it creates a different key: existing encrypted values cannot be decrypted and are treated as unavailable until the credentials are entered again.
+
+### OpenAI-compatible provider networking
+
+OpenAI-compatible providers are configured in **Settings → AI Models**, not in `config.toml`. YAAWC accepts an HTTP(S) root or a URL ending in `/v1` and canonicalizes it to `/v1`; requests are made server-side for model discovery and streaming Chat Completions. The provider's URL must be reachable from the YAAWC process. In Docker, `localhost` means the application container, so use a container service name, host gateway, or other address available on the application network for a host-local service. Query strings, fragments, userinfo, and redirects are not accepted.
 
 ### `[TOOLS.CODE_EXECUTION]`
 
@@ -54,7 +58,8 @@ The loader supplies the defaults above when fields are omitted. It validates the
 The database is the runtime source of truth for settings that used to live in `config.toml`:
 
 - Model and search provider API keys are encrypted rows in the `credentials` table.
-- Provider and search endpoint URLs, provider selection, locale, model visibility, retention, image generation, embedding selection, memory-model selection, the code-execution auto-run preference, and other Settings values are rows in `app_settings`.
+- Search endpoint URLs, provider selection, locale, model visibility, retention, image generation, embedding selection, memory-model selection, the code-execution auto-run preference, and other Settings values are rows in `app_settings`.
+- Named OpenAI-compatible provider definitions are rows in `openai_compatible_providers`; their header values are encrypted individually and never sent to clients.
 - The active Chat and System model choices are selected by the composer or saved workflow, schedule, workspace, and preset settings.
 
 Manage these values in Settings rather than adding new TOML fields. Legacy provider, search, and migrated setting fields may still be read once during boot migration for existing installations, but they are not the runtime source of those values. Device-local appearance preferences remain local to the browser.
@@ -112,8 +117,8 @@ CPU affinity and niceness are Linux optimizations; if the required host utilitie
 ## Validation and recovery
 
 - A missing, unreadable, or invalid TOML file prevents configuration reads; check `CONFIG_PATH`, file permissions, and TOML syntax first.
-- A missing passphrase leaves the encryption gate active. Set a non-empty passphrase and restart before saving credentials.
-- A changed passphrase makes previously encrypted credentials unreadable. Restore the original passphrase or re-enter those credentials.
+- A missing passphrase leaves the encryption gate active. Set a non-empty passphrase and restart before saving credentials or non-empty compatible-provider headers.
+- A changed passphrase makes previously encrypted credentials and compatible-provider headers unreadable. Restore the original passphrase or re-enter those values.
 - An invalid code-execution image or Docker host disables code execution instead of accepting the unsafe value; inspect the server log and the configuration error.
 - A stopped Docker daemon, missing socket, incorrect `DOCKER_GID`, or unreachable SearXNG endpoint makes only the dependent feature unavailable; verify the service and the corresponding environment/Settings value.
 - If data appears empty after a manual command, stop and check that every Drizzle, build, and runtime command used the same explicit `DATA_DIR` before creating or migrating another database.

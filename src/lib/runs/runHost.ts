@@ -271,7 +271,7 @@ export type TitleGenContext = {
 };
 
 /** Wall-clock budget for the title call before we give up and keep the raw title. */
-const TITLE_GEN_TIMEOUT_MS = 10_000;
+const TITLE_GEN_TIMEOUT_MS = 30_000;
 
 /**
  * Summarize the first turn into a chat title and persist it, if eligible.

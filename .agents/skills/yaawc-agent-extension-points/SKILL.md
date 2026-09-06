@@ -11,7 +11,7 @@ Established recipes for extending agent tools, model providers, and focus modes.
 
 OpenAI-compatible endpoints are data, not code registrations. Manage them through `/api/providers/openai-compatible` or **Settings → AI Models → OpenAI-Compatible Providers**. Each named row stores a canonical HTTP(S) `/v1` URL, enabled and embeddings flags, and individually encrypted write-only headers. Discovery runs from the YAAWC server process/container via `GET /v1/models`; enabled rows supply streaming Chat Completions models, and the optional embeddings flag exposes every discovered ID. Do not add a dedicated provider registry, manual model-ID branch, or client-side fetch for one of these endpoints.
 
-Provider requests must use the server/container-reachable URL, reject redirects, and keep upstream errors sanitized. See the provider route contract in `yaawc-api-endpoints` and the implementation under `src/lib/providers/openaiCompatible/`.
+Provider requests must use the server/container-reachable URL, reject redirects, and keep upstream errors sanitized. Chat Completions request bodies omit message-level `name` fields on non-tool messages for compatibility with stricter endpoints; tool names and tool-call identifiers are preserved, and LangChain's internal messages are unchanged. See the provider route contract in `yaawc-api-endpoints` and the implementation under `src/lib/providers/openaiCompatible/`.
 
 ## New Agent Tool (`src/lib/tools/agents/`)
 

@@ -323,6 +323,59 @@ function configuredHeaderNames(headers: Record<string, string>): Set<string> {
   return new Set(Object.keys(headers).map((name) => name.toLowerCase()));
 }
 
+function isChatCompletionsRequest(input: string | URL | Request): boolean {
+  const inputUrl =
+    typeof input === 'string'
+      ? input
+      : input instanceof URL
+        ? input.href
+        : input.url;
+
+  try {
+    return new URL(inputUrl).pathname
+      .replace(/\/+$/, '')
+      .endsWith('/chat/completions');
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Stricter OpenAI-compatible servers reject `name` on non-tool messages.
+ * Normalize only the serialized request body; LangChain messages remain intact.
+ */
+export function normalizeOpenAICompatibleChatBody(
+  body: unknown,
+): string | undefined {
+  if (typeof body !== 'string') return undefined;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return body;
+  }
+
+  if (!isRecord(parsed) || !Array.isArray(parsed.messages)) return body;
+
+  let changed = false;
+  const messages = parsed.messages.map((message) => {
+    if (
+      !isRecord(message) ||
+      message.role === 'tool' ||
+      !Object.prototype.hasOwnProperty.call(message, 'name')
+    ) {
+      return message;
+    }
+
+    changed = true;
+    const { name: _name, ...withoutName } = message;
+    return withoutName;
+  });
+
+  return changed ? JSON.stringify({ ...parsed, messages }) : body;
+}
+
 function ambientOpenAICustomHeaders(): Array<[string, string]> {
   const raw = process.env.OPENAI_CUSTOM_HEADERS;
   if (!raw) return [];
@@ -374,12 +427,19 @@ function createProviderFetch(
     for (const [name, value] of Object.entries(headers)) {
       requestHeaders.set(name, value);
     }
-    return fetch(input, {
+
+    const requestInit: RequestInit = {
       ...init,
       headers: requestHeaders,
       redirect: 'error',
       cache: 'no-store',
-    });
+    };
+    if (isChatCompletionsRequest(input)) {
+      const normalizedBody = normalizeOpenAICompatibleChatBody(init?.body);
+      if (normalizedBody !== undefined) requestInit.body = normalizedBody;
+    }
+
+    return fetch(input, requestInit);
   }) as NonNullable<ClientOptions['fetch']>;
 }
 

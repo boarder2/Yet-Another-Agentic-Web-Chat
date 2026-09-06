@@ -3,10 +3,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { encrypt } from '@/lib/encryption';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import {
+  AIMessage,
+  HumanMessage,
+  SystemMessage,
+  ToolMessage,
+} from '@langchain/core/messages';
+import {
   createOpenAICompatibleChatModel,
   createOpenAICompatibleEmbeddingModel,
   discoverOpenAICompatibleModels,
   invalidateOpenAICompatibleProviderDiscovery,
+  normalizeOpenAICompatibleChatBody,
   OPENAI_COMPATIBLE_DISCOVERY_TIMEOUT_MS,
   OpenAICompatibleDiscoveryError,
   parseOpenAICompatibleModels,
@@ -345,6 +352,137 @@ describe('discoverOpenAICompatibleModels', () => {
 });
 
 describe('OpenAI-compatible runtime factories', () => {
+  it('removes non-tool message names from compatible Chat Completions bodies', () => {
+    const body = JSON.stringify({
+      model: 'gpt-5.4',
+      messages: [
+        { role: 'system', name: 'system', content: 'Instructions' },
+        {
+          role: 'user',
+          name: 'user',
+          content: [{ type: 'text', text: 'Hello', name: 'nested' }],
+          metadata: { name: 'metadata' },
+        },
+        {
+          role: 'assistant',
+          name: 'model',
+          content: null,
+          tool_calls: [
+            {
+              id: 'call-1',
+              type: 'function',
+              function: {
+                name: 'web_search',
+                arguments: '{"query":"Hello"}',
+              },
+            },
+          ],
+        },
+        {
+          role: 'tool',
+          name: 'web_search',
+          tool_call_id: 'call-1',
+          content: 'Results',
+        },
+      ],
+    });
+
+    const normalized = JSON.parse(
+      normalizeOpenAICompatibleChatBody(body) ?? '',
+    ) as { messages: Array<Record<string, unknown>> };
+
+    expect(normalized.messages[0]).not.toHaveProperty('name');
+    expect(normalized.messages[1]).not.toHaveProperty('name');
+    expect(normalized.messages[1].content).toEqual([
+      { type: 'text', text: 'Hello', name: 'nested' },
+    ]);
+    expect(normalized.messages[1].metadata).toEqual({ name: 'metadata' });
+    expect(normalized.messages[2]).not.toHaveProperty('name');
+    expect(normalized.messages[2].tool_calls).toEqual([
+      {
+        id: 'call-1',
+        type: 'function',
+        function: {
+          name: 'web_search',
+          arguments: '{"query":"Hello"}',
+        },
+      },
+    ]);
+    expect(normalized.messages[3]).toHaveProperty('name', 'web_search');
+  });
+
+  it('preserves the original body when no non-tool message names need normalization', () => {
+    const body = JSON.stringify({
+      model: 'gpt-5.4',
+      messages: [
+        { role: 'user', content: 'Hello' },
+        { role: 'tool', name: 'web_search', content: 'Results' },
+      ],
+    });
+
+    expect(normalizeOpenAICompatibleChatBody(body)).toBe(body);
+    expect(normalizeOpenAICompatibleChatBody('not json')).toBe('not json');
+    expect(normalizeOpenAICompatibleChatBody(undefined)).toBeUndefined();
+  });
+
+  it('normalizes serialized LangChain tool continuations without mutating messages', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(streamingResponse());
+    vi.stubGlobal('fetch', fetchMock);
+
+    const messages = [
+      new SystemMessage({ content: 'Instructions', name: 'system' }),
+      new HumanMessage({ content: 'Search', name: 'user' }),
+      new AIMessage({
+        content: '',
+        name: 'model',
+        tool_calls: [
+          {
+            id: 'call-1',
+            name: 'web_search',
+            args: { query: 'Search' },
+            type: 'tool_call',
+          },
+        ],
+      }),
+      new ToolMessage({
+        content: 'Results',
+        name: 'web_search',
+        tool_call_id: 'call-1',
+      }),
+    ];
+
+    const model = createOpenAICompatibleChatModel(
+      provider({ headers: {} }),
+      'gpt-5.4',
+    );
+    for await (const _chunk of await model.stream(messages)) {
+      // Consume the stream so the request completes.
+    }
+
+    const { body } = requestParts(fetchMock);
+    const sentMessages = body.messages as Array<Record<string, unknown>>;
+    expect(sentMessages[0]).not.toHaveProperty('name');
+    expect(sentMessages[1]).not.toHaveProperty('name');
+    expect(sentMessages[2]).not.toHaveProperty('name');
+    expect(sentMessages[2].tool_calls).toEqual([
+      {
+        id: 'call-1',
+        type: 'function',
+        function: {
+          name: 'web_search',
+          arguments: '{"query":"Search"}',
+        },
+      },
+    ]);
+    expect(sentMessages[3]).toHaveProperty('name', 'web_search');
+    expect(sentMessages[3]).toHaveProperty('tool_call_id', 'call-1');
+
+    expect(messages[0].name).toBe('system');
+    expect(messages[1].name).toBe('user');
+    expect(messages[2].name).toBe('model');
+    expect(messages[3].name).toBe('web_search');
+  });
+
   it('forces streaming Chat Completions and applies configured headers without ambient OpenAI credentials', async () => {
     vi.stubEnv('OPENAI_API_KEY', 'ambient-api-key');
     vi.stubEnv('OPENAI_ORG_ID', 'ambient-org');

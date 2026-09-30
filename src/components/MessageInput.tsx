@@ -2,6 +2,7 @@ import Image from 'next/image';
 import {
   ArrowRight,
   ArrowUp,
+  CornerDownRight,
   LoaderCircle,
   Square,
   TriangleAlert,
@@ -38,6 +39,12 @@ import { useTokenAutocomplete } from '@/lib/hooks/useTokenAutocomplete';
 import { useWorkspaceArtifacts } from '@/lib/hooks/api/useArtifacts';
 import { buildArtifactMention } from '@/lib/artifacts/mention';
 import { useArtifactBridge } from '@/lib/artifacts/ArtifactBridgeContext';
+import { IconButton } from '@/components/ui/IconButton';
+import type { PendingSteer } from '@/lib/streaming/reducer';
+
+/** Put returned text ahead of whatever the user has typed since. */
+const withDraft = (draft: string, current: string): string =>
+  current.trim() ? `${draft}\n\n${current}` : draft;
 
 /** Shallow order-sensitive equality for the persona prompt ID list. */
 const arraysEqual = (a: string[], b: string[]): boolean =>
@@ -77,6 +84,10 @@ const MessageInput = ({
   compacting,
   enabledSkills,
   workspaceId,
+  onSteer,
+  pendingSteers = [],
+  onRemoveSteer,
+  draft,
 }: {
   sendMessage: (
     message: string,
@@ -117,6 +128,12 @@ const MessageInput = ({
   compacting?: boolean;
   enabledSkills?: Array<{ name: string; description: string }>;
   workspaceId?: string | null;
+  /** Redirects the running agent; resolves `false` when the steer was not queued. */
+  onSteer?: (content: string) => Promise<boolean>;
+  pendingSteers?: PendingSteer[];
+  onRemoveSteer?: (steerId: string) => void;
+  /** Text handed back to the composer, e.g. steers a run never delivered. */
+  draft?: { text: string };
 }) => {
   const { data: workspace } = useWorkspace(workspaceId);
   const modelOverride = workspace?.modelOverride ?? null;
@@ -140,6 +157,12 @@ const MessageInput = ({
         modelsData?.chatModelProviders,
       ));
   const [message, setMessage] = useState(initialMessage || '');
+  const [appliedDraft, setAppliedDraft] = useState(draft);
+  if (draft !== appliedDraft) {
+    setAppliedDraft(draft);
+    if (draft) setMessage((cur) => withDraft(draft.text, cur));
+  }
+  const steering = loading && !!onSteer;
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [contextWindowSizeStr] = useLocalStorageString(
     SELECTION_KEYS.contextWindowSize,
@@ -355,6 +378,19 @@ const MessageInput = ({
 
   // Function to handle message submission
   const handleSubmitMessage = () => {
+    // While the agent runs, the composer steers it with text only; attached
+    // images wait for the next message.
+    if (steering) {
+      const text = message.trim();
+      if (!text) return;
+      setMessage('');
+      skills.close();
+      mentions.close();
+      void onSteer(text).then((queued) => {
+        if (!queued) setMessage((cur) => withDraft(text, cur));
+      });
+      return;
+    }
     // Only submit if we have a non-empty message or images, not currently
     // loading, and (when workspace-pinned) the pinned model is available.
     if (
@@ -438,6 +474,38 @@ const MessageInput = ({
             )}
           </div>
         )}
+        {pendingSteers.length > 0 && (
+          <ul
+            className="flex flex-col gap-1.5 mb-2"
+            aria-label="Queued steering"
+          >
+            {pendingSteers.map((steer) => (
+              <li
+                key={steer.steerId}
+                data-testid="pending-steer"
+                className="flex items-center gap-2 rounded-control border border-surface-2 bg-surface-2 pl-2 text-xs text-fg-muted"
+              >
+                <CornerDownRight
+                  size={12}
+                  className="shrink-0 text-accent"
+                  aria-hidden
+                />
+                <span className="flex-1 min-w-0 truncate" title={steer.content}>
+                  {steer.content}
+                </span>
+                <span className="shrink-0 text-fg-subtle">Queued</span>
+                {onRemoveSteer && (
+                  <IconButton
+                    icon={X}
+                    iconSize={12}
+                    label="Remove queued message"
+                    onClick={() => onRemoveSteer(steer.steerId)}
+                  />
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
         {skills.open && (
           <TokenPopover
             choices={skills.choices}
@@ -465,9 +533,11 @@ const MessageInput = ({
               'overflow-y-auto flex resize-none max-h-24 lg:max-h-36 xl:max-h-48',
             )}
             placeholder={
-              firstMessage
-                ? 'What would you like to learn today?'
-                : 'Ask a follow-up'
+              steering
+                ? 'Redirect the agent…'
+                : firstMessage
+                  ? 'What would you like to learn today?'
+                  : 'Ask a follow-up'
             }
             autoFocus={true}
           />
@@ -527,6 +597,16 @@ const MessageInput = ({
               />
             )}
             {!onCancelEdit && <AutoReadToggle />}
+            {steering && message.trim().length > 0 && (
+              <IconButton
+                type="submit"
+                icon={CornerDownRight}
+                label="Steer the agent"
+                iconSize={17}
+                tone="primary"
+                className="rounded-pill p-2"
+              />
+            )}
             {loading ? (
               <button
                 type="button"

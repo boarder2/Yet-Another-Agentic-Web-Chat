@@ -6,7 +6,6 @@ import { Command, getCurrentTaskInput } from '@langchain/langgraph';
 import { SimplifiedAgentStateType } from '@/lib/state/chatAgentState';
 import { ToolMessage } from '@langchain/core/messages';
 // import { getLangfuseCallbacks } from '@/lib/tracing/langfuse';
-import { isSoftStop } from '@/lib/utils/runControl';
 import { defineTool } from '@/lib/tools/defineTool';
 
 // Schema for URL fetch tool input
@@ -67,7 +66,6 @@ export const urlFetchTool = defineTool(
       const {
         systemLlm: llm,
         retrievalSignal,
-        messageId,
         systemRecorder,
       } = runtime.context;
       if (!llm) {
@@ -79,10 +77,6 @@ export const urlFetchTool = defineTool(
       for (const url of urls) {
         if (runtime.signal?.aborted) {
           console.warn('URLFetchTool: Operation aborted by signal');
-          break;
-        }
-        if (messageId && isSoftStop(messageId)) {
-          console.warn('URLFetchTool: Soft-stop set; skipping URL');
           break;
         }
 

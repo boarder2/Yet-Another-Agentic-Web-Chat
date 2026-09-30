@@ -54,12 +54,25 @@ Rendering is display-only. The original Markdown and LaTeX remain the source for
 
 ## Control a conversation
 
-- Stop an in-progress run from the composer. **Answer now** asks the agent to synthesize from sources already gathered instead of continuing retrieval.
+- Stop an in-progress run from the composer.
+- Steer a running agent by typing into the composer while it works. See [Steer a running agent](#steer-a-running-agent).
 - Edit a user message to rebuild the conversation from that turn onward. Later messages and turn-scoped generated history are discarded.
 - Rename a conversation from its title. Automatic titles can be disabled in Settings.
 - Rewrite an assistant answer, copy the response with its citations, or read it aloud.
 - Export a conversation as Markdown or PDF from the chat header.
 - Use the context indicator to compact a long conversation into a summary. Compaction is unavailable while a run is active and requires enough completed messages to summarize.
+
+## Steer a running agent
+
+While the agent works, a message sent from the composer redirects it instead of starting a new turn. Steers are text only and support `/skill` and `@artifact` autocomplete; attached images wait for the next regular message.
+
+- A steer shows as **Queued** above the composer until the agent receives it. Remove a queued steer to take it back.
+- The agent receives queued steers once its in-flight tool calls finish, before its next model call. Each received steer appears inside the answer at the point the agent received it, and stays part of the conversation for later turns.
+- If the agent is already writing its final answer, no later model call remains to receive the steer. When the answer completes, the queued steers are sent together as the next message, using the same models and settings as the run. Until that message starts, you can keep steering (new steers join it) or remove steers; removing them all sends nothing.
+- Stopping the run, or a run that fails, returns queued steers to the composer. Stopping after the answer completes but before the next message starts keeps the answer and returns the steers; stopping once that message has started stops it like any run.
+- A steer that arrives after the agent has finished with nothing queued is not queued; it returns to the composer so you can send it as a new message.
+- A run waiting for your approval keeps steers queued and delivers them after it resumes. If the server restarts, or the run sits unwatched for 30 minutes, while it waits, those queued steers are lost and the resumed run can no longer be steered.
+- Agent Panel runs cannot be steered; the composer does not offer steering for them. Deep-research subagents are not steered directly; the main agent receives the steer after they return.
 
 ## Search from a browser
 

@@ -180,6 +180,12 @@ export type ArtifactSavedData = {
   version: number;
   action: 'create' | 'edit';
 };
+export type SteerData = { steerId: string; content: string };
+export type FollowupTurnStartedData = {
+  userMessageId: string;
+  aiMessageId: string;
+  content: string;
+};
 // ── Agent-emit vocabulary (producer → run host) ──────────────────────────────
 
 export type AgentEmitEvent =
@@ -205,6 +211,7 @@ export type AgentEmitEvent =
   | { type: 'workspace_file_changed'; data: WorkspaceFileChangedData }
   | { type: 'widget_proposal'; data: WidgetProposalData }
   | { type: 'artifact_saved'; data: ArtifactSavedData }
+  | { type: 'steer_applied'; data: SteerData }
   | {
       type: 'context_grew';
       kind: string;
@@ -305,6 +312,10 @@ export type StreamEvent =
     } & WithMessageId)
   | ({ type: 'widget_proposal'; data: WidgetProposalData } & WithMessageId)
   | ({ type: 'artifact_saved'; data: ArtifactSavedData } & WithMessageId)
+  | ({ type: 'steer_applied'; data: SteerData } & WithMessageId)
+  | { type: 'steer_queued'; data: SteerData }
+  | { type: 'steer_removed'; data: { steerId: string } }
+  | { type: 'followup_turn_started'; data: FollowupTurnStartedData }
   | ({
       type: 'context_grew';
       kind: string;
@@ -360,6 +371,8 @@ export type StreamEvent =
       /** Effective model settings for live and replayed historical Model Info. */
       modelConfig?: AgentModelConfigAudit;
       projectedNextInputTokens?: number;
+      /** Unconsumed steers are about to start the next turn server-side. */
+      followupPending?: boolean;
     } & WithMessageId)
   | ({ type: 'chatTitle'; chatId: string; title: string } & WithMessageId)
   | { type: 'error'; data: string }
@@ -368,7 +381,12 @@ export type StreamEvent =
       data: { saved: number; updated: number; memoryIds: string[] };
     }
   | { type: 'ping'; timestamp: number }
-  | { type: 'replay_complete'; content: string }
+  | {
+      type: 'replay_complete';
+      content: string;
+      /** The run accepts steers (see `enqueueSteer`). */
+      steerable?: boolean;
+    }
   | { type: 'gone' }
   | ApprovalPendingEvent
   | ApprovalAnsweredEvent

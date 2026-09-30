@@ -11,6 +11,7 @@ import {
   neutralizeSpoofedFences,
   upsertArtifactWidget,
   type ToolCallPayload,
+  type SteerPayload,
   type SubagentPayload,
 } from '@/lib/widgets/envelope';
 import {
@@ -56,12 +57,8 @@ import {
   type StreamEvent,
 } from '@/lib/streaming/events';
 import { deleteCheckpoint } from './checkpointer';
+import { closeSteers, takeSteers } from './steering';
 import { cleanupCancelToken, registerCancelToken } from '@/lib/cancel-tokens';
-import {
-  cleanupRun,
-  registerRetrieval,
-  clearSoftStop,
-} from '@/lib/utils/runControl';
 import db from '@/lib/db';
 import {
   chats,
@@ -907,12 +904,8 @@ async function reconstructAwaitingRun(
   // Register the fresh controllers so a Stop (POST /api/chat/cancel) can reach
   // this run. Without this, a reconstructed run (after eviction or a server
   // restart) has no entry in the cancel-token map and Stop silently 404s,
-  // leaving the chat stuck in awaiting_user. Also clear any stale soft-stop
-  // flag a prior 404'd Stop may have set, so the resumed agent doesn't halt
-  // immediately.
+  // leaving the chat stuck in awaiting_user.
   registerCancelToken(messageId, abortController);
-  registerRetrieval(messageId, retrievalController);
-  clearSoftStop(messageId);
 
   // The assistant message row is keyed by aiMessageId (distinct from the user
   // message id stored in activeRunMessageId). Recover it from the config
@@ -968,6 +961,8 @@ async function reconstructAwaitingRun(
     recievedMessage: persistedContent,
     chartRegistry,
     configSnapshot: runConfig,
+    steers: [],
+    steersClosed: true,
   };
 
   registerReconstructedRun(run);
@@ -1148,6 +1143,8 @@ export async function attachRunHost(params: {
     perModel: [],
   };
   let terminated = false;
+  // Set at `agent_end`: the answer is complete, so Stop no longer cancels it.
+  let ended = false;
   // Set once `messageEnd` is on the wire. After that, late recorder activity
   // (the auto-title system call) must not push another `stats` event — the
   // corrected totals ride to the DB via terminate, and a post-end `stats` would
@@ -1219,14 +1216,13 @@ export async function attachRunHost(params: {
     } catch (err) {
       console.warn('[runHost] terminal flush failed:', err);
     }
+    if (status === 'completed') await startFollowup();
     // Capture subscriber count before terminateRun clears them.
     const hadSubscriber = run.subscribers.size > 0;
     await flushRunEvents(run.messageId);
     dropRunEventBuffer(run.messageId);
-    terminateRun(run, status);
-    cleanupCancelToken(userMessageId);
-    cleanupRun(userMessageId);
-    // Clear chat markers and record terminal state.
+    // Clear chat markers and record terminal state — unless a newer run (the
+    // follow-up turn) already owns them, so the chat never reads as idle.
     // Use COALESCE for lastRunViewed so a concurrent markSeen(=1) write is
     // not overwritten; only defaults to 0 when the column is still NULL.
     db.update(chats)
@@ -1239,16 +1235,53 @@ export async function attachRunHost(params: {
         lastRunStatus: status,
         lastRunViewed: hadSubscriber ? 1 : sql`COALESCE(last_run_viewed, 0)`,
       })
-      .where(eq(chats.id, chatId))
+      .where(
+        and(eq(chats.id, chatId), eq(chats.activeRunMessageId, run.messageId)),
+      )
       .execute()
       .catch((err: unknown) =>
         console.warn('[runHost] chat marker clear failed:', err),
       );
+    terminateRun(run, status);
+    cleanupCancelToken(userMessageId);
+  };
+
+  // Steers the agent never received start the next turn once this answer is
+  // persisted (so its history includes it). A turn that does not start hands
+  // them back to the composer through `error`.
+  const startFollowup = async () => {
+    const steers = takeSteers(run);
+    if (steers.length === 0 || !run.followup) return;
+    const content = steers.map((s) => s.content).join('\n\n');
+    const next = await run.followup(content, run.abortController.signal);
+    pushEvent(
+      run,
+      typeof next === 'string'
+        ? { type: 'error', data: next }
+        : {
+            type: 'followup_turn_started',
+            data: {
+              userMessageId: next.messageId,
+              aiMessageId: next.aiMessageId,
+              content,
+            },
+          },
+    );
   };
 
   // Cancel path: abortController fired by cancelRequest()
   run.abortController.signal.addEventListener('abort', () => {
+    if (ended) {
+      // The answer is complete: Stop only calls off the pending follow-up
+      // turn, handing its steers back to the composer. Once the follow-up has
+      // taken them, it observes this abort itself.
+      if (takeSteers(run).length > 0) {
+        pushEvent(run, { type: 'error', data: 'Request cancelled by user' });
+      }
+      return;
+    }
     if (terminated) return;
+    closeSteers(run);
     if (!run.retrievalController.signal.aborted) {
       run.retrievalController.abort();
     }
@@ -1361,6 +1394,13 @@ export async function attachRunHost(params: {
         event.data.toolCallId,
         { status: event.data.status, error: event.data.error },
       );
+      scheduleFlush(true);
+    } else if (event.type === 'steer_applied') {
+      pushEvent(run, { ...event, messageId: aiMessageId });
+      recievedMessage = appendWidget<SteerPayload>(recievedMessage, 'steer', {
+        id: event.data.steerId,
+        content: event.data.content,
+      });
       scheduleFlush(true);
     } else if (event.type === 'artifact_saved') {
       pushEvent(run, { ...event, messageId: aiMessageId });
@@ -1629,6 +1669,7 @@ export async function attachRunHost(params: {
         console.error('[runHost] handleInterrupts failed:', err);
       }
     } else if (event.type === 'agent_end') {
+      ended = true;
       const endTime = Date.now();
       modelStats = {
         ...modelStats,
@@ -1666,6 +1707,11 @@ export async function attachRunHost(params: {
         console.warn('[runHost] projection failed:', err);
       }
 
+      // Steers queued after the agent's last model call start the follow-up
+      // turn, which keeps taking them until it starts. Read after the awaits
+      // above so a steer queued or removed meanwhile counts.
+      const followupPending = run.steers.length > 0 && !run.steersClosed;
+      if (!followupPending) closeSteers(run);
       pushEvent(run, {
         type: 'messageEnd',
         messageId: aiMessageId,
@@ -1679,6 +1725,7 @@ export async function attachRunHost(params: {
           modelConfig: buildAgentModelConfigAudit(auditConfig),
         }),
         projectedNextInputTokens,
+        ...(followupPending && { followupPending: true }),
       });
       // The composer has now unblocked (client reducer flips loading off at
       // messageEnd), so the brief auto-title call below is invisible to input.
@@ -1744,6 +1791,7 @@ export async function attachRunHost(params: {
         // no runStatus field = success
       });
     } else if (event.type === 'agent_error') {
+      closeSteers(run);
       pushEvent(run, { type: 'error', data: event.data });
 
       deleteCheckpoint(run.threadId).catch(console.warn);

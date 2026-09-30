@@ -5,7 +5,6 @@ import { Command, getCurrentTaskInput } from '@langchain/langgraph';
 import { SimplifiedAgentStateType } from '@/lib/state/chatAgentState';
 import { ToolMessage } from '@langchain/core/messages';
 import { removeThinkingBlocks } from '@/lib/utils/contentUtils';
-import { isSoftStop } from '@/lib/utils/runControl';
 import { defineTool } from '@/lib/tools/defineTool';
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10 MB
 
@@ -35,7 +34,6 @@ export const imageAnalysisTool = defineTool(
       );
 
       const {
-        messageId,
         retrievalSignal,
         systemLlm: llm,
         systemRecorder,
@@ -128,20 +126,6 @@ export const imageAnalysisTool = defineTool(
         });
       }
 
-      // Check soft-stop again before the expensive LLM call
-      if (messageId && isSoftStop(messageId)) {
-        return new Command({
-          update: {
-            messages: [
-              new ToolMessage({
-                content: 'Operation stopped by user.',
-                tool_call_id: runtime.toolCallId,
-              }),
-            ],
-          },
-        });
-      }
-
       // Build base64 data URI
       const base64Data = imageBuffer.toString('base64');
       const dataUri = `data:${mimeType};base64,${base64Data}`;
@@ -165,9 +149,9 @@ Be factual and specific. Describe only what you can actually see in the image.`;
         ],
       });
 
-      const result = await llm.invoke([humanMessage], {
-        signal: retrievalSignal || runtime.signal,
-      });
+      const signal = retrievalSignal || runtime.signal;
+      signal?.throwIfAborted();
+      const result = await llm.invoke([humanMessage], { signal });
 
       // Record token usage onto the turn's system model row.
       const usageData =

@@ -10,7 +10,6 @@ import { TokenTracker } from '@/lib/tokens/tracker';
 import type { Skill } from '@/lib/skills/types';
 import {
   AgentStreamDriver,
-  AgentStreamExecutionError,
   AgentStreamIntegrityError,
   type AgentStreamEvent,
   type AgentStreamPolicy,
@@ -434,46 +433,6 @@ describe('AgentStreamDriver', () => {
       {
         type: 'sources',
         data: [firstSection, secondSection],
-        searchQuery: '',
-        searchUrl: '',
-      },
-    ]);
-  });
-
-  it('uses the same response and usage fold for respond-now synthesis', async () => {
-    const existing = document('https://example.test/existing');
-    const { driver, events, responses, tracker } = makeHarness();
-
-    const result = await driver.consume(
-      streamOf([
-        streamEvent('on_chat_model_start', 'synthesis', 'synthesis-1'),
-        streamEvent('on_chat_model_stream', 'synthesis', 'synthesis-1', {
-          data: { chunk: { content: 'early answer' } },
-        }),
-        streamEvent('on_chat_model_end', 'synthesis', 'synthesis-1', {
-          data: {
-            output: {
-              response_metadata: { usage: usage(4, 3) },
-            },
-          },
-        }),
-      ]),
-      {
-        kind: 'respond-now',
-        existingDocuments: [existing],
-        emitFinalSources: true,
-      },
-    );
-
-    expect(result.responseText).toBe('early answer');
-    expect(responses).toEqual(['early answer']);
-    expect(tracker.perModel()).toEqual([
-      { provider: 'test', model: 'chat-model', usage: usage(4, 3) },
-    ]);
-    expect(events.filter((event) => event.type === 'sources')).toEqual([
-      {
-        type: 'sources',
-        data: [existing],
         searchQuery: '',
         searchUrl: '',
       },
@@ -1008,31 +967,18 @@ describe('AgentStreamDriver', () => {
     expect(graph.getState).not.toHaveBeenCalled();
   });
 
-  it('wraps ordinary stream failures with the partial result while preserving integrity errors', async () => {
+  it('propagates ordinary stream failures unchanged', async () => {
     const { driver } = makeHarness();
 
     async function* failingStream(): AsyncGenerator<AgentStreamEvent> {
       yield streamEvent('on_chat_model_start', 'chat', 'model-1', {
         metadata: { langgraph_node: 'model_request' },
       });
-      yield streamEvent('on_chat_model_stream', 'chat', 'model-1', {
-        metadata: { langgraph_node: 'model_request' },
-        data: { chunk: { content: 'partial' } },
-      });
       throw new Error('stream broke');
     }
 
-    try {
-      await driver.consume(failingStream(), { kind: 'start' });
-      throw new Error('expected consume to fail');
-    } catch (error) {
-      expect(error).toBeInstanceOf(AgentStreamExecutionError);
-      expect((error as AgentStreamExecutionError).result).toMatchObject({
-        responseText: 'partial',
-        aborted: false,
-        interrupted: false,
-      });
-      expect((error as AgentStreamExecutionError).cause).toBeInstanceOf(Error);
-    }
+    await expect(
+      driver.consume(failingStream(), { kind: 'start' }),
+    ).rejects.toThrow('stream broke');
   });
 });

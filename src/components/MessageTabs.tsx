@@ -54,7 +54,6 @@ interface SearchTabsProps {
     searchQuery: string;
     sources: Document[];
   }>;
-  actionMessageId?: string;
   isPrivateSession?: boolean;
   searchCapabilities?: {
     web: boolean;
@@ -75,7 +74,6 @@ const MessageTabs = ({
   sendMessage,
   onThinkBoxToggle,
   gatheringSources,
-  actionMessageId,
   isPrivateSession,
   searchCapabilities,
 }: SearchTabsProps) => {
@@ -229,10 +227,7 @@ const MessageTabs = ({
       <div>
         <div className="flex flex-col space-y-4 animate-fadeIn">
           {loading && isLast && (
-            <MessageBoxLoading
-              actionMessageId={actionMessageId}
-              gatheringSources={gatheringSources}
-            />
+            <MessageBoxLoading gatheringSources={gatheringSources} />
           )}
           {/* data-answer scopes the open-time scroll anchor (see Chat.tsx) to
               the answer body, so it never lands on the footer below it. */}

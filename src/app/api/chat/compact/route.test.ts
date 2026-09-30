@@ -2,18 +2,36 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   findFirst: vi.fn(),
+  insertValues: vi.fn(),
+  getChatMessages: vi.fn(),
+  getCompactionRows: vi.fn(),
+  invoke: vi.fn(),
 }));
 
 vi.mock('@/lib/db', () => ({
-  default: { query: { chats: { findFirst: mocks.findFirst } } },
+  default: {
+    query: { chats: { findFirst: mocks.findFirst } },
+    insert: () => ({
+      values: (v: unknown) => {
+        mocks.insertValues(v);
+        return { execute: async () => {} };
+      },
+    }),
+  },
 }));
 vi.mock('@/lib/db/schema', () => ({
   chats: { id: 'chats.id' },
   messages: { messageId: 'messages.messageId' },
 }));
 vi.mock('@/lib/db/queries', () => ({
-  getChatMessages: vi.fn(),
-  getCompactionRows: vi.fn(),
+  getChatMessages: mocks.getChatMessages,
+  getCompactionRows: mocks.getCompactionRows,
+}));
+vi.mock('@/lib/providers/resolveModels', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  resolveChatAndEmbedding: async () => ({
+    systemLlm: { invoke: mocks.invoke },
+  }),
 }));
 
 import { POST } from './route';
@@ -60,4 +78,35 @@ describe('POST /api/chat/compact model-reference validation', () => {
       expect(mocks.findFirst).not.toHaveBeenCalled();
     },
   );
+});
+
+describe('POST /api/chat/compact checkpoint', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('anchors the marker to the last visible row and never estimates negative tokens', async () => {
+    mocks.findFirst.mockResolvedValue({ activeRunMessageId: null });
+    mocks.getCompactionRows.mockResolvedValue([]);
+    mocks.invoke.mockResolvedValue({ content: 'summary' });
+    // The first chat call saw only the user turn; the turn's large tool
+    // output rows came after the assistant row.
+    mocks.getChatMessages.mockResolvedValue([
+      { id: 1, role: 'user', content: 'q', metadata: '{}' },
+      {
+        id: 2,
+        role: 'assistant',
+        content: 'a',
+        metadata: JSON.stringify({
+          modelStats: { firstChatCallInputTokens: 1000 },
+        }),
+      },
+      { id: 3, role: 'system', content: 'x'.repeat(40_000), metadata: '{}' },
+    ]);
+
+    const response = await POST(request({ chatId: 'chat-1' }));
+
+    expect(response.status).toBe(200);
+    const meta = JSON.parse(mocks.insertValues.mock.calls[0][0].metadata);
+    expect(meta).toMatchObject({ compactedUpTo: 3, positionId: 2 });
+    expect(meta.tokensAfter).toBe(Math.ceil('summary'.length / 4));
+  });
 });

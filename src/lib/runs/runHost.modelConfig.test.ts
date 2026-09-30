@@ -16,7 +16,6 @@ const mocks = vi.hoisted(() => ({
   dropRunEventBuffer: vi.fn(),
   deleteCheckpoint: vi.fn(),
   cleanupCancelToken: vi.fn(),
-  cleanupRun: vi.fn(),
 }));
 
 vi.mock('@/lib/db/queries', () => ({
@@ -50,11 +49,6 @@ vi.mock('@/lib/runs/checkpointer', () => ({
 vi.mock('@/lib/cancel-tokens', () => ({
   cleanupCancelToken: mocks.cleanupCancelToken,
   registerCancelToken: vi.fn(),
-}));
-vi.mock('@/lib/utils/runControl', () => ({
-  cleanupRun: mocks.cleanupRun,
-  registerRetrieval: vi.fn(),
-  clearSoftStop: vi.fn(),
 }));
 vi.mock('@/lib/search/agentStreamDriver', () => ({
   deduplicateDocuments: (documents: unknown[]) => documents,

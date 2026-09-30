@@ -131,14 +131,7 @@ export interface ResumeStreamPolicy {
   existingDocuments?: Document[];
 }
 
-export interface RespondNowStreamPolicy {
-  kind: 'respond-now';
-  existingDocuments?: Document[];
-  emitFinalSources?: boolean;
-}
-
-export type AgentStreamPolicy =
-  StartStreamPolicy | ResumeStreamPolicy | RespondNowStreamPolicy;
+export type AgentStreamPolicy = StartStreamPolicy | ResumeStreamPolicy;
 
 export interface AgentStreamResult {
   finalResult: {
@@ -155,16 +148,6 @@ export class AgentStreamIntegrityError extends Error {
   constructor(message: string, cause?: unknown) {
     super(message, cause === undefined ? undefined : { cause });
     this.name = 'AgentStreamIntegrityError';
-  }
-}
-
-export class AgentStreamExecutionError extends Error {
-  readonly result: AgentStreamResult;
-
-  constructor(message: string, result: AgentStreamResult, cause?: unknown) {
-    super(message, cause === undefined ? undefined : { cause });
-    this.name = 'AgentStreamExecutionError';
-    this.result = result;
   }
 }
 
@@ -403,9 +386,8 @@ class ParentChildAttributionTracker {
   private readonly parentToolsNodeRunIds = new Set<string>();
   private readonly activeAgentLlmRunIds = new Set<string>();
   private readonly recordedUsageRunIds = new Set<string>();
-  private readonly responseRuns = new Set<string>();
 
-  observe(event: AgentStreamEvent, respondNow: boolean): void {
+  observe(event: AgentStreamEvent): void {
     const metadata = event.metadata ?? {};
     const parentIds = event.parent_ids ?? [];
     const nestedInDeepResearch = parentIds.some((id) =>
@@ -436,15 +418,12 @@ class ParentChildAttributionTracker {
       this.parentToolsNodeRunIds.delete(event.run_id);
     }
 
-    if (event.event === 'on_chat_model_start') {
-      if (respondNow) {
-        this.responseRuns.add(event.run_id);
-      } else if (
-        metadata.langgraph_node === 'model_request' &&
-        !nestedInDeepResearch
-      ) {
-        this.activeAgentLlmRunIds.add(event.run_id);
-      }
+    if (
+      event.event === 'on_chat_model_start' &&
+      metadata.langgraph_node === 'model_request' &&
+      !nestedInDeepResearch
+    ) {
+      this.activeAgentLlmRunIds.add(event.run_id);
     }
   }
 
@@ -452,12 +431,7 @@ class ParentChildAttributionTracker {
     return !parentRunId || this.parentToolsNodeRunIds.has(parentRunId);
   }
 
-  isParentModel(event: AgentStreamEvent, respondNow: boolean): boolean {
-    if (respondNow) {
-      return (
-        this.responseRuns.size === 0 || this.responseRuns.has(event.run_id)
-      );
-    }
+  isParentModel(event: AgentStreamEvent): boolean {
     return (
       event.metadata?.langgraph_node === 'model_request' &&
       this.activeAgentLlmRunIds.has(event.run_id)
@@ -762,9 +736,7 @@ export class AgentStreamDriver {
       sources.seed(policy.existingDocuments ?? []);
       const seeded = sources.add(policy.seededDocuments ?? []);
       this.emitSourcesAdded(seeded, 'Panel sources');
-    } else if (policy.kind === 'resume') {
-      sources.seed(policy.existingDocuments ?? []);
-    } else if (policy.kind === 'respond-now') {
+    } else {
       sources.seed(policy.existingDocuments ?? []);
     }
 
@@ -773,104 +745,74 @@ export class AgentStreamDriver {
     let interrupted = false;
     let aborted = false;
     let firstEvent = true;
-    const respondNow = policy.kind === 'respond-now';
 
-    try {
-      for await (const event of stream) {
-        if (this.options.signal.aborted) {
-          aborted = true;
-          break;
-        }
+    for await (const event of stream) {
+      if (this.options.signal.aborted) {
+        aborted = true;
+        break;
+      }
 
-        if (firstEvent) {
-          firstEvent = false;
-          if (policy.kind === 'start' && policy.firefoxAIDetected) {
-            emitStreamEvent(this.options.emitter, {
-              type: 'tool_call_started',
-              data: {
-                toolCallId: `firefoxAI-${Date.now()}`,
-                toolType: 'firefoxAI',
-                status: 'success',
-              },
-            });
-          }
-        }
-
-        attribution.observe(event, respondNow);
-        this.foldSources(event, sources);
-
-        if (
-          event.event === 'on_chain_end' &&
-          event.name === 'RunnableSequence'
-        ) {
-          const output = asRecord(event.data?.output);
-          if (output) {
-            finalResult = {
-              messages: Array.isArray(output.messages)
-                ? (output.messages as BaseMessage[])
-                : undefined,
-              relevantDocuments: Array.isArray(output.relevantDocuments)
-                ? (output.relevantDocuments as Document[])
-                : undefined,
-            };
-          }
-        }
-
-        this.foldUsage(event, attribution, respondNow);
-
-        if (
-          event.event === 'on_chat_model_stream' &&
-          event.data?.chunk &&
-          attribution.isParentModel(event, respondNow)
-        ) {
-          const chunk = asRecord(event.data.chunk);
-          const text = extractAgentStreamTextContent(chunk?.content);
-          if (text) {
-            responseText += text;
-            this.options.onResponse(text);
-          }
+      if (firstEvent) {
+        firstEvent = false;
+        if (policy.kind === 'start' && policy.firefoxAIDetected) {
+          emitStreamEvent(this.options.emitter, {
+            type: 'tool_call_started',
+            data: {
+              toolCallId: `firefoxAI-${Date.now()}`,
+              toolType: 'firefoxAI',
+              status: 'success',
+            },
+          });
         }
       }
+
+      attribution.observe(event);
+      this.foldSources(event, sources);
+
+      if (event.event === 'on_chain_end' && event.name === 'RunnableSequence') {
+        const output = asRecord(event.data?.output);
+        if (output) {
+          finalResult = {
+            messages: Array.isArray(output.messages)
+              ? (output.messages as BaseMessage[])
+              : undefined,
+            relevantDocuments: Array.isArray(output.relevantDocuments)
+              ? (output.relevantDocuments as Document[])
+              : undefined,
+          };
+        }
+      }
+
+      this.foldUsage(event, attribution);
 
       if (
-        policy.kind === 'respond-now' &&
-        policy.emitFinalSources &&
-        sources.documents.length > 0
+        event.event === 'on_chat_model_stream' &&
+        event.data?.chunk &&
+        attribution.isParentModel(event)
       ) {
-        this.emitFinalSources(sources.documents);
-      } else if (policy.kind !== 'respond-now') {
-        if (!aborted && this.options.threadId && graph) {
-          const state = await this.readCheckpointState(
-            graph,
-            'post-stream scan',
-          );
-          const pendingInterrupts = pendingInterruptsFromState(state);
-          if (pendingInterrupts.length > 0) {
-            interrupted = true;
-            emitStreamEvent(this.options.emitter, {
-              type: 'interrupt',
-              interrupts: pendingInterrupts,
-            });
-          } else if (sources.documents.length > 0) {
-            this.emitFinalSources(sources.documents);
-          }
-        } else if (sources.documents.length > 0) {
-          this.emitFinalSources(sources.documents);
+        const chunk = asRecord(event.data.chunk);
+        const text = extractAgentStreamTextContent(chunk?.content);
+        if (text) {
+          responseText += text;
+          this.options.onResponse(text);
         }
       }
-    } catch (error) {
-      if (error instanceof AgentStreamIntegrityError) throw error;
-      throw new AgentStreamExecutionError(
-        'LangChain stream failed.',
-        {
-          finalResult,
-          collectedDocuments: sources.documents,
-          responseText,
-          interrupted,
-          aborted,
-        },
-        error,
-      );
+    }
+
+    if (!aborted && this.options.threadId && graph) {
+      const state = await this.readCheckpointState(graph, 'post-stream scan');
+      const pendingInterrupts = pendingInterruptsFromState(state);
+      if (pendingInterrupts.length > 0) {
+        interrupted = true;
+        emitStreamEvent(this.options.emitter, {
+          type: 'interrupt',
+          interrupts: pendingInterrupts,
+        });
+      } else if (sources.documents.length > 0) {
+        this.emitFinalSources(sources.documents);
+      }
+    } else if (sources.documents.length > 0) {
+      this.emitFinalSources(sources.documents);
     }
 
     return {
@@ -918,13 +860,12 @@ export class AgentStreamDriver {
   private foldUsage(
     event: AgentStreamEvent,
     attribution: ParentChildAttributionTracker,
-    respondNow: boolean,
   ): void {
     if (!event.data?.output) return;
     if (event.event !== 'on_chat_model_end' && event.event !== 'on_llm_end') {
       return;
     }
-    if (!attribution.isParentModel(event, respondNow)) return;
+    if (!attribution.isParentModel(event)) return;
     if (attribution.hasRecordedUsage(event.run_id)) return;
 
     const output = asRecord(event.data.output);

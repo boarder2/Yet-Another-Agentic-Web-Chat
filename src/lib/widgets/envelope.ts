@@ -17,7 +17,7 @@
  */
 
 export type WidgetKind =
-  'tool_call' | 'subagent' | 'panel' | 'artifact' | 'chart';
+  'tool_call' | 'subagent' | 'panel' | 'artifact' | 'chart' | 'steer';
 
 const WIDGET_KINDS: ReadonlySet<string> = new Set([
   'tool_call',
@@ -25,6 +25,7 @@ const WIDGET_KINDS: ReadonlySet<string> = new Set([
   'panel',
   'artifact',
   'chart',
+  'steer',
 ]);
 
 /** Former `<ToolCall>` attributes as plain JSON fields (base64 dropped). */
@@ -101,19 +102,27 @@ export interface ChartPayload {
   chartId: string;
 }
 
+/** A user steering message, placed where the agent received it. `id` is the steer id. */
+export interface SteerPayload {
+  id: string;
+  content: string;
+}
+
 export type WidgetPayload =
   | ToolCallPayload
   | SubagentPayload
   | PanelPayload
   | ArtifactPayload
-  | ChartPayload;
+  | ChartPayload
+  | SteerPayload;
 
 export type ParsedWidget =
   | { kind: 'tool_call'; payload: ToolCallPayload }
   | { kind: 'subagent'; payload: SubagentPayload }
   | { kind: 'panel'; payload: PanelPayload }
   | { kind: 'artifact'; payload: ArtifactPayload }
-  | { kind: 'chart'; payload: ChartPayload };
+  | { kind: 'chart'; payload: ChartPayload }
+  | { kind: 'steer'; payload: SteerPayload };
 
 type WithId = { id: string };
 
@@ -248,6 +257,12 @@ export function parseWidgetFence(
   if (
     kind === 'chart' &&
     typeof (payload as { chartId?: unknown }).chartId !== 'string'
+  ) {
+    return null;
+  }
+  if (
+    kind === 'steer' &&
+    typeof (payload as { content?: unknown }).content !== 'string'
   ) {
     return null;
   }
@@ -472,6 +487,35 @@ export function upsertArtifactWidget(
 /** Remove all `yaawc:*` widget fences from `content` (LLM context, clipboard). */
 export function stripWidgets(content: string): string {
   return content.replace(new RegExp(WIDGET_FENCE + '\\n?', 'g'), '');
+}
+
+/**
+ * Split content at its steer envelopes, in order, so history replay can place
+ * each steer as a user turn where the agent received it.
+ */
+export function splitAtSteers(
+  content: string,
+): Array<{ kind: 'text'; text: string } | { kind: 'steer'; content: string }> {
+  const parts: Array<
+    { kind: 'text'; text: string } | { kind: 'steer'; content: string }
+  > = [];
+  const re = fenceRegex('steer');
+  let last = 0;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(content))) {
+    let steer: Partial<SteerPayload> | null = null;
+    try {
+      steer = JSON.parse(match[1]) as Partial<SteerPayload>;
+    } catch {
+      // malformed fence body — keep it in the surrounding text
+    }
+    if (typeof steer?.content !== 'string') continue;
+    parts.push({ kind: 'text', text: content.slice(last, match.index) });
+    parts.push({ kind: 'steer', content: steer.content });
+    last = match.index + match[0].length;
+  }
+  parts.push({ kind: 'text', text: content.slice(last) });
+  return parts;
 }
 
 const MASK = (i: number) => `@@yaawc-widget-${i}@@`;

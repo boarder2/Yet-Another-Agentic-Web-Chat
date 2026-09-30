@@ -59,7 +59,23 @@ export type Run = {
   configSnapshot?: AgentRunConfig;
   /** Start-time model instances used when an active run is resumed in-process. */
   modelSnapshot?: RunModelSnapshot;
+  /**
+   * Starts the next turn from steers the agent never received, once this run's
+   * answer is persisted; resolves to that turn's run, or why it did not start.
+   * Present only on steerable runs; its absence (panel, reconstructed runs)
+   * rejects steering.
+   */
+  followup?: RunFollowup;
+  /** Steers queued for the agent's next model call, oldest first. */
+  steers: Array<{ id: string; content: string }>;
+  /** Set once the agent can no longer receive steers. */
+  steersClosed: boolean;
 };
+
+export type RunFollowup = (
+  content: string,
+  signal: AbortSignal,
+) => Promise<Run | string>;
 
 type Registry = {
   byMessageId: Map<string, Run>;
@@ -95,6 +111,7 @@ export function startRun(params: {
   chartRegistry?: TurnChartRegistry;
   configSnapshot?: AgentRunConfig;
   modelSnapshot?: RunModelSnapshot;
+  followup?: RunFollowup;
 }): { run: Run; isNew: boolean } {
   const reg = getRegistry();
   const existing = reg.byMessageId.get(params.messageId);
@@ -119,6 +136,9 @@ export function startRun(params: {
     chartRegistry: params.chartRegistry ?? new TurnChartRegistry(),
     configSnapshot: params.configSnapshot,
     modelSnapshot: params.modelSnapshot,
+    followup: params.followup,
+    steers: [],
+    steersClosed: false,
   };
 
   reg.byMessageId.set(params.messageId, run);
@@ -358,6 +378,7 @@ export function subscribe(
           JSON.stringify({
             type: 'replay_complete',
             content: run.recievedMessage,
+            steerable: !!run.followup && !run.steersClosed,
           }) + '\n',
         );
       } catch {

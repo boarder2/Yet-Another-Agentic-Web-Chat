@@ -53,7 +53,6 @@ const MessageBox = ({
   handleEditMessage,
   onThinkBoxToggle,
   gatheringSources,
-  actionMessageId,
   editInputProps,
   isPrivateSession,
   searchCapabilities,
@@ -87,7 +86,6 @@ const MessageBox = ({
     searchQuery: string;
     sources: Document[];
   }>;
-  actionMessageId?: string;
   editInputProps: {
     fileIds: string[];
     setFileIds: (fileIds: string[]) => void;
@@ -248,7 +246,6 @@ const MessageBox = ({
           sendMessage={sendMessage}
           onThinkBoxToggle={onThinkBoxToggle}
           gatheringSources={gatheringSources}
-          actionMessageId={actionMessageId}
           isPrivateSession={isPrivateSession}
           searchCapabilities={searchCapabilities}
         />

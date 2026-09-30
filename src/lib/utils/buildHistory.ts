@@ -1,7 +1,13 @@
-import { AIMessage, BaseMessage, HumanMessage } from '@langchain/core/messages';
+import {
+  AIMessage,
+  BaseMessage,
+  HumanMessage,
+  mergeMessageRuns,
+} from '@langchain/core/messages';
 import { messages as messagesSchema } from '@/lib/db/schema';
 import { buildMultimodalHumanMessage } from '@/lib/utils/images';
 import { encodeHtmlAttribute } from '@/lib/utils/html';
+import { splitAtSteers, stripWidgets } from '@/lib/widgets/envelope';
 
 type DbMessageRow = typeof messagesSchema.$inferSelect;
 
@@ -41,7 +47,9 @@ const renderToolEvidence = (rows: DbMessageRow[]): string => {
  * Tool/skill outputs stored as `role: 'system'` rows are folded into the
  * assistant turn that produced them (matched by metadata.parentMessageId) as
  * a leading `<previous_tool_outputs>` block. Orphan system rows (no matching
- * assistant in this slice) are dropped.
+ * assistant in this slice) are dropped. Steers inside an assistant turn are
+ * replayed as user messages where the agent received them; adjacent same-role
+ * messages are merged so roles always alternate.
  */
 export function buildHistoryFromDb(rows: DbMessageRow[]): BaseMessage[] {
   const systemByParent = new Map<string, DbMessageRow[]>();
@@ -81,7 +89,19 @@ export function buildHistoryFromDb(rows: DbMessageRow[]): BaseMessage[] {
     const preface = attached.length
       ? renderToolEvidence(attached) + '\n\n'
       : '';
-    out.push(new AIMessage({ content: preface + msg.content }));
+    const parts = splitAtSteers(msg.content);
+    parts.forEach((part, i) => {
+      if (part.kind === 'steer') {
+        out.push(new HumanMessage({ content: part.content }));
+        return;
+      }
+      const content = (i === 0 ? preface : '') + part.text;
+      // Around a steer, a segment that was only execution widgets carries
+      // nothing to replay.
+      if (parts.length === 1 || stripWidgets(content).trim()) {
+        out.push(new AIMessage({ content }));
+      }
+    });
   }
-  return out;
+  return mergeMessageRuns(out);
 }

@@ -75,6 +75,7 @@ import {
   useLocalStorageString,
 } from '@/lib/hooks/useLocalStorage';
 import { DEFAULT_CONTEXT_WINDOW } from '@/lib/models/presets';
+import { placeCompactionMarkers } from '@/lib/utils/compactionMarkers';
 import { isReasoningEffort } from '@/lib/providers/reasoningEffort';
 
 interface ChatModelProvider {
@@ -193,8 +194,7 @@ const loadMessages = async (
   }) as Message[];
 
   // Each compaction is stored as a 'compaction' role row in the DB with metadata
-  // containing compactedUpTo (the integer id of the last compacted message).
-  // Position each marker right after its compactedUpTo message in the list.
+  // containing positionId (the row id the marker follows).
   type RawMsg = Message & {
     id?: number;
     compactedUpTo?: number;
@@ -206,7 +206,7 @@ const loadMessages = async (
   };
   const rawMessages = messages as RawMsg[];
 
-  const compactionByPosition = new Map<number, Message[]>();
+  const markers: { pos: number; marker: Message }[] = [];
   for (const row of rawMessages) {
     if (row.role !== 'compaction') continue;
     // Use positionId if available (last message at compact time), otherwise
@@ -226,18 +226,13 @@ const loadMessages = async (
         compactedAt: row.compactedAt || '',
       },
     };
-    const existing = compactionByPosition.get(pos) ?? [];
-    existing.push(marker);
-    compactionByPosition.set(pos, existing);
+    markers.push({ pos, marker });
   }
 
-  const finalMessages: Message[] = [];
-  for (const msg of rawMessages) {
-    if (msg.role === 'compaction') continue;
-    finalMessages.push(msg as Message);
-    const markersHere = compactionByPosition.get(msg.id ?? -1) ?? [];
-    finalMessages.push(...markersHere);
-  }
+  const finalMessages: Message[] = placeCompactionMarkers(
+    rawMessages.filter((msg) => msg.role !== 'compaction'),
+    markers,
+  );
 
   const unread =
     data.chat.lastRunViewed === 0 && data.chat.lastRunStatus != null;
@@ -330,6 +325,8 @@ const RENDER_KEYS = [
   'liveContextGrew',
   'gatheringSources',
   'todoItems',
+  'pendingSteers',
+  'steerable',
   'pendingExecutions',
   'pendingQuestions',
   'pendingEditApprovals',
@@ -466,6 +463,8 @@ const ChatWindow = ({
     liveContextGrew,
     gatheringSources,
     todoItems,
+    pendingSteers,
+    steerable,
     pendingExecutions,
     pendingQuestions,
     pendingEditApprovals,
@@ -511,6 +510,8 @@ const ChatWindow = ({
   ) => setField('chartSpecsByMessage', v);
 
   const [compacting, setCompacting] = useState(false);
+  // Text the stream hands back to the composer (undelivered steers).
+  const [composerDraft, setComposerDraft] = useState<{ text: string }>();
 
   const [files, setFiles] = useState<File[]>([]);
   const [fileIds, setFileIds] = useState<string[]>([]);
@@ -698,6 +699,9 @@ const ChatWindow = ({
     }
   };
 
+  // Latest-ref to attachToRun (declared below) for the follow-up turn effect.
+  const attachToRunRef = useRef<(userMessageId: string) => void>(() => {});
+
   // Interpret one reducer effect. The reducer stays pure; every side effect it
   // requests is performed here.
   const runEffect = (effect: StreamEffect) => {
@@ -735,6 +739,14 @@ const ChatWindow = ({
         break;
       case 'fetchSuggestions':
         void fetchSuggestions(effect.messageId);
+        break;
+      case 'restoreDraft':
+        setComposerDraft({ text: effect.text });
+        break;
+      case 'attachRun':
+        // The reducer already appended the run's placeholder row; the attach
+        // supersedes the previous run's closing stream.
+        attachToRunRef.current(effect.userMessageId);
         break;
       case 'setChatTitle':
         // Only the open chat's live title updates in place; the sidebar row is
@@ -821,6 +833,10 @@ const ChatWindow = ({
       streamAbortRef.current = null;
     }
   };
+
+  useEffect(() => {
+    attachToRunRef.current = (userMessageId) => void attachToRun(userMessageId);
+  });
 
   // Re-subscribe to the active run after answering an approval. Needed when the
   // run was reconstructed (server restart / hub eviction): no live SSE
@@ -1813,6 +1829,9 @@ const ChatWindow = ({
                     personalizationLocation={personalizationLocation}
                     personalizationAbout={personalizationAbout}
                     todoItems={todoItems}
+                    pendingSteers={pendingSteers}
+                    steerable={steerable}
+                    draft={composerDraft}
                     pendingExecutions={pendingExecutions}
                     onExecutionAction={(
                       executionId: string,

@@ -22,6 +22,7 @@ import {
   appendPanelColumnChart,
   updateWidget,
   neutralizeSpoofedFences,
+  type SteerPayload,
   upsertNestedToolCall,
   patchNestedToolCall,
   startPanelColumn,
@@ -71,6 +72,7 @@ export type LiveContextGrew = {
 
 export type GatheringSource = { searchQuery: string; sources: Document[] };
 export type TodoItem = { content: string; status: string };
+export type PendingSteer = { steerId: string; content: string };
 
 export interface ChatStreamState {
   // Stream bookkeeping
@@ -92,6 +94,12 @@ export interface ChatStreamState {
   liveContextGrew: LiveContextGrew;
   gatheringSources: GatheringSource[];
   todoItems: TodoItem[];
+  /** Steers queued on the active run that the agent has not received yet. */
+  pendingSteers: PendingSteer[];
+  /** The active run accepts steers; told by its stream's `replay_complete`. */
+  steerable: boolean;
+  /** The run ended and its pending steers are about to start the next turn. */
+  followupPending: boolean;
   pendingExecutions: Record<string, PendingExecution[]>;
   pendingQuestions: Record<string, PendingQuestion[]>;
   pendingEditApprovals: Record<string, PendingEditApproval[]>;
@@ -146,6 +154,9 @@ export function initialChatStreamState(
     liveContextGrew: null,
     gatheringSources: [],
     todoItems: [],
+    pendingSteers: [],
+    steerable: false,
+    followupPending: false,
     pendingExecutions: {},
     pendingQuestions: {},
     pendingEditApprovals: {},
@@ -268,6 +279,19 @@ function sweepStatus<T>(
 const msgIdFor = (state: ChatStreamState, event: { messageId?: string }) =>
   event.messageId ?? state.activeAiMessageId ?? '';
 
+/** A run that ends without delivering its steers hands them back to the composer. */
+function restorePendingSteers(
+  state: ChatStreamState,
+  effects: StreamEffect[],
+): ChatStreamState {
+  if (state.pendingSteers.length === 0) return state;
+  effects.push({
+    kind: 'restoreDraft',
+    text: state.pendingSteers.map((s) => s.content).join('\n\n'),
+  });
+  return { ...state, pendingSteers: [], followupPending: false };
+}
+
 // ── reducer ──────────────────────────────────────────────────────────────────
 
 export function reduceStreamEvent(
@@ -324,6 +348,9 @@ function reduceStreamAction(
           userQuestionRunIds: {},
           gatheringSources: [],
           liveModelStats: null,
+          pendingSteers: [],
+          steerable: false,
+          followupPending: false,
         },
         effects,
       };
@@ -369,7 +396,7 @@ function reduceStreamAction(
       effects.push({ kind: 'setLoading', value: false });
       return {
         state: {
-          ...state,
+          ...restorePendingSteers(state, effects),
           messages: state.messages.map((m) =>
             m.messageId === state.activeAiMessageId
               ? { ...m, runStatus: undefined }
@@ -385,7 +412,7 @@ function reduceStreamAction(
       effects.push({ kind: 'invalidateActiveRuns' });
       return {
         state: {
-          ...state,
+          ...restorePendingSteers(state, effects),
           pendingQuestions: {},
           pendingExecutions: {},
           pendingEditApprovals: {},
@@ -411,7 +438,11 @@ function reduceStreamAction(
       return { state, effects };
 
     case 'replay_complete': {
-      const next = { ...state, inReplay: false };
+      const next = {
+        ...state,
+        inReplay: false,
+        steerable: !!action.steerable,
+      };
       if (
         typeof action.content === 'string' &&
         action.content !== state.receivedMessage &&
@@ -765,6 +796,97 @@ function reduceStreamAction(
         state: { ...state, todoItems: action.data.todos || [] },
         effects,
       };
+
+    case 'steer_queued':
+      if (state.pendingSteers.some((s) => s.steerId === action.data.steerId)) {
+        return { state, effects };
+      }
+      return {
+        state: {
+          ...state,
+          pendingSteers: [...state.pendingSteers, action.data],
+        },
+        effects,
+      };
+
+    case 'steer_removed': {
+      const pendingSteers = state.pendingSteers.filter(
+        (s) => s.steerId !== action.data.steerId,
+      );
+      // Withdrawing every steer meant for the follow-up means none will start.
+      const followupPending = state.followupPending && pendingSteers.length > 0;
+      if (state.followupPending && !followupPending) {
+        effects.push({ kind: 'setLoading', value: false });
+      }
+      return { state: { ...state, pendingSteers, followupPending }, effects };
+    }
+
+    case 'steer_applied': {
+      const msgId = msgIdFor(state, action);
+      const { steerId, content } = action.data;
+      const current = state.messages.find(
+        (m) => m.messageId === msgId,
+      )?.content;
+      const receivedMessage = appendWidget<SteerPayload>(
+        current ?? state.receivedMessage,
+        'steer',
+        { id: steerId, content },
+      );
+      const messages = upsertAssistant(state, msgId, receivedMessage);
+      scroll();
+      return {
+        state: {
+          ...state,
+          receivedMessage,
+          rowAdded: true,
+          messages,
+          pendingSteers: state.pendingSteers.filter(
+            (s) => s.steerId !== steerId,
+          ),
+        },
+        effects,
+      };
+    }
+
+    case 'followup_turn_started': {
+      const { userMessageId, aiMessageId, content } = action.data;
+      if (state.messages.some((m) => m.messageId === aiMessageId)) {
+        return { state, effects };
+      }
+      const chatId = state.chatId ?? '';
+      effects.push({ kind: 'setLoading', value: true });
+      effects.push({ kind: 'invalidateActiveRuns' });
+      effects.push({ kind: 'attachRun', userMessageId });
+      scroll();
+      return {
+        state: {
+          ...state,
+          pendingSteers: [],
+          followupPending: false,
+          messages: [
+            // A chat loaded mid-handoff may already hold the user row.
+            ...state.messages.filter((m) => m.messageId !== userMessageId),
+            {
+              messageId: userMessageId,
+              chatId,
+              role: 'user',
+              content,
+              createdAt: new Date(),
+            },
+            // The running placeholder is what the attach path resumes into.
+            {
+              messageId: aiMessageId,
+              chatId,
+              role: 'assistant',
+              content: '',
+              createdAt: new Date(),
+              runStatus: 'running',
+            },
+          ],
+        },
+        effects,
+      };
+    }
 
     case 'workspace_file_changed':
       effects.push({
@@ -1364,7 +1486,10 @@ function reduceMessageEnd(
       : m,
   );
 
-  effects.push({ kind: 'setLoading', value: false });
+  // A pending follow-up turn keeps the composer in steering mode until it starts.
+  if (!action.followupPending) {
+    effects.push({ kind: 'setLoading', value: false });
+  }
   effects.push({ kind: 'invalidateActiveRuns' });
   effects.push({ kind: 'fetchSuggestions', messageId: msgId });
   scroll();
@@ -1377,6 +1502,7 @@ function reduceMessageEnd(
       liveContextGrew: null,
       todoItems: [],
       gatheringSources: [],
+      followupPending: !!action.followupPending,
     },
     effects,
   };

@@ -13,6 +13,7 @@ import { ToolCall } from './MessageActions/ToolCall';
 import { SubagentExecution } from './MessageActions/SubagentExecution';
 import { PanelColumns } from './MessageActions/PanelColumns';
 import ArtifactCard from './Artifacts/ArtifactCard';
+import SteerMessage from './SteerMessage';
 import ArtifactMention from './Artifacts/ArtifactMention';
 import { parseArtifactHref } from '@/lib/artifacts/mention';
 import ChartElement, { spaceChartTags } from './ChartElement';
@@ -246,6 +247,8 @@ const WidgetOrCodeBlock = ({
     if (parsed.kind === 'artifact') return <ArtifactCard {...parsed.payload} />;
     if (parsed.kind === 'chart')
       return <ChartEnvelope chartId={parsed.payload.chartId} />;
+    if (parsed.kind === 'steer')
+      return <SteerMessage content={parsed.payload.content} />;
     return <PanelColumns columns={parsed.payload.columns} />;
   }
   if (className) {

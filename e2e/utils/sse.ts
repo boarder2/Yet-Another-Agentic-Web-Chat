@@ -88,12 +88,13 @@ export function extractSources(events: ChatEvent[]): CitationSource[] {
  * stream ends naturally). Needed because a run paused at an interrupt
  * (awaiting_user) keeps its HTTP connection open indefinitely — Playwright's
  * `request` fixture has no partial-read API, so this reads the fetch body
- * reader directly and aborts the connection once satisfied.
+ * reader directly and aborts the connection once satisfied. `stopWhen` may
+ * also act mid-stream (e.g. steer the run) and return false to read on.
  */
 export async function streamChatUntil(
   baseUrl: string,
   body: Record<string, unknown>,
-  stopWhen: (events: ChatEvent[]) => boolean,
+  stopWhen: (events: ChatEvent[]) => boolean | Promise<boolean>,
   timeoutMs = 10_000,
 ): Promise<ChatEvent[]> {
   const controller = new AbortController();
@@ -126,7 +127,7 @@ export async function streamChatUntil(
           // skip unparseable lines
         }
       }
-      if (stopWhen(events)) {
+      if (await stopWhen(events)) {
         await reader.cancel().catch(() => {});
         return events;
       }

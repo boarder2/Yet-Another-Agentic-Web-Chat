@@ -1,7 +1,6 @@
 import type { Document } from '@langchain/core/documents';
 import MessageSource from './MessageSource';
 import { useState } from 'react';
-import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 
 interface SourceGroup {
@@ -10,18 +9,13 @@ interface SourceGroup {
 }
 
 interface MessageBoxLoadingProps {
-  actionMessageId?: string;
-  onAnswerNow?: () => void;
   gatheringSources?: SourceGroup[];
 }
 
 const MessageBoxLoading = ({
-  actionMessageId,
-  onAnswerNow,
   gatheringSources = [],
 }: MessageBoxLoadingProps) => {
   const [isSourcesExpanded, setIsSourcesExpanded] = useState(false);
-  const [isAnsweringNow, setIsAnsweringNow] = useState(false);
   return (
     <div className="flex flex-col space-y-4 w-full lg:w-9/12">
       {/* Sources gathered during search phase */}
@@ -55,37 +49,6 @@ const MessageBoxLoading = ({
                 )
               </button>
             </div>
-            {/* Answer now control */}
-            {actionMessageId && gatheringSources.length > 0 && (
-              <div className="">
-                <Button
-                  onClick={async (e) => {
-                    try {
-                      // Disable the button immediately to prevent double clicks
-                      (e.currentTarget as HTMLButtonElement).disabled = true;
-                      setIsAnsweringNow(true);
-                      if (onAnswerNow) {
-                        onAnswerNow();
-                      } else {
-                        await fetch('/api/respond-now', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ messageId: actionMessageId }),
-                        });
-                      }
-                    } catch (_e) {
-                      // no-op
-                    }
-                  }}
-                  loading={isAnsweringNow}
-                  variant="primary"
-                  size="sm"
-                  className="w-28"
-                >
-                  Answer now
-                </Button>
-              </div>
-            )}
           </div>
           {isSourcesExpanded && (
             <div className="mt-4 space-y-4">

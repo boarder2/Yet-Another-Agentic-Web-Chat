@@ -23,7 +23,7 @@ A workflow's stored models and instructions are the configuration for its runs. 
 
 ## Run a workflow manually
 
-Choose **Run** on a workflow, fill its required fields, and submit. YAAWC creates a normal chat containing the substituted prompt, starts the run, and routes you to that chat. The run can continue in the background and can be continued like another conversation after it finishes.
+Choose **Run** on a workflow, fill its required fields, and submit. YAAWC creates a normal chat containing the substituted prompt, starts the run, and routes you to that chat. While it runs you can stop or steer it like any chat run; it can continue in the background and can be continued like another conversation after it finishes.
 
 Manual workflow runs use the workflow's selected focus mode, model references (including configured Chat/System effort), persona prompts, and methodology. They do not attach workspace files or workspace tools, use MCP tools, retrieve or extract memory, or run Agent Panel fan-out.
 

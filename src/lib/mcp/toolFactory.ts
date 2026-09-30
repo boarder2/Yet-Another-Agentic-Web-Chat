@@ -9,7 +9,6 @@ import {
 import { ToolMessage } from '@langchain/core/messages';
 import { Command, interrupt } from '@langchain/langgraph';
 import { toolContextSchema } from '@/lib/tools/toolContext';
-import { isContextSoftStopped, softStopCommand } from '@/lib/tools/defineTool';
 import {
   callMcpTool,
   getEnabledServerToolConfigs,
@@ -109,11 +108,6 @@ export function buildToolForDescriptor(
         return makeMsg(
           'MCP tools require an interactive session and cannot be used here.',
         );
-      }
-
-      // Soft-stop check
-      if (isContextSoftStopped(context)) {
-        return softStopCommand(toolCallId);
       }
 
       // Approval interrupt — skipped for auto-run tools (approval: 'never').

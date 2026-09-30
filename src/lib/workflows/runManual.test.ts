@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   attachRunHost: vi.fn(),
   agentOptions: [] as Array<Record<string, unknown>>,
   searchAndAnswer: vi.fn(),
+  registerCancelToken: vi.fn(),
 }));
 
 vi.mock('@/lib/workflows/resolveWorkflowRun', () => ({
@@ -49,6 +50,12 @@ vi.mock('@/lib/runs/runHub', () => ({
   evictByChatId: vi.fn(),
 }));
 vi.mock('@/lib/runs/runHost', () => ({ attachRunHost: mocks.attachRunHost }));
+vi.mock('@/lib/cancel-tokens', () => ({
+  registerCancelToken: mocks.registerCancelToken,
+}));
+vi.mock('@/lib/chat/startTurn', () => ({
+  chatFollowup: vi.fn(() => async () => 'unused'),
+}));
 
 import { startWorkflowRun } from './runManual';
 
@@ -126,5 +133,13 @@ describe('manual workflow effective model routing', () => {
         }),
       }),
     );
+    // Stop reaches the run like any chat turn.
+    const { messageId, abortController, followup } =
+      mocks.startRun.mock.calls[0][0];
+    expect(mocks.registerCancelToken).toHaveBeenCalledWith(
+      messageId,
+      abortController,
+    );
+    expect(followup).toEqual(expect.any(Function));
   });
 });

@@ -37,6 +37,8 @@ import {
 } from '@/lib/workflows/resolveWorkflowRun';
 import { TurnChartRegistry } from '@/lib/chart/turnChartRegistry';
 import { createAgentRunConfig } from '@/lib/search/agentRunConfig';
+import { registerCancelToken } from '@/lib/cancel-tokens';
+import { chatFollowup } from '@/lib/chat/startTurn';
 
 /**
  * Start a manual run of `workflow` with `values`, returning the seeded chat id.
@@ -106,6 +108,7 @@ export async function startWorkflowRun(
   const chartRegistry = new TurnChartRegistry();
 
   const abortController = new AbortController();
+  registerCancelToken(userMessageId, abortController);
   const retrievalController = new AbortController();
 
   const threadId = `${userMessageId}:${startTime}`;
@@ -165,6 +168,16 @@ export async function startWorkflowRun(
       chatModelRef,
       systemModelRef,
     } satisfies RunModelSnapshot,
+    // A steer that arrives too late continues the chat as a normal turn with
+    // the workflow's composer choices.
+    followup: chatFollowup(chatId, {
+      focusMode: run.focusMode,
+      files: [],
+      chatModel: chatModelRef,
+      systemModel: systemModelRef,
+      selectedSystemPromptIds: run.selectedSystemPromptIds,
+      selectedMethodologyId: run.selectedMethodologyId ?? undefined,
+    }),
   });
 
   if (isNew) {

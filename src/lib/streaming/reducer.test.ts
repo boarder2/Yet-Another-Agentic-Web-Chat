@@ -804,3 +804,151 @@ describe('artifact_saved', () => {
     expect(rowContent(state)).toContain('yaawc:artifact');
   });
 });
+
+describe('steering', () => {
+  const queued = (steerId: string, content: string): StreamEvent => ({
+    type: 'steer_queued',
+    data: { steerId, content },
+  });
+
+  it('tracks queued steers until removed, deduping replays', () => {
+    const { state } = run(liveStart(), [
+      queued('s1', 'focus on 2024'),
+      queued('s1', 'focus on 2024'),
+      queued('s2', 'skip blogs'),
+      { type: 'steer_removed', data: { steerId: 's1' } },
+    ]);
+    expect(state.pendingSteers).toEqual([
+      { steerId: 's2', content: 'skip blogs' },
+    ]);
+  });
+
+  it('places an applied steer inline and clears its chip', () => {
+    const { state } = run(liveStart(), [
+      { type: 'response', data: 'Searching', messageId: AI },
+      queued('s1', 'focus on 2024'),
+      {
+        type: 'steer_applied',
+        data: { steerId: 's1', content: 'focus on 2024' },
+        messageId: AI,
+      },
+    ]);
+    expect(state.pendingSteers).toEqual([]);
+    const row = state.messages.find((m) => m.messageId === AI)!;
+    expect(row.content.startsWith('Searching')).toBe(true);
+    expect(findWidget(row.content, 'steer', 's1')).toEqual({
+      id: 's1',
+      content: 'focus on 2024',
+    });
+  });
+
+  it('hands undelivered steers back to the composer when the run fails', () => {
+    const { state, effects } = run(liveStart(), [
+      queued('s1', 'first'),
+      queued('s2', 'second'),
+      { type: 'error', data: 'Request cancelled by user' },
+    ]);
+    expect(state.pendingSteers).toEqual([]);
+    expect(effects).toContainEqual({
+      kind: 'restoreDraft',
+      text: 'first\n\nsecond',
+    });
+  });
+
+  it('keeps loading through messageEnd when a follow-up turn is pending', () => {
+    const { effects } = run(liveStart(), [
+      { type: 'response', data: 'Answer', messageId: AI },
+      queued('s1', 'also compare prices'),
+      {
+        type: 'messageEnd',
+        messageId: AI,
+        modelStats: { version: 2, perModel: [] },
+        followupPending: true,
+      },
+    ]);
+    expect(effects).not.toContainEqual({ kind: 'setLoading', value: false });
+  });
+
+  it('unlocks the composer when every steer for a pending follow-up is withdrawn', () => {
+    const { state, effects } = run(liveStart(), [
+      queued('s1', 'first'),
+      queued('s2', 'second'),
+      {
+        type: 'messageEnd',
+        messageId: AI,
+        modelStats: { version: 2, perModel: [] },
+        followupPending: true,
+      },
+      { type: 'steer_removed', data: { steerId: 's1' } },
+    ]);
+    expect(state.followupPending).toBe(true);
+    expect(effects).not.toContainEqual({ kind: 'setLoading', value: false });
+
+    const last = reduceStreamEvent(state, {
+      type: 'steer_removed',
+      data: { steerId: 's2' },
+    });
+    expect(last.state.followupPending).toBe(false);
+    expect(last.effects).toContainEqual({ kind: 'setLoading', value: false });
+  });
+
+  it('turns a follow-up into a user turn and attaches to its run', () => {
+    const data = {
+      userMessageId: 'u2',
+      aiMessageId: 'ai2',
+      content: 'also compare prices',
+    };
+    const { state, effects } = run(liveStart(), [
+      queued('s1', 'also compare prices'),
+      { type: 'followup_turn_started', data },
+      { type: 'followup_turn_started', data },
+    ]);
+    expect(state.pendingSteers).toEqual([]);
+    expect(
+      state.messages.map((m) => [m.messageId, m.role, m.runStatus]),
+    ).toEqual([
+      ['u2', 'user', undefined],
+      ['ai2', 'assistant', 'running'],
+    ]);
+    expect(effects.filter((e) => e.kind === 'attachRun')).toEqual([
+      { kind: 'attachRun', userMessageId: 'u2' },
+    ]);
+  });
+  it('attaches to a follow-up whose user row a mid-handoff load already holds', () => {
+    let s = liveStart();
+    s = reduceStreamEvent(s, {
+      type: 'set_messages',
+      updater: () => [
+        {
+          messageId: 'u2',
+          chatId: 'c',
+          role: 'user',
+          content: 'also compare prices',
+          createdAt: new Date(),
+        },
+      ],
+    }).state;
+    const { state, effects } = reduceStreamEvent(s, {
+      type: 'followup_turn_started',
+      data: {
+        userMessageId: 'u2',
+        aiMessageId: 'ai2',
+        content: 'also compare prices',
+      },
+    });
+    expect(state.messages.map((m) => m.messageId)).toEqual(['u2', 'ai2']);
+    expect(effects).toContainEqual({ kind: 'attachRun', userMessageId: 'u2' });
+  });
+
+  it('offers steering only while the attached run says it accepts steers', () => {
+    const steerable = (content: string, value?: boolean) =>
+      reduceStreamEvent(attachStart(content), {
+        type: 'replay_complete',
+        content,
+        ...(value !== undefined && { steerable: value }),
+      }).state.steerable;
+    expect(steerable('seed', true)).toBe(true);
+    expect(steerable('seed', false)).toBe(false);
+    expect(steerable('seed')).toBe(false);
+  });
+});

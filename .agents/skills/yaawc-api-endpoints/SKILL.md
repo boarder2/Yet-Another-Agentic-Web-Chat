@@ -37,6 +37,8 @@ description: Generic HTTP route conventions and /api/chat run flow; defer subsys
 
 ### Data flow
 
+`POST /api/chat` is a thin wrapper over `startChatTurn` (`src/lib/chat/startTurn.ts`), which also starts a steered run's follow-up turn through the run's `followup` hook (`chatFollowup`).
+
 ```
 POST /api/chat
   → idempotency check (getRun) → re-subscribe if live
@@ -53,14 +55,15 @@ If `systemModel` is omitted it falls back to the complete Chat reference, includ
 
 ## Run Management
 
-| Endpoint                            | Method | Purpose                                                                                                                |
-| ----------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------- |
-| `/api/chat/cancel`                  | POST   | Hard-cancel. `{ messageId }`                                                                                           |
-| `/api/chat/compact`                 | POST   | Summarize history. `{ chatId, instructions?, chatModel?, systemModel? }` → `{ compactionSummary, tokensBefore/After }` |
-| `/api/chat/runs/active`             | GET    | Running/awaiting runs → `{ active, stale, unreadCount, awaitingAttentionCount }`                                       |
-| `/api/chat/runs/[messageId]/stream` | GET    | Re-attach to a run. `from=<seq>`, `chatId` → NDJSON stream or `{"type":"gone"}`                                        |
-| `/api/chat/runs/resume`             | POST   | Resume paused run. `{ approvalId, response }` or `{ resumeMap }`                                                       |
-| `/api/approvals/pending`            | GET    | Pending interrupt approvals. `?chatId=`                                                                                |
+| Endpoint                            | Method      | Purpose                                                                                                                   |
+| ----------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `/api/chat/cancel`                  | POST        | Hard-cancel. `{ messageId }`                                                                                              |
+| `/api/chat/compact`                 | POST        | Summarize history. `{ chatId, instructions?, chatModel?, systemModel? }` → `{ compactionSummary, tokensBefore/After }`    |
+| `/api/chat/runs/active`             | GET         | Running/awaiting runs → `{ active, stale, unreadCount, awaitingAttentionCount }`                                          |
+| `/api/chat/runs/[messageId]/stream` | GET         | Re-attach to a run. `from=<seq>`, `chatId` → NDJSON stream or `{"type":"gone"}`                                           |
+| `/api/chat/runs/resume`             | POST        | Resume paused run. `{ approvalId, response }` or `{ resumeMap }`                                                          |
+| `/api/chat/steer`                   | POST/DELETE | Queue a steer `{ messageId, content }` → `{ steerId }`; withdraw `{ messageId, steerId }`. 409 once not accepted/received |
+| `/api/approvals/pending`            | GET         | Pending interrupt approvals. `?chatId=`                                                                                   |
 
 ## Chats, Messages, Config
 
@@ -82,7 +85,6 @@ If `systemModel` is omitted it falls back to the complete Chat reference, includ
 | `/api/uploads`                                            | POST             | Document upload for file search: extract → chunk → embed → `{ files: [{ fileName, fileExtension, fileId }] }` |
 | `/api/tts(/stream)`                                       | GET/POST         | Voice list / speech synthesis (Kokoro, `mode: read\|narrate` — narrate LLM-rewrites and caches per message)   |
 | `/api/images`, `/api/videos`                              | POST             | Image / video search                                                                                          |
-| `/api/respond-now`                                        | POST             | Soft-stop / early synthesis. `{ messageId }`                                                                  |
 | `/api/opensearch`                                         | GET              | OpenSearch description XML                                                                                    |
 
 ## Subsystem Routes

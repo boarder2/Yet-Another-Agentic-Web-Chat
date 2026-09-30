@@ -6,33 +6,11 @@ import type {
   InferInteropZodOutput,
   InteropZodType,
 } from '@langchain/core/utils/types';
-import { Command } from '@langchain/langgraph';
-import { ToolMessage } from '@langchain/core/messages';
-import { isSoftStop } from '@/lib/utils/runControl';
-import { toolContextSchema, type ToolContext } from './toolContext';
+import { toolContextSchema } from './toolContext';
 import {
   persistFromToolContext,
   type ContextRowKind,
 } from '@/lib/utils/persistToolContext';
-
-/** Whether the run this context belongs to has been soft-stopped. */
-export function isContextSoftStopped(context: ToolContext): boolean {
-  return !!(context.messageId && isSoftStop(context.messageId));
-}
-
-/** The standard soft-stop bail-out: same shape every tool returns. */
-export function softStopCommand(toolCallId: string): Command {
-  return new Command({
-    update: {
-      messages: [
-        new ToolMessage({
-          content: 'Operation stopped by user.',
-          tool_call_id: toolCallId,
-        }),
-      ],
-    },
-  });
-}
 
 type PersistArgs = {
   kind: ContextRowKind;
@@ -60,9 +38,7 @@ interface DefineToolFields<
 /**
  * Wraps `langchain`'s `tool()` so handlers get a typed `ToolContext` (see
  * `toolContext.ts`) via native `ToolRuntime` instead of hand-parsing
- * `RunnableConfig.configurable`. Before the handler runs, soft-stop is
- * enforced structurally — every `defineTool` tool honors it, closing the gap
- * where some tools checked `isSoftStop` and others silently didn't.
+ * `RunnableConfig.configurable`.
  */
 export function defineTool<
   SchemaT extends InteropZodType,
@@ -81,10 +57,6 @@ export function defineTool<
       runtime: ToolRuntime<TState, typeof toolContextSchema>,
     ) => {
       const { context } = runtime;
-      if (isContextSoftStopped(context)) {
-        return softStopCommand(runtime.toolCallId);
-      }
-
       const augmented: DefineToolRuntime<TState> = {
         ...runtime,
         persist: (args: PersistArgs) =>

@@ -20,6 +20,9 @@ import {
   SkillEditApproval,
 } from './SkillEditApproval';
 import { PendingMcpApproval, McpToolApproval } from './McpToolApproval';
+import { toast } from 'sonner';
+import { useRemoveSteer, useSteerRun } from '@/lib/hooks/api/useActiveRuns';
+import type { PendingSteer } from '@/lib/streaming/reducer';
 
 const PROSE_BLOCKS = 'p,h1,h2,h3,h4,h5,h6,ul,ol,table,blockquote,pre';
 
@@ -107,6 +110,9 @@ const Chat = ({
   compacting,
   enabledSkills,
   skillNames,
+  pendingSteers,
+  steerable,
+  draft,
 }: {
   messages: Message[];
   sendMessage: (
@@ -197,6 +203,10 @@ const Chat = ({
   compacting?: boolean;
   enabledSkills?: Array<{ name: string; description: string }>;
   skillNames?: Set<string>;
+  pendingSteers?: PendingSteer[];
+  /** The live run accepts steers, so the composer steers it while loading. */
+  steerable?: boolean;
+  draft?: { text: string };
 }) => {
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [manuallyScrolledUp, setManuallyScrolledUp] = useState(false);
@@ -379,6 +389,26 @@ const Chat = ({
     return () => observer.disconnect();
   }, []);
 
+  const steerRun = useSteerRun();
+  const removeSteer = useRemoveSteer();
+  const handleSteer = async (content: string) => {
+    if (!currentMessageId) return false;
+    try {
+      await steerRun.mutateAsync({ messageId: currentMessageId, content });
+      return true;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to steer');
+      return false;
+    }
+  };
+  const handleRemoveSteer = (steerId: string) => {
+    if (!currentMessageId) return;
+    removeSteer.mutate(
+      { messageId: currentMessageId, steerId },
+      { onError: (err) => toast.error(err.message) },
+    );
+  };
+
   // Cancel handler
   const handleCancel = async () => {
     if (!currentMessageId) return;
@@ -425,7 +455,6 @@ const Chat = ({
               handleEditMessage={handleEditMessage}
               onThinkBoxToggle={onThinkBoxToggle}
               gatheringSources={gatheringSources}
-              actionMessageId={currentMessageId}
               isPrivateSession={isPrivateSession}
               searchCapabilities={searchCapabilities}
               skillNames={skillNames}
@@ -645,6 +674,10 @@ const Chat = ({
           onCompact={onCompact}
           compacting={compacting}
           enabledSkills={enabledSkills}
+          onSteer={steerable ? handleSteer : undefined}
+          pendingSteers={pendingSteers}
+          onRemoveSteer={handleRemoveSteer}
+          draft={draft}
         />
       </div>
       <div ref={messageEnd} className="h-0" />

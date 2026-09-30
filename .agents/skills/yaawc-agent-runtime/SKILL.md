@@ -16,6 +16,7 @@ The durable boundary is the strict versioned `AgentRunConfig`. Its v2 snapshot c
 3. Build a stable thread ID and strict run snapshot. Construct `SimplifiedAgent`, then call `startRun()` and `attachRunHost()` before launching work.
 4. Launch `searchAndAnswer()` without awaiting it and subscribe the HTTP response to the hub. Client disconnect removes a subscriber; it does not cancel the background run.
 5. The host folds events into content/widgets/sources/stats. On `agent_end`, emit `messageEnd`, finalize DB state, delete the completed checkpoint, and clear active markers.
+6. Steers left when the answer ends (`messageEnd.followupPending`) keep queueing until the host, after persisting the answer, calls the run's chat-layer `followup` hook, which starts the next turn via `startChatTurn`. The new run writes its own active markers first, and the old clear only matches its own `activeRunMessageId`, so the chat never reads idle. After `agent_end`, Stop only calls off the follow-up (returning steers through `error`); the follow-up aborted before its user row persists starts nothing.
 
 ## Toolset and context
 
@@ -55,9 +56,9 @@ After process restart/eviction, reconstruct controllers, assistant content, mile
 
 One `TokenTracker` spans the root turn, tools, Panel executors, and deep-research children. It aggregates by `(provider, model)` across scopes/roles, emits cumulative `model_stats`, preserves root input tokens, and supports resume seeding. Keep callback attribution/deduplication so child usage is not counted as parent usage.
 
-Hard cancellation and retrieval soft-stop are separate signals. Hard abort stops stream consumption and triggers checkpoint/approval/run cleanup. Retrieval abort may permit early synthesis from partial documents. Reconstructed runs must register both controllers so Stop still works.
+Stop aborts the run's hard-cancel controller, which stops stream consumption, triggers checkpoint/approval/run cleanup, and also aborts the retrieval controller that tools pass to in-flight fetches. Reconstructed runs must register both controllers so Stop still works.
 
-Ordinary stream execution errors are currently wrapped by the driver but can still be emitted as `agent_end` and finalized completed; preserve the integrity-error distinction, and do not extend this failure-as-success path. Interrupt decoding/handling must terminate fail-closed rather than leave a returned agent marked running.
+A failed `searchAndAnswer` streams an apology and emits `agent_error` (the run finalizes errored); only a Stop-induced failure emits `agent_end`. Interrupt decoding/handling must terminate fail-closed rather than leave a returned agent marked running.
 
 ## Verification
 

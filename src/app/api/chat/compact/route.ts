@@ -116,9 +116,10 @@ export const POST = async (req: Request) => {
     const compactableMessages = messages;
     const lastCompactedId =
       compactableMessages[compactableMessages.length - 1]?.id || 0;
-    // The marker is displayed after the last compacted message, which is now
-    // the last message in the chat at compact time.
-    const positionId = lastCompactedId;
+    // Tool-output system rows are inserted after their turn's assistant row but
+    // never loaded by the UI, so anchor the marker to the last visible message.
+    const positionId =
+      messages.findLast((m) => m.role !== 'system')?.id ?? lastCompactedId;
 
     // Build conversation text from all messages so the summarizer sees the
     // complete conversation being compacted.
@@ -228,14 +229,17 @@ ${existingSummary}
     // Baseline (tokensBefore) uses firstChatCallInputTokens from the newest
     // message plus an output estimate — same calculation the UI shows.
     // To estimate the post-compaction context, subtract the compacted messages'
-    // contribution and add the summary's.
+    // contribution and add the summary's. The baseline excludes the last turn's
+    // own tool output, so the subtraction can overshoot; clamp the remaining
+    // overhead at zero.
     const compactedMessageCount = compactableMessages.length;
     const compactedContentTokens = compactableMessages.reduce(
       (sum, m) => sum + Math.round(((m.content as string)?.length || 0) / 4),
       0,
     );
     const summaryTokens = Math.ceil(summary.length / 4);
-    const tokensAfter = tokensBefore - compactedContentTokens + summaryTokens;
+    const tokensAfter =
+      Math.max(0, tokensBefore - compactedContentTokens) + summaryTokens;
 
     const compactedAt = new Date().toISOString();
 

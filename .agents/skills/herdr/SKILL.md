@@ -1,13 +1,13 @@
 ---
 name: herdr
-description: Control Herdr only when explicitly requested; autonomous Pi worker delegation belongs exclusively to luna-delegation. Requires HERDR_ENV=1.
+description: Control Herdr only when explicitly requested; autonomous Pi reviewer workers belong exclusively to code-review. Requires HERDR_ENV=1.
 ---
 
 # Herdr
 
 Herdr organizes terminals into workspaces, tabs, and panes and recognizes coding agents running inside them. This skill authorizes user-directed Herdr topology, terminal, and agent control.
 
-Use it only when the user explicitly requests Herdr. `luna-delegation` is the sole automatic exception and authorizes only bounded Pi worker management. A delegated worker (`HERDR_DELEGATE=1`) must never use Herdr.
+Use it only when the user explicitly requests Herdr. `code-review` is the sole automatic exception and authorizes only its read-only Pi reviewer workers. A delegated worker (`HERDR_DELEGATE=1`) must never use Herdr.
 
 Before any control command, read [references/safe-operations.md](references/safe-operations.md) completely and follow its preconditions, targeting, status, wait, and cleanup rules.
 
@@ -18,7 +18,7 @@ Before any control command, read [references/safe-operations.md](references/safe
 - **Start, prompt, wait for, inspect, or take over a recognized coding agent**: agent commands.
 - **Create/open/remove an isolated checkout**: worktree commands, only when the user explicitly requests that topology.
 
-Do not create layout merely because background work would be convenient; that belongs to `luna-delegation` when its bounded-delegation rubric is met.
+Do not create layout merely because background work would be convenient; only `code-review` may do so automatically, for its reviewer workers.
 
 ## Inspect first
 

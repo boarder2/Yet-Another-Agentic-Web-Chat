@@ -40,6 +40,9 @@ export const CAPABILITY_DOCS_BROAD_ANSWER =
 export const CAPABILITY_DOCS_NO_MATCH_ANSWER =
   'I cannot verify that YAAWC capability from the current documentation.';
 
+/** Streamed by `test-steer` while its first step is held open. */
+export const STEER_WAIT_TEXT = 'Checking the documents. ';
+
 /** A valid local 1×1 PNG used by the test-only image-generation backend. */
 export const TEST_IMAGE_GENERATION_FIXTURE = {
   mimeType: 'image/png',
@@ -446,6 +449,27 @@ class FakeChatModel extends BaseChatModel {
       }
     }
 
+    if (
+      this.modelName.includes('steer') &&
+      !hasToolResult &&
+      !lastHumanText(messages).includes('short, concise title')
+    ) {
+      // Streams a marker, then holds its first step open so a spec can queue a
+      // steer that the next model call — after this tool call — receives.
+      await runManager?.handleLLMNewToken(STEER_WAIT_TEXT);
+      yield new ChatGenerationChunk({
+        text: STEER_WAIT_TEXT,
+        message: new AIMessageChunk({ content: STEER_WAIT_TEXT }),
+      });
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      yield lifecycleToolChunk(
+        'file_search',
+        { query: lastHumanText(messages) },
+        'test-steer-call-1',
+      );
+      return;
+    }
+
     if (this.modelName.includes('tool') && !hasToolResult) {
       yield new ChatGenerationChunk({
         text: '',
@@ -478,6 +502,9 @@ class FakeChatModel extends BaseChatModel {
       answer = this.modelName.includes('notitle')
         ? ''
         : 'Deterministic Test Title';
+    } else if (this.modelName.includes('steer')) {
+      // Echo the latest user turn so specs can assert a steer reached it.
+      answer = `Acting on: ${lastHumanText(messages)}`;
     } else if (this.modelName.includes('prompt-echo')) {
       // Echo the system prompt so specs can assert which sections were
       // injected. Checked after the title branch so auto-titling still works.
@@ -860,6 +887,12 @@ export async function loadTestChatModels(): Promise<Record<string, ChatModel>> {
       displayName: 'Test (tool loop, long answer)',
       model: new FakeChatModel({
         modelName: 'test-tool-long',
+      }) as unknown as BaseChatModel,
+    },
+    'test-steer': {
+      displayName: 'Test (steerable)',
+      model: new FakeChatModel({
+        modelName: 'test-steer',
       }) as unknown as BaseChatModel,
     },
     'test-slow': {

@@ -15,7 +15,7 @@ Provider requests must use the server/container-reachable URL, reject redirects,
 
 ## New Agent Tool (`src/lib/tools/agents/`)
 
-1. **Create the tool** with `defineTool` (`src/lib/tools/defineTool.ts`) — it validates against the typed `ToolContext` (`toolContext.ts`), enforces soft-stop before the handler runs, and provides `runtime.persist(...)`:
+1. **Create the tool** with `defineTool` (`src/lib/tools/defineTool.ts`) — it validates against the typed `ToolContext` (`toolContext.ts`) and provides `runtime.persist(...)`:
 
 ```typescript
 export const myTool = defineTool(

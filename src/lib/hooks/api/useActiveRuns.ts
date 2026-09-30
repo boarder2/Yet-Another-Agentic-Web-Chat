@@ -55,6 +55,30 @@ export function useCancelRun() {
   });
 }
 
+// Steer state reaches the client over the run's stream, so these mutations
+// have no query keys to invalidate.
+export function useSteerRun() {
+  return useMutation({
+    mutationFn: (vars: { messageId: string; content: string }) =>
+      apiFetch<{ steerId: string }>('/api/chat/steer', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(vars),
+      }),
+  });
+}
+
+export function useRemoveSteer() {
+  return useMutation({
+    mutationFn: (vars: { messageId: string; steerId: string }) =>
+      apiFetch<void>('/api/chat/steer', {
+        method: 'DELETE',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(vars),
+      }),
+  });
+}
+
 export function useMarkChatSeen() {
   const qc = useQueryClient();
   return useMutation({

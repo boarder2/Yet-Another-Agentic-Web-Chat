@@ -18,6 +18,7 @@ import {
   startPanelColumn,
   appendPanelColumnToken,
   setPanelColumnStatus,
+  splitAtSteers,
   PANEL_WIDGET_ID,
   upsertArtifactWidget,
   type ArtifactPayload,
@@ -616,5 +617,29 @@ describe('markdown-to-jsx parse-shape (regression net for nested-widget spillage
       (c) => (c as { type?: string }).type === 'pre',
     ).length;
     expect(topLevelPreCount).toBe(1);
+  });
+});
+
+describe('steer envelopes', () => {
+  it('splits content at steers, in order', () => {
+    let content = 'Looking into it.';
+    content = appendWidget(content, 'steer', {
+      id: 's1',
+      content: 'only 2024',
+    });
+    content += 'Narrowed down.';
+    expect(splitAtSteers(content)).toEqual([
+      { kind: 'text', text: 'Looking into it.\n\n' },
+      { kind: 'steer', content: 'only 2024' },
+      { kind: 'text', text: '\n\nNarrowed down.' },
+    ]);
+    expect(splitAtSteers('plain')).toEqual([{ kind: 'text', text: 'plain' }]);
+  });
+
+  it('rejects a steer fence without content', () => {
+    expect(parseWidgetFence('yaawc:steer', '{"id":"s1"}')).toBeNull();
+    expect(
+      parseWidgetFence('yaawc:steer', '{"id":"s1","content":"x"}'),
+    ).toEqual({ kind: 'steer', payload: { id: 's1', content: 'x' } });
   });
 });

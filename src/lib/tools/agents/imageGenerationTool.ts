@@ -2,7 +2,6 @@ import { z } from 'zod';
 import { Command, getCurrentTaskInput } from '@langchain/langgraph';
 import { SimplifiedAgentStateType } from '@/lib/state/chatAgentState';
 import { ToolMessage } from '@langchain/core/messages';
-import { isSoftStop } from '@/lib/utils/runControl';
 import { getOpenrouterApiKey } from '@/lib/config';
 import { getImageGenerationConfig } from '@/lib/settings/server';
 import { TEST_IMAGE_GENERATION_FIXTURE } from '@/lib/providers/test';
@@ -181,7 +180,6 @@ export const imageGenerationTool = defineTool(
     try {
       const { query, aspectRatio, imageSize } = input;
       const {
-        messageId,
         retrievalSignal,
         tracker,
         chatId,
@@ -254,19 +252,7 @@ export const imageGenerationTool = defineTool(
         });
       }
 
-      if (messageId && isSoftStop(messageId)) {
-        return new Command({
-          update: {
-            messages: [
-              new ToolMessage({
-                content: 'Operation stopped by user.',
-                tool_call_id: runtime.toolCallId,
-              }),
-            ],
-          },
-        });
-      }
-
+      retrievalSignal?.throwIfAborted();
       const image = createGeneratedImage({
         buffer: imageBuffer,
         mimeType,

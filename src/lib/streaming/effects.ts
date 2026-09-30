@@ -13,4 +13,6 @@ export type StreamEffect =
   | { kind: 'refreshSkills' }
   | { kind: 'setChatTitle'; chatId: string; title: string }
   | { kind: 'openArtifact'; artifactId: string; version: number }
-  | { kind: 'invalidateArtifacts'; chatId: string };
+  | { kind: 'invalidateArtifacts'; chatId: string }
+  | { kind: 'restoreDraft'; text: string }
+  | { kind: 'attachRun'; userMessageId: string };

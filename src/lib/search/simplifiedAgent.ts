@@ -4,7 +4,6 @@ import { buildLocalResearchPrompt } from '@/lib/prompts/simplifiedAgent/localRes
 import { buildWebSearchPrompt } from '@/lib/prompts/simplifiedAgent/webSearch';
 import { buildArtifactRoster } from '@/lib/prompts/simplifiedAgent/artifactGuidance';
 import { listChatRoster } from '@/lib/artifacts/roster';
-import { formattingAndCitationsWeb } from '@/lib/prompts/templates';
 import { SimplifiedAgentState } from '@/lib/state/chatAgentState';
 import {
   allAgentTools,
@@ -23,17 +22,12 @@ import { ARTIFACT_TOOL_NAMES } from '@/lib/tools/agents/artifactTools';
 //   getLangfuseHandler,
 // } from '@/lib/tracing/langfuse';
 import { getLanggraphCheckpointer } from '@/lib/runs/checkpointer';
-import { isSoftStop } from '@/lib/utils/runControl';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { BaseMessage, HumanMessage } from '@langchain/core/messages';
 import { buildMultimodalHumanMessage } from '@/lib/utils/images';
-import { ChatPromptTemplate } from '@langchain/core/prompts';
-import { RunnableSequence } from '@langchain/core/runnables';
 import { createAgent } from 'langchain';
 import { EventEmitter } from 'events';
 import { Document } from '@langchain/core/documents';
-import { webSearchResponsePrompt } from '../prompts/templates';
-import { formatDateForLLM } from '../utils';
 import { prepHistoryMessages } from '../utils/contentUtils';
 import { CachedEmbeddings } from '../utils/cachedEmbeddings';
 import { buildPersonalizationSection } from '../utils/personalization';
@@ -43,6 +37,11 @@ import {
   buildInvokedSkillsContext,
   buildSkillsPromptSection,
 } from '@/lib/skills/promptSection';
+import {
+  findInvokedSkillNames,
+  persistInvokedSkills,
+} from '@/lib/skills/invocation';
+import { steeringMiddleware } from '@/lib/search/steeringMiddleware';
 import { setRunContext, cleanupSkillsForRun } from '@/lib/skills/runStore';
 import type { Skill } from '@/lib/skills/types';
 import { capabilityDocsGuidance } from '@/lib/prompts/simplifiedAgent/capabilityDocsGuidance';
@@ -55,7 +54,6 @@ import type { AgentRunConfig } from '@/lib/search/agentRunConfig';
 import { ChartMentionTracker } from '@/lib/chart/handleMentions';
 import {
   AgentStreamDriver,
-  AgentStreamExecutionError,
   AgentStreamIntegrityError,
   extractAgentStreamTextContent,
 } from '@/lib/search/agentStreamDriver';
@@ -257,6 +255,21 @@ export class SimplifiedAgent {
     }
   }
 
+  /** A steer's model-facing text, with the bodies of any skills it invokes. */
+  private async steerContent(text: string): Promise<string> {
+    const names = findInvokedSkillNames(this.resolvedSkills, text);
+    if (names.size === 0) return text;
+    if (this.chatId && this.messageId) {
+      await persistInvokedSkills({
+        chatId: this.chatId,
+        parentMessageId: this.messageId,
+        skills: this.resolvedSkills,
+        names,
+      });
+    }
+    return `${buildInvokedSkillsContext(this.resolvedSkills, names)}\n\n${text}`;
+  }
+
   private createStreamDriver(
     runId: string,
     focusMode: string,
@@ -349,6 +362,18 @@ export class SimplifiedAgent {
         stateSchema: SimplifiedAgentState,
         contextSchema: toolContextSchema,
         systemPrompt: enhancedSystemPrompt,
+        // Only a top-level interactive single-agent run is steerable; Panel
+        // turns and child/headless agents never are.
+        middleware:
+          this.interactiveSession && this.messageId && !this.runConfig.panel
+            ? [
+                steeringMiddleware({
+                  messageId: this.messageId,
+                  emitter: this.emitter,
+                  toContent: (text) => this.steerContent(text),
+                }),
+              ]
+            : [],
         checkpointer:
           this.interactiveSession && this.threadId
             ? getLanggraphCheckpointer()
@@ -645,94 +670,11 @@ export class SimplifiedAgent {
         }),
       });
 
-      let streamResult;
-      try {
-        streamResult = await driver.consume(
-          eventStream,
-          { kind: 'start', seededDocuments, firefoxAIDetected },
-          agent,
-        );
-      } catch (error) {
-        if (error instanceof AgentStreamIntegrityError) throw error;
-        if (this.retrievalSignal?.aborted && isSoftStop(this.messageId || '')) {
-          streamResult =
-            error instanceof AgentStreamExecutionError
-              ? error.result
-              : {
-                  finalResult: null,
-                  collectedDocuments: [],
-                  responseText: '',
-                  interrupted: false,
-                  aborted: false,
-                };
-          const docsString = streamResult.collectedDocuments
-            .map((doc, idx) => {
-              const meta = doc?.metadata || {};
-              const title = meta.title || meta.url || `Source ${idx + 1}`;
-              const url = meta.url || '';
-              const snippet = doc?.pageContent || '';
-              return `<${idx + 1}>
-<title>${title}</title>
-${url ? `<url>${url}</url>` : ''}
-<content>\n${snippet}\n</content>
-</${idx + 1}>`;
-            })
-            .join('\n\n');
-
-          let respondNowPrompt: ChatPromptTemplate;
-          if (customSystemPrompt) {
-            const synthesisSystemPrompt = `${customSystemPrompt}\n\n## Early Synthesis\nYou were interrupted before completing your full research. Synthesize a response from the documents gathered so far.\n\n<context>\n${
-              docsString || 'No context documents available.'
-            }\n</context>\n\nCurrent date: ${formatDateForLLM(new Date())}`;
-            respondNowPrompt = ChatPromptTemplate.fromMessages([
-              ['system', synthesisSystemPrompt],
-              ['user', query],
-            ]);
-          } else {
-            respondNowPrompt = await ChatPromptTemplate.fromMessages([
-              ['system', webSearchResponsePrompt],
-              ['user', query],
-            ]).partial({
-              formattingAndCitations: this.personaInstructions
-                ? this.personaInstructions
-                : formattingAndCitationsWeb.content,
-              personalizationDirectives: buildPersonalizationSection({
-                location: this.userLocation,
-                profile: this.userProfile,
-              }),
-              context: docsString || 'No context documents available.',
-              date: formatDateForLLM(new Date()),
-            });
-          }
-
-          const chain = RunnableSequence.from([
-            respondNowPrompt,
-            this.chatLlm,
-          ]).withConfig({
-            runName: 'SimplifiedRespondNowSynthesis',
-            signal: this.signal,
-          });
-          const eventStream2 = chain.streamEvents({ query }, { version: 'v2' });
-
-          this.emitResponse(
-            `## ⚠︎ Early response triggered by budget or user request. ⚠︎\nResponse may be incomplete, lack citations, or omit important content.\n\n---\n\n`,
-          );
-          const synthesisResult = await driver.consume(eventStream2, {
-            kind: 'respond-now',
-            existingDocuments: streamResult.collectedDocuments,
-            emitFinalSources: true,
-          });
-          streamResult = {
-            ...streamResult,
-            finalResult:
-              streamResult.finalResult ?? synthesisResult.finalResult,
-            responseText:
-              streamResult.responseText + synthesisResult.responseText,
-          };
-        } else {
-          throw error;
-        }
-      }
+      const streamResult = await driver.consume(
+        eventStream,
+        { kind: 'start', seededDocuments, firefoxAIDetected },
+        agent,
+      );
 
       if (streamResult.interrupted) {
         if (skillRunId) cleanupSkillsForRun(skillRunId);
@@ -786,12 +728,16 @@ ${url ? `<url>${url}</url>` : ''}
       if (this.signal.aborted) {
         console.warn('SimplifiedAgent: Operation was aborted');
         this.emitResponse('The search operation was cancelled.');
-      } else {
-        this.emitResponse(
-          'I encountered an error while processing your request. Please try rephrasing your query or contact support if the issue persists.',
-        );
+        emitStreamEvent(this.emitter, { type: 'agent_end' });
+        return;
       }
-      emitStreamEvent(this.emitter, { type: 'agent_end' });
+      this.emitResponse(
+        'I encountered an error while processing your request. Please try rephrasing your query or contact support if the issue persists.',
+      );
+      emitStreamEvent(this.emitter, {
+        type: 'agent_error',
+        data: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 

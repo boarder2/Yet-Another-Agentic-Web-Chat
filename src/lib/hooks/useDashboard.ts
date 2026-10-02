@@ -225,7 +225,14 @@ export const useDashboard = (): UseDashboardReturn => {
 
       setState((prev) => ({
         ...prev,
-        widgets,
+        // `isLoading` is this hook's runtime state, but it's persisted with the
+        // widget. A `true` saved mid-refresh (page unload, the other surface, or
+        // another device) would otherwise pin the spinner and disable refresh.
+        widgets: widgets.map((w) => ({
+          ...w,
+          isLoading:
+            prev.widgets.find((p) => p.id === w.id)?.isLoading ?? false,
+        })),
         settings,
         // Stay "loading" until settings hydration has reconciled with the DB.
         // Reporting ready on the pre-hydration (stale) snapshot lets the

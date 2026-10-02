@@ -335,6 +335,42 @@ test.describe('dashboard', () => {
     }
   });
 
+  test('a widget persisted mid-refresh loads with content and a usable refresh button', async ({
+    page,
+    request,
+  }) => {
+    const farFuture = new Date(Date.now() + 3_600_000).toISOString();
+    const widgetsJson = JSON.stringify([{ ...WIDGET_ALPHA, isLoading: true }]);
+    const cacheJson = JSON.stringify({
+      [WIDGET_ALPHA.id]: {
+        content: '<p>Alpha content</p>',
+        lastFetched: new Date().toISOString(),
+        expiresAt: farFuture,
+      },
+    });
+    await request.patch('/api/settings', {
+      data: {
+        yaawc_dashboard_widgets: widgetsJson,
+        yaawc_dashboard_cache: cacheJson,
+      },
+    });
+    await page.addInitScript(
+      ([widgets, cache]) => {
+        localStorage.setItem('yaawc_dashboard_widgets', widgets);
+        localStorage.setItem('yaawc_dashboard_cache', cache);
+      },
+      [widgetsJson, cacheJson],
+    );
+
+    await new DashboardPage(page).goto();
+    await expect(page.getByText('Alpha content')).toBeVisible();
+    await expect(page.locator('[data-list-state="loading"]')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Switch to Edit Mode' }).click();
+    await expect(
+      page.getByRole('button', { name: 'Refresh Widget', exact: true }),
+    ).toBeEnabled();
+  });
+
   test('renders seeded widgets with content and hides empty state', async ({
     page,
     request,

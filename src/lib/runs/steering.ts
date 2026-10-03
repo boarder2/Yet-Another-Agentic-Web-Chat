@@ -1,10 +1,15 @@
 import crypto from 'crypto';
 import { getRun, pushEvent, type Run } from './runHub';
+import type { RunClock } from '@/lib/clock';
 
 export type Steer = Run['steers'][number];
 
 /** Queue a steer on a steerable, live run; `null` once it can no longer take one. */
-export function enqueueSteer(run: Run, content: string): Steer | null {
+export function enqueueSteer(
+  run: Run,
+  content: string,
+  clock: RunClock,
+): Steer | null {
   if (
     !run.followup ||
     run.steersClosed ||
@@ -12,7 +17,7 @@ export function enqueueSteer(run: Run, content: string): Steer | null {
   ) {
     return null;
   }
-  const steer = { id: crypto.randomBytes(7).toString('hex'), content };
+  const steer = { id: crypto.randomBytes(7).toString('hex'), content, clock };
   run.steers.push(steer);
   pushEvent(run, {
     type: 'steer_queued',

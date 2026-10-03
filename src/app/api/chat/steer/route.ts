@@ -1,5 +1,6 @@
 import { getRun } from '@/lib/runs/runHub';
 import { enqueueSteer, removeSteer } from '@/lib/runs/steering';
+import { getRequestClock } from '@/lib/clock';
 
 export const runtime = 'nodejs';
 
@@ -19,7 +20,9 @@ export async function POST(req: Request) {
     return Response.json({ error: 'Steer is empty' }, { status: 400 });
   }
   const run = getRun(messageId);
-  const steer = run ? enqueueSteer(run, content.trim()) : null;
+  const steer = run
+    ? enqueueSteer(run, content.trim(), getRequestClock(req))
+    : null;
   if (!steer) {
     return Response.json(
       { error: 'The agent is no longer accepting steering messages.' },

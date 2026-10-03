@@ -1253,7 +1253,12 @@ export async function attachRunHost(params: {
     const steers = takeSteers(run);
     if (steers.length === 0 || !run.followup) return;
     const content = steers.map((s) => s.content).join('\n\n');
-    const next = await run.followup(content, run.abortController.signal);
+    // The follow-up is the latest steer's turn, so it reads that steer's clock.
+    const next = await run.followup(
+      content,
+      steers[steers.length - 1].clock,
+      run.abortController.signal,
+    );
     pushEvent(
       run,
       typeof next === 'string'

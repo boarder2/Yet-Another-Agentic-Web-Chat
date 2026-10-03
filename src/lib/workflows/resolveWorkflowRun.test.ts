@@ -19,6 +19,8 @@ const workflow = (overrides: Record<string, unknown> = {}): Workflow =>
     ...overrides,
   }) as Workflow;
 
+const CLOCK = { now: '2026-07-22T14:30:00Z', timeZone: 'UTC' };
+
 describe('resolveWorkflowRun model references', () => {
   it('retains configured Chat/System effort in the run input', () => {
     const resolved = resolveWorkflowRun(
@@ -35,6 +37,7 @@ describe('resolveWorkflowRun model references', () => {
         },
       }),
       { topic: 'durable runtime' },
+      CLOCK,
     );
 
     expect(resolved.chatModel).toEqual({
@@ -50,9 +53,11 @@ describe('resolveWorkflowRun model references', () => {
   });
 
   it('keeps legacy workflows at Provider default', () => {
-    const resolved = resolveWorkflowRun(workflow(), {
-      topic: 'legacy workflow',
-    });
+    const resolved = resolveWorkflowRun(
+      workflow(),
+      { topic: 'legacy workflow' },
+      CLOCK,
+    );
 
     expect(resolved.chatModel).not.toHaveProperty('reasoningEffort');
     expect(resolved.systemModel).toBeNull();
@@ -69,6 +74,7 @@ describe('resolveWorkflowRun model references', () => {
           },
         }),
         { topic: 'invalid' },
+        CLOCK,
       ),
     ).toThrow(ModelReferenceValidationError);
   });

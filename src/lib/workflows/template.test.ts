@@ -239,7 +239,8 @@ describe('parseWorkflowTemplate — built-in date/time tokens', () => {
 });
 
 describe('substitute', () => {
-  const clock = new Date('2026-07-22T14:30:00Z');
+  const clock = { now: '2026-07-22T14:30:00Z', timeZone: 'UTC' };
+  const utc = (now: string) => ({ now, timeZone: 'UTC' });
   const at = (p: string, values: Record<string, string | string[]> = {}) =>
     substitute(p, fields(p), values, clock);
 
@@ -284,24 +285,44 @@ describe('substitute', () => {
   });
 
   it('computes @today with an offset, ISO by default', () => {
-    const out = substitute('{{@today}}', [], {}, new Date(2026, 6, 22, 9, 0));
+    const out = substitute('{{@today}}', [], {}, utc('2026-07-22T09:00:00Z'));
     expect(out).toBe('2026-07-22');
-    const past = substitute('{{@today-30d}}', [], {}, new Date(2026, 6, 22));
+    const past = substitute(
+      '{{@today-30d}}',
+      [],
+      {},
+      utc('2026-07-22T00:00:00Z'),
+    );
     expect(past).toBe('2026-06-22');
   });
 
   it('computes @today:long', () => {
-    expect(substitute('{{@today:long}}', [], {}, new Date(2026, 6, 22))).toBe(
-      'July 22, 2026',
-    );
+    expect(
+      substitute('{{@today:long}}', [], {}, utc('2026-07-22T00:00:00Z')),
+    ).toBe('July 22, 2026');
   });
 
   it('is deterministic given a fixed clock', () => {
     const p = 'sales {{@today-1w}}';
-    const a = substitute(p, [], {}, new Date(2026, 6, 22));
-    const b = substitute(p, [], {}, new Date(2026, 6, 22));
+    const a = substitute(p, [], {}, utc('2026-07-22T00:00:00Z'));
+    const b = substitute(p, [], {}, utc('2026-07-22T00:00:00Z'));
     expect(a).toBe(b);
     expect(a).toBe('sales 2026-07-15');
+  });
+
+  it("reads the date in the clock's zone, not the server's", () => {
+    // 03:30 UTC on Jul 22 is still Jul 21 in New York.
+    const ny = { now: '2026-07-22T03:30:00Z', timeZone: 'America/New_York' };
+    expect(substitute('{{@today}}', [], {}, ny)).toBe('2026-07-21');
+    expect(substitute('{{@now}}', [], {}, ny)).toBe('2026-07-21 23:30');
+    expect(substitute('{{@today+1d:long}}', [], {}, ny)).toBe('July 22, 2026');
+  });
+
+  it('moves hour offsets across a DST gap by elapsed time', () => {
+    // 01:30 EST on spring-forward day; 02:30 does not exist in New York.
+    const ny = { now: '2026-03-08T06:30:00Z', timeZone: 'America/New_York' };
+    expect(substitute('{{@now+1h}}', [], {}, ny)).toBe('2026-03-08 03:30');
+    expect(substitute('{{@now+30min}}', [], {}, ny)).toBe('2026-03-08 03:00');
   });
 });
 

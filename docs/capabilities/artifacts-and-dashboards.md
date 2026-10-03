@@ -26,7 +26,7 @@ Open `/dashboard` or use the widget controls on the home page. Widgets can be sh
 
 ### AI widgets
 
-An AI widget fetches one or more **Web Page** or **HTTP Data** sources, substitutes source content and date variables into a prompt, and processes the result with a selected Chat model and provider. You can choose the available helper tools for the widget and set a refresh interval in minutes or hours. A preview runs before the widget is saved.
+An AI widget fetches one or more **Web Page** or **HTTP Data** sources, substitutes source content and date variables into a prompt (`{{current_utc_datetime}}` and `{{current_local_datetime}}`, filled on the server from the refreshing browser's clock; the local value carries the browser's UTC offset), and processes the result with a selected Chat model and provider. You can choose the available helper tools for the widget and set a refresh interval in minutes or hours. A preview runs before the widget is saved.
 
 A widget accepts at most 8 sources. Each source is bounded to 300,000 characters. Source URLs are fetched by the server, and HTTP data is fetched as raw response text; use only URLs you trust. The widget cache is used until its refresh interval expires, while **Refresh All Widgets** bypasses the cache.
 

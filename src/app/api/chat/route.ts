@@ -1,5 +1,6 @@
 import { subscribe } from '@/lib/runs/runHub';
 import { startChatTurn, type ChatTurnRequest } from '@/lib/chat/startTurn';
+import { getRequestClock } from '@/lib/clock';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -12,7 +13,10 @@ const SSE_HEADERS = {
 
 export const POST = async (req: Request) => {
   try {
-    const result = await startChatTurn((await req.json()) as ChatTurnRequest);
+    const result = await startChatTurn(
+      (await req.json()) as ChatTurnRequest,
+      getRequestClock(req),
+    );
     if (!('run' in result)) {
       return Response.json(result.body, { status: result.status });
     }

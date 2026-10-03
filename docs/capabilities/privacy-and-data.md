@@ -12,7 +12,7 @@ Non-secret settings are synchronized through the database-backed settings store.
 
 Depending on the selected feature and provider, YAAWC can send:
 
-- User prompts, conversation context, selected persona instructions, and requested outputs to the configured Chat or System model endpoint, including an enabled OpenAI-compatible endpoint when selected.
+- User prompts, conversation context, selected persona instructions, and requested outputs to the configured Chat or System model endpoint, including an enabled OpenAI-compatible endpoint when selected. Prompts include the current date and the browser's (or a schedule's) IANA timezone name.
 - Attached content and embedding inputs to the selected embedding endpoint, including an OpenAI-compatible provider marked Supports Embeddings.
 - Configured compatible-provider request headers are sent with discovery and model requests; their values are never returned by YAAWC's API.
 - Web queries to the selected search provider and page, PDF, image, or YouTube URLs to retrieve their content.

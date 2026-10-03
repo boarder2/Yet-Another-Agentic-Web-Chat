@@ -40,6 +40,7 @@ export const deepResearchTool = defineTool(
         fileIds = [],
         userLocation,
         userProfile,
+        clock,
         tracker,
       } = runtime.context;
       const signal = runtime.signal;
@@ -79,6 +80,7 @@ export const deepResearchTool = defineTool(
         retrievalSignal, // Pass retrievalSignal for cancellation support
         userLocation,
         userProfile,
+        clock,
         tracker,
         chatModelRef,
         systemModelRef,

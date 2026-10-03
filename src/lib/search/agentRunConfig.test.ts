@@ -37,6 +37,7 @@ const validInput = (): AgentRunConfigInput => ({
   interactiveSession: true,
   workspaceSuffix: '\nWorkspace instructions',
   memoryEnabled: true,
+  clock: { now: '2026-10-03T12:00:00Z', timeZone: 'UTC' },
   panel: {
     executors: [
       { provider: 'openai', name: 'gpt-5-mini', imageCapable: true },
@@ -155,6 +156,17 @@ describe('agent run config codec', () => {
     expect(migrated.panel?.executors[0]).not.toHaveProperty('reasoningEffort');
   });
 
+  it('resumes a snapshot persisted without a clock on the server clock', () => {
+    const { clock: _clock, ...withoutClock } = validConfig();
+
+    const decoded = decodeAgentRunConfig(withoutClock);
+
+    expect(Date.parse(decoded.clock.now)).not.toBeNaN();
+    expect(decoded.clock.timeZone).toBe(
+      Intl.DateTimeFormat().resolvedOptions().timeZone,
+    );
+  });
+
   it('uses the chat reference for both audited roles when system is omitted', () => {
     const config = createAgentRunConfig({
       ...validInput(),
@@ -181,6 +193,7 @@ describe('agent run config codec', () => {
         'aiMessageId',
         'chatId',
         'chatModelRef',
+        'clock',
         'fileIds',
         'focusMode',
         'interactiveSession',

@@ -111,6 +111,12 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+const CLOCK = { now: '2026-10-03T12:00:00Z', timeZone: 'UTC' };
+const LATER_CLOCK = {
+  now: '2026-10-03T12:05:00Z',
+  timeZone: 'America/Chicago',
+};
+
 describe('run host steering follow-up', () => {
   it('starts the follow-up from leftover steers once the answer is persisted', async () => {
     const followup = vi.fn<NonNullable<Run['followup']>>();
@@ -119,8 +125,8 @@ describe('run host steering follow-up', () => {
       expect(mocks.updateAssistantRow).toHaveBeenCalled();
       return { ...run, messageId: 'u2', aiMessageId: 'ai2' };
     });
-    enqueueSteer(run, 'first');
-    enqueueSteer(run, 'second');
+    enqueueSteer(run, 'first', CLOCK);
+    enqueueSteer(run, 'second', LATER_CLOCK);
 
     emitStreamEvent(emitter, { type: 'agent_end' });
 
@@ -128,7 +134,12 @@ describe('run host steering follow-up', () => {
     expect(eventsOf(run, 'messageEnd')[0]).toMatchObject({
       followupPending: true,
     });
-    expect(followup).toHaveBeenCalledWith('first\n\nsecond', expect.anything());
+    // The follow-up is the latest steer's turn, so it reads that steer's clock.
+    expect(followup).toHaveBeenCalledWith(
+      'first\n\nsecond',
+      LATER_CLOCK,
+      expect.anything(),
+    );
     expect(eventsOf(run, 'followup_turn_started')).toEqual([
       {
         type: 'followup_turn_started',
@@ -153,7 +164,7 @@ describe('run host steering follow-up', () => {
     expect(eventsOf(run, 'messageEnd')[0]).not.toHaveProperty(
       'followupPending',
     );
-    expect(enqueueSteer(run, 'too late')).toBeNull();
+    expect(enqueueSteer(run, 'too late', CLOCK)).toBeNull();
   });
 
   it('Stop after the answer ends cancels only the follow-up and returns its steers', async () => {
@@ -161,7 +172,7 @@ describe('run host steering follow-up', () => {
     mocks.sumMessageContentChars.mockReturnValueOnce(projection.promise);
     const followup = vi.fn<NonNullable<Run['followup']>>();
     const { run, emitter } = await hostedRun(followup);
-    enqueueSteer(run, 'leftover');
+    enqueueSteer(run, 'leftover', CLOCK);
 
     emitStreamEvent(emitter, { type: 'agent_end' });
     run.abortController.abort();
@@ -179,11 +190,11 @@ describe('run host steering follow-up', () => {
   it('a Stop while the follow-up starts reaches it, and its refusal returns the steers', async () => {
     const started = deferred<string>();
     let signal: AbortSignal | undefined;
-    const { run, emitter } = await hostedRun(async (_content, s) => {
+    const { run, emitter } = await hostedRun(async (_content, _clock, s) => {
       signal = s;
       return started.promise;
     });
-    enqueueSteer(run, 'leftover');
+    enqueueSteer(run, 'leftover', CLOCK);
 
     emitStreamEvent(emitter, { type: 'agent_end' });
     await vi.waitFor(() => expect(signal).toBeDefined());
@@ -201,7 +212,7 @@ describe('run host steering follow-up', () => {
   it('a failed run never starts a follow-up', async () => {
     const followup = vi.fn<NonNullable<Run['followup']>>();
     const { run, emitter } = await hostedRun(followup);
-    enqueueSteer(run, 'leftover');
+    enqueueSteer(run, 'leftover', CLOCK);
 
     emitStreamEvent(emitter, { type: 'agent_error', data: 'boom' });
 

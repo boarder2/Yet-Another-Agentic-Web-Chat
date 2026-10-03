@@ -119,6 +119,7 @@ function makeConfig(
     interactiveSession: true,
     workspaceSuffix: '',
     memoryEnabled: false,
+    clock: { now: '2026-10-03T12:00:00Z', timeZone: 'UTC' },
     panel: null,
   });
 }

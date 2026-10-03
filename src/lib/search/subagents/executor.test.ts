@@ -6,6 +6,7 @@ import type { SubagentDefinition } from './definitions';
 
 const mocks = vi.hoisted(() => ({
   runs: [] as Array<Record<string, unknown>>,
+  prompts: [] as string[],
   register: vi.fn(() => ({ record: vi.fn() })),
   scopeUsage: vi.fn(() => undefined),
 }));
@@ -16,7 +17,11 @@ vi.mock('@/lib/search/simplifiedAgent', () => ({
       mocks.runs.push(options.run);
     }
 
-    async searchAndAnswer(): Promise<void> {}
+    async searchAndAnswer(input: {
+      customSystemPrompt: string;
+    }): Promise<void> {
+      mocks.prompts.push(input.customSystemPrompt);
+    }
   },
 }));
 vi.mock('@/lib/tools/agents', () => ({
@@ -28,6 +33,8 @@ vi.mock('@/lib/tools/agents/artifactTools', () => ({
 }));
 
 import { SubagentExecutor } from './executor';
+
+const CLOCK = { now: '2026-10-03T12:00:00Z', timeZone: 'America/Chicago' };
 
 const definition: SubagentDefinition = {
   name: 'Research child',
@@ -60,6 +67,7 @@ describe('SubagentExecutor reasoning routing', () => {
       undefined,
       undefined,
       undefined,
+      CLOCK,
       tracker,
       { provider: 'openai', model: 'gpt-5.4', reasoningEffort: 'high' },
       {
@@ -71,7 +79,11 @@ describe('SubagentExecutor reasoning routing', () => {
 
     expect(result.status).toBe('success');
     expect(mocks.runs).toHaveLength(1);
+    expect(mocks.prompts[0]).toContain(
+      "Today's Date: Saturday, October 3, 2026 (America/Chicago)",
+    );
     expect(mocks.runs[0]).toMatchObject({
+      clock: CLOCK,
       chatModelRef: {
         provider: 'openai',
         name: 'gpt-5.4',

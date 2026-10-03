@@ -287,6 +287,7 @@ export class SimplifiedAgent {
       retrievalSignal: this.retrievalSignal,
       userLocation: this.userLocation,
       userProfile: this.userProfile,
+      clock: this.runConfig.clock,
       chatId: this.chatId,
       workspaceId: this.workspaceId,
       interactiveSession: this.interactiveSession,
@@ -477,7 +478,7 @@ export class SimplifiedAgent {
       basePrompt = buildFirefoxAIPrompt(
         personaInstructions,
         personalizationSection,
-        new Date(),
+        this.runConfig.clock,
       );
     } else {
       // Create focus-mode-specific prompts
@@ -486,7 +487,7 @@ export class SimplifiedAgent {
           basePrompt = buildChatPrompt(
             personaInstructions,
             personalizationSection,
-            new Date(),
+            this.runConfig.clock,
             codeExecutionEnabled,
           );
           break;
@@ -498,7 +499,7 @@ export class SimplifiedAgent {
             fileIds,
             messagesCount ?? 0,
             query,
-            new Date(),
+            this.runConfig.clock,
             this.methodologyInstructions,
             codeExecutionEnabled,
             artifactsEnabled,
@@ -509,7 +510,7 @@ export class SimplifiedAgent {
           basePrompt = buildLocalResearchPrompt(
             personaInstructions,
             personalizationSection,
-            new Date(),
+            this.runConfig.clock,
             this.methodologyInstructions,
             codeExecutionEnabled,
             artifactsEnabled,
@@ -526,7 +527,7 @@ export class SimplifiedAgent {
             fileIds,
             messagesCount ?? 0,
             query,
-            new Date(),
+            this.runConfig.clock,
             this.methodologyInstructions,
             codeExecutionEnabled,
             artifactsEnabled,

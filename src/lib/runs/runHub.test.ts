@@ -31,6 +31,7 @@ const snapshot = (): AgentRunConfig =>
     interactiveSession: true,
     workspaceSuffix: '',
     memoryEnabled: false,
+    clock: { now: '2026-10-03T12:00:00Z', timeZone: 'UTC' },
     panel: {
       executors: [
         { provider: 'openai', name: 'gpt-5-mini', reasoningEffort: 'medium' },

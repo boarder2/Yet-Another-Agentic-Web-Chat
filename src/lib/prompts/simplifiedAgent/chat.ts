@@ -1,4 +1,4 @@
-import { formatDateForLLM } from '@/lib/utils';
+import { formatDateForLLM, type RunClock } from '@/lib/clock';
 import { formattingChat } from '@/lib/prompts/templates';
 import { buildChartingGuidance } from './chartingGuidance';
 import { mathGuidance } from './mathGuidance';
@@ -9,7 +9,7 @@ import { mathGuidance } from './mathGuidance';
 export function buildChatPrompt(
   personaInstructions: string,
   personalizationSection: string,
-  date: Date = new Date(),
+  clock: RunClock,
   codeExecutionEnabled: boolean = false,
 ): string {
   const personaBlock = personaInstructions
@@ -57,6 +57,6 @@ ${mathGuidance}
 ${buildChartingGuidance(codeExecutionEnabled)}
 
 ## Current Context
-- Today's Date: ${formatDateForLLM(date)}
+- Today's Date: ${formatDateForLLM(clock)}
 `;
 }

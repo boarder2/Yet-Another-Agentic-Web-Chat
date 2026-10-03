@@ -1,4 +1,4 @@
-import { formatDateForLLM } from '@/lib/utils';
+import { formatDateForLLM, type RunClock } from '@/lib/clock';
 import { formattingAndCitationsWeb } from '@/lib/prompts/templates';
 import { buildChartingGuidance } from './chartingGuidance';
 import { artifactGuidance } from './artifactGuidance';
@@ -12,8 +12,8 @@ export function buildWebSearchPrompt(
   personalizationSection: string,
   fileIds: string[] = [],
   messagesCount: number = 0,
-  query?: string,
-  date: Date = new Date(),
+  query: string | undefined,
+  clock: RunClock,
   methodologyInstructions?: string,
   codeExecutionEnabled: boolean = false,
   artifactsEnabled: boolean = false,
@@ -88,6 +88,6 @@ ${buildChartingGuidance(codeExecutionEnabled)}
 
 ${artifactsEnabled ? artifactGuidance : ''}
 
-**Context**: Today's Date - use for time sensitive queries: ${formatDateForLLM(date)}
+**Context**: Today's Date - use for time sensitive queries: ${formatDateForLLM(clock)}
 `;
 }

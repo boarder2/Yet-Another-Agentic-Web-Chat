@@ -8,7 +8,7 @@ import formatChatHistoryAsString from '../utils/formatHistory';
 import { BaseMessage } from '@langchain/core/messages';
 import LineOutputParser from '../outputParsers/lineOutputParser';
 import { getImageSearchProvider } from '../search/providers';
-import { formatDateForLLM } from '../utils';
+import { formatDateForLLM, type RunClock } from '@/lib/clock';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 // import { getLangfuseCallbacks } from '@/lib/tracing/langfuse';
 
@@ -81,6 +81,7 @@ type ImageSearchChainInput = {
   chat_history: BaseMessage[];
   query: string;
   isPrivate?: boolean;
+  clock: RunClock;
 };
 
 interface ImageSearchResult {
@@ -104,7 +105,7 @@ const createImageSearchChain = (llm: BaseChatModel, isPrivate: boolean) => {
       query: (input: ImageSearchChainInput) => {
         return input.query;
       },
-      date: () => formatDateForLLM(),
+      date: (input: ImageSearchChainInput) => formatDateForLLM(input.clock),
     }),
     PromptTemplate.fromTemplate(fullPrompt),
     llm,

@@ -4,6 +4,7 @@ import Lightbox from 'yet-another-react-lightbox';
 import 'yet-another-react-lightbox/styles.css';
 import { Message } from './ChatWindow';
 import { DEFAULT_CONTEXT_WINDOW } from '@/lib/models/presets';
+import { clientFetch } from '@/lib/api/client';
 
 type Image = {
   url: string;
@@ -76,7 +77,7 @@ const SearchImages = ({
       }
 
       try {
-        const res = await fetch(`/api/images`, {
+        const res = await clientFetch(`/api/images`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

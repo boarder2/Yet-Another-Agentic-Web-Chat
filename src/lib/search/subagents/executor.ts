@@ -24,6 +24,7 @@ import {
 import type { TokenTracker } from '@/lib/tokens/tracker';
 import type { ReasoningEffort } from '@/lib/providers/reasoningEffort';
 import { createAgentRunConfig } from '@/lib/search/agentRunConfig';
+import { formatDateForLLM, type RunClock } from '@/lib/clock';
 
 type SubagentModelRef = {
   provider: string;
@@ -67,6 +68,7 @@ export class SubagentExecutor {
   private retrievalSignal?: AbortSignal;
   private userLocation?: string;
   private userProfile?: string;
+  private clock: RunClock;
   private tracker: TokenTracker;
   private chatModelRef: SubagentModelRef;
   private systemModelRef: SubagentModelRef;
@@ -82,6 +84,7 @@ export class SubagentExecutor {
     retrievalSignal: AbortSignal | undefined,
     userLocation: string | undefined,
     userProfile: string | undefined,
+    clock: RunClock,
     tracker: TokenTracker,
     chatModelRef: SubagentModelRef,
     systemModelRef: SubagentModelRef,
@@ -96,6 +99,7 @@ export class SubagentExecutor {
     this.retrievalSignal = retrievalSignal;
     this.userLocation = userLocation;
     this.userProfile = userProfile;
+    this.clock = clock;
     this.tracker = tracker;
     this.chatModelRef = chatModelRef;
     this.systemModelRef = systemModelRef;
@@ -199,6 +203,7 @@ export class SubagentExecutor {
         interactiveSession: false,
         workspaceSuffix: '',
         memoryEnabled: false,
+        clock: this.clock,
         panel: null,
       });
       const subagent = new SimplifiedAgent({
@@ -233,7 +238,8 @@ export class SubagentExecutor {
         query: task,
         history: limitedContext,
         customTools: filteredTools,
-        customSystemPrompt: this.definition.systemPrompt,
+        // A custom prompt bypasses the focus-mode builders that add the date.
+        customSystemPrompt: `${this.definition.systemPrompt}\n\nToday's Date: ${formatDateForLLM(this.clock)}`,
       });
 
       // Wait a bit for all events to be processed

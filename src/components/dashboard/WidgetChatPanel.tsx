@@ -13,6 +13,7 @@ import { captureCurrentSelection, ModelSelection } from '@/lib/models/presets';
 import { REASONING_EFFORT_LABELS } from '@/lib/providers/reasoningEffort';
 import { resolveWidgetTheme } from '@/lib/widgets/widgetTheme';
 import { useModels } from '@/lib/hooks/api/useModels';
+import { clientFetch } from '@/lib/api/client';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -81,7 +82,7 @@ const WidgetChatPanel = ({
       setMessages((m) => [...m, { role: 'assistant', content: '' }]);
 
       try {
-        const res = await fetch('/api/dashboard/widget-builder', {
+        const res = await clientFetch('/api/dashboard/widget-builder', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           signal: abort.signal,

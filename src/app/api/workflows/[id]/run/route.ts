@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm';
 import { startWorkflowRun } from '@/lib/workflows/runManual';
 import { RequiredInputsError } from '@/lib/workflows/resolveWorkflowRun';
 import { ModelReferenceValidationError } from '@/lib/providers/resolveModels';
+import { getRequestClock } from '@/lib/clock';
 
 export const runtime = 'nodejs';
 
@@ -25,7 +26,11 @@ export async function POST(
   if (!workflow) return Response.json({ error: 'Not found' }, { status: 404 });
 
   try {
-    const { chatId } = await startWorkflowRun(workflow, values);
+    const { chatId } = await startWorkflowRun(
+      workflow,
+      values,
+      getRequestClock(req),
+    );
     return Response.json({ chatId }, { status: 201 });
   } catch (err) {
     if (err instanceof RequiredInputsError) {

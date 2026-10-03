@@ -17,34 +17,7 @@ import { LlmWidgetConfig } from '@/lib/types/widget';
 import { resolveWidgetTheme } from '@/lib/widgets/widgetTheme';
 import type { ModelSelection } from '@/lib/models/presets';
 import { useModels } from '@/lib/hooks/api/useModels';
-
-// Helper function to replace date/time variables in prompts on the client side
-const replaceDateTimeVariables = (prompt: string): string => {
-  let processedPrompt = prompt;
-
-  // Replace UTC datetime
-  if (processedPrompt.includes('{{current_utc_datetime}}')) {
-    const utcDateTime = new Date().toISOString();
-    processedPrompt = processedPrompt.replace(
-      /\{\{current_utc_datetime\}\}/g,
-      utcDateTime,
-    );
-  }
-
-  // Replace local datetime
-  if (processedPrompt.includes('{{current_local_datetime}}')) {
-    const now = new Date();
-    const localDateTime = new Date(
-      now.getTime() - now.getTimezoneOffset() * 60000,
-    ).toISOString();
-    processedPrompt = processedPrompt.replace(
-      /\{\{current_local_datetime\}\}/g,
-      localDateTime,
-    );
-  }
-
-  return processedPrompt;
-};
+import { clientFetch } from '@/lib/api/client';
 
 interface WidgetConfigModalProps {
   isOpen: boolean;
@@ -172,17 +145,14 @@ const WidgetConfigModal = ({
 
     setIsPreviewLoading(true);
     try {
-      // Replace date/time variables on the client side
-      const processedPrompt = replaceDateTimeVariables(config.prompt);
-
-      const response = await fetch('/api/dashboard/process-widget', {
+      const response = await clientFetch('/api/dashboard/process-widget', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           sources: config.sources.filter((s) => s.url.trim()), // Only send sources with URLs
-          prompt: processedPrompt,
+          prompt: config.prompt,
           provider: config.provider,
           model: config.model,
           tool_names: selectedTools,

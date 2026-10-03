@@ -57,7 +57,7 @@ import crypto from 'crypto';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { qk } from '@/lib/api/keys';
-import { apiFetch } from '@/lib/api/client';
+import { apiFetch, clientFetch } from '@/lib/api/client';
 import type { ActiveRunsData } from '@/lib/hooks/api/useActiveRuns';
 import { useMarkChatSeen } from '@/lib/hooks/api/useActiveRuns';
 import { useSkills } from '@/lib/hooks/api/useSkills';
@@ -1464,7 +1464,7 @@ const ChatWindow = ({
 
     let res: Response;
     try {
-      res = await fetch('/api/chat', {
+      res = await clientFetch('/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

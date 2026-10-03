@@ -1,4 +1,4 @@
-import { formatDateForLLM } from '@/lib/utils';
+import { formatDateForLLM, type RunClock } from '@/lib/clock';
 import { mathGuidance } from './mathGuidance';
 
 /**
@@ -7,7 +7,7 @@ import { mathGuidance } from './mathGuidance';
 export function buildFirefoxAIPrompt(
   personaInstructions: string,
   personalizationSection: string,
-  date: Date = new Date(),
+  clock: RunClock,
 ): string {
   return `# AI Chat Assistant (Firefox AI Detected)
 
@@ -48,7 +48,7 @@ You are a conversational AI assistant designed for creative and engaging dialogu
 - **No main heading/title**: Start your response directly with the content unless asked to provide a specific title
 
 ## Current Context
-- Today's Date: ${formatDateForLLM(date)}
+- Today's Date: ${formatDateForLLM(clock)}
 
 ${
   personaInstructions

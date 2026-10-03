@@ -21,6 +21,7 @@ import {
 } from '@/lib/userQuestion/questionCorrelation';
 import type { Skill } from '@/lib/skills/types';
 import { toolContextSchema, type ToolContext } from '@/lib/tools/toolContext';
+import type { RunClock } from '@/lib/clock';
 import { TurnChartRegistry } from '@/lib/chart/turnChartRegistry';
 import type { Recorder, TokenTracker } from '@/lib/tokens/tracker';
 import { normalizeUsageMetadata } from '@/lib/tokens/tracker';
@@ -66,6 +67,7 @@ export interface AgentStreamToolContextOptions {
   retrievalSignal?: AbortSignal;
   userLocation?: string;
   userProfile?: string;
+  clock: RunClock;
   chatId?: string;
   workspaceId?: string | null;
   interactiveSession: boolean;
@@ -93,6 +95,7 @@ export function buildAgentToolContext(
     retrievalSignal: options.retrievalSignal,
     userLocation: options.userLocation,
     userProfile: options.userProfile,
+    clock: options.clock,
     chatId: options.chatId,
     workspaceId: options.workspaceId,
     interactiveSession: options.interactiveSession,
@@ -538,6 +541,7 @@ export class AgentStreamDriver {
       retrievalSignal: this.options.retrievalSignal,
       userLocation: this.options.userLocation,
       userProfile: this.options.userProfile,
+      clock: this.options.clock,
       chatId: this.options.chatId,
       workspaceId: this.options.workspaceId,
       interactiveSession: this.options.interactiveSession,

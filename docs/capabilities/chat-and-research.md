@@ -24,6 +24,8 @@ Web Search can also use attached chat documents when files are supplied. A works
 
 The System model performs internal work such as retrieval processing and the Chat model writes the answer. If no separate System model is selected, the Chat model is used for both roles. A workspace model override can replace the selections for every chat in that workspace.
 
+The agent is told today's date and your timezone, taken from your browser's clock when you send, so time-sensitive research uses your calendar day. The date stays fixed for the whole turn, including approval resumes and subagents; a steering message that starts a follow-up turn uses the clock from when it was sent. Requests without the browser headers use the server's clock and timezone.
+
 ## Follow the live answer
 
 Responses stream into the conversation while the agent works. The answer can show:

@@ -5,6 +5,7 @@ import type { CachedEmbeddings } from '@/lib/utils/cachedEmbeddings';
 import type { TokenTracker, Recorder } from '@/lib/tokens/tracker';
 import type { CapabilityRuntimeFacts } from '@/lib/capabilities/availability';
 import type { TurnChartRegistry } from '@/lib/chart/turnChartRegistry';
+import { runClockSchema } from '@/lib/clock';
 
 /**
  * Per-run context handed to every tool via LangChain's native `ToolRuntime`
@@ -30,6 +31,8 @@ export const toolContextSchema = z.object({
   runId: z.string(),
   userLocation: z.string().optional(),
   userProfile: z.string().optional(),
+  /** The turn's pinned clock; child runs inherit it. */
+  clock: runClockSchema,
   tracker: z.custom<TokenTracker>(),
   chatRecorder: z.custom<Recorder>(),
   systemRecorder: z.custom<Recorder>(),

@@ -108,6 +108,7 @@ function makeHarness(
   const responses: string[] = [];
   const driver = new AgentStreamDriver({
     llm: {} as BaseChatModel,
+    clock: { now: '2026-10-03T12:00:00Z', timeZone: 'UTC' },
     systemLlm: {} as BaseChatModel,
     embeddings: {} as CachedEmbeddings,
     fileIds: ['file-1'],

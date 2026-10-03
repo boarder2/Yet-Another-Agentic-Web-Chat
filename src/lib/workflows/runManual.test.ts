@@ -108,7 +108,14 @@ describe('manual workflow effective model routing', () => {
     mocks.searchAndAnswer.mockResolvedValue(undefined);
     mocks.agentOptions.length = 0;
 
-    const result = await startWorkflowRun({ id: 'workflow-1' } as never, {});
+    const result = await startWorkflowRun(
+      { id: 'workflow-1' } as never,
+      {},
+      {
+        now: '2026-07-22T14:30:00Z',
+        timeZone: 'UTC',
+      },
+    );
 
     expect(result.chatId).toEqual(expect.any(String));
     expect(mocks.createTurnTracker).toHaveBeenCalledWith(

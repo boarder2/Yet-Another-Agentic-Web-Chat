@@ -17,7 +17,7 @@ notes: longtext | optional
 Research {{topic}} in a {{tone}} voice. Include {{notes}} when provided.
 ```
 
-Fields are required unless marked `optional`. Supported input types are text, longtext, select, and multi. Select and multi fields declare options. Prompts can also use `{{@today}}`, `{{@now}}`, date offsets such as `{{@today-7d}}`, and `{{@today:long}}`; escape braces when literal `{{` or `}}` are needed. The builder validates the syntax and previews the fill form before saving.
+Fields are required unless marked `optional`. Supported input types are text, longtext, select, and multi. Select and multi fields declare options. Prompts can also use `{{@today}}`, `{{@now}}`, date offsets such as `{{@today-7d}}`, and `{{@today:long}}`, resolved in your browser's timezone for a manual run and in the schedule's timezone for a scheduled run; escape braces when literal `{{` or `}}` are needed. The builder validates the syntax and previews the fill form before saving.
 
 A workflow's stored models and instructions are the configuration for its runs. It does not silently inherit the current chat's model, workspace, MCP servers, memory, panel selection, or personalization.
 
@@ -29,7 +29,7 @@ Manual workflow runs use the workflow's selected focus mode, model references (i
 
 ## Schedule a workflow
 
-Create one or more schedules for a workflow. A schedule stores a label, the saved input values, a cron expression, an optional timezone, enabled state, and an optional retention override. The scheduler runs enabled schedules in-process while the application is running.
+Create one or more schedules for a workflow. A schedule stores a label, the saved input values, a cron expression, an optional IANA timezone, enabled state, and an optional retention override. A new schedule's timezone defaults to your browser's. The timezone sets when the cron fires and the date the run's prompt and `{{@today}}`/`{{@now}}` tokens see; left empty, both use the server's timezone. **Run now** behaves like a scheduled firing and uses the schedule's timezone. An unknown timezone name is rejected on save. The scheduler runs enabled schedules in-process while the application is running.
 
 The Scheduled Tasks page shows the cron description, enabled/disabled state, active run, last status, last error, and a link to the latest run chat. You can run a schedule immediately, edit it, toggle it, or delete it. Deleting a workflow or schedule does not delete past run chats.
 

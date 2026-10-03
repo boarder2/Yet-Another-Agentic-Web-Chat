@@ -6,6 +6,7 @@ import {
   type ReasoningEffort,
 } from '@/lib/providers/reasoningEffort';
 import type { ModelRef } from '@/lib/providers/resolveModels';
+import { localClock, runClockSchema } from '@/lib/clock';
 
 /** The current durable agent-run configuration format. */
 export const AGENT_RUN_CONFIG_VERSION = 2 as const;
@@ -61,6 +62,9 @@ const runConfigFields = {
   interactiveSession: z.boolean(),
   workspaceSuffix: z.string(),
   memoryEnabled: z.boolean(),
+  // Pinned at turn start so resume and child runs tell the LLM the same date.
+  // Snapshots persisted before the field existed resume on the server clock.
+  clock: runClockSchema.default(() => localClock()),
 };
 
 const agentRunConfigBaseSchema = z

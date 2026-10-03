@@ -17,6 +17,7 @@ import {
 import { allAgentTools } from '@/lib/tools/agents';
 import { WidgetTheme } from '@/lib/types/widget';
 import { createAgentRunConfig } from '@/lib/search/agentRunConfig';
+import { getRequestClock } from '@/lib/clock';
 
 interface WidgetBuilderRequest {
   message: string;
@@ -140,6 +141,7 @@ export async function POST(req: NextRequest) {
     interactiveSession: false,
     workspaceSuffix: '',
     memoryEnabled: false,
+    clock: getRequestClock(req),
     panel: null,
   });
   const agent = new SimplifiedAgent({

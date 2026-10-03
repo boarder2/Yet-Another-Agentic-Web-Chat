@@ -39,6 +39,7 @@ import { TurnChartRegistry } from '@/lib/chart/turnChartRegistry';
 import { createAgentRunConfig } from '@/lib/search/agentRunConfig';
 import { registerCancelToken } from '@/lib/cancel-tokens';
 import { chatFollowup } from '@/lib/chat/startTurn';
+import type { RunClock } from '@/lib/clock';
 
 /**
  * Start a manual run of `workflow` with `values`, returning the seeded chat id.
@@ -48,8 +49,9 @@ import { chatFollowup } from '@/lib/chat/startTurn';
 export async function startWorkflowRun(
   workflow: Workflow,
   values: Record<string, string | string[]>,
+  clock: RunClock,
 ): Promise<{ chatId: string }> {
-  const run = resolveWorkflowRun(workflow, values, new Date());
+  const run = resolveWorkflowRun(workflow, values, clock);
 
   const resolved = await resolveChatAndEmbedding({
     chatModel: run.chatModel,
@@ -129,6 +131,7 @@ export async function startWorkflowRun(
     interactiveSession: true,
     workspaceSuffix: '',
     memoryEnabled: false,
+    clock,
     panel: null,
   });
 

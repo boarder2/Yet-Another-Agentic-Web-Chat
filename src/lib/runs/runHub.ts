@@ -4,6 +4,7 @@ import type { StreamEvent } from '@/lib/streaming/events';
 import { TurnChartRegistry } from '@/lib/chart/turnChartRegistry';
 import type { AgentRunConfig } from '@/lib/search/agentRunConfig';
 import type { ModelRef } from '@/lib/providers/resolveModels';
+import type { RunClock } from '@/lib/clock';
 import type { CachedEmbeddings } from '@/lib/utils/cachedEmbeddings';
 
 export type RunStatus =
@@ -67,13 +68,14 @@ export type Run = {
    */
   followup?: RunFollowup;
   /** Steers queued for the agent's next model call, oldest first. */
-  steers: Array<{ id: string; content: string }>;
+  steers: Array<{ id: string; content: string; clock: RunClock }>;
   /** Set once the agent can no longer receive steers. */
   steersClosed: boolean;
 };
 
 export type RunFollowup = (
   content: string,
+  clock: RunClock,
   signal: AbortSignal,
 ) => Promise<Run | string>;
 

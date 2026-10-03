@@ -43,6 +43,7 @@ import { TurnChartRegistry } from '@/lib/chart/turnChartRegistry';
 import { stripStreamedChartTags } from '@/lib/utils/contentStripping';
 import { neutralizeSpoofedFences } from '@/lib/widgets/envelope';
 import { createAgentRunConfig } from '@/lib/search/agentRunConfig';
+import type { RunClock } from '@/lib/clock';
 
 export type { PanelUsage };
 
@@ -101,6 +102,7 @@ export class PanelCoordinator {
   private memorySection: string;
   private personaInstructions: string;
   private methodologyInstructions: string;
+  private clock: RunClock;
   private tracker: TokenTracker;
   private systemModelRef: {
     provider: string;
@@ -121,6 +123,7 @@ export class PanelCoordinator {
     memorySection?: string;
     personaInstructions?: string;
     methodologyInstructions?: string;
+    clock: RunClock;
     tracker: TokenTracker;
     /** Identity of the system model shared by every executor's internal calls. */
     systemModelRef: {
@@ -141,6 +144,7 @@ export class PanelCoordinator {
     this.memorySection = params.memorySection ?? '';
     this.personaInstructions = params.personaInstructions ?? '';
     this.methodologyInstructions = params.methodologyInstructions ?? '';
+    this.clock = params.clock;
     this.tracker = params.tracker;
     this.systemModelRef = {
       provider: params.systemModelRef.provider,
@@ -309,6 +313,7 @@ export class PanelCoordinator {
         interactiveSession: false,
         workspaceSuffix: '',
         memoryEnabled: false,
+        clock: this.clock,
         panel: null,
       });
       const agent = new SimplifiedAgent({

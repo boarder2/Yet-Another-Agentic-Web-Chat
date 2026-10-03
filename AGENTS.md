@@ -41,6 +41,7 @@ Subsystem detail lives in the `.agents/skills/yaawc-*` skills — read the relev
 - TypeScript strict, `@/*` → `src/*`; npm for all commands
 - UI: reuse the primitives in `src/components/ui/` (`Button`, `Modal`, `Select`, `Input`/`Field`, …) — never hand-roll a dialog or scrim. See the `yaawc-design-system` skill
 - Data fetching: TanStack Query hooks in `src/lib/hooks/api/` via `apiFetch` (`src/lib/api/client.ts`) and keys from `qk` (`src/lib/api/keys.ts`) — no raw `fetch` in components; mutations invalidate their keys
+- Dates an LLM reads come from the run's `RunClock` (`src/lib/clock.ts`): any request that can reach an LLM goes through `clientFetch`/`apiFetch`, which send the browser's `X-Current-Date`/`X-Timezone`; routes read them only via `getRequestClock`. Persisted timestamps stay server UTC
 - DB changes: edit `src/lib/db/schema.ts` only, then `npm run db:generate`
 - Tests use the lowest practical level: prefer fast Vitest unit tests for pure or isolated behavior; use Playwright for UI workflows and full application boundaries. Avoid duplicating unit coverage in e2e unless the e2e test verifies an additional integration boundary. E2e tests never call a real LLM (env-gated test provider — see `e2e/CLAUDE.md`)
 - Ask before adding dependencies

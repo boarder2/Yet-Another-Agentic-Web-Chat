@@ -4,7 +4,7 @@ import { buildChartingGuidance } from './chartingGuidance';
 import { buildLocalResearchPrompt } from './localResearch';
 import { buildWebSearchPrompt } from './webSearch';
 
-const DATE = new Date('2026-08-17T00:00:00Z');
+const CLOCK = { now: '2026-08-17T00:00:00Z', timeZone: 'UTC' };
 
 const expectLifecycleGuidance = (prompt: string) => {
   expect(prompt).toContain('create_chart');
@@ -43,9 +43,9 @@ describe('chart lifecycle prompt guidance', () => {
 
   it('composes the same lifecycle guidance into Chat, Web Search, and Local Research prompts', () => {
     const prompts = [
-      buildChatPrompt('', '', DATE, true),
-      buildWebSearchPrompt('', '', [], 0, 'make a chart', DATE, '', true),
-      buildLocalResearchPrompt('', '', DATE, '', true),
+      buildChatPrompt('', '', CLOCK, true),
+      buildWebSearchPrompt('', '', [], 0, 'make a chart', CLOCK, '', true),
+      buildLocalResearchPrompt('', '', CLOCK, '', true),
     ];
 
     for (const prompt of prompts) expectLifecycleGuidance(prompt);

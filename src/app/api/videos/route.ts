@@ -3,6 +3,7 @@ import { DEFAULT_CONTEXT_WINDOW } from '@/lib/models/presets';
 import { getAvailableChatModelProviders } from '@/lib/providers';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { AIMessage, BaseMessage, HumanMessage } from '@langchain/core/messages';
+import { getRequestClock } from '@/lib/clock';
 
 interface ChatModel {
   provider: string;
@@ -61,6 +62,7 @@ export const POST = async (req: Request) => {
         chat_history: chatHistory,
         query: body.query,
         isPrivate: body.isPrivate,
+        clock: getRequestClock(req),
       },
       llm,
     );

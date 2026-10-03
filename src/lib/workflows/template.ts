@@ -10,6 +10,8 @@
  * and widget envelope. Covered by template.test.ts.
  */
 
+import { wallClock, type RunClock } from '@/lib/clock';
+
 export type FieldType = 'text' | 'longtext' | 'select' | 'multi';
 
 export interface FieldDef {
@@ -451,54 +453,60 @@ function pad(n: number): string {
   return String(n).padStart(2, '0');
 }
 
-function applyOffset(base: Date, spec: BuiltinSpec): Date {
-  const d = new Date(base.getTime());
+const ELAPSED_MS: Record<string, number> = { h: 3_600_000, min: 60_000 };
+
+/**
+ * The offset clock's wall time (see `wallClock`). Hours and minutes move the
+ * instant, so a DST gap normalizes; calendar units move the zone's wall date.
+ */
+function applyOffset(clock: RunClock, spec: BuiltinSpec): Date {
   const n = spec.offsetSign * spec.offsetAmount;
+  const elapsed = spec.offsetUnit && ELAPSED_MS[spec.offsetUnit];
+  if (elapsed) {
+    const now = new Date(Date.parse(clock.now) + n * elapsed).toISOString();
+    return wallClock({ ...clock, now });
+  }
+  const d = wallClock(clock);
   switch (spec.offsetUnit) {
     case 'd':
-      d.setDate(d.getDate() + n);
+      d.setUTCDate(d.getUTCDate() + n);
       break;
     case 'w':
-      d.setDate(d.getDate() + n * 7);
+      d.setUTCDate(d.getUTCDate() + n * 7);
       break;
     case 'm':
-      d.setMonth(d.getMonth() + n);
+      d.setUTCMonth(d.getUTCMonth() + n);
       break;
     case 'y':
-      d.setFullYear(d.getFullYear() + n);
-      break;
-    case 'h':
-      d.setHours(d.getHours() + n);
-      break;
-    case 'min':
-      d.setMinutes(d.getMinutes() + n);
+      d.setUTCFullYear(d.getUTCFullYear() + n);
       break;
   }
   return d;
 }
 
-function formatBuiltin(spec: BuiltinSpec, now: Date): string {
-  const d = applyOffset(now, spec);
-  const iso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+function formatBuiltin(spec: BuiltinSpec, clock: RunClock): string {
+  const d = applyOffset(clock, spec);
+  const iso = `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
   switch (spec.format) {
     case 'long':
       return d.toLocaleDateString('en-US', {
+        timeZone: 'UTC',
         year: 'numeric',
         month: 'long',
         day: 'numeric',
       });
     case 'short':
-      return `${pad(d.getMonth() + 1)}/${pad(d.getDate())}/${d.getFullYear()}`;
+      return `${pad(d.getUTCMonth() + 1)}/${pad(d.getUTCDate())}/${d.getUTCFullYear()}`;
     case null:
     case undefined:
     case '':
       return spec.base === 'now'
-        ? `${iso} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+        ? `${iso} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`
         : iso;
     default:
       // Unknown format falls back to ISO; parse-time already flags it as an error.
       return spec.base === 'now'
-        ? `${iso} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+        ? `${iso} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`
         : iso;
   }
 }
@@ -516,16 +524,16 @@ function fieldValueToString(
 }
 
 /**
- * Substitute placeholders in `prompt`. Pure and deterministic given `now`
- * (the run clock — scheduled runs pass fire time, manual runs request time).
- * Missing/empty values fall back to a field's declared default; built-in
- * date/time tokens are computed from `now`.
+ * Substitute placeholders in `prompt`. Pure and deterministic given `clock`
+ * (scheduled runs pass fire time in the schedule's zone, manual runs the
+ * browser's clock). Missing/empty values fall back to a field's declared
+ * default; built-in date/time tokens are computed from `clock`.
  */
 export function substitute(
   prompt: string,
   fields: FieldDef[],
   values: Record<string, string | string[]>,
-  now: Date,
+  clock: RunClock,
 ): string {
   const byName = new Map(fields.map((f) => [f.name, f]));
   // Frontmatter is field definitions, not output — substitute only the body.
@@ -552,7 +560,7 @@ export function substitute(
       const raw = body.slice(i + 2, close).trim();
       if (isBuiltinToken(raw)) {
         const b = parseBuiltin(raw);
-        out += 'error' in b ? '' : formatBuiltin(b, now);
+        out += 'error' in b ? '' : formatBuiltin(b, clock);
       } else {
         // Body refs are bare `{{name}}`; unknown tokens are dropped (parse-time
         // already blocks such prompts).

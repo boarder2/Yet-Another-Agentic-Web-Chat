@@ -4,6 +4,7 @@ import db from '@/lib/db';
 import { chats, schedules, workflows } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { parseWorkflowTemplate, fillSetErrors } from '@/lib/workflows/template';
+import { isValidTimeZone } from '@/lib/clock';
 import {
   rescheduleSchedule,
   unregisterSchedule,
@@ -40,6 +41,9 @@ export async function PATCH(
     !validateCronExpression(body.cronExpression).valid
   ) {
     return Response.json({ error: 'Invalid cron expression' }, { status: 400 });
+  }
+  if (body.timezone && !isValidTimeZone(body.timezone)) {
+    return Response.json({ error: 'Invalid timezone' }, { status: 400 });
   }
 
   // Re-validate the fill-set (whichever is in play after this edit) against the

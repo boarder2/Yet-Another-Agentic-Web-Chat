@@ -8,7 +8,7 @@ import formatChatHistoryAsString from '../utils/formatHistory';
 import { BaseMessage } from '@langchain/core/messages';
 import LineOutputParser from '../outputParsers/lineOutputParser';
 import { getVideoSearchProvider } from '../search/providers';
-import { formatDateForLLM } from '../utils';
+import { formatDateForLLM, type RunClock } from '@/lib/clock';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 // import { getLangfuseCallbacks } from '@/lib/tracing/langfuse';
 
@@ -81,6 +81,7 @@ type VideoSearchChainInput = {
   chat_history: BaseMessage[];
   query: string;
   isPrivate?: boolean;
+  clock: RunClock;
 };
 
 interface VideoSearchResult {
@@ -105,7 +106,7 @@ const createVideoSearchChain = (llm: BaseChatModel, isPrivate: boolean) => {
       query: (input: VideoSearchChainInput) => {
         return input.query;
       },
-      date: () => formatDateForLLM(),
+      date: (input: VideoSearchChainInput) => formatDateForLLM(input.clock),
     }),
     PromptTemplate.fromTemplate(fullPrompt),
     llm,

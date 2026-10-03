@@ -4,6 +4,7 @@ import db from '@/lib/db';
 import { schedules, workflows } from '@/lib/db/schema';
 import { desc, eq } from 'drizzle-orm';
 import { parseWorkflowTemplate, fillSetErrors } from '@/lib/workflows/template';
+import { isValidTimeZone } from '@/lib/clock';
 import { registerSchedule } from '@/lib/scheduledTasks/scheduler';
 
 export const runtime = 'nodejs';
@@ -43,6 +44,9 @@ export async function POST(
   }
   if (!validateCronExpression(body.cronExpression).valid) {
     return Response.json({ error: 'Invalid cron expression' }, { status: 400 });
+  }
+  if (body.timezone && !isValidTimeZone(body.timezone)) {
+    return Response.json({ error: 'Invalid timezone' }, { status: 400 });
   }
 
   // Decision 7: a schedule's fill-set is validated complete at save time (no

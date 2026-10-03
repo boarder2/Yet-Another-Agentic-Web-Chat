@@ -81,6 +81,8 @@ vi.mock('@/lib/utils/contentUtils', () => ({
 
 import { PanelCoordinator } from './coordinator';
 
+const CLOCK = { now: '2026-10-03T12:00:00Z', timeZone: 'America/Chicago' };
+
 const fakeModel = {} as never;
 const registerRecorder = vi.fn(() => ({}));
 const fakeTracker = {
@@ -131,6 +133,7 @@ describe('PanelCoordinator structured chart bridge', () => {
       parentEmitter,
       signal: new AbortController().signal,
       messageId: 'message-1',
+      clock: CLOCK,
       tracker: fakeTracker,
       systemModelRef: { provider: 'test', name: 'system' },
     });
@@ -193,6 +196,7 @@ describe('PanelCoordinator structured chart bridge', () => {
       parentEmitter: new EventEmitter(),
       signal: new AbortController().signal,
       messageId: 'message-effort',
+      clock: CLOCK,
       tracker: fakeTracker,
       systemModelRef: {
         provider: 'openai',
@@ -243,6 +247,7 @@ describe('PanelCoordinator structured chart bridge', () => {
           name: 'system',
           reasoningEffort: 'medium',
         },
+        clock: CLOCK,
       }),
       expect.objectContaining({
         chatModelRef: {
@@ -255,6 +260,7 @@ describe('PanelCoordinator structured chart bridge', () => {
           name: 'system',
           reasoningEffort: 'medium',
         },
+        clock: CLOCK,
       }),
     ]);
   });

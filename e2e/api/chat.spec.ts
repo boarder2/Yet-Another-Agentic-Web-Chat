@@ -37,12 +37,14 @@ async function postChat(
     focusMode: string;
     workspaceId: string;
     model: string;
+    headers: Record<string, string>;
   }>,
 ): Promise<PostChatResult> {
   const chatId = overrides?.chatId ?? uid();
   const messageId = overrides?.messageId ?? uid();
   const model = overrides?.model ?? 'test-direct';
   const res = await request.post('/api/chat', {
+    headers: overrides?.headers,
     data: {
       message: {
         messageId,
@@ -187,6 +189,24 @@ test.describe('POST /api/chat (test-direct)', () => {
 
     const endEvents = eventsOfType(events, 'messageEnd');
     expect(endEvents.length).toBe(1);
+  });
+
+  test("tells the agent the browser's date in the browser's zone", async ({
+    request,
+  }) => {
+    // 23:30 on Oct 3 in New York is already Oct 4 in UTC.
+    const { events } = await postChat(request, {
+      model: 'test-prompt-echo',
+      content: 'what day is it?',
+      headers: {
+        'X-Current-Date': '2026-10-03T23:30:00-04:00',
+        'X-Timezone': 'America/New_York',
+      },
+    });
+
+    expect(joinResponseText(events)).toContain(
+      'Saturday, October 3, 2026 (America/New_York)',
+    );
   });
 
   test('message content is required — returns 400 when empty with no images', async ({

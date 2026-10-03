@@ -7,6 +7,7 @@ import { allTools } from '@/lib/tools';
 import { WidgetProcessRequest } from '@/lib/types/api';
 import { fetchSourceContent } from '@/lib/dashboard/sources';
 import { themePromptBlock } from '@/lib/widgets/widgetTheme';
+import { getRequestClock, localIsoString, type RunClock } from '@/lib/clock';
 // import { getLangfuseCallbacks } from '@/lib/tracing/langfuse';
 
 // Helper function to replace variables in prompt
@@ -32,6 +33,12 @@ function replacePromptVariables(
   }
 
   return processedPrompt;
+}
+
+function replaceDateTimeVariables(prompt: string, clock: RunClock): string {
+  return prompt
+    .replace(/\{\{current_utc_datetime\}\}/g, clock.now)
+    .replace(/\{\{current_local_datetime\}\}/g, localIsoString(clock));
 }
 
 // Helper function to get LLM instance based on provider and model
@@ -146,6 +153,10 @@ export async function POST(request: NextRequest) {
       // Replace variables in prompt
       processedPrompt = replacePromptVariables(body.prompt, sourceContents);
     }
+    processedPrompt = replaceDateTimeVariables(
+      processedPrompt,
+      getRequestClock(request),
+    );
 
     // Append the user's current theme colors so the widget can style any HTML
     // it emits to match the dashboard theme.

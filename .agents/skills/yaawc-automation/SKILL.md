@@ -15,7 +15,7 @@ Automations are reusable parameterized workflows plus DB-backed cron schedules. 
 - Fields support `optional`, `label=`, `desc=`, `options=`, and `default=`. Names follow the identifier grammar; `step*_output` is reserved.
 - The body references `{{name}}`. Built-ins `{{@today}}` and `{{@now}}` support offsets and `:long`/`:short`; escaped braces remain literal.
 - Reject malformed, duplicate, undefined, unclosed, invalid-option, and invalid-default tokens. Preserve unused-field warnings.
-- Substitution strips frontmatter, applies defaults, joins `multi` values with `, `, and accepts an explicit clock for deterministic dates.
+- Substitution strips frontmatter, applies defaults, joins `multi` values with `, `, and takes an explicit `RunClock` (instant + IANA zone, `src/lib/clock.ts`) for deterministic dates: the browser's request clock on manual runs, the schedule's zone on scheduled runs and Run now.
 
 `resolveWorkflowRun.ts` is the shared run-time resolver. Create/edit routes reject parser errors and malformed model references; schedule create/edit validates the stored fill-set against the current prompt. Workflow edits that invalidate child schedules must disable and unregister them with a repair reason. Saved model effort is resolved at run time without rewriting the workflow or schedule definition.
 

@@ -20,6 +20,7 @@ import {
 } from '@/lib/constants/dashboard';
 import { resolveWidgetTheme } from '@/lib/widgets/widgetTheme';
 import { THEME_CHANGE_EVENT } from '@/lib/theme/apply';
+import { clientFetch } from '@/lib/api/client';
 
 // Helper function to request location permission and get user's location
 const requestLocationPermission = async (): Promise<string | undefined> => {
@@ -51,34 +52,6 @@ const requestLocationPermission = async (): Promise<string | undefined> => {
     console.warn('Error requesting location:', error);
     return undefined;
   }
-};
-
-// Helper function to replace date/time variables in prompts on the client side
-const replaceDateTimeVariables = (prompt: string): string => {
-  let processedPrompt = prompt;
-
-  // Replace UTC datetime
-  if (processedPrompt.includes('{{current_utc_datetime}}')) {
-    const utcDateTime = new Date().toISOString();
-    processedPrompt = processedPrompt.replace(
-      /\{\{current_utc_datetime\}\}/g,
-      utcDateTime,
-    );
-  }
-
-  // Replace local datetime
-  if (processedPrompt.includes('{{current_local_datetime}}')) {
-    const now = new Date();
-    const localDateTime = new Date(
-      now.getTime() - now.getTimezoneOffset() * 60000,
-    ).toISOString();
-    processedPrompt = processedPrompt.replace(
-      /\{\{current_local_datetime\}\}/g,
-      localDateTime,
-    );
-  }
-
-  return processedPrompt;
 };
 
 // Widgets render on two independent surfaces. Layout + placement operations are
@@ -504,13 +477,12 @@ export const useDashboard = (): UseDashboardReturn => {
           if (widget.prompt.includes('{{location}}')) {
             location = await requestLocationPermission();
           }
-          const processedPrompt = replaceDateTimeVariables(widget.prompt);
-          response = await fetch('/api/dashboard/process-widget', {
+          response = await clientFetch('/api/dashboard/process-widget', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               sources: widget.sources,
-              prompt: processedPrompt,
+              prompt: widget.prompt,
               provider: widget.provider,
               model: widget.model,
               tool_names: widget.tool_names,

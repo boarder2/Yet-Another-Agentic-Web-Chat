@@ -43,7 +43,12 @@ export default function ScheduleEditor({
 
   const [label, setLabel] = useState(schedule?.label ?? '');
   const [cron, setCron] = useState(schedule?.cronExpression ?? '0 8 * * *');
-  const [timezone, setTimezone] = useState(schedule?.timezone ?? '');
+  // A new schedule defaults to the creator's zone: it is the date the LLM reads.
+  const [timezone, setTimezone] = useState(
+    schedule
+      ? (schedule.timezone ?? '')
+      : Intl.DateTimeFormat().resolvedOptions().timeZone,
+  );
   const [enabled, setEnabled] = useState(schedule ? !!schedule.enabled : true);
   const [retentionMode, setRetentionMode] = useState<string | null>(
     schedule?.retentionMode ?? null,

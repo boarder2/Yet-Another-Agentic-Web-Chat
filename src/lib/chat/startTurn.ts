@@ -69,6 +69,7 @@ import { validatePanelConfig, type PanelConfig } from '@/lib/types/panel';
 import { buildMcpLangchainTools } from '@/lib/mcp/toolFactory';
 import { TurnChartRegistry } from '@/lib/chart/turnChartRegistry';
 import { createAgentRunConfig } from '@/lib/search/agentRunConfig';
+import type { RunClock } from '@/lib/clock';
 
 export type ChatTurnMessage = {
   messageId: string;
@@ -205,7 +206,7 @@ export function chatFollowup(
   chatId: string,
   template: FollowupTemplate,
 ): RunFollowup {
-  return async (content, signal) => {
+  return async (content, clock, signal) => {
     try {
       const result = await startChatTurn(
         {
@@ -216,6 +217,7 @@ export function chatFollowup(
             content,
           },
         },
+        clock,
         signal,
       );
       if (!('run' in result)) {
@@ -243,6 +245,7 @@ export type StartTurnResult =
  */
 export async function startChatTurn(
   body: ChatTurnRequest,
+  clock: RunClock,
   signal?: AbortSignal,
 ): Promise<StartTurnResult> {
   const startTime = Date.now();
@@ -683,6 +686,7 @@ export async function startChatTurn(
     interactiveSession: true,
     workspaceSuffix,
     memoryEnabled: body.memoryEnabled ?? false,
+    clock,
     panel: panelConfig ?? null,
   });
 
@@ -796,6 +800,7 @@ export async function startChatTurn(
             memorySection,
             personaInstructions: personaInstructionsContent,
             methodologyInstructions,
+            clock,
             tracker,
             systemModelRef: body.systemModel ?? body.chatModel,
           });

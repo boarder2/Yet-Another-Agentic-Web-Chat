@@ -47,6 +47,7 @@ import { resolveChartPlacement } from '@/lib/chart/placement';
 import { ChartSpecSchema, type ChartSpec } from '@/lib/chart/chartSpec';
 import { stripStreamedChartTags } from '@/lib/utils/contentStripping';
 import { resolveWorkflowRun } from '@/lib/workflows/resolveWorkflowRun';
+import { clockInZone } from '@/lib/clock';
 import {
   buildAgentModelConfigAudit,
   createAgentRunConfig,
@@ -80,11 +81,9 @@ export async function runSchedule(
   let assistantRowReady = false;
 
   try {
-    const run = resolveWorkflowRun(
-      workflow,
-      schedule.inputValues ?? {},
-      new Date(),
-    );
+    // No browser here: the LLM reads the fire time in the schedule's zone.
+    const clock = clockInZone(schedule.timezone);
+    const run = resolveWorkflowRun(workflow, schedule.inputValues ?? {}, clock);
 
     const resolved = await resolveChatAndEmbedding({
       chatModel: run.chatModel,
@@ -165,6 +164,7 @@ export async function runSchedule(
       interactiveSession: false,
       workspaceSuffix: '',
       memoryEnabled: false,
+      clock,
       panel: null,
     });
     const agent = new SimplifiedAgent({

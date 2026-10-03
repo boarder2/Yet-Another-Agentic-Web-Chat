@@ -6,21 +6,21 @@ import { mathGuidance } from './mathGuidance';
 import { buildWebSearchPrompt } from './webSearch';
 import { getSubagentDefinition } from '@/lib/search/subagents/definitions';
 
-const DATE = new Date('2026-08-26T00:00:00Z');
+const CLOCK = { now: '2026-08-26T00:00:00Z', timeZone: 'UTC' };
 const PERSONA = 'PERSONA FORMATTING OVERRIDE';
 
 const rootPrompts = (personaInstructions: string) => [
-  buildChatPrompt(personaInstructions, '', DATE),
+  buildChatPrompt(personaInstructions, '', CLOCK),
   buildWebSearchPrompt(
     personaInstructions,
     '',
     [],
     0,
     'formula question',
-    DATE,
+    CLOCK,
   ),
-  buildLocalResearchPrompt(personaInstructions, '', DATE),
-  buildFirefoxAIPrompt(personaInstructions, '', DATE),
+  buildLocalResearchPrompt(personaInstructions, '', CLOCK),
+  buildFirefoxAIPrompt(personaInstructions, '', CLOCK),
 ];
 
 describe('mathematical formatting prompt guidance', () => {

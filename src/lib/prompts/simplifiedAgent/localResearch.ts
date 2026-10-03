@@ -1,4 +1,4 @@
-import { formatDateForLLM } from '@/lib/utils';
+import { formatDateForLLM, type RunClock } from '@/lib/clock';
 import { formattingAndCitationsLocal } from '@/lib/prompts/templates';
 import { buildChartingGuidance } from './chartingGuidance';
 import { artifactGuidance } from './artifactGuidance';
@@ -10,7 +10,7 @@ import { mathGuidance } from './mathGuidance';
 export function buildLocalResearchPrompt(
   personaInstructions: string,
   personalizationSection: string,
-  date: Date = new Date(),
+  clock: RunClock,
   methodologyInstructions?: string,
   codeExecutionEnabled: boolean = false,
   artifactsEnabled: boolean = false,
@@ -77,7 +77,7 @@ ${buildChartingGuidance(codeExecutionEnabled)}
 ${artifactsEnabled ? artifactGuidance : ''}
 
 ## Current Context
-- Today's Date: ${formatDateForLLM(date)}
+- Today's Date: ${formatDateForLLM(clock)}
 
 Use all available tools strategically to provide comprehensive, well-researched, formatted responses with proper citations based on uploaded documents.`;
 }

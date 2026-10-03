@@ -5,6 +5,7 @@ import Lightbox, { GenericSlide, VideoSlide } from 'yet-another-react-lightbox';
 import 'yet-another-react-lightbox/styles.css';
 import { Message } from './ChatWindow';
 import { DEFAULT_CONTEXT_WINDOW } from '@/lib/models/presets';
+import { clientFetch } from '@/lib/api/client';
 
 type Video = {
   url: string;
@@ -90,7 +91,7 @@ const Searchvideos = ({
       }
 
       try {
-        const res = await fetch(`/api/videos`, {
+        const res = await clientFetch(`/api/videos`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

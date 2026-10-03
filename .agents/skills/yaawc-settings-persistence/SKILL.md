@@ -39,7 +39,7 @@ Sections live in `src/app/settings/sections/*`; section components in `src/app/s
 
 ## Model selection
 
-`ModelPicker` (`src/components/models/`) drives chat/system/embedding/memory model choice. Note:
+`ModelPicker` (`src/components/models/`) drives Chat/System model choice; the embedding and memory models use `Select`/`ModelField` in their settings sections. Note:
 
 - **Per-request composer choices** (chat/system model, each role's optional reasoning effort, selected prompts, vision) are NOT read server-side from `app_settings` — they remain **request parameters** so a live change takes effect immediately without a debounce-staleness race.
 - **Ambient settings** (memory flags, personalization, `autoTitleEnabled`) are read server-side, not sent in request bodies. `autoTitleEnabled` (instance-wide, **default `true`**) gates auto-generated chat titles; the chat route reads it via `getBooleanSetting(..., true)`.

@@ -61,7 +61,7 @@ export default defineConfig({
       // server uses. Always boot our own fresh, DATA_DIR-isolated test server.
       reuseExistingServer: false,
       timeout: 120_000,
-      stdout: 'pipe',
+      stdout: 'ignore',
       stderr: 'pipe',
     },
     {
@@ -82,7 +82,7 @@ export default defineConfig({
       url: UNCONFIGURED_BASE_URL,
       reuseExistingServer: false,
       timeout: 120_000,
-      stdout: 'pipe',
+      stdout: 'ignore',
       stderr: 'pipe',
     },
   ],

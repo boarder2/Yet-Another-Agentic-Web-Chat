@@ -169,10 +169,16 @@ test.describe('settings depth', () => {
 
     const listRes = await request.get('/api/mcp/servers');
     const body: {
-      servers: Array<{ name: string; url: string; authType: string }>;
+      servers: Array<{
+        id: string;
+        name: string;
+        url: string;
+        authType: string;
+      }>;
     } = await listRes.json();
     const created = body.servers.find((s) => s.name === name);
     expect(created?.url).toBe(url);
     expect(created?.authType).toBe('none');
+    await request.delete(`/api/mcp/servers/${created!.id}`);
   });
 });

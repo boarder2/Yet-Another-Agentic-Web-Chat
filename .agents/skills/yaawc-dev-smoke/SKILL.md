@@ -75,6 +75,6 @@ npm start      # serve the production build
 ## Troubleshooting
 
 - **`command not found: timeout`** — macOS lacks GNU `timeout`; poll with `seq`/`sleep` (harness does) or install coreutils for `gtimeout`.
-- **Landed on an unexpected port** — 5005 was taken; normal. Read the port from `/tmp/yaawc-dev.log`, or `kill $(lsof -ti:5005)` to force 5005.
+- **Landed on an unexpected port** — 5005 was taken; normal. Read the port from `/tmp/yaawc-dev.log`; never kill a server you did not start.
 - **Server never comes up** — `tail -20 /tmp/yaawc-dev.log`; usually missing `config.toml` or a drizzle/`db.sqlite` error.
 - **`playwright-cli` not found** — use `npx playwright-cli`.

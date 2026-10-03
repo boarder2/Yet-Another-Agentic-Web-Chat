@@ -60,10 +60,10 @@ export default function Modal({
       onClose={onClose}
       className="fixed inset-0 z-50 overflow-y-auto"
     >
-      <DialogBackdrop
-        transition
-        className="fixed inset-0 bg-overlay transition-opacity duration-200 data-closed:opacity-0"
-      />
+      {/* Enter-only motion via @starting-style. Headless UI transitions
+          deadlock when open flips mid-enter, leaving an invisible overlay
+          that swallows clicks (tailwindlabs/headlessui#3892). */}
+      <DialogBackdrop className="fixed inset-0 bg-overlay transition-opacity duration-200 starting:opacity-0" />
       <div
         className={cn(
           // `relative` keeps the panel above the positioned backdrop, which
@@ -74,9 +74,8 @@ export default function Modal({
         )}
       >
         <DialogPanel
-          transition
           className={cn(
-            'flex flex-col overflow-hidden bg-surface transition-[opacity,transform] duration-200 ease-standard data-closed:opacity-0 data-closed:scale-95',
+            'flex flex-col overflow-hidden bg-surface transition-[opacity,transform] duration-200 ease-standard starting:opacity-0 starting:scale-95',
             sizes[size],
             className,
           )}

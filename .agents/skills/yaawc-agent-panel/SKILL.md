@@ -14,7 +14,7 @@ Panel is an optional **composer mode** (orthogonal to focus mode; research modes
 - `executors: PanelExecutorConfig[]` — each is a `ModelRef` (`provider` + `name` + optional `contextWindow` + native `reasoningEffort`) plus optional `imageCapable`. **2–4 required**; enforce via `validatePanelConfig()` (returns a discriminated `{ ok }` result — guard on it both client- and server-side).
 - An **absent** `panel` leaves the single-model path byte-for-byte unchanged.
 
-## Two phases (wired in `src/app/api/chat/route.ts`, inside the `isNew` block)
+## Two phases (wired in `src/lib/chat/startTurn.ts`, inside the `isNew` block)
 
 Phase 1 runs only on a **new** message; **resume never re-runs Phase 1** (it reuses the ordinary agent runHost path).
 

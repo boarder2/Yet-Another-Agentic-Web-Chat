@@ -2,9 +2,31 @@ import { test, expect } from '../fixtures/api';
 import { uniq } from '../utils/helpers';
 import { seedWorkspace } from '../utils/seed';
 
+// Servers are instance-wide and enabled by default: a leaked row makes every
+// later chat turn in the suite probe it. Delete whatever each test created.
+const createdNames = new Set<string>();
+
+function serverName(prefix: string): string {
+  const name = uniq(prefix);
+  createdNames.add(name);
+  return name;
+}
+
+test.afterEach(async ({ request }) => {
+  const { servers } = (await (
+    await request.get('/api/mcp/servers')
+  ).json()) as { servers: Array<{ id: string; name: string }> };
+  for (const server of servers) {
+    if (createdNames.has(server.name)) {
+      await request.delete(`/api/mcp/servers/${server.id}`);
+    }
+  }
+  createdNames.clear();
+});
+
 test.describe('POST /api/mcp/servers', () => {
   test('creates a server with valid name and url', async ({ request }) => {
-    const name = uniq('mcp');
+    const name = serverName('mcp');
     const res = await request.post('/api/mcp/servers', {
       data: { name, url: 'https://example.com/mcp' },
     });
@@ -37,7 +59,7 @@ test.describe('POST /api/mcp/servers', () => {
 
   test('rejects missing url with 400', async ({ request }) => {
     const res = await request.post('/api/mcp/servers', {
-      data: { name: uniq('mcp') },
+      data: { name: serverName('mcp') },
     });
     expect(res.status()).toBe(400);
     const body = await res.json();
@@ -46,7 +68,7 @@ test.describe('POST /api/mcp/servers', () => {
 
   test('rejects url with wrong type with 400', async ({ request }) => {
     const res = await request.post('/api/mcp/servers', {
-      data: { name: uniq('mcp'), url: { host: 'example.com' } },
+      data: { name: serverName('mcp'), url: { host: 'example.com' } },
     });
     expect(res.status()).toBe(400);
     const body = await res.json();
@@ -55,7 +77,7 @@ test.describe('POST /api/mcp/servers', () => {
 
   test('rejects invalid url with 400', async ({ request }) => {
     const res = await request.post('/api/mcp/servers', {
-      data: { name: uniq('mcp'), url: 'not a url' },
+      data: { name: serverName('mcp'), url: 'not a url' },
     });
     expect(res.status()).toBe(400);
     const body = await res.json();
@@ -64,7 +86,7 @@ test.describe('POST /api/mcp/servers', () => {
 
   test('rejects non-http scheme with 400', async ({ request }) => {
     const res = await request.post('/api/mcp/servers', {
-      data: { name: uniq('mcp'), url: 'ftp://example.com/mcp' },
+      data: { name: serverName('mcp'), url: 'ftp://example.com/mcp' },
     });
     expect(res.status()).toBe(400);
     const body = await res.json();
@@ -72,7 +94,7 @@ test.describe('POST /api/mcp/servers', () => {
   });
 
   test('rejects duplicate name with 409', async ({ request }) => {
-    const name = uniq('mcp-dup');
+    const name = serverName('mcp-dup');
     await request.post('/api/mcp/servers', {
       data: { name, url: 'https://example.com/mcp' },
     });
@@ -87,7 +109,7 @@ test.describe('POST /api/mcp/servers', () => {
   });
 
   test('creates a server with enabled set to false', async ({ request }) => {
-    const name = uniq('mcp-off');
+    const name = serverName('mcp-off');
     const res = await request.post('/api/mcp/servers', {
       data: { name, url: 'https://example.com/mcp', enabled: false },
     });
@@ -98,7 +120,7 @@ test.describe('POST /api/mcp/servers', () => {
   });
 
   test('defaults enabled to true when omitted', async ({ request }) => {
-    const name = uniq('mcp-def');
+    const name = serverName('mcp-def');
     const res = await request.post('/api/mcp/servers', {
       data: { name, url: 'https://example.com/mcp' },
     });
@@ -109,7 +131,7 @@ test.describe('POST /api/mcp/servers', () => {
   });
 
   test('persists optional fields and redacts secrets', async ({ request }) => {
-    const name = uniq('mcp-full');
+    const name = serverName('mcp-full');
     const res = await request.post('/api/mcp/servers', {
       data: {
         name,
@@ -140,7 +162,7 @@ test.describe('POST /api/mcp/servers', () => {
   }) => {
     const res = await request.post('/api/mcp/servers', {
       data: {
-        name: uniq('mcp-headers'),
+        name: serverName('mcp-headers'),
         url: 'https://example.com/mcp',
         authType: 'bearer',
         secretToken: 'gate-token',
@@ -163,7 +185,7 @@ test.describe('POST /api/mcp/servers', () => {
     try {
       const createdResponse = await request.post('/api/mcp/servers', {
         data: {
-          name: uniq('mcp-transport-header'),
+          name: serverName('mcp-transport-header'),
           url: 'https://example.com/mcp',
           extraHeaders: { Host: 'virtual-host' },
         },
@@ -193,7 +215,10 @@ test.describe('POST /api/mcp/servers', () => {
     request,
   }) => {
     const res = await request.post('/api/mcp/servers', {
-      data: { name: uniq('mcp-noheaders'), url: 'https://example.com/mcp' },
+      data: {
+        name: serverName('mcp-noheaders'),
+        url: 'https://example.com/mcp',
+      },
     });
     expect(res.status()).toBe(201);
     expect((await res.json()).server.extraHeaderNames).toEqual([]);
@@ -204,7 +229,7 @@ test.describe('POST /api/mcp/servers', () => {
   }) => {
     const res = await request.post('/api/mcp/servers', {
       data: {
-        name: uniq('mcp-crlf'),
+        name: serverName('mcp-crlf'),
         url: 'https://example.com/mcp',
         extraHeaders: { 'X-Api-Key': 'ok\r\nX-Injected: evil' },
       },
@@ -218,7 +243,7 @@ test.describe('POST /api/mcp/servers', () => {
   }) => {
     const res = await request.post('/api/mcp/servers', {
       data: {
-        name: uniq('mcp-badname'),
+        name: serverName('mcp-badname'),
         url: 'https://example.com/mcp',
         extraHeaders: { 'bad header name': 'v' },
       },
@@ -232,7 +257,7 @@ test.describe('POST /api/mcp/servers', () => {
   }) => {
     const res = await request.post('/api/mcp/servers', {
       data: {
-        name: uniq('mcp-nonstring'),
+        name: serverName('mcp-nonstring'),
         url: 'https://example.com/mcp',
         extraHeaders: { 'X-Api-Key': 42 },
       },
@@ -244,7 +269,7 @@ test.describe('POST /api/mcp/servers', () => {
   test('rejects a non-object extraHeaders with 400', async ({ request }) => {
     const res = await request.post('/api/mcp/servers', {
       data: {
-        name: uniq('mcp-arr'),
+        name: serverName('mcp-arr'),
         url: 'https://example.com/mcp',
         extraHeaders: ['X-Api-Key'],
       },
@@ -254,7 +279,7 @@ test.describe('POST /api/mcp/servers', () => {
   });
 
   test('redacts oauthClientSecret when provided', async ({ request }) => {
-    const name = uniq('mcp-oauth');
+    const name = serverName('mcp-oauth');
     const res = await request.post('/api/mcp/servers', {
       data: {
         name,
@@ -282,7 +307,7 @@ test.describe('GET /api/mcp/servers', () => {
   test('returns servers array including a created server', async ({
     request,
   }) => {
-    const name = uniq('mcp-list');
+    const name = serverName('mcp-list');
     const createRes = await request.post('/api/mcp/servers', {
       data: { name, url: 'https://example.com/mcp' },
     });
@@ -302,7 +327,7 @@ test.describe('GET /api/mcp/servers', () => {
   test('returns servers seeded with all optional fields intact', async ({
     request,
   }) => {
-    const name = uniq('mcp-full-list');
+    const name = serverName('mcp-full-list');
     const createRes = await request.post('/api/mcp/servers', {
       data: {
         name,
@@ -331,7 +356,7 @@ test.describe('GET /api/mcp/servers', () => {
 
 test.describe('GET /api/mcp/servers/[id]', () => {
   test('returns a created server by id', async ({ request }) => {
-    const name = uniq('mcp-get');
+    const name = serverName('mcp-get');
     const createRes = await request.post('/api/mcp/servers', {
       data: { name, url: 'https://example.com/mcp' },
     });
@@ -366,10 +391,10 @@ test.describe('GET /api/mcp/servers/[id]', () => {
 test.describe('PATCH /api/mcp/servers/[id]', () => {
   test('updates the server name', async ({ request }) => {
     const createRes = await request.post('/api/mcp/servers', {
-      data: { name: uniq('mcp-upd'), url: 'https://example.com/mcp' },
+      data: { name: serverName('mcp-upd'), url: 'https://example.com/mcp' },
     });
     const created = (await createRes.json()).server;
-    const newName = uniq('mcp-renamed');
+    const newName = serverName('mcp-renamed');
 
     const res = await request.patch(`/api/mcp/servers/${created.id}`, {
       data: { name: newName },
@@ -384,7 +409,7 @@ test.describe('PATCH /api/mcp/servers/[id]', () => {
 
   test('updates the server url', async ({ request }) => {
     const createRes = await request.post('/api/mcp/servers', {
-      data: { name: uniq('mcp-url'), url: 'https://example.com/mcp' },
+      data: { name: serverName('mcp-url'), url: 'https://example.com/mcp' },
     });
     const created = (await createRes.json()).server;
 
@@ -399,7 +424,7 @@ test.describe('PATCH /api/mcp/servers/[id]', () => {
 
   test('updates transport and authType together', async ({ request }) => {
     const createRes = await request.post('/api/mcp/servers', {
-      data: { name: uniq('mcp-tx'), url: 'https://example.com/mcp' },
+      data: { name: serverName('mcp-tx'), url: 'https://example.com/mcp' },
     });
     const created = (await createRes.json()).server;
 
@@ -415,7 +440,7 @@ test.describe('PATCH /api/mcp/servers/[id]', () => {
 
   test('rejects invalid url with 400', async ({ request }) => {
     const createRes = await request.post('/api/mcp/servers', {
-      data: { name: uniq('mcp-badurl'), url: 'https://example.com/mcp' },
+      data: { name: serverName('mcp-badurl'), url: 'https://example.com/mcp' },
     });
     const created = (await createRes.json()).server;
 
@@ -429,7 +454,7 @@ test.describe('PATCH /api/mcp/servers/[id]', () => {
 
   test('rejects non-http scheme url with 400', async ({ request }) => {
     const createRes = await request.post('/api/mcp/servers', {
-      data: { name: uniq('mcp-scheme'), url: 'https://example.com/mcp' },
+      data: { name: serverName('mcp-scheme'), url: 'https://example.com/mcp' },
     });
     const created = (await createRes.json()).server;
 
@@ -443,7 +468,7 @@ test.describe('PATCH /api/mcp/servers/[id]', () => {
 
   test('coerces enabled to a strict boolean', async ({ request }) => {
     const createRes = await request.post('/api/mcp/servers', {
-      data: { name: uniq('mcp-enbl'), url: 'https://example.com/mcp' },
+      data: { name: serverName('mcp-enbl'), url: 'https://example.com/mcp' },
     });
     const created = (await createRes.json()).server;
 
@@ -485,8 +510,8 @@ test.describe('PATCH /api/mcp/servers/[id]', () => {
   test('rejects unique name violation on update with 409', async ({
     request,
   }) => {
-    const nameA = uniq('mcp-uq-a');
-    const nameB = uniq('mcp-uq-b');
+    const nameA = serverName('mcp-uq-a');
+    const nameB = serverName('mcp-uq-b');
     await request.post('/api/mcp/servers', {
       data: { name: nameA, url: 'https://example.com/a' },
     });
@@ -509,7 +534,7 @@ test.describe('PATCH /api/mcp/servers/[id]', () => {
     request,
   }) => {
     const createRes = await request.post('/api/mcp/servers', {
-      data: { name: uniq('mcp-sec'), url: 'https://example.com/mcp' },
+      data: { name: serverName('mcp-sec'), url: 'https://example.com/mcp' },
     });
     const created = (await createRes.json()).server;
 
@@ -532,7 +557,7 @@ test.describe('PATCH /api/mcp/servers/[id]', () => {
   }) => {
     const createRes = await request.post('/api/mcp/servers', {
       data: {
-        name: uniq('mcp-hdr-merge'),
+        name: serverName('mcp-hdr-merge'),
         url: 'https://example.com/mcp',
         extraHeaders: { 'X-Gate': 'gate-v1', 'X-Key': 'key-v1' },
       },
@@ -572,7 +597,10 @@ test.describe('PATCH /api/mcp/servers/[id]', () => {
 
   test('rejects an invalid extraHeadersPatch with 400', async ({ request }) => {
     const createRes = await request.post('/api/mcp/servers', {
-      data: { name: uniq('mcp-patch-bad'), url: 'https://example.com/mcp' },
+      data: {
+        name: serverName('mcp-patch-bad'),
+        url: 'https://example.com/mcp',
+      },
     });
     const created = (await createRes.json()).server;
 
@@ -588,7 +616,7 @@ test.describe('PATCH /api/mcp/servers/[id]', () => {
   }) => {
     const createRes = await request.post('/api/mcp/servers', {
       data: {
-        name: uniq('mcp-hdr-patch'),
+        name: serverName('mcp-hdr-patch'),
         url: 'https://example.com/mcp',
         extraHeaders: { 'X-One': 'a', 'X-Two': 'b' },
       },
@@ -624,7 +652,7 @@ test.describe('PATCH /api/mcp/servers/[id]', () => {
     request,
   }) => {
     const createRes = await request.post('/api/mcp/servers', {
-      data: { name: uniq('mcp-hdr-bad'), url: 'https://example.com/mcp' },
+      data: { name: serverName('mcp-hdr-bad'), url: 'https://example.com/mcp' },
     });
     const created = (await createRes.json()).server;
 
@@ -639,7 +667,7 @@ test.describe('PATCH /api/mcp/servers/[id]', () => {
 
   test('persists and round-trips visibleInGeneralChat', async ({ request }) => {
     const createRes = await request.post('/api/mcp/servers', {
-      data: { name: uniq('mcp-vgc'), url: 'https://example.com/mcp' },
+      data: { name: serverName('mcp-vgc'), url: 'https://example.com/mcp' },
     });
     const created = (await createRes.json()).server;
     expect(created.visibleInGeneralChat).toBe(false);
@@ -659,7 +687,10 @@ test.describe('PATCH /api/mcp/servers/[id]', () => {
     request,
   }) => {
     const createRes = await request.post('/api/mcp/servers', {
-      data: { name: uniq('mcp-vgc-coerce'), url: 'https://example.com/mcp' },
+      data: {
+        name: serverName('mcp-vgc-coerce'),
+        url: 'https://example.com/mcp',
+      },
     });
     const created = (await createRes.json()).server;
 
@@ -676,7 +707,7 @@ test.describe('PATCH /api/mcp/servers/[id]', () => {
 
   test('rejects toolConfigPatch that is not an object', async ({ request }) => {
     const createRes = await request.post('/api/mcp/servers', {
-      data: { name: uniq('mcp-tc'), url: 'https://example.com/mcp' },
+      data: { name: serverName('mcp-tc'), url: 'https://example.com/mcp' },
     });
     const created = (await createRes.json()).server;
 
@@ -690,7 +721,7 @@ test.describe('PATCH /api/mcp/servers/[id]', () => {
 
   test('rejects toolConfigPatch with a null value', async ({ request }) => {
     const createRes = await request.post('/api/mcp/servers', {
-      data: { name: uniq('mcp-tc-null'), url: 'https://example.com/mcp' },
+      data: { name: serverName('mcp-tc-null'), url: 'https://example.com/mcp' },
     });
     const created = (await createRes.json()).server;
 
@@ -704,7 +735,7 @@ test.describe('PATCH /api/mcp/servers/[id]', () => {
 
   test('rejects toolConfigPatch with a reserved key', async ({ request }) => {
     const createRes = await request.post('/api/mcp/servers', {
-      data: { name: uniq('mcp-proto'), url: 'https://example.com/mcp' },
+      data: { name: serverName('mcp-proto'), url: 'https://example.com/mcp' },
     });
     const created = (await createRes.json()).server;
 
@@ -724,7 +755,7 @@ test.describe('PATCH /api/mcp/servers/[id]', () => {
     request,
   }) => {
     const createRes = await request.post('/api/mcp/servers', {
-      data: { name: uniq('mcp-arr'), url: 'https://example.com/mcp' },
+      data: { name: serverName('mcp-arr'), url: 'https://example.com/mcp' },
     });
     const created = (await createRes.json()).server;
 
@@ -742,7 +773,7 @@ test.describe('PATCH /api/mcp/servers/[id]', () => {
     request,
   }) => {
     const createRes = await request.post('/api/mcp/servers', {
-      data: { name: uniq('mcp-enb'), url: 'https://example.com/mcp' },
+      data: { name: serverName('mcp-enb'), url: 'https://example.com/mcp' },
     });
     const created = (await createRes.json()).server;
 
@@ -760,7 +791,7 @@ test.describe('PATCH /api/mcp/servers/[id]', () => {
     request,
   }) => {
     const createRes = await request.post('/api/mcp/servers', {
-      data: { name: uniq('mcp-appr'), url: 'https://example.com/mcp' },
+      data: { name: serverName('mcp-appr'), url: 'https://example.com/mcp' },
     });
     const created = (await createRes.json()).server;
 
@@ -778,7 +809,7 @@ test.describe('PATCH /api/mcp/servers/[id]', () => {
     request,
   }) => {
     const createRes = await request.post('/api/mcp/servers', {
-      data: { name: uniq('mcp-tc-ok'), url: 'https://example.com/mcp' },
+      data: { name: serverName('mcp-tc-ok'), url: 'https://example.com/mcp' },
     });
     const created = (await createRes.json()).server;
 
@@ -803,7 +834,7 @@ test.describe('PATCH /api/mcp/servers/[id]', () => {
 
   test('removes a tool config entry via null value', async ({ request }) => {
     const createRes = await request.post('/api/mcp/servers', {
-      data: { name: uniq('mcp-tc-rm'), url: 'https://example.com/mcp' },
+      data: { name: serverName('mcp-tc-rm'), url: 'https://example.com/mcp' },
     });
     const created = (await createRes.json()).server;
 
@@ -826,7 +857,7 @@ test.describe('PATCH /api/mcp/servers/[id]', () => {
 
   test('rejects toolConfigPatch with too many entries', async ({ request }) => {
     const createRes = await request.post('/api/mcp/servers', {
-      data: { name: uniq('mcp-tc-big'), url: 'https://example.com/mcp' },
+      data: { name: serverName('mcp-tc-big'), url: 'https://example.com/mcp' },
     });
     const created = (await createRes.json()).server;
 
@@ -850,7 +881,10 @@ test.describe('GET/PUT /api/mcp/servers/[id]/workspaces', () => {
     request,
   }) => {
     const createRes = await request.post('/api/mcp/servers', {
-      data: { name: uniq('mcp-ws-empty'), url: 'https://example.com/mcp' },
+      data: {
+        name: serverName('mcp-ws-empty'),
+        url: 'https://example.com/mcp',
+      },
     });
     const created = (await createRes.json()).server;
 
@@ -870,7 +904,10 @@ test.describe('GET/PUT /api/mcp/servers/[id]/workspaces', () => {
 
   test('rejects a non-array workspaceIds with 400', async ({ request }) => {
     const createRes = await request.post('/api/mcp/servers', {
-      data: { name: uniq('mcp-ws-notarr'), url: 'https://example.com/mcp' },
+      data: {
+        name: serverName('mcp-ws-notarr'),
+        url: 'https://example.com/mcp',
+      },
     });
     const created = (await createRes.json()).server;
 
@@ -888,7 +925,10 @@ test.describe('GET/PUT /api/mcp/servers/[id]/workspaces', () => {
     request,
   }) => {
     const createRes = await request.post('/api/mcp/servers', {
-      data: { name: uniq('mcp-ws-badentry'), url: 'https://example.com/mcp' },
+      data: {
+        name: serverName('mcp-ws-badentry'),
+        url: 'https://example.com/mcp',
+      },
     });
     const created = (await createRes.json()).server;
 
@@ -904,7 +944,10 @@ test.describe('GET/PUT /api/mcp/servers/[id]/workspaces', () => {
 
   test('rejects an unknown workspace id with 400', async ({ request }) => {
     const createRes = await request.post('/api/mcp/servers', {
-      data: { name: uniq('mcp-ws-unknown'), url: 'https://example.com/mcp' },
+      data: {
+        name: serverName('mcp-ws-unknown'),
+        url: 'https://example.com/mcp',
+      },
     });
     const created = (await createRes.json()).server;
 
@@ -920,7 +963,10 @@ test.describe('GET/PUT /api/mcp/servers/[id]/workspaces', () => {
     request,
   }) => {
     const createRes = await request.post('/api/mcp/servers', {
-      data: { name: uniq('mcp-ws-atomic'), url: 'https://example.com/mcp' },
+      data: {
+        name: serverName('mcp-ws-atomic'),
+        url: 'https://example.com/mcp',
+      },
     });
     const created = (await createRes.json()).server;
     const wsA = await seedWorkspace(request);
@@ -948,7 +994,7 @@ test.describe('GET/PUT /api/mcp/servers/[id]/workspaces', () => {
     request,
   }) => {
     const createRes = await request.post('/api/mcp/servers', {
-      data: { name: uniq('mcp-ws-ok'), url: 'https://example.com/mcp' },
+      data: { name: serverName('mcp-ws-ok'), url: 'https://example.com/mcp' },
     });
     const created = (await createRes.json()).server;
     const wsA = await seedWorkspace(request);
@@ -972,7 +1018,10 @@ test.describe('GET/PUT /api/mcp/servers/[id]/workspaces', () => {
     request,
   }) => {
     const createRes = await request.post('/api/mcp/servers', {
-      data: { name: uniq('mcp-ws-replace'), url: 'https://example.com/mcp' },
+      data: {
+        name: serverName('mcp-ws-replace'),
+        url: 'https://example.com/mcp',
+      },
     });
     const created = (await createRes.json()).server;
     const wsA = await seedWorkspace(request);
@@ -996,7 +1045,10 @@ test.describe('GET/PUT /api/mcp/servers/[id]/workspaces', () => {
 
   test('an empty array clears the scope entirely', async ({ request }) => {
     const createRes = await request.post('/api/mcp/servers', {
-      data: { name: uniq('mcp-ws-clear'), url: 'https://example.com/mcp' },
+      data: {
+        name: serverName('mcp-ws-clear'),
+        url: 'https://example.com/mcp',
+      },
     });
     const created = (await createRes.json()).server;
     const wsA = await seedWorkspace(request);
@@ -1020,7 +1072,7 @@ test.describe('GET/PUT /api/mcp/servers/[id]/workspaces', () => {
 test.describe('DELETE /api/mcp/servers/[id]', () => {
   test('deletes a server and returns ok', async ({ request }) => {
     const createRes = await request.post('/api/mcp/servers', {
-      data: { name: uniq('mcp-del'), url: 'https://example.com/mcp' },
+      data: { name: serverName('mcp-del'), url: 'https://example.com/mcp' },
     });
     const created = (await createRes.json()).server;
 
@@ -1077,7 +1129,7 @@ test.describe('POST /api/mcp/servers/[id]/test', () => {
   }) => {
     const createRes = await request.post('/api/mcp/servers', {
       data: {
-        name: uniq('mcp-unreachable'),
+        name: serverName('mcp-unreachable'),
         url: 'https://new.example.com/mcp',
       },
     });

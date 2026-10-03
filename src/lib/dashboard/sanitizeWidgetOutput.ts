@@ -14,9 +14,9 @@ import DOMPurify from 'isomorphic-dompurify';
 //   - Real code-execution / framing vectors stay blocked: script, iframe,
 //     object, embed, base, link, style.
 //   - Inline `style` attributes are ALLOWED so widgets can lay out their
-//     output (flexbox, sizing, colors). DOMPurify still sanitizes the CSS
-//     values (blocking javascript: urls, expression(), etc.); this matches
-//     the owner-approved-code trust model used for remote images above.
+//     output (flexbox, sizing, colors). DOMPurify does not parse CSS, so
+//     values (including url(...)) pass through untouched; this matches the
+//     owner-approved-code trust model used for remote images above.
 //
 // Markdown images (![](url)) are rendered by markdown-to-jsx AFTER this runs,
 // so we only need to (a) not strip them and (b) neutralize svg data URIs in the

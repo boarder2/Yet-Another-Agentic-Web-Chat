@@ -436,8 +436,10 @@ test.describe('workspaces CRUD', () => {
       await page.getByRole('tab', { name: 'Files', exact: true }).click();
       await filesStarted;
 
+      // The hidden desktop pane mounts its own ChatsTab, which can still be
+      // loading; only the visible mobile Files panel is under test.
       const loading = page.locator(
-        '[data-list-state="loading"][data-list-layout="section"]',
+        '[data-list-state="loading"][data-list-layout="section"]:visible',
       );
       await expect(loading).toBeVisible();
       await expect(loading.locator('svg')).toHaveAttribute('width', '20');

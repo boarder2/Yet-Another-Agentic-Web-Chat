@@ -30,7 +30,7 @@ Sources are always fetched server-side via `src/lib/dashboard/sources.ts` (`fetc
 
 ## Output sanitization
 
-`src/lib/dashboard/sanitizeWidgetOutput.ts` (DOMPurify). Output is markdown (markdown-to-jsx) and may carry `<Chart id="c0"/>`. Policy (owner-approved-code trust model): images ALLOWED incl. remote http(s) + raster `data:`; **SVG blocked** in every form; script/iframe/object/embed/base/link/style blocked; inline `style` allowed (CSS still sanitized); `<Chart>` preserved.
+`src/lib/dashboard/sanitizeWidgetOutput.ts` (DOMPurify). Output is markdown (markdown-to-jsx) and may carry `<Chart id="c0"/>`. Policy (owner-approved-code trust model): images ALLOWED incl. remote http(s) + raster `data:`; **SVG blocked** in every form; script/iframe/object/embed/base/link/style blocked; inline `style` passes through unsanitized (trusted, incl. `url(...)`); `<Chart>` preserved.
 
 ## Charts
 

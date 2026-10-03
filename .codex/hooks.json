@@ -19,7 +19,7 @@
           },
           {
             "type": "command",
-            "command": "'/Users/wzutz/Projects/Perplexica/.codex/hooks/block-dangerous-git.sh'"
+            "command": "root=$(git rev-parse --show-toplevel) && exec \"$root\"/.codex/hooks/block-dangerous-git.sh"
           }
         ]
       },

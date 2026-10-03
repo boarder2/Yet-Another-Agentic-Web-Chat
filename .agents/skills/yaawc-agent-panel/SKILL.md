@@ -45,7 +45,7 @@ Phase 1 runs only on a **new** message; **resume never re-runs Phase 1** (it reu
 ## Gotchas
 
 - Chart lifecycle tools are available to the synthesizing top-level Chat/Web/Local agent, but remain excluded from deep-research subagents and panel executor restrictions unless the executor focus toolset explicitly includes them; executor placement is always bridged structurally into its column.
-- The separate orchestrator **model** was removed (it duplicated the chat-model picker and silently overrode it). Do not reintroduce one; synthesis always uses `body.chatModel`.
+- Synthesis always uses `body.chatModel`; don't add a separate orchestrator model — it would duplicate the chat-model picker and silently override it.
 - The final `sources` event re-emits the executor's COMPLETE document set — **replace**, don't append, or you double-count (`sources_added` batches accumulate; `sources` replaces). Capability-document sections are internal sources and keep their exact `/docs/capabilities/...#...` URLs through this merge.
 - Phase 1 is fired in a non-awaited async IIFE so the HTTP response can subscribe immediately; errors emit a stream `error` event. Deep-research subagents still receive their unchanged static whitelist and do not receive `search_yaawc_docs`.
 

@@ -51,6 +51,6 @@ Subsystem detail lives in the `.agents/skills/yaawc-*` skills — read the relev
 
 ## Pointers
 
-- Domain glossary: `CONTEXT.md` — use its terms, not its listed "avoid" synonyms. ADRs in `docs/adr/` (lazily created); see `docs/agents/domain.md`
-- Issues: GitHub Issues on `boarder2/Yet-Another-Agentic-Web-Chat` via `gh`; labels per `docs/agents/triage-labels.md`
+- Domain glossary: `CONTEXT.md` — use its terms, not its listed "avoid" synonyms
+- Issues: GitHub Issues on `boarder2/Yet-Another-Agentic-Web-Chat` via `gh`
 - External docs: context7 (`/vercel/next.js`, `/tailwindlabs/tailwindcss.com`, `/quantizor/markdown-to-jsx`, `/context7/headlessui_com`); `docs-langchain` tool for LangChain/LangGraph

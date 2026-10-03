@@ -22,5 +22,5 @@ Pure HTTP tests against route handlers under `src/app/api/**`. No browser is lau
 ## Running
 
 ```bash
-npm run test:e2e --project=api
+npm run test:e2e:api
 ```

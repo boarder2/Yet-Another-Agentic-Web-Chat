@@ -49,12 +49,14 @@ Hand-rolling is what produced 46 button spellings, 21 card spellings, four list-
 
 ## Rules
 
-- **ALWAYS** semantic tokens for every color, radius, shadow, spacing decision — surface tokens for surfaces, `bg-accent`+`text-accent-fg` (hover `bg-accent-700`) for brand actions, `*-soft`/`text-*` status tokens for errors/success/warnings.
-- **NEVER** hardcode hex/`rgb()`/`oklch()` literals, raw Tailwind palette colors (`bg-red-500`, `text-gray-700`), or `text-white`/`bg-black` — they don't flip with theme.
-- **NEVER** `bg-fg/*` for scrims (`fg` is light on dark themes) — use `bg-overlay`.
-- **NEVER** arbitrary radii (`rounded-[10px]`) or new shadow utilities.
-- **NEVER** strip a focus ring with bare `outline-none`.
-- **NEVER** legacy aliases (`bg-light-primary`, `bg-dark-100`, …) in new code, or shadcn-style tokens that don't exist here (`bg-card`, `text-muted-foreground`, `bg-primary`, …). Don't invent names (`bg-surface-3`) — check `globals.css` first.
+Every color, radius, shadow, and spacing decision uses a semantic token, because anything else won't follow the active theme:
+
+- Surface tokens for surfaces, `bg-accent`+`text-accent-fg` (hover `bg-accent-700`) for brand actions, `*-soft`/`text-*` status tokens for errors/success/warnings.
+- No hex/`rgb()`/`oklch()` literals, raw Tailwind palette colors (`bg-red-500`, `text-gray-700`), or `text-white`/`bg-black`.
+- Scrims use `bg-overlay`, not `bg-fg/*` (`fg` is light on dark themes).
+- No arbitrary radii (`rounded-[10px]`) or new shadow utilities.
+- Keep a visible focus indicator; bare `outline-none` removes it.
+- Use only names defined in `globals.css` — not legacy aliases (`bg-light-primary`, `bg-dark-100`, …) or shadcn-style tokens (`bg-card`, `text-muted-foreground`, `bg-primary`, …), and don't invent new ones (`bg-surface-3`).
 
 ## Verifying
 

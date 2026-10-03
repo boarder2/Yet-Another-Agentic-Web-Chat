@@ -17,6 +17,6 @@ Each question should be formatted like so:
 
 Each round the user answers reshapes the tree — settled decisions push the frontier outward and unblock questions that depended on them. Recompute the frontier and ask the next round. A question whose answer depends on another question still open in this round belongs to a _later_ round, not this one.
 
-Finding _facts_ is your job, never the user's. When a frontier question needs substantial independent exploration, use one bounded read-only worker through `luna-delegation`; otherwise inspect directly. Give a worker one factual question and narrow paths—never the whole design tree. Don't ask the user for anything you can look up. Don't block the rest of the frontier: only downstream questions wait for the exploration. The _decisions_ are the user's—put each to them and wait.
+Finding _facts_ is your job, never the user's. When a frontier question needs substantial independent exploration, use one read-only subagent; otherwise inspect directly. Give a worker one factual question and narrow paths—never the whole design tree. Don't ask the user for anything you can look up. Don't block the rest of the frontier: only downstream questions wait for the exploration. The _decisions_ are the user's—put each to them and wait.
 
 The session is done when the frontier is empty: every branch of the design tree visited, nothing left silently assumed. Do not act on it until the user confirms you have reached a shared understanding.

@@ -25,6 +25,25 @@ async function mockCodeExecutionAvailable(page: Page) {
   });
 }
 
+// Matches on the key, not just the method: a fresh context's first-load
+// defaults flush in their own debounced PATCH, which must not absorb the failure.
+async function failNextAutoRunSave(page: Page) {
+  let failNext = true;
+  await page.route('**/api/settings', async (route) => {
+    const request = route.request();
+    if (
+      failNext &&
+      request.method() === 'PATCH' &&
+      settingKey in (request.postDataJSON() ?? {})
+    ) {
+      failNext = false;
+      await route.fulfill({ status: 500, body: 'save failed' });
+    } else {
+      await route.continue();
+    }
+  });
+}
+
 async function openAutomation(page: Page) {
   const settings = new SettingsPage(page);
   await settings.goto();
@@ -102,15 +121,7 @@ test.describe('code execution auto-run setting', () => {
   }) => {
     await setAutoRun(page, true);
     await mockCodeExecutionAvailable(page);
-    let failNextPatch = true;
-    await page.route('**/api/settings', async (route) => {
-      if (route.request().method() === 'PATCH' && failNextPatch) {
-        failNextPatch = false;
-        await route.fulfill({ status: 500, body: 'save failed' });
-      } else {
-        await route.continue();
-      }
-    });
+    await failNextAutoRunSave(page);
     const toggle = await openAutomation(page);
 
     await expect(toggle).toBeChecked();
@@ -133,15 +144,7 @@ test.describe('code execution auto-run setting', () => {
   }) => {
     await setAutoRun(page, false);
     await mockCodeExecutionAvailable(page);
-    let failNextPatch = true;
-    await page.route('**/api/settings', async (route) => {
-      if (route.request().method() === 'PATCH' && failNextPatch) {
-        failNextPatch = false;
-        await route.fulfill({ status: 500, body: 'save failed' });
-      } else {
-        await route.continue();
-      }
-    });
+    await failNextAutoRunSave(page);
     const toggle = await openAutomation(page);
 
     await toggle.click();

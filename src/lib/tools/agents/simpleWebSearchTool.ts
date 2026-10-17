@@ -65,7 +65,7 @@ export const simpleWebSearchTool = tool(
       const provider = getWebSearchProvider({ isPrivate });
       const searchResults = await provider.webSearch(
         query,
-        {},
+        { sessionId: config?.configurable?.chatId as string | undefined },
         retrievalSignal,
       );
 

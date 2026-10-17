@@ -11,6 +11,7 @@ const PROVIDER_OPTIONS = [
   { value: 'brave_search', label: 'Brave Search' },
   { value: 'brave_llm', label: 'Brave LLM Context' },
   { value: 'mojeek', label: 'Mojeek' },
+  { value: 'parallel', label: 'Parallel' },
 ];
 
 const LANGUAGE_OPTIONS = [
@@ -98,6 +99,7 @@ const CAPABILITY_MATRIX: Record<
   brave_search: { web: true, images: true, videos: true, autocomplete: true },
   brave_llm: { web: true, images: false, videos: false, autocomplete: false },
   mojeek: { web: true, images: false, videos: false, autocomplete: false },
+  parallel: { web: true, images: false, videos: false, autocomplete: false },
 };
 
 type Mode = 'regular' | 'private';
@@ -175,6 +177,11 @@ export default function SearchProvidersSection({
         provider doesn&apos;t support a capability, the fallback provider is
         used; if the fallback can&apos;t cover it either, that capability is
         hidden in the UI.
+      </p>
+      <p className="text-xs text-fg/60">
+        Parallel provides web search without an API key. Queries are sent to
+        Parallel; free usage is rate limited. Language, region, and pagination
+        settings do not apply to Parallel.
       </p>
 
       <div className="flex flex-col space-y-4">

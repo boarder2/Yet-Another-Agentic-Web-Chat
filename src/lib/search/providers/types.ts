@@ -2,7 +2,8 @@ export type SearchProviderId =
   | 'searxng'
   | 'brave_search'
   | 'brave_llm'
-  | 'mojeek';
+  | 'mojeek'
+  | 'parallel';
 
 export type SearchCapability = 'web' | 'images' | 'videos' | 'autocomplete';
 
@@ -31,6 +32,7 @@ export interface SearchResponse {
 }
 
 export interface WebSearchOpts {
+  sessionId?: string;
   language?: string;
   region?: string;
   pageno?: number;
@@ -73,6 +75,7 @@ export const ALL_PROVIDER_IDS: SearchProviderId[] = [
   'brave_search',
   'brave_llm',
   'mojeek',
+  'parallel',
 ];
 
 export const PROVIDER_DISPLAY_NAMES: Record<SearchProviderId, string> = {
@@ -80,4 +83,5 @@ export const PROVIDER_DISPLAY_NAMES: Record<SearchProviderId, string> = {
   brave_search: 'Brave Search',
   brave_llm: 'Brave LLM Context',
   mojeek: 'Mojeek',
+  parallel: 'Parallel',
 };

@@ -435,11 +435,19 @@ Long conversations eat up context window. Compaction replaces the conversation h
 
 YAAWC supports multiple search backends and lets you choose from the Settings page:
 
-| Provider    | Capabilities                      | Config                         |
-| ----------- | --------------------------------- | ------------------------------ |
-| **SearXNG** | Web, images, videos, autocomplete | Self-hosted URL (default)      |
-| **Brave**   | Web, images, videos, autocomplete | API key (+ optional Brave LLM) |
-| **Mojeek**  | Web                               | API key                        |
+| Provider     | Capabilities                      | Config                         |
+| ------------ | --------------------------------- | ------------------------------ |
+| **SearXNG**  | Web, images, videos, autocomplete | Self-hosted URL (default)      |
+| **Brave**    | Web, images, videos, autocomplete | API key (+ optional Brave LLM) |
+| **Mojeek**   | Web                               | API key                        |
+| **Parallel** | Web                               | No API key                     |
+
+Select **Parallel** under **Settings → Search Providers** for free web search
+via [Parallel Search MCP](https://docs.parallel.ai/integrations/mcp/search-mcp),
+powered by Fast mode. No account or API key is needed; free usage is rate limited.
+Queries are sent to Parallel. Language, region, and pagination settings are not
+applied. Image, video, and autocomplete searches use your configured fallback.
+SearXNG remains the default, and existing provider selections are preserved.
 
 ## Installation
 

@@ -1,6 +1,7 @@
 import { braveLLMProvider } from './braveLLM';
 import { braveSearchProvider } from './braveSearch';
 import { mojeekProvider } from './mojeek';
+import { parallelProvider } from './parallel';
 import { searxngProvider } from './searxng';
 import { ALL_PROVIDER_IDS, SearchProvider, SearchProviderId } from './types';
 
@@ -9,6 +10,7 @@ const providers: Record<SearchProviderId, SearchProvider> = {
   brave_search: braveSearchProvider,
   brave_llm: braveLLMProvider,
   mojeek: mojeekProvider,
+  parallel: parallelProvider,
 };
 
 export const getProviderById = (id: SearchProviderId): SearchProvider => {

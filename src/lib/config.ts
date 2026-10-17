@@ -181,7 +181,8 @@ export type SearchProviderIdType =
   | 'searxng'
   | 'brave_search'
   | 'brave_llm'
-  | 'mojeek';
+  | 'mojeek'
+  | 'parallel';
 
 export const getBraveSearchApiKey = () =>
   loadConfig().SEARCH?.PROVIDERS?.BRAVE_SEARCH?.API_KEY || '';

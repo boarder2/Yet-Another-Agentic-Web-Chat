@@ -7,6 +7,16 @@ description: Use when adding or extending agent tools, LLM providers, API routes
 
 This skill covers the established patterns for extending YAAWC's core subsystems. Follow these patterns to maintain consistency with existing code.
 
+## Adding a Search Provider
+
+Implement `SearchProvider` in `src/lib/search/providers/`, register it in
+`registry.ts`, and update the IDs/display names in `types.ts`, the ID type in
+`src/lib/config.ts`, and the options/capability matrix in
+`SearchProvidersSection.tsx`. Keep existing provider defaults and selections.
+`simpleWebSearchTool` passes a conversation `sessionId` in `WebSearchOpts`;
+Parallel hashes it for MCP session correlation. Parallel is web-only and needs
+no credentials; unsupported capabilities use the configured fallback.
+
 ## Adding a New Agent Tool
 
 Tools live in `src/lib/tools/agents/`. Each tool follows a consistent pattern.
